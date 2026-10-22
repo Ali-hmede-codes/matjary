@@ -4,7 +4,6 @@ export class GrantVerificationBadgeDto {
   @IsString()
   @IsUUID()
   storeId!: string;
-
 }
 
 export class RevokeVerificationBadgeDto {

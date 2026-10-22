@@ -38,32 +38,51 @@ export class LocalStorageProvider implements StorageProvider {
     // CLI agree on where media lives regardless of the current working dir.
     this.root = path.resolve(dir);
     this.publicBase =
-      config.get('STORAGE_PUBLIC_BASE_URL', { infer: true }) || config.get('APP_ORIGIN', { infer: true });
+      config.get('STORAGE_PUBLIC_BASE_URL', { infer: true }) ||
+      config.get('APP_ORIGIN', { infer: true });
   }
 
   private async filePath(key: string, create = false): Promise<string> {
     const segments = key.split('/');
-    if (!key || key.length > 512 || !/^[a-zA-Z0-9_./-]+$/.test(key) || segments.some((part) => !part || part === '.' || part === '..')) {
+    if (
+      !key ||
+      key.length > 512 ||
+      !/^[a-zA-Z0-9_./-]+$/.test(key) ||
+      segments.some((part) => !part || part === '.' || part === '..')
+    ) {
       throw new BadRequestException('Invalid storage key');
     }
     const file = path.resolve(this.root, ...segments);
     const relative = path.relative(this.root, file);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new BadRequestException('Invalid storage key');
+    if (relative.startsWith('..') || path.isAbsolute(relative))
+      throw new BadRequestException('Invalid storage key');
     if (create) await fs.mkdir(this.root, { recursive: true });
     const rootInfo = await fs.lstat(this.root);
-    if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory() || path.relative(await fs.realpath(this.root), this.root) !== '') throw new BadRequestException('Invalid storage directory');
+    if (
+      rootInfo.isSymbolicLink() ||
+      !rootInfo.isDirectory() ||
+      path.relative(await fs.realpath(this.root), this.root) !== ''
+    )
+      throw new BadRequestException('Invalid storage directory');
     let current = this.root;
     for (let i = 0; i < segments.length; i++) {
       current = path.join(current, segments[i]!);
       try {
         const entry = await fs.lstat(current);
-        if (entry.isSymbolicLink() || (i < segments.length - 1 && !entry.isDirectory())) throw new BadRequestException('Invalid storage key');
+        if (
+          entry.isSymbolicLink() ||
+          (i < segments.length - 1 && !entry.isDirectory())
+        )
+          throw new BadRequestException('Invalid storage key');
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         if (create && i < segments.length - 1) {
-          await fs.mkdir(current).catch((mkdirError: NodeJS.ErrnoException) => { if (mkdirError.code !== 'EEXIST') throw mkdirError; });
+          await fs.mkdir(current).catch((mkdirError: NodeJS.ErrnoException) => {
+            if (mkdirError.code !== 'EEXIST') throw mkdirError;
+          });
           const entry = await fs.lstat(current);
-          if (entry.isSymbolicLink() || !entry.isDirectory()) throw new BadRequestException('Invalid storage key');
+          if (entry.isSymbolicLink() || !entry.isDirectory())
+            throw new BadRequestException('Invalid storage key');
         }
       }
     }
@@ -76,29 +95,47 @@ export class LocalStorageProvider implements StorageProvider {
       if (!stat.isFile()) throw new NotFoundException('Stored file not found');
       return { size: stat.size };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new NotFoundException('Stored file not found');
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+        throw new NotFoundException('Stored file not found');
       throw error;
     }
   }
 
-  async openReadStream(key: string, range?: { start: number; end: number }): Promise<Readable> {
+  async openReadStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<Readable> {
     await this.statObject(key);
     return createReadStream(await this.filePath(key), range);
   }
 
-  async putStream(key: string, body: Readable, _mimeType: string, size: number, options: { exclusive?: boolean; signal?: AbortSignal } = {}): Promise<void> {
+  async putStream(
+    key: string,
+    body: Readable,
+    _mimeType: string,
+    size: number,
+    options: { exclusive?: boolean; signal?: AbortSignal } = {},
+  ): Promise<void> {
     const file = await this.filePath(key, true);
     const temporary = path.join(path.dirname(file), `.${randomUUID()}.upload`);
     try {
-      await pipeline(body, new ByteLimit(size, true), createWriteStream(temporary, { flags: 'wx', mode: 0o600 }), { signal: options.signal });
+      await pipeline(
+        body,
+        new ByteLimit(size, true),
+        createWriteStream(temporary, { flags: 'wx', mode: 0o600 }),
+        { signal: options.signal },
+      );
       // Hard-link creation is atomic and cannot overwrite another upload.
       if (options.exclusive) await fs.link(temporary, file);
       else await fs.rename(temporary, file);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ConflictException('Media has already been uploaded');
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+        throw new ConflictException('Media has already been uploaded');
       throw error;
     } finally {
-      await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+      await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
     }
   }
 
@@ -126,7 +163,8 @@ export class LocalStorageProvider implements StorageProvider {
   async getObject(key: string): Promise<Buffer> {
     const file = await this.filePath(key);
     try {
-      if ((await this.statObject(key)).size > 10485760) throw new BadRequestException('Use streaming for large media');
+      if ((await this.statObject(key)).size > 10485760)
+        throw new BadRequestException('Use streaming for large media');
       return await fs.readFile(file);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {

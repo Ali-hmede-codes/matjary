@@ -42,8 +42,14 @@ test('API and CLI database options prohibit automatic schema mutations', () => {
 test('entity metadata has private hashes, unique keys, and restrictive foreign keys', async () => {
   const source = new MetadataDataSource(options);
   await source.inspect();
-  assert.equal(source.entityMetadatas.length, (options.entities as unknown[]).length);
-  assert.equal(source.migrations.length, (options.migrations as unknown[]).length);
+  assert.equal(
+    source.entityMetadatas.length,
+    (options.entities as unknown[]).length,
+  );
+  assert.equal(
+    source.migrations.length,
+    (options.migrations as unknown[]).length,
+  );
   assert.ok(source.hasMetadata('MediaProcessingOutbox'));
   assert.ok(source.hasMetadata('EngagementFlushReceipt'));
   assert.ok(source.hasMetadata('SeoRedirect'));

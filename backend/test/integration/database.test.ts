@@ -22,11 +22,26 @@ import {
 // Set MYSQL_TEST_ALLOW_DDL=1 after provisioning an isolated empty *_test schema.
 // This suite tests migration rollback; never point it at application data.
 test('MySQL migrations and relational persistence', async (t) => {
-  assert.equal(process.env.MYSQL_TEST_ALLOW_DDL, '1', 'Explicit isolated DDL test opt-in required');
-  for (const key of ['MYSQL_HOST', 'MYSQL_PORT', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD']) {
-    assert.ok(process.env[key], `Supply ${key} explicitly for the isolated test database`);
+  assert.equal(
+    process.env.MYSQL_TEST_ALLOW_DDL,
+    '1',
+    'Explicit isolated DDL test opt-in required',
+  );
+  for (const key of [
+    'MYSQL_HOST',
+    'MYSQL_PORT',
+    'MYSQL_DATABASE',
+    'MYSQL_USER',
+    'MYSQL_PASSWORD',
+  ]) {
+    assert.ok(
+      process.env[key],
+      `Supply ${key} explicitly for the isolated test database`,
+    );
   }
-  const source = new DataSource(createDatabaseOptions(validateDatabaseEnvironment(process.env)));
+  const source = new DataSource(
+    createDatabaseOptions(validateDatabaseEnvironment(process.env)),
+  );
   assert.match(
     String(source.options.database),
     /^[a-zA-Z0-9_]+_test$/,
@@ -35,12 +50,24 @@ test('MySQL migrations and relational persistence', async (t) => {
   await source.initialize();
   try {
     // Check BEFORE the migration ledger or any application table is created.
-    const tables = await source.query('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()');
-    assert.equal(tables.length, 0, 'Integration schema must contain no tables before any DDL');
-    assert.equal((await source.runMigrations()).length, source.migrations.length);
+    const tables = await source.query(
+      'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()',
+    );
+    assert.equal(
+      tables.length,
+      0,
+      'Integration schema must contain no tables before any DDL',
+    );
+    assert.equal(
+      (await source.runMigrations()).length,
+      source.migrations.length,
+    );
     const seeded = new Map<string, number>();
     for (const metadata of source.entityMetadatas) {
-      seeded.set(metadata.tableName, await source.getRepository(metadata.target).count());
+      seeded.set(
+        metadata.tableName,
+        await source.getRepository(metadata.target).count(),
+      );
     }
 
     await t.test(
@@ -252,7 +279,11 @@ test('MySQL migrations and relational persistence', async (t) => {
       'migrations can be reverted and reapplied on an empty schema',
       async () => {
         for (const metadata of source.entityMetadatas) {
-          assert.equal(await source.getRepository(metadata.target).count(), seeded.get(metadata.tableName), `Unexpected test data in ${metadata.tableName}`);
+          assert.equal(
+            await source.getRepository(metadata.target).count(),
+            seeded.get(metadata.tableName),
+            `Unexpected test data in ${metadata.tableName}`,
+          );
         }
         for (let index = 0; index < source.migrations.length; index++) {
           await source.undoLastMigration({ transaction: 'none' });
@@ -260,16 +291,29 @@ test('MySQL migrations and relational persistence', async (t) => {
         const runner = source.createQueryRunner();
         try {
           for (const metadata of source.entityMetadatas) {
-            assert.equal(await runner.hasTable(metadata.tableName), false, metadata.tableName);
+            assert.equal(
+              await runner.hasTable(metadata.tableName),
+              false,
+              metadata.tableName,
+            );
           }
-          assert.equal((await runner.query('SELECT * FROM schema_migrations')).length, 0);
+          assert.equal(
+            (await runner.query('SELECT * FROM schema_migrations')).length,
+            0,
+          );
         } finally {
           await runner.release();
         }
-        assert.equal((await source.runMigrations()).length, source.migrations.length);
+        assert.equal(
+          (await source.runMigrations()).length,
+          source.migrations.length,
+        );
         assert.equal(await source.showMigrations(), false);
         const drift = await source.driver.createSchemaBuilder().log();
-        assert.deepEqual(drift.upQueries.map((query) => query.query), []);
+        assert.deepEqual(
+          drift.upQueries.map((query) => query.query),
+          [],
+        );
       },
     );
   } finally {

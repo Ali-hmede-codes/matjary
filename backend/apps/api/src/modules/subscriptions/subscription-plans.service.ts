@@ -224,7 +224,10 @@ export class SubscriptionPlansService {
     userId: string,
   ): Promise<UserSubscription | null> {
     try {
-      return await effectiveSubscription(this.userSubscriptions.manager, userId);
+      return await effectiveSubscription(
+        this.userSubscriptions.manager,
+        userId,
+      );
     } catch (error) {
       this.sanitize(error);
     }
@@ -248,15 +251,45 @@ export class SubscriptionPlansService {
     notes?: string,
   ): Promise<UserSubscription> {
     try {
-      if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) throw new BadRequestException('Subscription expiry must be in the future');
-      return await this.userSubscriptions.manager.transaction(async (manager) => {
-        const user = await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
-        if (!user) throw new NotFoundException('User not found');
-        const plan = await manager.findOne(SubscriptionPlan, { where: { id: planId }, lock: { mode: 'pessimistic_read' } });
-        if (!plan || !plan.isActive) throw new NotFoundException('Active subscription plan not found');
-        await manager.update(UserSubscription, { userId, status: SubscriptionStatus.ACTIVE }, { status: SubscriptionStatus.CANCELLED });
-        return manager.save(UserSubscription, manager.create(UserSubscription, { userId, planId, status: SubscriptionStatus.ACTIVE, startsAt: new Date(), expiresAt: expiresAt ?? null, assignedBy, notes: notes ?? null }));
-      });
+      if (
+        expiresAt &&
+        (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())
+      )
+        throw new BadRequestException(
+          'Subscription expiry must be in the future',
+        );
+      return await this.userSubscriptions.manager.transaction(
+        async (manager) => {
+          const user = await manager.findOne(User, {
+            where: { id: userId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!user) throw new NotFoundException('User not found');
+          const plan = await manager.findOne(SubscriptionPlan, {
+            where: { id: planId },
+            lock: { mode: 'pessimistic_read' },
+          });
+          if (!plan || !plan.isActive)
+            throw new NotFoundException('Active subscription plan not found');
+          await manager.update(
+            UserSubscription,
+            { userId, status: SubscriptionStatus.ACTIVE },
+            { status: SubscriptionStatus.CANCELLED },
+          );
+          return manager.save(
+            UserSubscription,
+            manager.create(UserSubscription, {
+              userId,
+              planId,
+              status: SubscriptionStatus.ACTIVE,
+              startsAt: new Date(),
+              expiresAt: expiresAt ?? null,
+              assignedBy,
+              notes: notes ?? null,
+            }),
+          );
+        },
+      );
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -285,7 +318,9 @@ export class SubscriptionPlansService {
       if (
         value !== undefined &&
         value !== null &&
-        (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0)
+        (typeof value !== 'number' ||
+          !Number.isSafeInteger(value) ||
+          value <= 0)
       ) {
         throw new BadRequestException(
           `${field} must be a positive number or null for unlimited`,

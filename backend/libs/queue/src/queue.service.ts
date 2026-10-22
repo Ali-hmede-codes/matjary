@@ -74,7 +74,9 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
       connectTimeout: 5000,
       commandTimeout: 5000,
     });
-    this.redis.on('error', () => this.logger.warn('Queue connection unavailable'));
+    this.redis.on('error', () =>
+      this.logger.warn('Queue connection unavailable'),
+    );
   }
 
   async onModuleInit(): Promise<void> {
@@ -95,8 +97,15 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
 
   createWorkerConnection(): Redis {
     // Blocking consumers must retry indefinitely; API producers must not.
-    const connection = this.redis.duplicate({ maxRetriesPerRequest: null, commandTimeout: undefined, enableOfflineQueue: true, lazyConnect: true });
-    connection.on('error', () => this.logger.warn('Worker queue connection unavailable'));
+    const connection = this.redis.duplicate({
+      maxRetriesPerRequest: null,
+      commandTimeout: undefined,
+      enableOfflineQueue: true,
+      lazyConnect: true,
+    });
+    connection.on('error', () =>
+      this.logger.warn('Worker queue connection unavailable'),
+    );
     this.workerConnections.push(connection);
     return connection;
   }
@@ -109,7 +118,10 @@ export class QueueService implements OnModuleInit, OnApplicationShutdown {
     if (!this.queue) {
       throw new Error('Media processing queue is not initialized');
     }
-    await this.queue.add(PROCESS_MEDIA_JOB, data, { ...QUEUE_OPTIONS, jobId: `media-${data.mediaId}` });
+    await this.queue.add(PROCESS_MEDIA_JOB, data, {
+      ...QUEUE_OPTIONS,
+      jobId: `media-${data.mediaId}`,
+    });
   }
 
   /**

@@ -17,7 +17,15 @@ export class PresignedUrlDto {
   @Length(1, 255)
   fileName!: string;
 
-  @IsIn(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/quicktime', 'video/webm'])
+  @IsIn([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/avif',
+    'video/mp4',
+    'video/quicktime',
+    'video/webm',
+  ])
   fileType!: string;
 
   @IsPositive()

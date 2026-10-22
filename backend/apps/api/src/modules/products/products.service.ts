@@ -8,7 +8,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
-import { Store, Product, ProductStatus, ProductCategory, User, effectiveLimits, assertQuota } from '@app/database';
+import {
+  Store,
+  Product,
+  ProductStatus,
+  ProductCategory,
+  User,
+  effectiveLimits,
+  assertQuota,
+} from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import {
@@ -120,45 +128,54 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto> {
     try {
-      const { saved, store } = await this.products.manager.transaction(async (manager) => {
-      await manager.findOneOrFail(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
-      const limits = await effectiveLimits(manager, userId);
-      const count = await manager.count(Product, { where: { store: { ownerId: userId } } });
-      assertQuota(count, limits.maxProducts, 'Product');
-      const store = await manager.findOneBy(Store, { id: storeId });
-      if (!store) {
-        throw new NotFoundException('Store not found');
-      }
-      if (store.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this store');
-      }
+      const { saved, store } = await this.products.manager.transaction(
+        async (manager) => {
+          await manager.findOneOrFail(User, {
+            where: { id: userId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          const limits = await effectiveLimits(manager, userId);
+          const count = await manager.count(Product, {
+            where: { store: { ownerId: userId } },
+          });
+          assertQuota(count, limits.maxProducts, 'Product');
+          const store = await manager.findOneBy(Store, { id: storeId });
+          if (!store) {
+            throw new NotFoundException('Store not found');
+          }
+          if (store.ownerId !== userId) {
+            throw new ForbiddenException('You do not own this store');
+          }
 
-      const existing = await manager.findOneBy(Product, { slug: dto.slug });
-      if (existing) {
-        throw new ConflictException('A product with this slug already exists');
-      }
+          const existing = await manager.findOneBy(Product, { slug: dto.slug });
+          if (existing) {
+            throw new ConflictException(
+              'A product with this slug already exists',
+            );
+          }
 
-      const product = manager.create(Product, {
-        slug: dto.slug,
-        name: dto.name,
-        description: dto.description ?? null,
-        priceCents: dto.priceCents.toString(),
-        currency: dto.currency ?? 'USD',
-        category: dto.category ?? ProductCategory.OTHER,
-        status: dto.status ?? ProductStatus.DRAFT,
-        sku: dto.sku ?? null,
-        stockQuantity: dto.stockQuantity ?? null,
-        weightGrams: dto.weightGrams ?? null,
-        imageKeys: dto.imageKeys ?? null,
-        tags: dto.tags ?? null,
-        sortOrder: dto.sortOrder ?? 0,
-        requiresShipping: dto.requiresShipping ?? true,
-        storeId,
-      });
+          const product = manager.create(Product, {
+            slug: dto.slug,
+            name: dto.name,
+            description: dto.description ?? null,
+            priceCents: dto.priceCents.toString(),
+            currency: dto.currency ?? 'USD',
+            category: dto.category ?? ProductCategory.OTHER,
+            status: dto.status ?? ProductStatus.DRAFT,
+            sku: dto.sku ?? null,
+            stockQuantity: dto.stockQuantity ?? null,
+            weightGrams: dto.weightGrams ?? null,
+            imageKeys: dto.imageKeys ?? null,
+            tags: dto.tags ?? null,
+            sortOrder: dto.sortOrder ?? 0,
+            requiresShipping: dto.requiresShipping ?? true,
+            storeId,
+          });
 
-      const saved = await manager.save(product);
-      return { saved, store };
-      });
+          const saved = await manager.save(product);
+          return { saved, store };
+        },
+      );
 
       // Auto-generate SEO for the new product
       try {

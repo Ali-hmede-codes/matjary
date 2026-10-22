@@ -93,26 +93,69 @@ export class S3StorageProvider implements StorageProvider {
 
   async statObject(key: string): Promise<{ size: number }> {
     try {
-      const response = await this.requireClient().send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }), { abortSignal: AbortSignal.timeout(30000) });
-      if (!Number.isSafeInteger(response.ContentLength) || response.ContentLength! < 0) throw new BadRequestException('Invalid stored media');
+      const response = await this.requireClient().send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+        { abortSignal: AbortSignal.timeout(30000) },
+      );
+      if (
+        !Number.isSafeInteger(response.ContentLength) ||
+        response.ContentLength! < 0
+      )
+        throw new BadRequestException('Invalid stored media');
       return { size: response.ContentLength! };
     } catch (error) {
-      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) throw new NotFoundException('Stored file not found');
+      if (
+        (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode === 404
+      )
+        throw new NotFoundException('Stored file not found');
       throw error;
     }
   }
 
-  async openReadStream(key: string, range?: { start: number; end: number }): Promise<Readable> {
-    const response = await this.requireClient().send(new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: range ? `bytes=${range.start}-${range.end}` : undefined }), { abortSignal: AbortSignal.timeout(30000) });
-    if (!(response.Body instanceof Readable)) throw new ServiceUnavailableException('Media storage is temporarily unavailable');
+  async openReadStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<Readable> {
+    const response = await this.requireClient().send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Range: range ? `bytes=${range.start}-${range.end}` : undefined,
+      }),
+      { abortSignal: AbortSignal.timeout(30000) },
+    );
+    if (!(response.Body instanceof Readable))
+      throw new ServiceUnavailableException(
+        'Media storage is temporarily unavailable',
+      );
     return response.Body;
   }
 
-  async putStream(key: string, body: Readable, mimeType: string, size: number, options: { exclusive?: boolean; signal?: AbortSignal } = {}): Promise<void> {
+  async putStream(
+    key: string,
+    body: Readable,
+    mimeType: string,
+    size: number,
+    options: { exclusive?: boolean; signal?: AbortSignal } = {},
+  ): Promise<void> {
     const limited = new ByteLimit(size, true);
     const transfer = pipeline(body, limited, { signal: options.signal });
     try {
-      await Promise.all([transfer, this.requireClient().send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: limited, ContentType: mimeType, ContentLength: size, IfNoneMatch: options.exclusive ? '*' : undefined }), { abortSignal: options.signal })]);
+      await Promise.all([
+        transfer,
+        this.requireClient().send(
+          new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            Body: limited,
+            ContentType: mimeType,
+            ContentLength: size,
+            IfNoneMatch: options.exclusive ? '*' : undefined,
+          }),
+          { abortSignal: options.signal },
+        ),
+      ]);
     } finally {
       limited.destroy();
       body.destroy();
@@ -122,18 +165,22 @@ export class S3StorageProvider implements StorageProvider {
 
   async getObject(key: string): Promise<Buffer> {
     const { size } = await this.statObject(key);
-    if (size > 10485760) throw new BadRequestException('Use streaming for large media');
+    if (size > 10485760)
+      throw new BadRequestException('Use streaming for large media');
     const source = await this.openReadStream(key);
     const chunks: Buffer[] = [];
     let bytes = 0;
     try {
       for await (const chunk of source) {
         bytes += Buffer.byteLength(chunk);
-        if (bytes > 10485760) throw new BadRequestException('Media exceeds the size limit');
+        if (bytes > 10485760)
+          throw new BadRequestException('Media exceeds the size limit');
         chunks.push(Buffer.from(chunk));
       }
       return Buffer.concat(chunks);
-    } finally { source.destroy(); }
+    } finally {
+      source.destroy();
+    }
   }
 
   async putObject(key: string, body: Buffer, mimeType: string): Promise<void> {

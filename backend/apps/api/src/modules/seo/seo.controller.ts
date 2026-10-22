@@ -22,7 +22,15 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { SeoService, MetaTags } from './seo.service';
-import { StoreSeoDto, ProductSeoDto, ShowcaseSeoDto, SeoSettingsDto, CreateRedirectDto, UpdateRedirectDto, IndexNowDto } from './seo.dto';
+import {
+  StoreSeoDto,
+  ProductSeoDto,
+  ShowcaseSeoDto,
+  SeoSettingsDto,
+  CreateRedirectDto,
+  UpdateRedirectDto,
+  IndexNowDto,
+} from './seo.dto';
 import {
   StoreSeo,
   ProductSeo,
@@ -30,7 +38,11 @@ import {
   SeoRedirect,
   SeoSettings,
 } from './seo.entities';
-import { SessionGuard, AdminGuard, MutationGuard } from '../auth/guards/auth.guards';
+import {
+  SessionGuard,
+  AdminGuard,
+  MutationGuard,
+} from '../auth/guards/auth.guards';
 import type { AuthenticatedRequest } from '../auth/guards/auth.guards';
 
 @ApiTags('SEO')
@@ -195,8 +207,12 @@ export class SeoController {
   @ApiOperation({ summary: 'Check if a redirect exists for a path' })
   @ApiResponse({ status: 200, description: 'Redirect target if exists' })
   async checkRedirect(@Param('fromPath') fromPath?: string | string[]) {
-    const path = Array.isArray(fromPath) ? fromPath.join('/') : (fromPath ?? '');
-    const redirect = await this.seoService.getRedirect(`/${path.replace(/^\/+/, '')}`);
+    const path = Array.isArray(fromPath)
+      ? fromPath.join('/')
+      : (fromPath ?? '');
+    const redirect = await this.seoService.getRedirect(
+      `/${path.replace(/^\/+/, '')}`,
+    );
     if (!redirect) {
       return { redirect: null };
     }
@@ -268,7 +284,10 @@ export class SeoController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete SEO for a store' })
-  async deleteStoreSeo(@Param('storeId') storeId: string, @Req() req: AuthenticatedRequest): Promise<void> {
+  async deleteStoreSeo(
+    @Param('storeId') storeId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
     await this.seoService.deleteStoreSeo(storeId, req.user.id);
   }
 
@@ -304,7 +323,11 @@ export class SeoController {
     @Param('productId') productId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.seoService.autoGenerateOwnedSeo('product', productId, req.user.id);
+    return this.seoService.autoGenerateOwnedSeo(
+      'product',
+      productId,
+      req.user.id,
+    );
   }
 
   @Delete('products/:productId')
@@ -312,7 +335,10 @@ export class SeoController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete SEO for a product' })
-  async deleteProductSeo(@Param('productId') productId: string, @Req() req: AuthenticatedRequest): Promise<void> {
+  async deleteProductSeo(
+    @Param('productId') productId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
     await this.seoService.deleteProductSeo(productId, req.user.id);
   }
 
@@ -350,7 +376,11 @@ export class SeoController {
     @Param('showcaseId') showcaseId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.seoService.autoGenerateOwnedSeo('showcase', showcaseId, req.user.id);
+    return this.seoService.autoGenerateOwnedSeo(
+      'showcase',
+      showcaseId,
+      req.user.id,
+    );
   }
 
   @Delete('showcases/:showcaseId')
@@ -406,7 +436,10 @@ export class SeoController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a redirect' })
-  async deleteRedirect(@Param('id') id: string, @Req() req: AuthenticatedRequest): Promise<void> {
+  async deleteRedirect(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
     await this.seoService.deleteRedirect(id, req.user.id);
   }
 }

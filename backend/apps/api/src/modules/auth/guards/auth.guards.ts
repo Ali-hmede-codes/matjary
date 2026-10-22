@@ -25,11 +25,22 @@ export class AdminGuard implements CanActivate {
 
   isAdmin(user: PublicUser | undefined): boolean {
     const emails = this.config.get('ADMIN_EMAILS', { infer: true }) ?? '';
-    return Boolean(user && emails.split(',').map((email) => email.trim().toLowerCase()).filter(Boolean).includes(user.email.toLowerCase()));
+    return Boolean(
+      user &&
+      emails
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean)
+        .includes(user.email.toLowerCase()),
+    );
   }
 
   canActivate(context: ExecutionContext): boolean {
-    if (!this.isAdmin(context.switchToHttp().getRequest<AuthenticatedRequest>().user)) {
+    if (
+      !this.isAdmin(
+        context.switchToHttp().getRequest<AuthenticatedRequest>().user,
+      )
+    ) {
       throw new ForbiddenException('Admin access required');
     }
     return true;
@@ -76,7 +87,9 @@ export class BinaryOriginGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    if (request.headers.origin !== this.config.get('APP_ORIGIN', { infer: true })) {
+    if (
+      request.headers.origin !== this.config.get('APP_ORIGIN', { infer: true })
+    ) {
       throw new ForbiddenException('Request origin is not allowed');
     }
     return true;
@@ -85,14 +98,20 @@ export class BinaryOriginGuard implements CanActivate {
 
 @Injectable()
 export class OptionalSessionGuard implements CanActivate {
-  constructor(private readonly auth: AuthService, private readonly cookies: AuthCookies) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly cookies: AuthCookies,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<Request & { user?: PublicUser }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: PublicUser }>();
     const token = this.cookies.read(request, 'session');
     if (token) {
-      try { request.user = await this.auth.currentUser(token); }
-      catch (error) {
+      try {
+        request.user = await this.auth.currentUser(token);
+      } catch (error) {
         // Expired sessions may browse anonymously, but outages must fail closed.
         if (!(error instanceof UnauthorizedException)) throw error;
       }
@@ -103,7 +122,10 @@ export class OptionalSessionGuard implements CanActivate {
 
 @Injectable()
 export class MutationGuard implements CanActivate {
-  constructor(private readonly origin: AuthOriginGuard, private readonly rate: AuthRateLimitGuard) {}
+  constructor(
+    private readonly origin: AuthOriginGuard,
+    private readonly rate: AuthRateLimitGuard,
+  ) {}
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const method = context.switchToHttp().getRequest<Request>().method;
     if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;

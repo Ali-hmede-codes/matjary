@@ -12,7 +12,15 @@ import { plainToInstance, ClassConstructor } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminGuard } from '../auth/guards/auth.guards';
 import { StorageService } from '@app/storage';
-import { StoreSeoDto, ProductSeoDto, ShowcaseSeoDto, SeoSettingsDto, CreateRedirectDto, UpdateRedirectDto, IndexNowDto } from './seo.dto';
+import {
+  StoreSeoDto,
+  ProductSeoDto,
+  ShowcaseSeoDto,
+  SeoSettingsDto,
+  CreateRedirectDto,
+  UpdateRedirectDto,
+  IndexNowDto,
+} from './seo.dto';
 
 type SeoKind = 'store' | 'product' | 'showcase';
 import { ConfigService } from '@nestjs/config';
@@ -142,17 +150,26 @@ export class SeoService {
   // Settings
   // ============================================
 
-  private async validated<T extends object>(type: ClassConstructor<T>, data: T): Promise<T> {
+  private async validated<T extends object>(
+    type: ClassConstructor<T>,
+    data: T,
+  ): Promise<T> {
     const dto = plainToInstance(type, data);
-    if ((await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).length) {
+    if (
+      (await validate(dto, { whitelist: true, forbidNonWhitelisted: true }))
+        .length
+    ) {
       throw new BadRequestException('Invalid SEO fields');
     }
     return dto;
   }
 
   private async requireAdmin(actorId: string): Promise<void> {
-    const actor = await this.dataSource.manager.findOneBy(User, { id: actorId });
-    if (!actor || !this.admin.isAdmin(actor)) throw new ForbiddenException('Admin access required');
+    const actor = await this.dataSource.manager.findOneBy(User, {
+      id: actorId,
+    });
+    if (!actor || !this.admin.isAdmin(actor))
+      throw new ForbiddenException('Admin access required');
   }
 
   private async ownedEntity(kind: SeoKind, id: string, actorId: string) {
@@ -163,11 +180,17 @@ export class SeoService {
       return { store, product: null, showcase: null };
     }
     if (kind === 'product') {
-      const product = await manager.findOne(Product, { where: { id, store: { ownerId: actorId } }, relations: ['store'] });
+      const product = await manager.findOne(Product, {
+        where: { id, store: { ownerId: actorId } },
+        relations: ['store'],
+      });
       if (!product) throw new NotFoundException('Product not found');
       return { store: product.store, product, showcase: null };
     }
-    const showcase = await manager.findOne(Showcase, { where: { id, ownerId: actorId }, relations: ['store'] });
+    const showcase = await manager.findOne(Showcase, {
+      where: { id, ownerId: actorId },
+      relations: ['store'],
+    });
     if (!showcase) throw new NotFoundException('Post not found');
     return { store: showcase.store ?? null, product: null, showcase };
   }
@@ -180,13 +203,21 @@ export class SeoService {
   }
 
   async autoGenerateOwnedSeo(kind: SeoKind, id: string, actorId: string) {
-    const { store, product, showcase } = await this.ownedEntity(kind, id, actorId);
+    const { store, product, showcase } = await this.ownedEntity(
+      kind,
+      id,
+      actorId,
+    );
     if (showcase) return this.autoGenerateShowcaseSeo(showcase, store);
     if (product && store) return this.autoGenerateProductSeo(product, store);
     return this.autoGenerateStoreSeo(store!);
   }
 
-  async getMetaBySlug(kind: SeoKind, slug: string, storeSlug?: string): Promise<MetaTags> {
+  async getMetaBySlug(
+    kind: SeoKind,
+    slug: string,
+    storeSlug?: string,
+  ): Promise<MetaTags> {
     const manager = this.dataSource.manager;
     if (kind === 'store') {
       const store = await manager.findOneBy(Store, { slug });
@@ -195,12 +226,24 @@ export class SeoService {
     }
     if (kind === 'product') {
       // Honor optional store context and reject ambiguous legacy slug data.
-      const products = await manager.find(Product, { where: { slug, status: ProductStatus.ACTIVE, ...(storeSlug ? { store: { slug: storeSlug } } : {}) }, relations: ['store'], take: 2 });
+      const products = await manager.find(Product, {
+        where: {
+          slug,
+          status: ProductStatus.ACTIVE,
+          ...(storeSlug ? { store: { slug: storeSlug } } : {}),
+        },
+        relations: ['store'],
+        take: 2,
+      });
       if (!products.length) throw new NotFoundException('Product not found');
-      if (products.length !== 1) throw new BadRequestException('Specify storeSlug for this product');
+      if (products.length !== 1)
+        throw new BadRequestException('Specify storeSlug for this product');
       return this.generateProductMetaTags(products[0]!, products[0]!.store);
     }
-    const showcase = await manager.findOne(Showcase, { where: { slug, status: ShowcaseStatus.PUBLISHED }, relations: ['store'] });
+    const showcase = await manager.findOne(Showcase, {
+      where: { slug, status: ShowcaseStatus.PUBLISHED },
+      relations: ['store'],
+    });
     if (!showcase) throw new NotFoundException('Post not found');
     return this.generateShowcaseMetaTags(showcase, showcase.store ?? null);
   }
@@ -208,16 +251,34 @@ export class SeoService {
   private assertSiteUrl(value: string): void {
     try {
       const url = new URL(value);
-      if (url.origin === new URL(this.baseUrl).origin && !url.username && !url.password) return;
-    } catch { /* Invalid URLs fail closed. */ }
+      if (
+        url.origin === new URL(this.baseUrl).origin &&
+        !url.username &&
+        !url.password
+      )
+        return;
+    } catch {
+      /* Invalid URLs fail closed. */
+    }
     throw new BadRequestException('URL must belong to the application origin');
   }
 
-  private async checkMetadata(data: { canonicalUrl?: string | null; ogImageKey?: string | null }, actorId: string) {
+  private async checkMetadata(
+    data: { canonicalUrl?: string | null; ogImageKey?: string | null },
+    actorId: string,
+  ) {
     if (data.canonicalUrl) this.assertSiteUrl(data.canonicalUrl);
     if (data.ogImageKey) {
-      const variant = await this.dataSource.manager.findOne(MediaVariant, { where: { storageKey: data.ogImageKey, asset: { showcase: { ownerId: actorId }, status: MediaStatus.READY } } });
-      if (!variant) throw new BadRequestException('Image must be an owned ready media variant');
+      const variant = await this.dataSource.manager.findOne(MediaVariant, {
+        where: {
+          storageKey: data.ogImageKey,
+          asset: { showcase: { ownerId: actorId }, status: MediaStatus.READY },
+        },
+      });
+      if (!variant)
+        throw new BadRequestException(
+          'Image must be an owned ready media variant',
+        );
     }
   }
 
@@ -229,17 +290,25 @@ export class SeoService {
   private async getSettings(): Promise<SeoSettings> {
     // The migration seeds settings. Reads must not create competing singleton
     // rows, and TypeORM findOne requires a where clause.
-    const [settings] = await this.settingsRepo.find({ take: 1, order: { createdAt: 'ASC' } });
-    if (!settings) throw new ServiceUnavailableException('SEO settings are unavailable');
+    const [settings] = await this.settingsRepo.find({
+      take: 1,
+      order: { createdAt: 'ASC' },
+    });
+    if (!settings)
+      throw new ServiceUnavailableException('SEO settings are unavailable');
     return settings;
   }
 
-  async updateSettings(data: SeoSettingsDto, actorId: string): Promise<SeoSettings> {
+  async updateSettings(
+    data: SeoSettingsDto,
+    actorId: string,
+  ): Promise<SeoSettings> {
     await this.requireAdmin(actorId);
     data = await this.validated(SeoSettingsDto, data);
     if (data.indexNowKeyLocation) this.assertSiteUrl(data.indexNowKeyLocation);
     for (const key of [data.defaultOgImageKey, data.organizationLogoKey]) {
-      if (key && !(await this.buildImageUrl(key))) throw new BadRequestException('Image must be a public ready variant');
+      if (key && !(await this.buildImageUrl(key)))
+        throw new BadRequestException('Image must be a public ready variant');
     }
     const settings = await this.getSettings();
     Object.assign(settings, data);
@@ -311,7 +380,9 @@ export class SeoService {
   // Showcase/Post SEO
   // ============================================
 
-  private async getShowcaseSeo(showcaseId: string): Promise<ShowcaseSeo | null> {
+  private async getShowcaseSeo(
+    showcaseId: string,
+  ): Promise<ShowcaseSeo | null> {
     return this.showcaseSeoRepo.findOneBy({ showcaseId });
   }
 
@@ -320,7 +391,11 @@ export class SeoService {
     data: ShowcaseSeoDto,
     actorId: string,
   ): Promise<ShowcaseSeo> {
-    const { showcase } = await this.ownedEntity('showcase', showcaseId, actorId);
+    const { showcase } = await this.ownedEntity(
+      'showcase',
+      showcaseId,
+      actorId,
+    );
     const storeId = showcase!.storeId;
     data = await this.validated(ShowcaseSeoDto, data);
     await this.checkMetadata(data, actorId);
@@ -346,13 +421,19 @@ export class SeoService {
     return this.redirectRepo.findOneBy({ fromPath, isActive: true });
   }
 
-  async getRedirects(actorId: string, storeId?: string): Promise<SeoRedirect[]> {
+  async getRedirects(
+    actorId: string,
+    storeId?: string,
+  ): Promise<SeoRedirect[]> {
     await this.requireAdmin(actorId);
     const where = storeId ? { storeId, isActive: true } : { isActive: true };
     return this.redirectRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
-  async createRedirect(data: CreateRedirectDto, actorId: string): Promise<SeoRedirect> {
+  async createRedirect(
+    data: CreateRedirectDto,
+    actorId: string,
+  ): Promise<SeoRedirect> {
     await this.requireAdmin(actorId);
     data = await this.validated(CreateRedirectDto, data);
     this.assertSiteUrl(new URL(data.fromPath, this.baseUrl).href);
@@ -374,8 +455,10 @@ export class SeoService {
   ): Promise<SeoRedirect> {
     await this.requireAdmin(actorId);
     data = await this.validated(UpdateRedirectDto, data);
-    if (data.fromPath) this.assertSiteUrl(new URL(data.fromPath, this.baseUrl).href);
-    if (data.toPath) this.assertSiteUrl(new URL(data.toPath, this.baseUrl).href);
+    if (data.fromPath)
+      this.assertSiteUrl(new URL(data.fromPath, this.baseUrl).href);
+    if (data.toPath)
+      this.assertSiteUrl(new URL(data.toPath, this.baseUrl).href);
     const redirect = await this.redirectRepo.findOneBy({ id });
     if (!redirect) {
       throw new NotFoundException('Redirect not found');
@@ -762,7 +845,8 @@ export class SeoService {
     product: Product,
     store: Store,
   ): Promise<MetaTags> {
-    if (product.status !== ProductStatus.ACTIVE) throw new NotFoundException('Product not found');
+    if (product.status !== ProductStatus.ACTIVE)
+      throw new NotFoundException('Product not found');
     // Ensure SEO exists (auto-generate if needed)
     let seo = await this.getProductSeo(product.id);
     if (!seo) {
@@ -817,7 +901,13 @@ export class SeoService {
         description: this.truncate(ogDescription, 200),
         image: ogImage,
       },
-      jsonLd: await this.buildProductJsonLd(product, store, seo, price, isInStock),
+      jsonLd: await this.buildProductJsonLd(
+        product,
+        store,
+        seo,
+        price,
+        isInStock,
+      ),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
@@ -828,7 +918,8 @@ export class SeoService {
     showcase: Showcase,
     store: Store | null,
   ): Promise<MetaTags> {
-    if (showcase.status !== ShowcaseStatus.PUBLISHED) throw new NotFoundException('Post not found');
+    if (showcase.status !== ShowcaseStatus.PUBLISHED)
+      throw new NotFoundException('Post not found');
     // Ensure SEO exists (auto-generate if needed)
     let seo = await this.getShowcaseSeo(showcase.id);
     if (!seo) {
@@ -1040,7 +1131,11 @@ export class SeoService {
       '@type': 'Product',
       name: product.name,
       description: product.description,
-      image: (await Promise.all((product.imageKeys ?? []).map((key) => this.buildImageUrl(key)))).filter(Boolean),
+      image: (
+        await Promise.all(
+          (product.imageKeys ?? []).map((key) => this.buildImageUrl(key)),
+        )
+      ).filter(Boolean),
       sku: seo?.sku || product.sku,
       mpn: seo?.mpn,
       gtin: seo?.gtin,
@@ -1260,7 +1355,10 @@ export class SeoService {
         seo.robots === RobotsDirective.NOINDEX_FOLLOW
       )
         continue;
-      const product = await this.dataSource.manager.findOne(Product, { where: { id: seo.productId, status: ProductStatus.ACTIVE }, relations: ['store'] });
+      const product = await this.dataSource.manager.findOne(Product, {
+        where: { id: seo.productId, status: ProductStatus.ACTIVE },
+        relations: ['store'],
+      });
       if (product) {
         entries.push({
           title: product.name,
@@ -1480,7 +1578,9 @@ export class SeoService {
     } else if (entityType === 'product') {
       const product = entity as Product;
       if (product.status !== ProductStatus.ACTIVE) return;
-      const store = await this.dataSource.manager.findOneBy(Store, { id: product.storeId });
+      const store = await this.dataSource.manager.findOneBy(Store, {
+        id: product.storeId,
+      });
       if (!store) return;
       url = this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug;
     } else {
@@ -1499,18 +1599,32 @@ export class SeoService {
     const settings = await this.getSettings();
     if (!settings.sitemapEnabled) return [];
     const urls: SitemapUrl[] = [];
-    const indexable = (seo: { robots: RobotsDirective } | null) => !seo?.robots?.includes('noindex');
+    const indexable = (seo: { robots: RobotsDirective } | null) =>
+      !seo?.robots?.includes('noindex');
     const manager = this.dataSource.manager;
-    if (!kind) urls.push({ url: this.baseUrl, changefreq: settings.sitemapChangefreq, priority: 1 });
+    if (!kind)
+      urls.push({
+        url: this.baseUrl,
+        changefreq: settings.sitemapChangefreq,
+        priority: 1,
+      });
     if (!kind || kind === 'store') {
       for (const store of await manager.find(Store)) {
         const seo = await this.getStoreSeo(store.id);
         if (!indexable(seo)) continue;
-        urls.push({ url: seo?.canonicalUrl || `${this.baseUrl}/shop/${store.slug}`, lastmod: store.updatedAt.toISOString().split('T')[0], changefreq: 'weekly', priority: 0.8 });
+        urls.push({
+          url: seo?.canonicalUrl || `${this.baseUrl}/shop/${store.slug}`,
+          lastmod: store.updatedAt.toISOString().split('T')[0],
+          changefreq: 'weekly',
+          priority: 0.8,
+        });
       }
     }
     if (!kind || kind === 'product') {
-      for (const product of await manager.find(Product, { where: { status: ProductStatus.ACTIVE }, relations: ['store'] })) {
+      for (const product of await manager.find(Product, {
+        where: { status: ProductStatus.ACTIVE },
+        relations: ['store'],
+      })) {
         const seo = await this.getProductSeo(product.id);
         if (!indexable(seo)) continue;
         const images: SitemapImage[] = [];
@@ -1518,14 +1632,29 @@ export class SeoService {
           const url = await this.buildImageUrl(key);
           if (url) images.push({ url, title: product.name });
         }
-        urls.push({ url: seo?.canonicalUrl || `${this.baseUrl}/shop/${product.store.slug}/product/${product.slug}`, lastmod: product.updatedAt.toISOString().split('T')[0], changefreq: 'weekly', priority: 0.6, images });
+        urls.push({
+          url:
+            seo?.canonicalUrl ||
+            `${this.baseUrl}/shop/${product.store.slug}/product/${product.slug}`,
+          lastmod: product.updatedAt.toISOString().split('T')[0],
+          changefreq: 'weekly',
+          priority: 0.6,
+          images,
+        });
       }
     }
     if (!kind || kind === 'showcase') {
-      for (const showcase of await manager.find(Showcase, { where: { status: ShowcaseStatus.PUBLISHED } })) {
+      for (const showcase of await manager.find(Showcase, {
+        where: { status: ShowcaseStatus.PUBLISHED },
+      })) {
         const seo = await this.getShowcaseSeo(showcase.id);
         if (!indexable(seo)) continue;
-        urls.push({ url: seo?.canonicalUrl || `${this.baseUrl}/post/${showcase.slug}`, lastmod: showcase.updatedAt.toISOString().split('T')[0], changefreq: 'monthly', priority: 0.5 });
+        urls.push({
+          url: seo?.canonicalUrl || `${this.baseUrl}/post/${showcase.slug}`,
+          lastmod: showcase.updatedAt.toISOString().split('T')[0],
+          changefreq: 'monthly',
+          priority: 0.5,
+        });
       }
     }
     return urls;
@@ -1665,11 +1794,19 @@ export class SeoService {
   // Helpers
   // ============================================
 
-  private async buildImageUrl(key: string | null | undefined): Promise<string | undefined> {
+  private async buildImageUrl(
+    key: string | null | undefined,
+  ): Promise<string | undefined> {
     if (!key) return undefined;
     // Never advertise originals, arbitrary keys, or media belonging to drafts.
     const variant = await this.dataSource.manager.findOne(MediaVariant, {
-      where: { storageKey: key, asset: { status: MediaStatus.READY, showcase: { status: ShowcaseStatus.PUBLISHED } } },
+      where: {
+        storageKey: key,
+        asset: {
+          status: MediaStatus.READY,
+          showcase: { status: ShowcaseStatus.PUBLISHED },
+        },
+      },
     });
     if (!variant || !variant.mimeType.startsWith('image/')) return undefined;
     return this.storage.presignedGetUrl(key);
@@ -1812,13 +1949,15 @@ export class SeoService {
       '@type': 'HowTo',
       name: data.name,
       description: data.description,
-      step: await Promise.all(data.steps.map(async (step, index) => ({
-        '@type': 'HowToStep',
-        position: index + 1,
-        name: step.name,
-        text: step.text,
-        image: await this.buildImageUrl(step.image),
-      }))),
+      step: await Promise.all(
+        data.steps.map(async (step, index) => ({
+          '@type': 'HowToStep',
+          position: index + 1,
+          name: step.name,
+          text: step.text,
+          image: await this.buildImageUrl(step.image),
+        })),
+      ),
       totalTime: data.totalTime,
       estimatedCost: data.estimatedCost,
       supply: data.supply,

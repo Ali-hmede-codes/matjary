@@ -134,7 +134,11 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     return [Number(next), keys as string[]];
   }
 
-  async evaluate(script: string, keys: string[], arguments_: string[]): Promise<unknown> {
+  async evaluate(
+    script: string,
+    keys: string[],
+    arguments_: string[],
+  ): Promise<unknown> {
     return this.client.eval(script, keys.length, ...keys, ...arguments_);
   }
 

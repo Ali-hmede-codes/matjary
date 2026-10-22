@@ -14,8 +14,18 @@ import type { Request } from 'express';
 import { randomBytes } from 'node:crypto';
 import { parse } from 'cookie';
 import type { AppEnvironment } from '@app/config';
-import { PostEngagement, PostLike, Showcase, ShowcaseStatus } from '@app/database';
-import { hydrateEngagement, readEngagement, mutateEngagement, type EngagementState } from '@app/queue/engagement-buffer';
+import {
+  PostEngagement,
+  PostLike,
+  Showcase,
+  ShowcaseStatus,
+} from '@app/database';
+import {
+  hydrateEngagement,
+  readEngagement,
+  mutateEngagement,
+  type EngagementState,
+} from '@app/queue/engagement-buffer';
 import { RedisService } from '@app/queue';
 import { QueueService, type EngagementFlushJob } from '@app/queue';
 import { AuthService } from '../../auth/auth.service';
@@ -110,8 +120,11 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
     const cookies = parse(request.headers.cookie ?? '');
 
     // 1. A valid session means a logged-in user (accounts are for shops).
-    const secure = this.config.get('APP_ORIGIN', { infer: true }).startsWith('https:');
-    const sessionToken = cookies[secure ? '__Host-matjary_session' : 'matjary_session'];
+    const secure = this.config
+      .get('APP_ORIGIN', { infer: true })
+      .startsWith('https:');
+    const sessionToken =
+      cookies[secure ? '__Host-matjary_session' : 'matjary_session'];
     if (sessionToken) {
       try {
         const user = await this.auth.currentUser(sessionToken);
@@ -156,13 +169,24 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
     // Serialize cold hydration against the worker's commit. An old baseline
     // must never replace a freshly committed snapshot after cache loss.
     await this.showcases.manager.transaction(async (manager) => {
-      await manager.findOneOrFail(Showcase, { where: { id: postId }, lock: { mode: 'pessimistic_write' } });
+      await manager.findOneOrFail(Showcase, {
+        where: { id: postId },
+        lock: { mode: 'pessimistic_write' },
+      });
       const likes = await manager.findBy(PostLike, { postId });
       const row = await manager.findOneBy(PostEngagement, { postId });
-      await hydrateEngagement(this.redis, postId, Object.fromEntries(likes.map((like) => [like.voterId, like.voterType])), row?.viewsCount ?? 0);
+      await hydrateEngagement(
+        this.redis,
+        postId,
+        Object.fromEntries(likes.map((like) => [like.voterId, like.voterType])),
+        row?.viewsCount ?? 0,
+      );
     });
     state = await readEngagement(this.redis, postId);
-    if (!state) throw new ServiceUnavailableException('Engagement temporarily unavailable');
+    if (!state)
+      throw new ServiceUnavailableException(
+        'Engagement temporarily unavailable',
+      );
     return state;
   }
 
@@ -202,11 +226,23 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
 
     try {
       await this.hydratedState(postId);
-      const state = await mutateEngagement(this.redis, postId, 'like', viewer.voterId, viewer.voterType, 1);
+      const state = await mutateEngagement(
+        this.redis,
+        postId,
+        'like',
+        viewer.voterId,
+        viewer.voterType,
+        1,
+      );
       if (!state) throw new Error('Cache changed');
-      return { liked: Boolean(state.likes[viewer.voterId]), likes: Object.keys(state.likes).length };
+      return {
+        liked: Boolean(state.likes[viewer.voterId]),
+        likes: Object.keys(state.likes).length,
+      };
     } catch {
-      throw new ServiceUnavailableException('Engagement temporarily unavailable');
+      throw new ServiceUnavailableException(
+        'Engagement temporarily unavailable',
+      );
     }
   }
 
@@ -226,7 +262,14 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
       await this.rateLimit(viewer.voterId, 'view');
 
       await this.hydratedState(postId);
-      const state = await mutateEngagement(this.redis, postId, 'view', viewer.voterId, viewer.voterType, this.config.get('ENGAGEMENT_VIEW_DEDUPE_TTL_SECONDS', { infer: true }));
+      const state = await mutateEngagement(
+        this.redis,
+        postId,
+        'view',
+        viewer.voterId,
+        viewer.voterType,
+        this.config.get('ENGAGEMENT_VIEW_DEDUPE_TTL_SECONDS', { infer: true }),
+      );
       if (!state) throw new Error('Cache changed');
       return { views: state.views };
     } catch (error) {
@@ -252,15 +295,27 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
       const state = await this.hydratedState(postId);
       // views includes the hydrated durable baseline plus every new event;
       // acknowledgement does not add the committed batch a second time.
-      return { likes: Object.keys(state.likes).length, views: state.views, viewerLiked: Boolean(viewer && state.likes[viewer.voterId]) };
+      return {
+        likes: Object.keys(state.likes).length,
+        views: state.views,
+        viewerLiked: Boolean(viewer && state.likes[viewer.voterId]),
+      };
     } catch {
       const row = await this.engagement.findOneBy({ postId });
-      const like = viewer ? await this.postLikes.findOneBy({ postId, voterId: viewer.voterId }) : null;
-      return { likes: row?.likesCount ?? 0, views: row?.viewsCount ?? 0, viewerLiked: Boolean(like) };
+      const like = viewer
+        ? await this.postLikes.findOneBy({ postId, voterId: viewer.voterId })
+        : null;
+      return {
+        likes: row?.likesCount ?? 0,
+        views: row?.viewsCount ?? 0,
+        viewerLiked: Boolean(like),
+      };
     }
   }
 
   async flushEngagement(postIds?: string[]): Promise<void> {
-    await this.queue.enqueueEngagementFlush(postIds ? { postIds } : { all: true });
+    await this.queue.enqueueEngagementFlush(
+      postIds ? { postIds } : { all: true },
+    );
   }
 }

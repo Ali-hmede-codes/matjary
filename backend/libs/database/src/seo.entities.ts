@@ -217,14 +217,20 @@ export class ProductSeo {
   productId!: string;
 
   @ManyToOne(() => Product, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'product_id', foreignKeyConstraintName: 'fk_product_seo_product' })
+  @JoinColumn({
+    name: 'product_id',
+    foreignKeyConstraintName: 'fk_product_seo_product',
+  })
   product!: Relation<Product>;
 
   @Column({ name: 'store_id', type: 'varchar', length: 36 })
   storeId!: string;
 
   @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'store_id', foreignKeyConstraintName: 'fk_product_seo_store' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_product_seo_store',
+  })
   store!: Relation<Store>;
 
   @Column({ name: 'meta_title', type: 'varchar', length: 120, nullable: true })
@@ -365,14 +371,20 @@ export class ShowcaseSeo {
   showcaseId!: string;
 
   @ManyToOne(() => Showcase, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'showcase_id', foreignKeyConstraintName: 'fk_showcase_seo_showcase' })
+  @JoinColumn({
+    name: 'showcase_id',
+    foreignKeyConstraintName: 'fk_showcase_seo_showcase',
+  })
   showcase!: Relation<Showcase>;
 
   @Column({ name: 'store_id', type: 'varchar', length: 36, nullable: true })
   storeId!: string | null;
 
   @ManyToOne(() => Store, { onDelete: 'RESTRICT', nullable: true })
-  @JoinColumn({ name: 'store_id', foreignKeyConstraintName: 'fk_showcase_seo_store' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_showcase_seo_store',
+  })
   store!: Relation<Store> | null;
 
   @Column({ name: 'meta_title', type: 'varchar', length: 120, nullable: true })

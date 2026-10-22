@@ -55,21 +55,67 @@ redis.call('SET', KEYS[1], cjson.encode(s))
 if not s.changed then redis.call('SREM', KEYS[2], ARGV[1]) end
 return 1`;
 
-export async function readEngagement(redis: RedisService, postId: string): Promise<EngagementState | null> {
+export async function readEngagement(
+  redis: RedisService,
+  postId: string,
+): Promise<EngagementState | null> {
   const value = await redis.get(stateKey(postId));
-  return value ? JSON.parse(value) as EngagementState : null;
+  return value ? (JSON.parse(value) as EngagementState) : null;
 }
-export async function hydrateEngagement(redis: RedisService, postId: string, likes: Record<string, 'user' | 'visitor'>, views: number): Promise<void> {
-  await redis.evaluate("return redis.call('SET', KEYS[1], ARGV[1], 'NX')", [stateKey(postId)], [JSON.stringify({ likes, views, pendingViews: 0, changed: false })]);
+export async function hydrateEngagement(
+  redis: RedisService,
+  postId: string,
+  likes: Record<string, 'user' | 'visitor'>,
+  views: number,
+): Promise<void> {
+  await redis.evaluate(
+    "return redis.call('SET', KEYS[1], ARGV[1], 'NX')",
+    [stateKey(postId)],
+    [JSON.stringify({ likes, views, pendingViews: 0, changed: false })],
+  );
 }
-export async function mutateEngagement(redis: RedisService, postId: string, action: 'like' | 'view', voterId: string, voterType: 'user' | 'visitor', dedupeSeconds: number): Promise<EngagementState | null> {
-  const result = await redis.evaluate(MUTATE, [stateKey(postId), ENGAGEMENT_DIRTY, `matjary:eng:seen:${postId}:${voterType}:${voterId}`], [postId, action, voterId, voterType, String(dedupeSeconds)]);
-  return typeof result === 'string' ? JSON.parse(result) as EngagementState : null;
+export async function mutateEngagement(
+  redis: RedisService,
+  postId: string,
+  action: 'like' | 'view',
+  voterId: string,
+  voterType: 'user' | 'visitor',
+  dedupeSeconds: number,
+): Promise<EngagementState | null> {
+  const result = await redis.evaluate(
+    MUTATE,
+    [
+      stateKey(postId),
+      ENGAGEMENT_DIRTY,
+      `matjary:eng:seen:${postId}:${voterType}:${voterId}`,
+    ],
+    [postId, action, voterId, voterType, String(dedupeSeconds)],
+  );
+  return typeof result === 'string'
+    ? (JSON.parse(result) as EngagementState)
+    : null;
 }
-export async function stageEngagement(redis: RedisService, postId: string): Promise<EngagementBatch | null> {
-  const result = await redis.evaluate(STAGE, [stateKey(postId), ENGAGEMENT_DIRTY], [postId, randomUUID()]);
-  return typeof result === 'string' ? JSON.parse(result) as EngagementBatch : null;
+export async function stageEngagement(
+  redis: RedisService,
+  postId: string,
+): Promise<EngagementBatch | null> {
+  const result = await redis.evaluate(
+    STAGE,
+    [stateKey(postId), ENGAGEMENT_DIRTY],
+    [postId, randomUUID()],
+  );
+  return typeof result === 'string'
+    ? (JSON.parse(result) as EngagementBatch)
+    : null;
 }
-export async function acknowledgeEngagement(redis: RedisService, postId: string, batchId: string): Promise<void> {
-  await redis.evaluate(ACK, [stateKey(postId), ENGAGEMENT_DIRTY], [postId, batchId]);
+export async function acknowledgeEngagement(
+  redis: RedisService,
+  postId: string,
+  batchId: string,
+): Promise<void> {
+  await redis.evaluate(
+    ACK,
+    [stateKey(postId), ENGAGEMENT_DIRTY],
+    [postId, batchId],
+  );
 }

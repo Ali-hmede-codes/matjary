@@ -19,7 +19,10 @@ import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { CheckoutDto } from './dto/checkout.dto';
 import { CartResponseDto, CheckoutResponseDto } from './dto/cart-response.dto';
-import { MutationGuard, AuthenticatedRequest } from '../auth/guards/auth.guards';
+import {
+  MutationGuard,
+  AuthenticatedRequest,
+} from '../auth/guards/auth.guards';
 import { CartIdentityGuard, CartVisitor } from './cart-identity.guard';
 
 @Controller('stores/:storeSlug/cart')

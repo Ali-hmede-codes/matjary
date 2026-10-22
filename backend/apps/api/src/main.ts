@@ -7,11 +7,17 @@ import { AppModule } from './app.module';
 import { setupApp } from './setup-app';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
   const config = app.get(ConfigService<AppEnvironment, true>);
   setupApp(app, config.get('NODE_ENV', { infer: true }) === 'production');
   const proxies = config.get('TRUST_PROXY_CIDRS', { infer: true });
-  if (proxies) app.set('trust proxy', proxies.split(',').map((cidr) => cidr.trim()));
+  if (proxies)
+    app.set(
+      'trust proxy',
+      proxies.split(',').map((cidr) => cidr.trim()),
+    );
   app.enableShutdownHooks();
 
   try {

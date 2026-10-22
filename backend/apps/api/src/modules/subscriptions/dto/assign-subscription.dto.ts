@@ -1,4 +1,10 @@
-import { IsDateString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class AssignSubscriptionDto {
   @IsUUID() userId!: string;

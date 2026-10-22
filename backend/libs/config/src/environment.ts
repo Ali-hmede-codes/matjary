@@ -148,33 +148,81 @@ export function validateEnvironment(
     );
   }
   const storageProvider = String(env.STORAGE_PROVIDER ?? 'local');
-  if (!['local', 's3'].includes(storageProvider)) throw new Error("STORAGE_PROVIDER must be 's3' or 'local'");
+  if (!['local', 's3'].includes(storageProvider))
+    throw new Error("STORAGE_PROVIDER must be 's3' or 'local'");
   if (storageProvider === 's3') {
-    for (const key of ['S3_ENDPOINT', 'S3_REGION', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) text(env, key);
+    for (const key of [
+      'S3_ENDPOINT',
+      'S3_REGION',
+      'S3_BUCKET',
+      'S3_ACCESS_KEY_ID',
+      'S3_SECRET_ACCESS_KEY',
+    ])
+      text(env, key);
     try {
       const endpoint = new URL(String(env.S3_ENDPOINT));
-      if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || (nodeEnv === 'production' && endpoint.protocol !== 'https:')) throw new Error();
-    } catch { throw new Error('S3_ENDPOINT must be an HTTP(S) URL; HTTPS is required in production'); }
+      if (
+        !['http:', 'https:'].includes(endpoint.protocol) ||
+        endpoint.username ||
+        endpoint.password ||
+        (nodeEnv === 'production' && endpoint.protocol !== 'https:')
+      )
+        throw new Error();
+    } catch {
+      throw new Error(
+        'S3_ENDPOINT must be an HTTP(S) URL; HTTPS is required in production',
+      );
+    }
   }
   const localBase = String(env.STORAGE_PUBLIC_BASE_URL || appOrigin);
   try {
     const base = new URL(localBase);
-    if (base.origin !== localBase || !['http:', 'https:'].includes(base.protocol) || (nodeEnv === 'production' && base.protocol !== 'https:')) throw new Error();
-  } catch { throw new Error('STORAGE_PUBLIC_BASE_URL must be an HTTP(S) origin; HTTPS is required in production'); }
+    if (
+      base.origin !== localBase ||
+      !['http:', 'https:'].includes(base.protocol) ||
+      (nodeEnv === 'production' && base.protocol !== 'https:')
+    )
+      throw new Error();
+  } catch {
+    throw new Error(
+      'STORAGE_PUBLIC_BASE_URL must be an HTTP(S) origin; HTTPS is required in production',
+    );
+  }
   const proxies = String(env.TRUST_PROXY_CIDRS ?? '');
-  for (const cidr of proxies ? proxies.split(',').map((value) => value.trim()) : []) {
+  for (const cidr of proxies
+    ? proxies.split(',').map((value) => value.trim())
+    : []) {
     const [address, prefix, extra] = cidr.split('/');
     const family = isIP(address ?? '');
-    if (!family || extra !== undefined || (prefix !== undefined && (!/^\d+$/.test(prefix) || Number(prefix) > (family === 4 ? 32 : 128)))) throw new Error('TRUST_PROXY_CIDRS must contain IP addresses or CIDRs');
+    if (
+      !family ||
+      extra !== undefined ||
+      (prefix !== undefined &&
+        (!/^\d+$/.test(prefix) || Number(prefix) > (family === 4 ? 32 : 128)))
+    )
+      throw new Error('TRUST_PROXY_CIDRS must contain IP addresses or CIDRs');
   }
   const pathStyle = String(env.S3_FORCE_PATH_STYLE ?? 'true').toLowerCase();
-  if (!['true', 'false'].includes(pathStyle)) throw new Error('S3_FORCE_PATH_STYLE must be true or false');
+  if (!['true', 'false'].includes(pathStyle))
+    throw new Error('S3_FORCE_PATH_STYLE must be true or false');
   const mediaBase = String(env.MEDIA_PUBLIC_BASE_URL ?? '');
   if (mediaBase) {
     try {
       const mediaUrl = new URL(mediaBase);
-      if (!['http:', 'https:'].includes(mediaUrl.protocol) || mediaUrl.username || mediaUrl.password || mediaUrl.search || mediaUrl.hash || (nodeEnv === 'production' && mediaUrl.protocol !== 'https:')) throw new Error();
-    } catch { throw new Error('MEDIA_PUBLIC_BASE_URL must be an HTTP(S) URL; HTTPS is required in production'); }
+      if (
+        !['http:', 'https:'].includes(mediaUrl.protocol) ||
+        mediaUrl.username ||
+        mediaUrl.password ||
+        mediaUrl.search ||
+        mediaUrl.hash ||
+        (nodeEnv === 'production' && mediaUrl.protocol !== 'https:')
+      )
+        throw new Error();
+    } catch {
+      throw new Error(
+        'MEDIA_PUBLIC_BASE_URL must be an HTTP(S) URL; HTTPS is required in production',
+      );
+    }
   }
   return {
     ...env,
@@ -260,15 +308,49 @@ export function validateEnvironment(
     // Empty means no admin endpoints are accessible.
     ADMIN_EMAILS: String(env.ADMIN_EMAILS ?? ''),
     MEDIA_WORKER_CONCURRENCY: integer(env, 'MEDIA_WORKER_CONCURRENCY', 1, 1, 4),
-    MEDIA_JOB_TIMEOUT_MS: integer(env, 'MEDIA_JOB_TIMEOUT_MS', 300000, 1000, 900000),
-    MEDIA_UPLOAD_TIMEOUT_MS: integer(env, 'MEDIA_UPLOAD_TIMEOUT_MS', 300000, 1000, 900000),
-    MEDIA_ORIGINAL_RETENTION_HOURS: integer(env, 'MEDIA_ORIGINAL_RETENTION_HOURS', 24, 1, 168),
-    MEDIA_MAX_IMAGE_PIXELS: integer(env, 'MEDIA_MAX_IMAGE_PIXELS', 40000000, 1, 100000000),
-    MEDIA_MAX_VIDEO_HEIGHT: integer(env, 'MEDIA_MAX_VIDEO_HEIGHT', 1080, 240, 1080),
+    MEDIA_JOB_TIMEOUT_MS: integer(
+      env,
+      'MEDIA_JOB_TIMEOUT_MS',
+      300000,
+      1000,
+      900000,
+    ),
+    MEDIA_UPLOAD_TIMEOUT_MS: integer(
+      env,
+      'MEDIA_UPLOAD_TIMEOUT_MS',
+      300000,
+      1000,
+      900000,
+    ),
+    MEDIA_ORIGINAL_RETENTION_HOURS: integer(
+      env,
+      'MEDIA_ORIGINAL_RETENTION_HOURS',
+      24,
+      1,
+      168,
+    ),
+    MEDIA_MAX_IMAGE_PIXELS: integer(
+      env,
+      'MEDIA_MAX_IMAGE_PIXELS',
+      40000000,
+      1,
+      100000000,
+    ),
+    MEDIA_MAX_VIDEO_HEIGHT: integer(
+      env,
+      'MEDIA_MAX_VIDEO_HEIGHT',
+      1080,
+      240,
+      1080,
+    ),
     MEDIA_TEMP_DIR: text(env, 'MEDIA_TEMP_DIR', '.tmp/media'),
     FFMPEG_PATH: text(env, 'FFMPEG_PATH', 'ffmpeg'),
     FFPROBE_PATH: text(env, 'FFPROBE_PATH', 'ffprobe'),
     TRUST_PROXY_CIDRS: proxies,
-    WORKER_HEARTBEAT_FILE: text(env, 'WORKER_HEARTBEAT_FILE', '.tmp/worker-heartbeat'),
+    WORKER_HEARTBEAT_FILE: text(
+      env,
+      'WORKER_HEARTBEAT_FILE',
+      '.tmp/worker-heartbeat',
+    ),
   };
 }

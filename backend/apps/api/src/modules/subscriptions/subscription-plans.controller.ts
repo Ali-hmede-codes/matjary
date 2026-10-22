@@ -16,7 +16,12 @@ import { SubscriptionPlansService } from './subscription-plans.service';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
 import { SubscriptionPlanResponseDto } from './dto/subscription-plan-response.dto';
-import { SessionGuard, AdminGuard, MutationGuard, AuthenticatedRequest } from '../auth/guards/auth.guards';
+import {
+  SessionGuard,
+  AdminGuard,
+  MutationGuard,
+  AuthenticatedRequest,
+} from '../auth/guards/auth.guards';
 import { AssignSubscriptionDto } from './dto/assign-subscription.dto';
 
 @Controller('admin/subscriptions/plans')
@@ -25,8 +30,17 @@ export class SubscriptionPlansController {
   constructor(private readonly plans: SubscriptionPlansService) {}
 
   @Post('assign')
-  async assign(@Body() dto: AssignSubscriptionDto, @Req() request: AuthenticatedRequest) {
-    return this.plans.assignSubscription(dto.userId, dto.planId, request.user.id, dto.expiresAt ? new Date(dto.expiresAt) : undefined, dto.notes);
+  async assign(
+    @Body() dto: AssignSubscriptionDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.plans.assignSubscription(
+      dto.userId,
+      dto.planId,
+      request.user.id,
+      dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+      dto.notes,
+    );
   }
 
   @Post()

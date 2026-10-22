@@ -728,46 +728,114 @@ export class StoresService {
   /**
    * Check if a store can have a verification badge based on their subscription
    */
-  async checkBadgeEligibility(storeId: string, actorId: string): Promise<{
-    eligible: boolean; reason?: string; currentBadges: number; maxBadges: number | null; badgePriceCents: number | null;
+  async checkBadgeEligibility(
+    storeId: string,
+    actorId: string,
+  ): Promise<{
+    eligible: boolean;
+    reason?: string;
+    currentBadges: number;
+    maxBadges: number | null;
+    badgePriceCents: number | null;
   }> {
     const store = await this.stores.findOneBy({ id: storeId });
     const actor = await this.stores.manager.findOneBy(User, { id: actorId });
     if (!store || !actor) throw new NotFoundException('Store not found');
-    if (store.ownerId !== actorId && !this.admin.isAdmin(actor)) throw new ForbiddenException('You do not own this store');
+    if (store.ownerId !== actorId && !this.admin.isAdmin(actor))
+      throw new ForbiddenException('You do not own this store');
     const limits = await effectiveLimits(this.stores.manager, store.ownerId);
-    const currentBadges = await this.activeBadgeCount(this.stores.manager, store.ownerId);
-    const maxBadges = limits.maxVerificationBadges === undefined ? 0 : limits.maxVerificationBadges;
-    const alreadyActive = store.hasVerificationBadge && (!store.verificationBadgeExpiresAt || store.verificationBadgeExpiresAt > new Date());
-    const eligible = alreadyActive || maxBadges === null || currentBadges < maxBadges;
-    return { eligible, reason: eligible ? undefined : 'Badge limit reached for your subscription', currentBadges, maxBadges, badgePriceCents: limits.verificationBadgePriceCents ?? 0 };
+    const currentBadges = await this.activeBadgeCount(
+      this.stores.manager,
+      store.ownerId,
+    );
+    const maxBadges =
+      limits.maxVerificationBadges === undefined
+        ? 0
+        : limits.maxVerificationBadges;
+    const alreadyActive =
+      store.hasVerificationBadge &&
+      (!store.verificationBadgeExpiresAt ||
+        store.verificationBadgeExpiresAt > new Date());
+    const eligible =
+      alreadyActive || maxBadges === null || currentBadges < maxBadges;
+    return {
+      eligible,
+      reason: eligible
+        ? undefined
+        : 'Badge limit reached for your subscription',
+      currentBadges,
+      maxBadges,
+      badgePriceCents: limits.verificationBadgePriceCents ?? 0,
+    };
   }
 
-  private activeBadgeCount(manager: import('typeorm').EntityManager, ownerId: string): Promise<number> {
-    return manager.getRepository(Store).createQueryBuilder('store').where('store.ownerId = :ownerId AND store.hasVerificationBadge = true AND (store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :now)', { ownerId, now: new Date() }).getCount();
+  private activeBadgeCount(
+    manager: import('typeorm').EntityManager,
+    ownerId: string,
+  ): Promise<number> {
+    return manager
+      .getRepository(Store)
+      .createQueryBuilder('store')
+      .where(
+        'store.ownerId = :ownerId AND store.hasVerificationBadge = true AND (store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :now)',
+        { ownerId, now: new Date() },
+      )
+      .getCount();
   }
 
   /**
    * Grant a verification badge to a store
    * Can be called by admin (free grant) or by store owner (paid via subscription)
    */
-  async grantVerificationBadge(storeId: string, grantedBy: string): Promise<{ success: boolean; error?: string; requiresPayment?: boolean; priceCents?: number }> {
+  async grantVerificationBadge(
+    storeId: string,
+    grantedBy: string,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    requiresPayment?: boolean;
+    priceCents?: number;
+  }> {
     try {
       const existing = await this.stores.findOneBy({ id: storeId });
       if (!existing) throw new NotFoundException('Store not found');
       return await this.stores.manager.transaction(async (manager) => {
-        await manager.findOneOrFail(User, { where: { id: existing.ownerId }, lock: { mode: 'pessimistic_write' } });
+        await manager.findOneOrFail(User, {
+          where: { id: existing.ownerId },
+          lock: { mode: 'pessimistic_write' },
+        });
         const actor = await manager.findOneBy(User, { id: grantedBy });
-        const store = await manager.findOneOrFail(Store, { where: { id: storeId }, lock: { mode: 'pessimistic_write' } });
+        const store = await manager.findOneOrFail(Store, {
+          where: { id: storeId },
+          lock: { mode: 'pessimistic_write' },
+        });
         const adminGrant = Boolean(actor && this.admin.isAdmin(actor));
-        if (!actor || (!adminGrant && store.ownerId !== grantedBy)) throw new ForbiddenException('You do not own this store');
-        if (store.hasVerificationBadge && (!store.verificationBadgeExpiresAt || store.verificationBadgeExpiresAt > new Date())) return { success: true };
+        if (!actor || (!adminGrant && store.ownerId !== grantedBy))
+          throw new ForbiddenException('You do not own this store');
+        if (
+          store.hasVerificationBadge &&
+          (!store.verificationBadgeExpiresAt ||
+            store.verificationBadgeExpiresAt > new Date())
+        )
+          return { success: true };
         if (!adminGrant) {
           const limits = await effectiveLimits(manager, store.ownerId);
-          assertQuota(await this.activeBadgeCount(manager, store.ownerId), limits.maxVerificationBadges, 'Verification badge');
+          assertQuota(
+            await this.activeBadgeCount(manager, store.ownerId),
+            limits.maxVerificationBadges,
+            'Verification badge',
+          );
           const price = limits.verificationBadgePriceCents ?? 0;
-          if (price > 0) return { success: false, requiresPayment: true, priceCents: price, error: 'Paid badge checkout is not available' };
-          store.verificationBadgeExpiresAt = (await effectiveSubscription(manager, store.ownerId))?.expiresAt ?? null;
+          if (price > 0)
+            return {
+              success: false,
+              requiresPayment: true,
+              priceCents: price,
+              error: 'Paid badge checkout is not available',
+            };
+          store.verificationBadgeExpiresAt =
+            (await effectiveSubscription(manager, store.ownerId))?.expiresAt ??
+            null;
         } else store.verificationBadgeExpiresAt = null;
         store.hasVerificationBadge = true;
         store.verificationBadgeGrantedAt = new Date();
@@ -775,7 +843,9 @@ export class StoresService {
         await manager.save(store);
         return { success: true };
       });
-    } catch (error) { this.sanitize(error); }
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
   /**
@@ -787,12 +857,19 @@ export class StoresService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const actor = await this.stores.manager.findOneBy(User, { id: actorId });
-      if (!actor || !this.admin.isAdmin(actor)) throw new ForbiddenException('Administrator access required');
+      if (!actor || !this.admin.isAdmin(actor))
+        throw new ForbiddenException('Administrator access required');
       const existing = await this.stores.findOneBy({ id: storeId });
       if (!existing) throw new NotFoundException('Store not found');
       return await this.stores.manager.transaction(async (manager) => {
-        await manager.findOneOrFail(User, { where: { id: existing.ownerId }, lock: { mode: 'pessimistic_write' } });
-        const store = await manager.findOneOrFail(Store, { where: { id: storeId }, lock: { mode: 'pessimistic_write' } });
+        await manager.findOneOrFail(User, {
+          where: { id: existing.ownerId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const store = await manager.findOneOrFail(Store, {
+          where: { id: storeId },
+          lock: { mode: 'pessimistic_write' },
+        });
         store.hasVerificationBadge = false;
         store.verificationBadgeGrantedAt = null;
         store.verificationBadgeGrantedBy = null;
@@ -804,5 +881,4 @@ export class StoresService {
       this.sanitize(error);
     }
   }
-
 }

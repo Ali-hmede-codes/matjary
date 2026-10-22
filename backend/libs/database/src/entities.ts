@@ -12,8 +12,18 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { StoreSeo, ProductSeo, ShowcaseSeo, SeoRedirect, SeoSettings } from './seo.entities';
-import { MediaProcessingOutbox, EngagementFlushReceipt, type ProcessingLimits } from './durability.entities';
+import {
+  StoreSeo,
+  ProductSeo,
+  ShowcaseSeo,
+  SeoRedirect,
+  SeoSettings,
+} from './seo.entities';
+import {
+  MediaProcessingOutbox,
+  EngagementFlushReceipt,
+  type ProcessingLimits,
+} from './durability.entities';
 
 abstract class TimestampedEntity {
   @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
@@ -733,7 +743,12 @@ export class MediaAsset extends BaseEntity {
   @Column({ name: 'processing_limits', type: 'json', nullable: true })
   processingLimits!: ProcessingLimits | null;
 
-  @Column({ name: 'upload_expires_at', type: 'datetime', precision: 6, nullable: true })
+  @Column({
+    name: 'upload_expires_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
   uploadExpiresAt!: Date | null;
 
   // Ownership is inherited from the showcase, avoiding conflicting owner IDs.
@@ -837,7 +852,12 @@ export class MediaVariant extends BaseEntity {
 
 @Entity({ name: 'post_engagement', engine: 'InnoDB' })
 export class PostEngagement extends BaseEntity {
-  @Column({ name: 'last_batch_id', type: 'varchar', length: 36, nullable: true })
+  @Column({
+    name: 'last_batch_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   lastBatchId!: string | null;
 
   @Column({ name: 'post_id', type: 'varchar', length: 36 })
@@ -959,7 +979,14 @@ export class BoostTransaction {
   @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
   createdAt!: Date;
 
-  @Column({ name: 'operation_id', type: 'varchar', length: 100, nullable: true, unique: true, collation: 'utf8mb4_bin' })
+  @Column({
+    name: 'operation_id',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+    unique: true,
+    collation: 'utf8mb4_bin',
+  })
   operationId!: string | null;
 
   @Column({ name: 'user_id', type: 'varchar', length: 36 })
@@ -1049,7 +1076,11 @@ export interface BoostCreative {
 
 @Entity({ name: 'boost_campaigns', engine: 'InnoDB' })
 @Index('idx_boost_campaigns_user', ['userId'])
-@Index('idx_boost_campaigns_target', ['targetType', 'targetStoreId', 'targetShowcaseId'])
+@Index('idx_boost_campaigns_target', [
+  'targetType',
+  'targetStoreId',
+  'targetShowcaseId',
+])
 @Index('idx_boost_campaigns_status', ['status'])
 @Index('idx_boost_campaigns_schedule', ['startAt', 'endAt'])
 export class BoostCampaign extends BaseEntity {
@@ -1073,22 +1104,40 @@ export class BoostCampaign extends BaseEntity {
   })
   targetType!: BoostTargetType;
 
-  @Column({ name: 'target_store_id', type: 'varchar', length: 36, nullable: true })
+  @Column({
+    name: 'target_store_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   targetStoreId!: string | null;
 
-  @Column({ name: 'target_showcase_id', type: 'varchar', length: 36, nullable: true })
+  @Column({
+    name: 'target_showcase_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   targetShowcaseId!: string | null;
 
   @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'target_store_id', foreignKeyConstraintName: 'fk_boost_campaigns_store' })
+  @JoinColumn({
+    name: 'target_store_id',
+    foreignKeyConstraintName: 'fk_boost_campaigns_store',
+  })
   targetStore!: Relation<Store | null>;
 
   @ManyToOne(() => Showcase, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'target_showcase_id', foreignKeyConstraintName: 'fk_boost_campaigns_showcase' })
+  @JoinColumn({
+    name: 'target_showcase_id',
+    foreignKeyConstraintName: 'fk_boost_campaigns_showcase',
+  })
   targetShowcase!: Relation<Showcase | null>;
 
   get targetId(): string {
-    return this.targetType === BoostTargetType.STORE ? this.targetStoreId! : this.targetShowcaseId!;
+    return this.targetType === BoostTargetType.STORE
+      ? this.targetStoreId!
+      : this.targetShowcaseId!;
   }
 
   toJSON() {

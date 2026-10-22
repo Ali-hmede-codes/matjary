@@ -36,6 +36,11 @@ import { WorkerHeartbeat } from './worker-heartbeat';
       PostLike,
     ]),
   ],
-  providers: [MediaProcessor, MediaRecovery, EngagementFlusher, WorkerHeartbeat],
+  providers: [
+    MediaProcessor,
+    MediaRecovery,
+    EngagementFlusher,
+    WorkerHeartbeat,
+  ],
 })
 export class WorkerModule {}

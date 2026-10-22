@@ -103,26 +103,67 @@ export class StorageService implements StorageProvider, OnModuleInit {
   }
 
   async statObject(key: string): Promise<{ size: number }> {
-    try { return await this.provider.statObject(key); } catch (error) { this.sanitize(error); }
+    try {
+      return await this.provider.statObject(key);
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
-  async openReadStream(key: string, range?: { start: number; end: number }): Promise<Readable> {
-    try { return await this.provider.openReadStream(key, range); } catch (error) { this.sanitize(error); }
+  async openReadStream(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<Readable> {
+    try {
+      return await this.provider.openReadStream(key, range);
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
-  async putStream(key: string, body: Readable, mimeType: string, size: number, options: { exclusive?: boolean; signal?: AbortSignal } = {}): Promise<void> {
-    try { await this.provider.putStream(key, body, mimeType, size, options); } catch (error) { this.sanitize(error); }
+  async putStream(
+    key: string,
+    body: Readable,
+    mimeType: string,
+    size: number,
+    options: { exclusive?: boolean; signal?: AbortSignal } = {},
+  ): Promise<void> {
+    try {
+      await this.provider.putStream(key, body, mimeType, size, options);
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
-  async downloadToFile(key: string, file: string, maximum: number, signal: AbortSignal): Promise<void> {
+  async downloadToFile(
+    key: string,
+    file: string,
+    maximum: number,
+    signal: AbortSignal,
+  ): Promise<void> {
     const source = await this.openReadStream(key);
-    try { await pipeline(source, new ByteLimit(maximum), createWriteStream(file, { flags: 'wx', mode: 0o600 }), { signal }); }
-    catch (error) { this.sanitize(error); }
+    try {
+      await pipeline(
+        source,
+        new ByteLimit(maximum),
+        createWriteStream(file, { flags: 'wx', mode: 0o600 }),
+        { signal },
+      );
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
-  async uploadFile(key: string, file: string, mimeType: string, signal: AbortSignal): Promise<void> {
+  async uploadFile(
+    key: string,
+    file: string,
+    mimeType: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     const { size } = await fs.stat(file);
-    await this.putStream(key, createReadStream(file), mimeType, size, { signal });
+    await this.putStream(key, createReadStream(file), mimeType, size, {
+      signal,
+    });
   }
 
   private sanitize(error: unknown): never {

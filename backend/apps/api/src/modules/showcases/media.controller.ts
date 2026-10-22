@@ -27,15 +27,35 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
 import { pipeline } from 'node:stream/promises';
-import { BinaryOriginGuard, OptionalSessionGuard } from '../auth/guards/auth.guards';
+import {
+  BinaryOriginGuard,
+  OptionalSessionGuard,
+} from '../auth/guards/auth.guards';
 
 // Only one range is supported. Invalid and unsatisfiable ranges return 416.
-export function parseMediaRange(header: string, size: number): { start: number; end: number } | null {
+export function parseMediaRange(
+  header: string,
+  size: number,
+): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/.exec(header);
   if (!match || (!match[1] && !match[2]) || size <= 0) return null;
-  const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
-  const end = match[1] ? (match[2] ? Math.min(Number(match[2]), size - 1) : size - 1) : size - 1;
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= size || end < start || (!match[1] && Number(match[2]) <= 0)) return null;
+  const start = match[1]
+    ? Number(match[1])
+    : Math.max(0, size - Number(match[2]));
+  const end = match[1]
+    ? match[2]
+      ? Math.min(Number(match[2]), size - 1)
+      : size - 1
+    : size - 1;
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start < 0 ||
+    start >= size ||
+    end < start ||
+    (!match[1] && Number(match[2]) <= 0)
+  )
+    return null;
   return { start, end };
 }
 
@@ -79,7 +99,10 @@ export class MediaController {
     const { size } = await this.storage.statObject(key);
     const header = request.headers.range;
     const range = header ? parseMediaRange(header, size) : undefined;
-    response.setHeader('Cache-Control', access.public ? 'public, max-age=60' : 'private, no-store');
+    response.setHeader(
+      'Cache-Control',
+      access.public ? 'public, max-age=60' : 'private, no-store',
+    );
     response.setHeader('Vary', 'Cookie');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Content-Type', access.mimeType);
@@ -91,10 +114,19 @@ export class MediaController {
     }
     if (range) {
       response.status(206);
-      response.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
+      response.setHeader(
+        'Content-Range',
+        `bytes ${range.start}-${range.end}/${size}`,
+      );
     }
-    response.setHeader('Content-Length', range ? range.end - range.start + 1 : size);
-    if (request.method === 'HEAD') { response.end(); return; }
+    response.setHeader(
+      'Content-Length',
+      range ? range.end - range.start + 1 : size,
+    );
+    if (request.method === 'HEAD') {
+      response.end();
+      return;
+    }
     const stream = await this.storage.openReadStream(key, range);
     // pipeline destroys the source when the reader disconnects.
     await pipeline(stream, response).catch(() => response.destroy());
@@ -109,19 +141,33 @@ export class MediaController {
   ): Promise<{ key: string }> {
     const asset = await this.media.authorizeUpload(key, request.user.id);
     const size = Number(asset.sizeBytes);
-    if (request.headers['content-encoding'] || request.headers['content-type']?.split(';')[0] !== asset.mimeType || (request.headers['content-length'] !== undefined && Number(request.headers['content-length']) !== size)) {
-      throw new BadRequestException('Upload headers do not match the negotiated media');
+    if (
+      request.headers['content-encoding'] ||
+      request.headers['content-type']?.split(';')[0] !== asset.mimeType ||
+      (request.headers['content-length'] !== undefined &&
+        Number(request.headers['content-length']) !== size)
+    ) {
+      throw new BadRequestException(
+        'Upload headers do not match the negotiated media',
+      );
     }
     const abort = new AbortController();
     const disconnected = () => abort.abort();
     request.once('aborted', disconnected);
-    const timer = setTimeout(() => abort.abort(), this.config.get('MEDIA_UPLOAD_TIMEOUT_MS', { infer: true }));
+    const timer = setTimeout(
+      () => abort.abort(),
+      this.config.get('MEDIA_UPLOAD_TIMEOUT_MS', { infer: true }),
+    );
     timer.unref();
     try {
-      await this.storage.putStream(key, request, asset.mimeType, size, { exclusive: true, signal: abort.signal });
+      await this.storage.putStream(key, request, asset.mimeType, size, {
+        exclusive: true,
+        signal: abort.signal,
+      });
       return { key };
     } catch (error) {
-      if (abort.signal.aborted) throw new RequestTimeoutException('Upload did not finish in time');
+      if (abort.signal.aborted)
+        throw new RequestTimeoutException('Upload did not finish in time');
       throw error;
     } finally {
       clearTimeout(timer);

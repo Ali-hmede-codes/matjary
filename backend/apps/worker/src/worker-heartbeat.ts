@@ -1,4 +1,9 @@
-import { Injectable, OnApplicationBootstrap, BeforeApplicationShutdown, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnApplicationBootstrap,
+  BeforeApplicationShutdown,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { RedisService } from '@app/queue';
@@ -9,7 +14,9 @@ import { MediaProcessor } from './jobs/media.process';
 import { EngagementFlusher } from './jobs/engagement.flush';
 
 @Injectable()
-export class WorkerHeartbeat implements OnApplicationBootstrap, BeforeApplicationShutdown {
+export class WorkerHeartbeat
+  implements OnApplicationBootstrap, BeforeApplicationShutdown
+{
   private timer?: NodeJS.Timeout;
   private pending?: Promise<void>;
   private readonly logger = new Logger(WorkerHeartbeat.name);
@@ -26,9 +33,13 @@ export class WorkerHeartbeat implements OnApplicationBootstrap, BeforeApplicatio
     await fs.mkdir(path.dirname(file), { recursive: true });
     const tick = () => {
       if (this.pending) return;
-      this.pending = this.probe(file).catch(() => {
-        this.logger.warn('Worker readiness probe failed');
-      }).finally(() => { this.pending = undefined; });
+      this.pending = this.probe(file)
+        .catch(() => {
+          this.logger.warn('Worker readiness probe failed');
+        })
+        .finally(() => {
+          this.pending = undefined;
+        });
     };
     tick();
     this.timer = setInterval(tick, 10000);
@@ -36,7 +47,8 @@ export class WorkerHeartbeat implements OnApplicationBootstrap, BeforeApplicatio
   }
 
   private async probe(file: string): Promise<void> {
-    if (!this.media.isRunning() || !this.engagement.isRunning()) throw new Error('Consumer stopped');
+    if (!this.media.isRunning() || !this.engagement.isRunning())
+      throw new Error('Consumer stopped');
     await Promise.all([this.database.query('SELECT 1'), this.redis.ping()]);
     // Freshness only advances after both dependencies and consumers are healthy.
     await fs.writeFile(file, String(Date.now()), { mode: 0o600 });
@@ -45,6 +57,9 @@ export class WorkerHeartbeat implements OnApplicationBootstrap, BeforeApplicatio
   async beforeApplicationShutdown(): Promise<void> {
     clearInterval(this.timer);
     await this.pending;
-    await fs.writeFile(this.config.get('WORKER_HEARTBEAT_FILE', { infer: true }), '0');
+    await fs.writeFile(
+      this.config.get('WORKER_HEARTBEAT_FILE', { infer: true }),
+      '0',
+    );
   }
 }

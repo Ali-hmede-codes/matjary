@@ -8,8 +8,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
-import { PostEngagement, PostLike, Showcase, EngagementFlushReceipt } from '@app/database';
-import { stageEngagement, acknowledgeEngagement, ENGAGEMENT_DIRTY } from '@app/queue/engagement-buffer';
+import {
+  PostEngagement,
+  PostLike,
+  Showcase,
+  EngagementFlushReceipt,
+} from '@app/database';
+import {
+  stageEngagement,
+  acknowledgeEngagement,
+  ENGAGEMENT_DIRTY,
+} from '@app/queue/engagement-buffer';
 import { RedisService } from '@app/queue';
 import {
   QueueService,
@@ -21,7 +30,9 @@ import { Worker } from 'bullmq';
 // Persistence is worker-only; Redis owns the immutable batch until commit.
 
 @Injectable()
-export class EngagementFlusher implements OnModuleInit, BeforeApplicationShutdown {
+export class EngagementFlusher
+  implements OnModuleInit, BeforeApplicationShutdown
+{
   private readonly logger = new Logger(EngagementFlusher.name);
   private worker: Worker | null = null;
 
@@ -46,10 +57,14 @@ export class EngagementFlusher implements OnModuleInit, BeforeApplicationShutdow
       },
       { connection: this.queue.createWorkerConnection(), concurrency: 1 },
     );
-    this.worker.on('error', () => this.logger.warn('Engagement queue unavailable'));
+    this.worker.on('error', () =>
+      this.logger.warn('Engagement queue unavailable'),
+    );
   }
 
-  isRunning(): boolean { return this.worker?.isRunning() ?? false; }
+  isRunning(): boolean {
+    return this.worker?.isRunning() ?? false;
+  }
 
   async beforeApplicationShutdown(): Promise<void> {
     if (this.worker) {
@@ -61,37 +76,65 @@ export class EngagementFlusher implements OnModuleInit, BeforeApplicationShutdow
     // When `postIds` is given flush exactly those posts; otherwise flush every
     // post currently marked dirty in Redis. Dirty-only flushing keeps the cost
     // proportional to activity, not to the total number of posts.
-    const postIds = data.postIds ?? (await this.redis.smembers(ENGAGEMENT_DIRTY));
+    const postIds =
+      data.postIds ?? (await this.redis.smembers(ENGAGEMENT_DIRTY));
     let failed = false;
     for (const postId of postIds) {
-      try { await this.flushPost(postId); }
-      catch { failed = true; this.logger.warn(`Engagement flush deferred for ${postId}`); }
+      try {
+        await this.flushPost(postId);
+      } catch {
+        failed = true;
+        this.logger.warn(`Engagement flush deferred for ${postId}`);
+      }
     }
     if (failed) throw new Error('Engagement flush will retry');
   }
 
   async flushPost(postId: string): Promise<void> {
-    const batchId = await this.showcases.manager.transaction(async (manager) => {
-      // Every flusher and cold-cache hydrator uses this same lock order.
-      await manager.findOneOrFail(Showcase, { where: { id: postId }, lock: { mode: 'pessimistic_write' } });
-      const batch = await stageEngagement(this.redis, postId);
-      if (!batch) return null;
-      if (await manager.existsBy(EngagementFlushReceipt, { batchId: batch.id })) return batch.id;
-      const existing = await manager.findBy(PostLike, { postId });
-      const voters = new Set(existing.map((like) => like.voterId));
-      for (const [voterId, voterType] of Object.entries(batch.likes)) {
-        if (!voters.has(voterId)) await manager.save(PostLike, manager.create(PostLike, { postId, voterId, voterType }));
-      }
-      for (const like of existing) if (!batch.likes[like.voterId]) await manager.delete(PostLike, { id: like.id });
-      const row = await manager.findOneBy(PostEngagement, { postId }) ?? manager.create(PostEngagement, { postId, viewsCount: 0 });
-      row.likesCount = Object.keys(batch.likes).length;
-      row.viewsCount += batch.views;
-      row.lastBatchId = batch.id;
-      await manager.save(row);
-      await manager.update(Showcase, { id: postId }, { likesCount: row.likesCount, viewsCount: row.viewsCount });
-      await manager.insert(EngagementFlushReceipt, { batchId: batch.id, postId });
-      return batch.id;
-    });
+    const batchId = await this.showcases.manager.transaction(
+      async (manager) => {
+        // Every flusher and cold-cache hydrator uses this same lock order.
+        await manager.findOneOrFail(Showcase, {
+          where: { id: postId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const batch = await stageEngagement(this.redis, postId);
+        if (!batch) return null;
+        if (
+          await manager.existsBy(EngagementFlushReceipt, { batchId: batch.id })
+        )
+          return batch.id;
+        const existing = await manager.findBy(PostLike, { postId });
+        const voters = new Set(existing.map((like) => like.voterId));
+        for (const [voterId, voterType] of Object.entries(batch.likes)) {
+          if (!voters.has(voterId))
+            await manager.save(
+              PostLike,
+              manager.create(PostLike, { postId, voterId, voterType }),
+            );
+        }
+        for (const like of existing)
+          if (!batch.likes[like.voterId])
+            await manager.delete(PostLike, { id: like.id });
+        const row =
+          (await manager.findOneBy(PostEngagement, { postId })) ??
+          manager.create(PostEngagement, { postId, viewsCount: 0 });
+        row.likesCount = Object.keys(batch.likes).length;
+        row.viewsCount += batch.views;
+        row.lastBatchId = batch.id;
+        await manager.save(row);
+        await manager.update(
+          Showcase,
+          { id: postId },
+          { likesCount: row.likesCount, viewsCount: row.viewsCount },
+        );
+        await manager.insert(EngagementFlushReceipt, {
+          batchId: batch.id,
+          postId,
+        });
+        return batch.id;
+      },
+    );
     // A crash here replays the batch but the durable receipt prevents double-counting.
     if (batchId) await acknowledgeEngagement(this.redis, postId, batchId);
   }

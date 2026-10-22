@@ -81,7 +81,8 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<Cart> {
     try {
-      if (!userId && !visitorId) throw new ForbiddenException('Cart identity required');
+      if (!userId && !visitorId)
+        throw new ForbiddenException('Cart identity required');
       // Authenticated and anonymous carts are separate; never infer a merge.
       if (userId) visitorId = undefined;
       let cart: Cart | null = null;
@@ -92,7 +93,12 @@ export class CartsService {
         });
       } else if (visitorId) {
         cart = await this.carts.findOne({
-          where: { visitorId, userId: IsNull(), storeId, status: CartStatus.ACTIVE },
+          where: {
+            visitorId,
+            userId: IsNull(),
+            storeId,
+            status: CartStatus.ACTIVE,
+          },
         });
       }
 
@@ -282,7 +288,11 @@ export class CartsService {
         throw new ForbiddenException('Cart item does not belong to this cart');
       }
 
-      const product = await this.products.findOneBy({ id: cartItem.productId, storeId: store.id, status: ProductStatus.ACTIVE });
+      const product = await this.products.findOneBy({
+        id: cartItem.productId,
+        storeId: store.id,
+        status: ProductStatus.ACTIVE,
+      });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
