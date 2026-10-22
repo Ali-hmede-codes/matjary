@@ -69,7 +69,8 @@ for (const failing of ['mysql', 'redis', 'both']) {
 }
 
 test('dependency timeouts and synchronous failures are reported as down', async () => {
-  assert.equal(await checkDependency(() => new Promise(() => {}), 10), 'down');
+  // Use a generous timeout so the test is not flaky on loaded CI runners.
+  assert.equal(await checkDependency(() => new Promise(() => {}), 50), 'down');
   assert.equal(
     await checkDependency(() => {
       throw new Error('offline');
