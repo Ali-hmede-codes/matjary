@@ -4,6 +4,7 @@ import {
   Param,
   Query,
   Res,
+  Req,
   Post,
   Body,
   Put,
@@ -20,7 +21,8 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { SeoService, MetaTags, IndexNowUrl } from './seo.service';
+import { SeoService, MetaTags } from './seo.service';
+import { StoreSeoDto, ProductSeoDto, ShowcaseSeoDto, SeoSettingsDto, CreateRedirectDto, UpdateRedirectDto, IndexNowDto } from './seo.dto';
 import {
   StoreSeo,
   ProductSeo,
@@ -28,10 +30,12 @@ import {
   SeoRedirect,
   SeoSettings,
 } from './seo.entities';
-import { SessionGuard } from '../auth/guards/auth.guards';
+import { SessionGuard, AdminGuard, MutationGuard } from '../auth/guards/auth.guards';
+import type { AuthenticatedRequest } from '../auth/guards/auth.guards';
 
 @ApiTags('SEO')
 @Controller('seo')
+@UseGuards(MutationGuard)
 export class SeoController {
   constructor(private readonly seoService: SeoService) {}
 
@@ -61,8 +65,7 @@ export class SeoController {
     content: { 'application/xml': {} },
   })
   async getStoresSitemap(@Res() res: Response): Promise<void> {
-    // Could implement filtered sitemap
-    const xml = await this.seoService.generateSitemapXml();
+    const xml = await this.seoService.generateSitemapXml('store');
     res.set('Content-Type', 'application/xml; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(xml);
@@ -76,7 +79,7 @@ export class SeoController {
     content: { 'application/xml': {} },
   })
   async getProductsSitemap(@Res() res: Response): Promise<void> {
-    const xml = await this.seoService.generateSitemapXml();
+    const xml = await this.seoService.generateSitemapXml('product');
     res.set('Content-Type', 'application/xml; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(xml);
@@ -90,7 +93,7 @@ export class SeoController {
     content: { 'application/xml': {} },
   })
   async getPostsSitemap(@Res() res: Response): Promise<void> {
-    const xml = await this.seoService.generateSitemapXml();
+    const xml = await this.seoService.generateSitemapXml('showcase');
     res.set('Content-Type', 'application/xml; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(xml);
@@ -131,8 +134,7 @@ export class SeoController {
     res.send(txt);
   }
 
-  @Get('ai.txt')
-  @Get('ai-robots.txt')
+  @Get(['ai.txt', 'ai-robots.txt'])
   @ApiOperation({
     summary: 'Generate ai.txt / ai-robots.txt for AI crawler permissions',
   })
@@ -150,14 +152,15 @@ export class SeoController {
   }
 
   @Post('indexnow')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Submit URLs to IndexNow for instant indexing' })
   @ApiResponse({ status: 200, description: 'IndexNow submission results' })
   async submitIndexNow(
-    @Body() body: { urls: string[] },
+    @Body() body: IndexNowDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<{ success: boolean; results: Record<string, boolean> }> {
-    return this.seoService.submitToIndexNow(body.urls);
+    return this.seoService.submitAdminIndexNow(body, req.user.id);
   }
 
   @Get('meta/store/:storeSlug')
@@ -166,7 +169,7 @@ export class SeoController {
   async getStoreMetaTags(
     @Param('storeSlug') storeSlug: string,
   ): Promise<MetaTags | { error: string }> {
-    return { error: 'Use store ID endpoint or implement store lookup' };
+    return this.seoService.getMetaBySlug('store', storeSlug);
   }
 
   @Get('meta/product/:productSlug')
@@ -174,8 +177,9 @@ export class SeoController {
   @ApiResponse({ status: 200, description: 'Meta tags for product' })
   async getProductMetaTags(
     @Param('productSlug') productSlug: string,
-  ): Promise<MetaTags | { error: string }> {
-    return { error: 'Use product ID endpoint or implement product lookup' };
+    @Query('storeSlug') storeSlug?: string,
+  ): Promise<MetaTags> {
+    return this.seoService.getMetaBySlug('product', productSlug, storeSlug);
   }
 
   @Get('meta/post/:postSlug')
@@ -184,14 +188,15 @@ export class SeoController {
   async getPostMetaTags(
     @Param('postSlug') postSlug: string,
   ): Promise<MetaTags | { error: string }> {
-    return { error: 'Use showcase ID endpoint or implement showcase lookup' };
+    return this.seoService.getMetaBySlug('showcase', postSlug);
   }
 
-  @Get('redirect/:fromPath(*)')
+  @Get('redirect/{*fromPath}')
   @ApiOperation({ summary: 'Check if a redirect exists for a path' })
   @ApiResponse({ status: 200, description: 'Redirect target if exists' })
-  async checkRedirect(@Param('fromPath') fromPath: string) {
-    const redirect = await this.seoService.getRedirect(`/${fromPath}`);
+  async checkRedirect(@Param('fromPath') fromPath?: string | string[]) {
+    const path = Array.isArray(fromPath) ? fromPath.join('/') : (fromPath ?? '');
+    const redirect = await this.seoService.getRedirect(`/${path.replace(/^\/+/, '')}`);
     if (!redirect) {
       return { redirect: null };
     }
@@ -205,21 +210,22 @@ export class SeoController {
   // ============================================
 
   @Get('settings')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get global SEO settings' })
-  async getSettings(): Promise<SeoSettings> {
-    return this.seoService.getSettings();
+  async getSettings(@Req() req: AuthenticatedRequest): Promise<SeoSettings> {
+    return this.seoService.getAdminSettings(req.user.id);
   }
 
   @Put('settings')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update global SEO settings' })
   async updateSettings(
-    @Body() data: Partial<SeoSettings>,
+    @Body() data: SeoSettingsDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<SeoSettings> {
-    return this.seoService.updateSettings(data);
+    return this.seoService.updateSettings(data, req.user.id);
   }
 
   // Store SEO
@@ -229,8 +235,9 @@ export class SeoController {
   @ApiOperation({ summary: 'Get SEO for a store' })
   async getStoreSeo(
     @Param('storeId') storeId: string,
-  ): Promise<StoreSeo | null> {
-    return this.seoService.getStoreSeo(storeId);
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.seoService.getOwnedSeo('store', storeId, req.user.id);
   }
 
   @Put('stores/:storeId')
@@ -239,9 +246,10 @@ export class SeoController {
   @ApiOperation({ summary: 'Create/update SEO for a store' })
   async upsertStoreSeo(
     @Param('storeId') storeId: string,
-    @Body() data: Partial<StoreSeo>,
+    @Body() data: StoreSeoDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<StoreSeo> {
-    return this.seoService.upsertStoreSeo(storeId, data);
+    return this.seoService.upsertStoreSeo(storeId, data, req.user.id);
   }
 
   @Post('stores/:storeId/auto-generate')
@@ -250,9 +258,9 @@ export class SeoController {
   @ApiOperation({ summary: 'Auto-generate SEO for a store from its content' })
   async autoGenerateStoreSeo(
     @Param('storeId') storeId: string,
-  ): Promise<StoreSeo> {
-    // This would need store lookup - placeholder for integration
-    return { error: 'Implement store lookup' } as any;
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.seoService.autoGenerateOwnedSeo('store', storeId, req.user.id);
   }
 
   @Delete('stores/:storeId')
@@ -260,8 +268,8 @@ export class SeoController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete SEO for a store' })
-  async deleteStoreSeo(@Param('storeId') storeId: string): Promise<void> {
-    await this.seoService.deleteStoreSeo(storeId);
+  async deleteStoreSeo(@Param('storeId') storeId: string, @Req() req: AuthenticatedRequest): Promise<void> {
+    await this.seoService.deleteStoreSeo(storeId, req.user.id);
   }
 
   // Product SEO
@@ -271,8 +279,9 @@ export class SeoController {
   @ApiOperation({ summary: 'Get SEO for a product' })
   async getProductSeo(
     @Param('productId') productId: string,
-  ): Promise<ProductSeo | null> {
-    return this.seoService.getProductSeo(productId);
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.seoService.getOwnedSeo('product', productId, req.user.id);
   }
 
   @Put('products/:productId')
@@ -281,10 +290,10 @@ export class SeoController {
   @ApiOperation({ summary: 'Create/update SEO for a product' })
   async upsertProductSeo(
     @Param('productId') productId: string,
-    @Query('storeId') storeId: string,
-    @Body() data: Partial<ProductSeo>,
+    @Body() data: ProductSeoDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<ProductSeo> {
-    return this.seoService.upsertProductSeo(productId, storeId, data);
+    return this.seoService.upsertProductSeo(productId, data, req.user.id);
   }
 
   @Post('products/:productId/auto-generate')
@@ -293,9 +302,9 @@ export class SeoController {
   @ApiOperation({ summary: 'Auto-generate SEO for a product from its content' })
   async autoGenerateProductSeo(
     @Param('productId') productId: string,
-    @Query('storeId') storeId: string,
-  ): Promise<ProductSeo> {
-    return { error: 'Implement product/store lookup' } as any;
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.seoService.autoGenerateOwnedSeo('product', productId, req.user.id);
   }
 
   @Delete('products/:productId')
@@ -303,8 +312,8 @@ export class SeoController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete SEO for a product' })
-  async deleteProductSeo(@Param('productId') productId: string): Promise<void> {
-    await this.seoService.deleteProductSeo(productId);
+  async deleteProductSeo(@Param('productId') productId: string, @Req() req: AuthenticatedRequest): Promise<void> {
+    await this.seoService.deleteProductSeo(productId, req.user.id);
   }
 
   // Showcase/Post SEO
@@ -314,8 +323,9 @@ export class SeoController {
   @ApiOperation({ summary: 'Get SEO for a showcase/post' })
   async getShowcaseSeo(
     @Param('showcaseId') showcaseId: string,
-  ): Promise<ShowcaseSeo | null> {
-    return this.seoService.getShowcaseSeo(showcaseId);
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.seoService.getOwnedSeo('showcase', showcaseId, req.user.id);
   }
 
   @Put('showcases/:showcaseId')
@@ -324,10 +334,10 @@ export class SeoController {
   @ApiOperation({ summary: 'Create/update SEO for a showcase/post' })
   async upsertShowcaseSeo(
     @Param('showcaseId') showcaseId: string,
-    @Query('storeId') storeId: string,
-    @Body() data: Partial<ShowcaseSeo>,
+    @Body() data: ShowcaseSeoDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<ShowcaseSeo> {
-    return this.seoService.upsertShowcaseSeo(showcaseId, storeId, data);
+    return this.seoService.upsertShowcaseSeo(showcaseId, data, req.user.id);
   }
 
   @Post('showcases/:showcaseId/auto-generate')
@@ -338,9 +348,9 @@ export class SeoController {
   })
   async autoGenerateShowcaseSeo(
     @Param('showcaseId') showcaseId: string,
-    @Query('storeId') storeId: string,
-  ): Promise<ShowcaseSeo> {
-    return { error: 'Implement showcase/store lookup' } as any;
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.seoService.autoGenerateOwnedSeo('showcase', showcaseId, req.user.id);
   }
 
   @Delete('showcases/:showcaseId')
@@ -350,49 +360,53 @@ export class SeoController {
   @ApiOperation({ summary: 'Delete SEO for a showcase/post' })
   async deleteShowcaseSeo(
     @Param('showcaseId') showcaseId: string,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
-    await this.seoService.deleteShowcaseSeo(showcaseId);
+    await this.seoService.deleteShowcaseSeo(showcaseId, req.user.id);
   }
 
   // Redirects
   @Get('redirects')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List all redirects' })
   @ApiQuery({ name: 'storeId', required: false })
   async getRedirects(
+    @Req() req: AuthenticatedRequest,
     @Query('storeId') storeId?: string,
   ): Promise<SeoRedirect[]> {
-    return this.seoService.getRedirects(storeId);
+    return this.seoService.getRedirects(req.user.id, storeId);
   }
 
   @Post('redirects')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new redirect' })
   async createRedirect(
-    @Body() data: Partial<SeoRedirect>,
+    @Body() data: CreateRedirectDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<SeoRedirect> {
-    return this.seoService.createRedirect(data);
+    return this.seoService.createRedirect(data, req.user.id);
   }
 
   @Put('redirects/:id')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a redirect' })
   async updateRedirect(
     @Param('id') id: string,
-    @Body() data: Partial<SeoRedirect>,
+    @Body() data: UpdateRedirectDto,
+    @Req() req: AuthenticatedRequest,
   ): Promise<SeoRedirect> {
-    return this.seoService.updateRedirect(id, data);
+    return this.seoService.updateRedirect(id, data, req.user.id);
   }
 
   @Delete('redirects/:id')
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, AdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a redirect' })
-  async deleteRedirect(@Param('id') id: string): Promise<void> {
-    await this.seoService.deleteRedirect(id);
+  async deleteRedirect(@Param('id') id: string, @Req() req: AuthenticatedRequest): Promise<void> {
+    await this.seoService.deleteRedirect(id, req.user.id);
   }
 }

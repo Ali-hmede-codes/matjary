@@ -19,9 +19,11 @@ import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { CheckoutDto } from './dto/checkout.dto';
 import { CartResponseDto, CheckoutResponseDto } from './dto/cart-response.dto';
-import { SessionGuard, AuthenticatedRequest } from '../auth/guards/auth.guards';
+import { MutationGuard, AuthenticatedRequest } from '../auth/guards/auth.guards';
+import { CartIdentityGuard, CartVisitor } from './cart-identity.guard';
 
 @Controller('stores/:storeSlug/cart')
+@UseGuards(CartIdentityGuard, MutationGuard)
 export class CartsController {
   constructor(private readonly carts: CartsService) {}
 
@@ -29,7 +31,7 @@ export class CartsController {
   async getCart(
     @Param('storeSlug') storeSlug: string,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<CartResponseDto> {
     const userId = 'user' in request ? request.user?.id : undefined;
     return this.carts.getCart(storeSlug, userId, visitorId);
@@ -41,7 +43,7 @@ export class CartsController {
     @Param('storeSlug') storeSlug: string,
     @Body() dto: AddToCartDto,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<CartResponseDto> {
     const userId = 'user' in request ? request.user?.id : undefined;
     return this.carts.addItem(storeSlug, dto, userId, visitorId);
@@ -53,7 +55,7 @@ export class CartsController {
     @Param('itemId') itemId: string,
     @Body() dto: UpdateCartItemDto,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<CartResponseDto> {
     const userId = 'user' in request ? request.user?.id : undefined;
     return this.carts.updateItem(storeSlug, itemId, dto, userId, visitorId);
@@ -65,7 +67,7 @@ export class CartsController {
     @Param('storeSlug') storeSlug: string,
     @Param('itemId') itemId: string,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<void> {
     const userId = 'user' in request ? request.user?.id : undefined;
     await this.carts.removeItem(storeSlug, itemId, userId, visitorId);
@@ -76,7 +78,7 @@ export class CartsController {
   async clearCart(
     @Param('storeSlug') storeSlug: string,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<void> {
     const userId = 'user' in request ? request.user?.id : undefined;
     await this.carts.clearCart(storeSlug, userId, visitorId);
@@ -87,7 +89,7 @@ export class CartsController {
     @Param('storeSlug') storeSlug: string,
     @Body() dto: CheckoutDto,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<CheckoutResponseDto> {
     const userId = 'user' in request ? request.user?.id : undefined;
     return this.carts.checkout(storeSlug, dto, userId, visitorId);
@@ -99,7 +101,7 @@ export class CartsController {
     @Body() dto: CheckoutDto,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },
     @Res() response: Response,
-    @Query('visitorId') visitorId?: string,
+    @CartVisitor() visitorId?: string,
   ): Promise<void> {
     const userId = 'user' in request ? request.user?.id : undefined;
     const result = await this.carts.checkout(storeSlug, dto, userId, visitorId);

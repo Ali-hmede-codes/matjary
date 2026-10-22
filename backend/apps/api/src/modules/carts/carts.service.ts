@@ -5,9 +5,10 @@ import {
   ConflictException,
   ServiceUnavailableException,
   BadRequestException,
+  HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError, In } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import {
   Store,
   Product,
@@ -15,6 +16,7 @@ import {
   Cart,
   CartItem,
   CartStatus,
+  effectiveLimits,
 } from '@app/database';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -40,6 +42,7 @@ export class CartsService {
   ) {}
 
   private sanitize(error: unknown): never {
+    if (error instanceof HttpException) throw error;
     throw new ServiceUnavailableException(
       'Cart storage is temporarily unavailable',
     );
@@ -48,8 +51,9 @@ export class CartsService {
   /**
    * Check if cart feature is enabled for the store
    */
-  private checkCartEnabled(store: Store): void {
-    if (!store.enableCart) {
+  private async checkCartEnabled(store: Store): Promise<void> {
+    const limits = await effectiveLimits(this.stores.manager, store.ownerId);
+    if (!store.enableCart || !limits.enableCart) {
       throw new BadRequestException('Cart feature is disabled for this store');
     }
   }
@@ -57,8 +61,9 @@ export class CartsService {
   /**
    * Check if WhatsApp checkout feature is enabled for the store
    */
-  private checkWhatsAppCheckoutEnabled(store: Store): void {
-    if (!store.enableWhatsAppCheckout) {
+  private async checkWhatsAppCheckoutEnabled(store: Store): Promise<void> {
+    const limits = await effectiveLimits(this.stores.manager, store.ownerId);
+    if (!store.enableWhatsAppCheckout || !limits.enableWhatsAppCheckout) {
       throw new BadRequestException(
         'WhatsApp checkout is disabled for this store',
       );
@@ -76,6 +81,9 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<Cart> {
     try {
+      if (!userId && !visitorId) throw new ForbiddenException('Cart identity required');
+      // Authenticated and anonymous carts are separate; never infer a merge.
+      if (userId) visitorId = undefined;
       let cart: Cart | null = null;
 
       if (userId) {
@@ -84,7 +92,7 @@ export class CartsService {
         });
       } else if (visitorId) {
         cart = await this.carts.findOne({
-          where: { visitorId, storeId, status: CartStatus.ACTIVE },
+          where: { visitorId, userId: IsNull(), storeId, status: CartStatus.ACTIVE },
         });
       }
 
@@ -139,7 +147,7 @@ export class CartsService {
         throw new NotFoundException('Store not found');
       }
 
-      this.checkCartEnabled(store);
+      await this.checkCartEnabled(store);
 
       const cart = await this.getOrCreateCart(store.id, userId, visitorId);
       const items = await this.cartItems.find({
@@ -177,7 +185,7 @@ export class CartsService {
         throw new NotFoundException('Store not found');
       }
 
-      this.checkCartEnabled(store);
+      await this.checkCartEnabled(store);
 
       const product = await this.products.findOneBy({ id: dto.productId });
       if (!product) {
@@ -262,7 +270,7 @@ export class CartsService {
         throw new NotFoundException('Store not found');
       }
 
-      this.checkCartEnabled(store);
+      await this.checkCartEnabled(store);
 
       const cart = await this.getOrCreateCart(store.id, userId, visitorId);
 
@@ -274,7 +282,7 @@ export class CartsService {
         throw new ForbiddenException('Cart item does not belong to this cart');
       }
 
-      const product = await this.products.findOneBy({ id: cartItem.productId });
+      const product = await this.products.findOneBy({ id: cartItem.productId, storeId: store.id, status: ProductStatus.ACTIVE });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
@@ -319,7 +327,7 @@ export class CartsService {
         throw new NotFoundException('Store not found');
       }
 
-      this.checkCartEnabled(store);
+      await this.checkCartEnabled(store);
 
       const cart = await this.getOrCreateCart(store.id, userId, visitorId);
 
@@ -356,7 +364,7 @@ export class CartsService {
         throw new NotFoundException('Store not found');
       }
 
-      this.checkCartEnabled(store);
+      await this.checkCartEnabled(store);
 
       const cart = await this.getOrCreateCart(store.id, userId, visitorId);
 
@@ -383,8 +391,8 @@ export class CartsService {
         throw new NotFoundException('Store not found');
       }
 
-      this.checkCartEnabled(store);
-      this.checkWhatsAppCheckoutEnabled(store);
+      await this.checkCartEnabled(store);
+      await this.checkWhatsAppCheckoutEnabled(store);
 
       const cart = await this.getOrCreateCart(store.id, userId, visitorId);
       const items = await this.cartItems.find({

@@ -16,6 +16,9 @@ import {
   AuthRateLimitGuard,
   SessionGuard,
   AdminGuard,
+  OptionalSessionGuard,
+  BinaryOriginGuard,
+  MutationGuard,
 } from './guards/auth.guards';
 
 @Module({
@@ -28,6 +31,10 @@ import {
     AuthOriginGuard,
     AuthRateLimitGuard,
     SessionGuard,
+    AdminGuard,
+    OptionalSessionGuard,
+    BinaryOriginGuard,
+    MutationGuard,
     { provide: GOOGLE_OAUTH_CLIENT, useFactory: () => new OAuth2Client() },
   ],
   exports: [
@@ -37,6 +44,9 @@ import {
     AuthRateLimitGuard,
     SessionGuard,
     AdminGuard,
+    OptionalSessionGuard,
+    BinaryOriginGuard,
+    MutationGuard,
   ],
 })
 export class AuthModule {}

@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  RequestTimeoutException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { MediaService } from './media.service';
@@ -23,36 +24,30 @@ import {
   SessionGuard,
   AuthenticatedRequest,
 } from '../auth/guards/auth.guards';
-import { serialize } from 'cookie';
+import { ConfigService } from '@nestjs/config';
+import type { AppEnvironment } from '@app/config';
+import { pipeline } from 'node:stream/promises';
+import { BinaryOriginGuard, OptionalSessionGuard } from '../auth/guards/auth.guards';
 
-// Local-storage media routes. When STORAGE_PROVIDER=local, presigned URLs
-// point here so clients PUT uploads to and GET media from this API (media
-// bytes flow through the API for local storage; object storage avoids this).
-const LOCAL_UPLOAD_ROUTE = 'uploads';
-const MIME_BY_EXTENSION: Record<string, string> = {
-  avif: 'image/avif',
-  webp: 'image/webp',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  mp4: 'video/mp4',
-  mov: 'video/quicktime',
-};
-
-function mimeForKey(key: string): string {
-  const ext = key.slice(key.lastIndexOf('.') + 1).toLowerCase();
-  return MIME_BY_EXTENSION[ext] ?? 'application/octet-stream';
+// Only one range is supported. Invalid and unsatisfiable ranges return 416.
+export function parseMediaRange(header: string, size: number): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
+  if (!match || (!match[1] && !match[2]) || size <= 0) return null;
+  const start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
+  const end = match[1] ? (match[2] ? Math.min(Number(match[2]), size - 1) : size - 1) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= size || end < start || (!match[1] && Number(match[2]) <= 0)) return null;
+  return { start, end };
 }
 
-@Controller('posts')
+@Controller()
 export class MediaController {
   constructor(
     private readonly media: MediaService,
     private readonly storage: StorageService,
+    private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
 
-  @Post(':slug/media/presigned-url')
+  @Post('posts/:slug/media/presigned-url')
   @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
   async presignedUrl(
     @Param('slug') slug: string,
@@ -62,7 +57,7 @@ export class MediaController {
     return this.media.presignedUrl(dto, slug, request.user.id);
   }
 
-  @Post(':slug/media/complete')
+  @Post('posts/:slug/media/complete')
   @HttpCode(HttpStatus.OK)
   @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
   async mediaComplete(
@@ -73,41 +68,64 @@ export class MediaController {
     return this.media.mediaComplete(dto, slug, request.user.id);
   }
 
-  /**
-   * Serve a locally-stored media object (STORAGE_PROVIDER=local only).
-   * Public: media is meant to be viewed. With S3, clients use presigned GET
-   * URLs instead, so this route is effectively local-storage only.
-   */
-  @Get(`/${LOCAL_UPLOAD_ROUTE}/:key`)
+  @Get('uploads/:key')
+  @UseGuards(OptionalSessionGuard)
   async serveLocalUpload(
     @Param('key') key: string,
+    @Req() request: Request & { user?: { id: string } },
     @Res() response: Response,
   ): Promise<void> {
-    const buffer = await this.storage.getObject(key);
-    response.setHeader('Content-Type', mimeForKey(key));
-    response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    response.send(buffer);
+    const access = await this.media.authorizeDownload(key, request.user?.id);
+    const { size } = await this.storage.statObject(key);
+    const header = request.headers.range;
+    const range = header ? parseMediaRange(header, size) : undefined;
+    response.setHeader('Cache-Control', access.public ? 'public, max-age=60' : 'private, no-store');
+    response.setHeader('Vary', 'Cookie');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Content-Type', access.mimeType);
+    response.setHeader('Accept-Ranges', 'bytes');
+    if (range === null) {
+      response.setHeader('Content-Range', `bytes */${size}`);
+      response.status(416).end();
+      return;
+    }
+    if (range) {
+      response.status(206);
+      response.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
+    }
+    response.setHeader('Content-Length', range ? range.end - range.start + 1 : size);
+    if (request.method === 'HEAD') { response.end(); return; }
+    const stream = await this.storage.openReadStream(key, range);
+    // pipeline destroys the source when the reader disconnects.
+    await pipeline(stream, response).catch(() => response.destroy());
   }
 
-  /**
-   * Receive a direct local-storage upload (STORAGE_PROVIDER=local only).
-   * Requires an authenticated session; the caller should have obtained the
-   * key from a presigned PUT URL. Requires a raw body parser (see main.ts).
-   */
-  @Put(`/${LOCAL_UPLOAD_ROUTE}/:key`)
+  @Put('uploads/:key')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(SessionGuard)
+  @UseGuards(SessionGuard, BinaryOriginGuard, AuthRateLimitGuard)
   async uploadLocal(
     @Param('key') key: string,
-    @Req() request: Request,
+    @Req() request: AuthenticatedRequest,
   ): Promise<{ key: string }> {
-    const body = request.body;
-    if (!Buffer.isBuffer(body) || body.length === 0) {
-      throw new BadRequestException('Empty upload');
+    const asset = await this.media.authorizeUpload(key, request.user.id);
+    const size = Number(asset.sizeBytes);
+    if (request.headers['content-encoding'] || request.headers['content-type']?.split(';')[0] !== asset.mimeType || (request.headers['content-length'] !== undefined && Number(request.headers['content-length']) !== size)) {
+      throw new BadRequestException('Upload headers do not match the negotiated media');
     }
-    const contentType = request.headers['content-type'];
-    const mime = Array.isArray(contentType) ? contentType[0] : contentType;
-    await this.storage.putObject(key, body, mime ?? 'application/octet-stream');
-    return { key };
+    const abort = new AbortController();
+    const disconnected = () => abort.abort();
+    request.once('aborted', disconnected);
+    const timer = setTimeout(() => abort.abort(), this.config.get('MEDIA_UPLOAD_TIMEOUT_MS', { infer: true }));
+    timer.unref();
+    try {
+      await this.storage.putStream(key, request, asset.mimeType, size, { exclusive: true, signal: abort.signal });
+      return { key };
+    } catch (error) {
+      if (abort.signal.aborted) throw new RequestTimeoutException('Upload did not finish in time');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      request.removeListener('aborted', disconnected);
+    }
   }
 }

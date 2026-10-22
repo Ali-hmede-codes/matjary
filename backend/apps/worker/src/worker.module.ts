@@ -12,10 +12,12 @@ import {
   PostLike,
 } from '@app/database';
 import { MediaProcessor } from './jobs/media.process';
+import { MediaRecovery } from './jobs/media.recovery';
 import { EngagementFlusher } from './jobs/engagement.flush';
+import { WorkerHeartbeat } from './worker-heartbeat';
 
 // Queue consumers belong in jobs/; encoding must stay outside the API process.
-// StorageModule (S3Service), QueueModule (QueueService), and the TypeORM
+// StorageModule (StorageService), QueueModule (QueueService), and the TypeORM
 // repositories for MediaAsset/MediaVariant are all needed by MediaProcessor.
 // Showcase/PostEngagement/PostLike are needed by EngagementFlusher for the
 // async Redis-to-MySQL engagement flush.
@@ -34,6 +36,6 @@ import { EngagementFlusher } from './jobs/engagement.flush';
       PostLike,
     ]),
   ],
-  providers: [MediaProcessor, EngagementFlusher],
+  providers: [MediaProcessor, MediaRecovery, EngagementFlusher, WorkerHeartbeat],
 })
 export class WorkerModule {}

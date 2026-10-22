@@ -6,6 +6,7 @@ coverage/
 *.log
 *.tsbuildinfo
 .tmp/
+storage/
 *.sql
 *.sql.gz
 *.dump

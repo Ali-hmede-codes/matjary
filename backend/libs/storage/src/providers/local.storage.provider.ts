@@ -3,10 +3,16 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
-import { promises as fs } from 'fs';
+import { promises as fs, createReadStream, createWriteStream } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { ByteLimit } from '../bounded-stream';
 import path from 'path';
 import type { StorageProvider } from '../contracts/storage.port';
 
@@ -32,17 +38,68 @@ export class LocalStorageProvider implements StorageProvider {
     // CLI agree on where media lives regardless of the current working dir.
     this.root = path.resolve(dir);
     this.publicBase =
-      config.get('STORAGE_PUBLIC_BASE_URL', { infer: true }) || '';
+      config.get('STORAGE_PUBLIC_BASE_URL', { infer: true }) || config.get('APP_ORIGIN', { infer: true });
   }
 
-  private filePath(key: string): string {
-    // Reject path traversal: keys must not escape the storage root.
-    const safeKey = key.replace(/\.\./g, '');
-    return path.join(this.root, safeKey);
+  private async filePath(key: string, create = false): Promise<string> {
+    const segments = key.split('/');
+    if (!key || key.length > 512 || !/^[a-zA-Z0-9_./-]+$/.test(key) || segments.some((part) => !part || part === '.' || part === '..')) {
+      throw new BadRequestException('Invalid storage key');
+    }
+    const file = path.resolve(this.root, ...segments);
+    const relative = path.relative(this.root, file);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new BadRequestException('Invalid storage key');
+    if (create) await fs.mkdir(this.root, { recursive: true });
+    const rootInfo = await fs.lstat(this.root);
+    if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory() || path.relative(await fs.realpath(this.root), this.root) !== '') throw new BadRequestException('Invalid storage directory');
+    let current = this.root;
+    for (let i = 0; i < segments.length; i++) {
+      current = path.join(current, segments[i]!);
+      try {
+        const entry = await fs.lstat(current);
+        if (entry.isSymbolicLink() || (i < segments.length - 1 && !entry.isDirectory())) throw new BadRequestException('Invalid storage key');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        if (create && i < segments.length - 1) {
+          await fs.mkdir(current).catch((mkdirError: NodeJS.ErrnoException) => { if (mkdirError.code !== 'EEXIST') throw mkdirError; });
+          const entry = await fs.lstat(current);
+          if (entry.isSymbolicLink() || !entry.isDirectory()) throw new BadRequestException('Invalid storage key');
+        }
+      }
+    }
+    return file;
   }
 
-  private async ensureDir(filePath: string): Promise<void> {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
+  async statObject(key: string): Promise<{ size: number }> {
+    try {
+      const stat = await fs.stat(await this.filePath(key));
+      if (!stat.isFile()) throw new NotFoundException('Stored file not found');
+      return { size: stat.size };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new NotFoundException('Stored file not found');
+      throw error;
+    }
+  }
+
+  async openReadStream(key: string, range?: { start: number; end: number }): Promise<Readable> {
+    await this.statObject(key);
+    return createReadStream(await this.filePath(key), range);
+  }
+
+  async putStream(key: string, body: Readable, _mimeType: string, size: number, options: { exclusive?: boolean; signal?: AbortSignal } = {}): Promise<void> {
+    const file = await this.filePath(key, true);
+    const temporary = path.join(path.dirname(file), `.${randomUUID()}.upload`);
+    try {
+      await pipeline(body, new ByteLimit(size, true), createWriteStream(temporary, { flags: 'wx', mode: 0o600 }), { signal: options.signal });
+      // Hard-link creation is atomic and cannot overwrite another upload.
+      if (options.exclusive) await fs.link(temporary, file);
+      else await fs.rename(temporary, file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new ConflictException('Media has already been uploaded');
+      throw error;
+    } finally {
+      await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    }
   }
 
   async presignedPutUrl(key: string): Promise<{ url: string; key: string }> {
@@ -67,8 +124,9 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async getObject(key: string): Promise<Buffer> {
-    const file = this.filePath(key);
+    const file = await this.filePath(key);
     try {
+      if ((await this.statObject(key)).size > 10485760) throw new BadRequestException('Use streaming for large media');
       return await fs.readFile(file);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -79,18 +137,12 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async putObject(key: string, body: Buffer, mimeType: string): Promise<void> {
-    const file = this.filePath(key);
-    await this.ensureDir(file);
-    await fs.writeFile(file, body);
-    // mimeType is stored on disk as metadata only via the key extension;
-    // the filesystem does not enforce a content type.
-    void mimeType;
+    await this.putStream(key, Readable.from(body), mimeType, body.length);
   }
 
   async deleteObject(key: string): Promise<void> {
-    const file = this.filePath(key);
     try {
-      await fs.unlink(file);
+      await fs.unlink(await this.filePath(key));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw new ServiceUnavailableException('Local storage delete failed');

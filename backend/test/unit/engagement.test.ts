@@ -15,6 +15,9 @@ import {
 import { PostEngagementService } from '../../apps/api/src/modules/showcases/engagement/post-engagement.service';
 import type { QueueService } from '../../libs/queue/src/queue.service';
 import type { RedisService } from '../../libs/queue/src/redis.service';
+import { EngagementFlusher } from '../../apps/worker/src/jobs/engagement.flush';
+import { EngagementFlushReceipt } from '../../libs/database/src/durability.entities';
+import { readEngagement, stageEngagement, acknowledgeEngagement, ENGAGEMENT_DIRTY, type EngagementState } from '../../libs/queue/src/engagement-buffer';
 
 const CLIENT_ID = 'test-client.apps.googleusercontent.com';
 const baseEnv = {
@@ -39,7 +42,8 @@ const user = {
   displayName: 'Owner',
 };
 
-// ── In-memory Redis fake supporting the hash ops engagement needs ──
+// Model the atomic script contract for service/worker tests. The integration
+// suite exercises the actual Lua against Redis; this fake does not execute Lua.
 class MemoryRedis implements Partial<RedisService> {
   now = 0;
   fail = false;
@@ -51,6 +55,52 @@ class MemoryRedis implements Partial<RedisService> {
   private expired(key: string): boolean {
     const expiry = this.expires.get(key);
     return expiry !== undefined && this.now > expiry;
+  }
+
+  failAck = false;
+  async evaluate(script: string, keys: string[], args: string[]): Promise<unknown> {
+    if (this.fail) throw new Error('private redis details');
+    const key = keys[0]!;
+    if (keys.length === 1) {
+      if (!this.values.has(key)) this.values.set(key, args[0]!);
+      return 'OK';
+    }
+    const raw = this.values.get(key);
+    if (!raw) return null;
+    const state = JSON.parse(raw) as EngagementState;
+    const dirty = this.sets.get(ENGAGEMENT_DIRTY) ?? new Set<string>();
+    this.sets.set(ENGAGEMENT_DIRTY, dirty);
+    if (keys.length === 3) {
+      if (args[1] === 'like') {
+        if (state.likes[args[2]!]) delete state.likes[args[2]!];
+        else state.likes[args[2]!] = args[3] as 'user' | 'visitor';
+      } else {
+        const seen = keys[2]!;
+        if (this.values.has(seen) && !this.expired(seen)) return raw;
+        this.values.set(seen, '1');
+        this.expires.set(seen, this.now + Number(args[4]));
+        state.views++;
+        state.pendingViews++;
+      }
+      state.changed = true;
+      dirty.add(args[0]!);
+    } else if (script.includes('s.batch = nil')) {
+      if (this.failAck) throw new Error('acknowledgment interrupted');
+      if (state.batch?.id !== args[1]) return 0;
+      delete state.batch;
+      if (!state.changed) dirty.delete(args[0]!);
+    } else {
+      if (state.batch) return JSON.stringify(state.batch);
+      if (!state.changed) { dirty.delete(args[0]!); return null; }
+      state.batch = { id: args[1]!, likes: { ...state.likes }, views: state.pendingViews };
+      state.pendingViews = 0;
+      state.changed = false;
+      this.values.set(key, JSON.stringify(state));
+      return JSON.stringify(state.batch);
+    }
+    const updated = JSON.stringify(state);
+    this.values.set(key, updated);
+    return updated;
   }
 
   async get(key: string) {
@@ -200,6 +250,7 @@ function postLikesRepoWith(
 ): Repository<PostLike> {
   return {
     find: async () => existingLikes,
+    findOneBy: async (where: { voterId: string }) => existingLikes.find((like) => like.voterId === where.voterId) ?? null,
     create: (value: unknown) => value,
     save: async (value: unknown) => value,
     remove: async () => undefined,
@@ -225,6 +276,11 @@ function serviceWith({
 }): PostEngagementService {
   const showcases = {
     findOneBy: async () => showcase ?? null,
+    manager: { transaction: async (work: (manager: unknown) => Promise<unknown>) => work({
+      findOneOrFail: async () => showcase,
+      findBy: async () => existingLikes,
+      findOneBy: async () => engagementRow ?? null,
+    }) },
   } as unknown as Repository<Showcase>;
   const engagement = {
     findOneBy: async () => engagementRow ?? null,
@@ -443,19 +499,20 @@ test('resolveViewer reuses an existing visitor cookie', async () => {
     config: config(),
   });
   const viewer = await svc.resolveViewer(
-    requestWith('matjary_visitor=visitor-42'),
+    requestWith('matjary_visitor=0123456789abcdef0123456789abcdef'),
   );
-  assert.equal(viewer.voterId, 'visitor-42');
+  assert.equal(viewer.voterId, '0123456789abcdef0123456789abcdef');
   assert.equal(viewer.voterType, 'visitor');
   assert.equal(viewer.newVisitorId, undefined);
 });
 
 // ── flushEngagement ──
-test('flushEngagement persists like count and mirrors votes into post_likes', async () => {
+test('API flush only schedules work and retains live likes', async () => {
   const redis = new MemoryRedis();
+  let scheduled = 0;
   const svc = serviceWith({
     redis,
-    queue: { enqueueEngagementFlush: async () => undefined },
+    queue: { enqueueEngagementFlush: async () => { scheduled++; } },
     config: config(),
     existingLikes: [],
   });
@@ -465,6 +522,87 @@ test('flushEngagement persists like count and mirrors votes into post_likes', as
 
   await svc.flushEngagement();
 
-  // Redis like set should be cleared after flushing.
-  assert.equal(await redis.hlen(`matjary:eng:like:set:${postId}`), 0);
+  assert.equal(scheduled, 1);
+  assert.equal(Object.keys((await readEngagement(redis as unknown as RedisService, postId))!.likes).length, 2);
+  assert.deepEqual(await redis.smembers(ENGAGEMENT_DIRTY), [postId]);
+});
+
+function workerFixture(redis: MemoryRedis) {
+  let persisted = { row: { postId, likesCount: 0, viewsCount: 0, lastBatchId: null } as PostEngagement, likes: [] as PostLike[], receipts: [] as string[] };
+  let failCommit = false;
+  const repository = { manager: { transaction: async (work: (manager: any) => Promise<unknown>) => {
+    const next = structuredClone(persisted);
+    const result = await work({
+      findOneOrFail: async (_target: unknown, options: any) => { assert.equal(options.lock.mode, 'pessimistic_write'); return makeShowcase(); },
+      existsBy: async (target: unknown, where: { batchId: string }) => { assert.equal(target, EngagementFlushReceipt); return next.receipts.includes(where.batchId); },
+      findBy: async () => next.likes,
+      findOneBy: async () => next.row,
+      create: (_target: unknown, value: any) => value,
+      save: async (target: unknown, value?: any) => { if (target === PostLike) next.likes.push({ ...value, id: value.voterId }); },
+      delete: async (_target: unknown, where: { id: string }) => { next.likes = next.likes.filter((like) => like.id !== where.id); },
+      update: async (_target: unknown, _where: unknown, values: any) => { assert.equal(values.viewsCount, next.row.viewsCount); },
+      insert: async (_target: unknown, value: { batchId: string }) => { next.receipts.push(value.batchId); },
+    });
+    if (failCommit) throw new Error('database transaction failed');
+    persisted = next;
+    return result;
+  } } } as unknown as Repository<Showcase>;
+  const worker = new EngagementFlusher(repository, {} as Repository<PostEngagement>, {} as Repository<PostLike>, redis as unknown as RedisService, {} as QueueService, config());
+  return { worker, state: () => persisted, failCommit: (value: boolean) => { failCommit = value; } };
+}
+
+test('worker retries commit-before-ack without double-counting, retaining concurrent events', async () => {
+  const redis = new MemoryRedis();
+  const svc = serviceWith({ redis, queue: { enqueueEngagementFlush: async () => {} }, config: config() });
+  const viewer = { voterId: 'a', voterType: 'visitor' as const };
+  await svc.toggleLike(postId, viewer);
+  await svc.registerView(postId, viewer);
+  const fixture = workerFixture(redis);
+  redis.failAck = true;
+  await assert.rejects(fixture.worker.flushPost(postId), /interrupted/);
+  assert.equal(fixture.state().row.viewsCount, 1);
+  await svc.registerView(postId, { ...viewer, voterId: 'b' });
+  await svc.toggleLike(postId, { ...viewer, voterId: 'b' });
+  assert.equal((await svc.getEngagement(postId)).views, 2);
+  redis.failAck = false;
+  await fixture.worker.flushPost(postId);
+  assert.equal(fixture.state().row.viewsCount, 1);
+  assert.deepEqual(await redis.smembers(ENGAGEMENT_DIRTY), [postId]);
+  await fixture.worker.flushPost(postId);
+  await fixture.worker.flushPost(postId);
+  assert.equal(fixture.state().row.viewsCount, 2);
+  assert.equal(fixture.state().row.likesCount, 2);
+  assert.equal(fixture.state().receipts.length, 2);
+  assert.deepEqual(await redis.smembers(ENGAGEMENT_DIRTY), []);
+  assert.equal((await svc.getEngagement(postId, viewer)).viewerLiked, true);
+});
+
+test('failed database commits retain immutable batches and stale acknowledgments do nothing', async () => {
+  const redis = new MemoryRedis();
+  const client = redis as unknown as RedisService;
+  const svc = serviceWith({ redis, queue: { enqueueEngagementFlush: async () => {} }, config: config() });
+  await svc.registerView(postId, { voterId: 'a', voterType: 'visitor' });
+  const fixture = workerFixture(redis);
+  fixture.failCommit(true);
+  await assert.rejects(fixture.worker.flushPost(postId), /transaction failed/);
+  const batch = await stageEngagement(client, postId);
+  await acknowledgeEngagement(client, postId, 'wrong-batch');
+  assert.deepEqual(await stageEngagement(client, postId), batch);
+  redis.now = 999999;
+  assert.ok(await readEngagement(client, postId));
+  assert.equal(fixture.state().row.viewsCount, 0);
+  fixture.failCommit(false);
+  await fixture.worker.flushPost(postId);
+  assert.equal(fixture.state().row.viewsCount, 1);
+  assert.equal(fixture.state().row.likesCount, 0);
+});
+
+test('cold cache hydrates durable likes and supports unliking after restart', async () => {
+  const redis = new MemoryRedis();
+  const svc = serviceWith({ redis, queue: { enqueueEngagementFlush: async () => {} }, config: config(),
+    existingLikes: [{ voterId: 'a', voterType: 'visitor' } as PostLike],
+    engagementRow: { postId, viewsCount: 8, likesCount: 1 } as PostEngagement });
+  const viewer = { voterId: 'a', voterType: 'visitor' as const };
+  assert.deepEqual(await svc.getEngagement(postId, viewer), { views: 8, likes: 1, viewerLiked: true });
+  assert.deepEqual(await svc.toggleLike(postId, viewer), { liked: false, likes: 0 });
 });

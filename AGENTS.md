@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-Matjary is a showcase platform (photos + short videos, many visitors). This repo currently contains only the **NestJS backend** under `backend/`; the Next.js frontend is planned as a separate app and is not here yet. `infrastructure-contabo-media-v3.md` (repo root) is the authoritative plan for hosting (Contabo VPS), object storage, CDN and the media pipeline — read it before touching media/storage code.
+Matjary is a showcase platform (photos + short videos). This repo contains the **NestJS backend** under `backend/`; the planned frontend is not included. `infrastructure-contabo-media-v3.md` describes the current deployment: **local disk media storage, including production**, with optional S3 later. No cloud account is required now. Provider changes require copying/verifying objects and arranging delivery, not only changing configuration.
 
 **All commands run from `backend/`.** Node.js >= 22.12. No ESLint — Prettier + `tsc` only.
 
@@ -20,14 +20,15 @@ npm run db:migrate
 npm run dev:api       # API with watch: http://127.0.0.1:3000, prefix /api/v1
 npm run dev:worker    # media worker with watch (no HTTP listener)
 
-# Verification — run all three before finishing any change
+# Verification — run all four before finishing any change
 npm run typecheck
 npm run format:check   # or npm run format to fix
-npm test               # unit tests (node:test)
+npm test               # isolated unit tests (node:test)
+npm run build          # API, worker, and compiled migration runner
 
 # One file / one test name
-node -r ts-node/register -r tsconfig-paths/register --test test/unit/auth.test.ts
-node -r ts-node/register -r tsconfig-paths/register --test test/unit/auth.test.ts --test-name-pattern "rate"
+node -r ./test/setup-unit.cjs -r ts-node/register -r tsconfig-paths/register --test test/unit/auth.test.ts
+node -r ./test/setup-unit.cjs -r ts-node/register -r tsconfig-paths/register --test --test-name-pattern "rate" test/unit/auth.test.ts
 
 # Integration tests — DESTRUCTIVE (runs migration rollback). Requires infra up and a
 # dedicated EMPTY database whose name ends in _test:
@@ -39,42 +40,51 @@ npm run db:migration:generate   # then register the class in libs/database/src/d
 npm run db:migrate
 npm run db:migration:revert     # destructive; never on real data
 
-npm run build         # webpack -> dist/apps/api, dist/apps/worker
+npm run stack:up      # explicit application profile; migrations remain explicit
 npm run start:api      # production entry: node dist/apps/api/main.js (start:worker similarly)
 ```
 
-**Gotcha:** the `test` script lists its four unit files explicitly in package.json — add every new test file there or it never runs.
+**Gotcha:** the `test` script lists unit files explicitly in package.json — register every new test. Its preload removes inherited application configuration and tests do not load `.env`. Integration tests use explicitly supplied isolated connection settings; never point rollback tests at application data.
 
 ## Architecture
 
-Nest 11 monorepo (`nest-cli.json`, `monorepo: true`): two deployables plus shared libs imported via `@app/*` aliases (see tsconfig `paths`).
+Nest 11 monorepo (`nest-cli.json`, `monorepo: true`): API, worker, compiled migration runner, and shared libs imported via `@app/*` aliases (see tsconfig `paths`).
 
 - `apps/api` — HTTP API (Express). Global prefix `api/v1`; `/` redirects to `/api/v1/auth/login`. The starter login page is inline HTML/JS in `modules/auth/auth.page.ts`. `setup-app.ts` wires helmet (CSP allows accounts.google.com), 16kb JSON body limit, a strict global ValidationPipe, and `Cache-Control: no-store`.
 - `apps/worker` — `createApplicationContext` only, **no HTTP listener**. Queue consumers go in `apps/worker/src/jobs/`. Its purpose: CPU-heavy media encoding must never run in the API process.
 - `libs/config` — fail-fast env validation. `validateEnvironment` (app) and `validateDatabaseEnvironment` (migration CLI needs MySQL creds only) in `environment.ts`, wired through `ConfigModule.forRoot({ validate, cache, isGlobal })`. Bad env crashes at boot. Production requires HTTPS `APP_ORIGIN` and a `GOOGLE_CLIENT_ID`.
 - `libs/database` — TypeORM + MySQL 8.4. `synchronize: false` and `migrationsRun: false`: schema changes happen **only** through files in `libs/database/src/migrations/`, which must also be registered in the `migrations` array of `database.options.ts` (used by both the CLI and the webpack bundles). `data-source.ts` is the standalone CLI DataSource and loads `.env` from the CWD, so migration commands only work from `backend/`. Entities in `entities.ts`: User, Showcase (draft/published/archived), MediaAsset (image/video; pending/processing/ready/failed), MediaVariant (labels like `avif-480`, `mp4-720`). Conventions: BIGINT kept as strings (`bigNumberStrings`), `timezone: 'Z'`, sensitive columns (`passwordHash`, `googleSubject`) are `select: false`, storage keys use `utf8mb4_bin` (case-sensitive), all FKs `ON DELETE RESTRICT`.
-- `libs/queue` — `RedisService`: one shared ioredis client (`lazyConnect`, no offline queue) exposing get / setWithTtl / remove / consume (GETDEL) / incrementWithTtl / ping. Redis being down means sanitized 503s (fail closed), not hangs.
-- `libs/storage`, `libs/media-processing`, `libs/common` — placeholders with plan comments; not wired yet.
+- `libs/queue` — bounded fail-fast producer/request connections and dedicated BullMQ consumer connections (`maxRetriesPerRequest: null`). Worker-only engagement flushing stages immutable Redis batches, commits MySQL receipts and counters transactionally, then acknowledges only the matching batch. Pending state never expires. Complete Redis loss can still lose unflushed activity; configure AOF/noeviction and backups.
+- `libs/storage` — selected local/S3 provider, bounded streaming and metadata operations. Local paths reject traversal and symlink escapes; originals are written exclusively. `libs/media-processing` is worker-only Sharp/FFmpeg encoding, never imported into the API.
+- `libs/database/subscription-policy.ts` — shared effective-plan policy, start/expiry handling, free fallback, nullable quotas. Owner row locks serialize post/product/upload reservations. Boost reservations never debit wallets; spending and ledger receipts commit together using integer-safe arithmetic and operation IDs.
 
-### Auth (Google Identity Services — the finished feature)
+### Authentication and authorization
 
 - `POST /auth/bootstrap` issues a random nonce: stored SHA-256-hashed in Redis (TTL 600s), returned as the GIS nonce, set as an HttpOnly cookie. `POST /auth/google` verifies the ID credential (`GoogleTokenVerifier`: signature, issuer, expiry, exact audience, azp, nonce, verified email), consumes the nonce with GETDEL (replay-proof), then `UsersService.findOrCreateGoogleUser` matches by `googleSubject` (never auto-links an email that already exists) and is race-safe against `ER_DUP_ENTRY`. Session = opaque 32-byte token; only its SHA-256 hash is stored (`matjary:auth:session:<hash>`, TTL `AUTH_SESSION_TTL_SECONDS`, default 7 days). Every login rotates the previous session; logout revokes it.
 - Cookies `matjary_session` / `matjary_nonce`: HttpOnly, SameSite=Lax, path=/; `__Host-` prefix when `APP_ORIGIN` is HTTPS.
 - Guards (`auth/guards/auth.guards.ts`): mutating auth routes require `AuthOriginGuard` (Origin === `APP_ORIGIN`, JSON content type) + `AuthRateLimitGuard` (30/min per IP+action, Redis INCR with 60s window). `SessionGuard` resolves `request.user` from the session cookie. `request.ip` is only meaningful behind a configured trusted proxy.
 - Routes: `GET /auth/login`, `GET /auth/client.js`, `POST /auth/bootstrap`, `POST /auth/google`, `GET /auth/me`, `POST /auth/logout`.
+- `ADMIN_EMAILS` is the server-derived allowlist. Subscription assignments/plans, global SEO/redirects/IndexNow and badge revocation require admin checks. Tenant SEO is owner-authorized in services using validated DTOs. Public lists/media/SEO exclude drafts. Mutation guards enforce exact origin and rate limits; binary uploads use the non-JSON origin guard.
+- Anonymous carts use server-generated HttpOnly cookies, not query visitor IDs. Authenticated/anonymous carts are isolated; no automatic merge policy.
 
 ### Health
 
 `/api/v1/health/live` (static) and `/ready` (MySQL `SELECT 1` + Redis `PING`, 2s timeout each, shared in-flight DB probe so timeouts don't fill the pool; 503 with sanitized `{checks}` on failure).
 
-### Planned media pipeline (per infrastructure doc — not built yet)
+### Media and deployment
 
-Uploads go **directly to S3-compatible object storage** via presigned URLs (the API never touches media bytes). The API enqueues BullMQ jobs in Redis; **only the worker consumes them** (start at `MEDIA_WORKER_CONCURRENCY=1`, with timeouts and memory limits). Worker plan: `sharp` → AVIF + WebP variants at widths 480/1080/1600 with EXIF/GPS stripped; FFmpeg → 720p H.264 MP4 + poster, later HLS renditions and selective AV1. FFmpeg/ffprobe come from the runtime image, not npm. `libs/media-processing` must never be imported into the API app. Media is never stored on, or served from, the VPS/API — `media_variants.storage_key` points into object storage. The `S3_*` and `MEDIA_*` variables in `.env.example` are documented placeholders that `validateEnvironment` does not validate yet — extend it when wiring them.
+Local bytes stream through `/api/v1/uploads/:key` (encoded full keys), without buffering entire videos. PUT requires the pending asset's owner and cannot overwrite originals. Downloads require registered keys: only READY variants on published content are public; originals/drafts require owner sessions and `private, no-store`. Downloads support single ranges and trusted MIME types with `nosniff`. Do not expose the media volume using an unguarded static proxy alias.
+
+Completion validates stored bytes and atomically creates a database outbox. Worker recovery retries enqueueing and cleanup. Encoding uses signatures, dimension/duration bounds, per-attempt directories, subprocess deadlines, AVIF50/WebP75/JPEG80 widths 480/1080/1600, and H.264 MP4 up to 720p plus a JPEG poster, without upscaling. READY commits before original cleanup. Start at one job, 2 CPU and 2 GB; these are tunable defaults, not capacity guarantees. No HLS or AV1 is implemented.
+
+`infra:up` starts local dependencies; `stack:up` selects the `app` profile. Production uses `infra/compose.production.yaml` with explicit environment configuration. API and worker run as the same non-root UID and share `/var/lib/matjary/media`. Containers use service DNS/internal ports; host exposure remains loopback-only. API readiness and worker heartbeat gate releases. `apps/migrations` packages an advisory-lock-serialized runner; MySQL DDL is nontransactional, so failed migrations need schema/ledger inspection before retry.
+
+CI tests/builds changes. Deployment is explicitly dispatched, serialized, and subject to the production environment's approvals. Do not run deployment, database resets, volume removal, or commits/pushes without explicit authorization. TLS/proxy trust, host hardening, private off-server media/database backups, restore rehearsal, monitoring and load approval are operational prerequisites, not implied by passing unit tests.
 
 ## Rules to keep
 
 - **No secret leakage.** Every failure path returns generic sanitized messages; the tests assert that raw driver errors, tokens and credentials never appear in responses. Keep that invariant in all new code.
 - **Schema changes via migrations only**; the integration suite actually runs rollback, so `down()` must work — and only ever run it against a `_test` database. MySQL DDL is non-transactional, so keep `up()` steps small.
-- **Media bytes never flow through the API process**, and processing code stays out of the API bundle.
+- **Local media uses bounded streaming through authenticated/authorized API routes**; CPU-heavy processing stays out of the API bundle. Preserve the 16 KB ordinary JSON body limit.
 - **`.env` is local-only** (gitignored; `env:init` generates its passwords). `.env.example` is the template and the documentation of knobs: keep it, `environment.ts` validation, and any `ConfigService` reads in sync when adding variables.
 - Style: Prettier (single quotes, trailing commas, LF) and `strict` TS with `noUncheckedIndexedAccess` — no indexed access without a guard. Comments explain *why* (security rationale especially), matching the existing voice. Tests use `node:test` + `assert/strict` with hand-rolled fakes (see `MemoryRedis` in `test/unit/auth.test.ts`); no jest.

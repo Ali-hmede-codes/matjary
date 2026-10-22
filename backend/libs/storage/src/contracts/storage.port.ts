@@ -12,10 +12,14 @@
  * local is offered for small/self-hosted deployments and local development.
  */
 export interface StorageProvider {
+  statObject(key: string): Promise<{ size: number }>;
+  openReadStream(key: string, range?: { start: number; end: number }): Promise<import('node:stream').Readable>;
+  putStream(key: string, body: import('node:stream').Readable, mimeType: string, size: number, options?: { exclusive?: boolean; signal?: AbortSignal }): Promise<void>;
   /** Generate a time-limited PUT URL the client uploads to directly. */
   presignedPutUrl(
     key: string,
     mimeType: string,
+    size?: number,
   ): Promise<{ url: string; key: string }>;
   /** Generate a time-limited GET URL for viewing/downloading an object. */
   presignedGetUrl(key: string): Promise<string>;

@@ -1,8 +1,9 @@
 import {
   IsString,
   IsOptional,
-  IsNumber,
-  IsPositive,
+  IsInt,
+  Max,
+  IsIn,
   Min,
   MaxLength,
   IsEnum,
@@ -15,59 +16,69 @@ import { BillingCycle, SubscriptionLimits } from '@app/database';
 
 export class CreateSubscriptionLimitsDto implements Partial<SubscriptionLimits> {
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxVideoDurationSeconds?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxVideoDurationSeconds?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxVideoSizeBytes?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxVideoSizeBytes?: number | null;
 
   @IsOptional()
   @IsString()
-  @MaxLength(20)
-  maxVideoQuality?: string;
+  @IsIn(['480p', '720p', '1080p', '4k', '8k'])
+  maxVideoQuality?: string | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxImageCount?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxImageCount?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxImageSizeBytes?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxImageSizeBytes?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxImageWidth?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxImageWidth?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxImageHeight?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxImageHeight?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxPostsPerMonth?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxPostsPerMonth?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxTotalPosts?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxTotalPosts?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxProducts?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxProducts?: number | null;
 
   @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  maxStorageBytes?: number;
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxStorageBytes?: number | null;
 
   @IsOptional()
   @IsBoolean()
@@ -91,14 +102,16 @@ export class CreateSubscriptionLimitsDto implements Partial<SubscriptionLimits> 
 
   // Verification Badge limits
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
-  maxVerificationBadges?: number; // 0 = no badges, null = unlimited
+  maxVerificationBadges?: number | null; // 0 = no badges, null = unlimited
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
-  verificationBadgePriceCents?: number; // price per badge in cents, 0 = free
+  verificationBadgePriceCents?: number | null; // price per badge in cents, 0 = free
 }
 
 export class CreateSubscriptionPlanDto {
@@ -115,7 +128,8 @@ export class CreateSubscriptionPlanDto {
   description?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   priceCents?: number;
 
@@ -138,7 +152,8 @@ export class CreateSubscriptionPlanDto {
   isActive?: boolean;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   sortOrder?: number;
 

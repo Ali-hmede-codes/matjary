@@ -42,7 +42,7 @@ export class AddCartAndCartItems1792886400000 implements MigrationInterface {
         INDEX idx_cart_items_cart (cart_id),
         INDEX idx_cart_items_product (product_id),
         PRIMARY KEY (id),
-        CONSTRAINT fk_cart_items_cart FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE CASCADE ON UPDATE NO ACTION,
+        CONSTRAINT fk_cart_items_cart FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE RESTRICT ON UPDATE NO ACTION,
         CONSTRAINT fk_cart_items_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT ON UPDATE NO ACTION
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
     `);

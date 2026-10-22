@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleDestroy,
+  OnApplicationShutdown,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -9,7 +9,7 @@ import type { AppEnvironment } from '@app/config';
 import Redis from 'ioredis';
 
 @Injectable()
-export class RedisService implements OnModuleInit, OnModuleDestroy {
+export class RedisService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(RedisService.name);
   private readonly client: Redis;
 
@@ -34,7 +34,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.connect();
   }
 
-  onModuleDestroy(): void {
+  onApplicationShutdown(): void {
     this.client.disconnect();
   }
 
@@ -132,6 +132,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       count,
     );
     return [Number(next), keys as string[]];
+  }
+
+  async evaluate(script: string, keys: string[], arguments_: string[]): Promise<unknown> {
+    return this.client.eval(script, keys.length, ...keys, ...arguments_);
   }
 
   async ping(): Promise<void> {

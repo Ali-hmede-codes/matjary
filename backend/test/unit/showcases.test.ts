@@ -12,6 +12,8 @@ import {
   Showcase,
   ShowcaseStatus,
   Store,
+  User,
+  UserSubscription,
 } from '../../libs/database/src/entities';
 import { ShowcasesService } from '../../apps/api/src/modules/showcases/showcases.service';
 import { ShowcasesController } from '../../apps/api/src/modules/showcases/showcases.controller';
@@ -35,6 +37,28 @@ function makeShowcase(overrides: Partial<Showcase> = {}): Showcase {
 
 class FakeRepository {
   items: Showcase[] = [];
+  monthlyCount = 0;
+  totalCount = 0;
+  locks: string[] = [];
+  manager = {
+    transaction: async (work: (manager: any) => Promise<any>) => work({
+      findOneOrFail: async (target: unknown, options: any) => {
+        assert.equal(target, User);
+        assert.equal(options.lock.mode, 'pessimistic_write');
+        this.locks.push(options.where.id);
+        return { id: options.where.id };
+      },
+      getRepository: (target: unknown) => {
+        if (target === UserSubscription) return { find: async () => [] };
+        if (target !== Showcase) return { findOneBy: async () => null };
+        return { createQueryBuilder: () => ({ where: () => ({ getCount: async () => this.monthlyCount }) }) };
+      },
+      countBy: async () => this.totalCount,
+      findOneBy: (_target: unknown, where: Record<string, unknown>) => this.findOneBy(where),
+      create: (_target: unknown, value: unknown) => this.create(value),
+      save: (value: unknown) => this.save(value),
+    }),
+  };
 
   async findOneBy(where: Record<string, unknown>): Promise<Showcase | null> {
     const key = Object.keys(where)[0]!;

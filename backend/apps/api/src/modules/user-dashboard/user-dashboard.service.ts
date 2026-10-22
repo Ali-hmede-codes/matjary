@@ -91,27 +91,6 @@ export class UserDashboardService {
         },
       });
 
-      if (userStores.length === 0) {
-        // User has no stores - return empty dashboard quickly
-        const effectiveLimits =
-          await this.plansService.getEffectiveLimits(userId);
-        return {
-          stores: [],
-          posts: [],
-          products: [],
-          subscription: null,
-          limits: effectiveLimits,
-          stats: {
-            totalStores: 0,
-            totalPosts: 0,
-            totalProducts: 0,
-            publishedPosts: 0,
-            activeProducts: 0,
-            totalMedia: 0,
-          },
-        };
-      }
-
       const storeIds = userStores.map((s) => s.id);
 
       // 2. Batch count posts per store (single query with GROUP BY)
@@ -123,7 +102,7 @@ export class UserDashboardService {
           "SUM(CASE WHEN sc.status = 'published' THEN 1 ELSE 0 END)",
           'published',
         )
-        .where('sc.storeId IN (:...ids)', { ids: storeIds })
+        .where('sc.ownerId = :userId', { userId })
         .groupBy('sc.storeId')
         .getRawMany();
       const postsCountMap = new Map(
@@ -136,13 +115,14 @@ export class UserDashboardService {
       // 3. Batch count products per store (single query with GROUP BY)
       const productsPerStore = await this.products
         .createQueryBuilder('p')
+        .innerJoin('p.store', 'store')
         .select('p.storeId', 'storeId')
         .addSelect('COUNT(*)', 'total')
         .addSelect(
           "SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END)",
           'active',
         )
-        .where('p.storeId IN (:...ids)', { ids: storeIds })
+        .where('store.ownerId = :userId', { userId })
         .groupBy('p.storeId')
         .getRawMany();
       const productsCountMap = new Map(

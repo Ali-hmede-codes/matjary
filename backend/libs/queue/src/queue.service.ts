@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleDestroy,
+  OnApplicationShutdown,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -56,11 +56,12 @@ const ENGAGEMENT_QUEUE_OPTIONS = {
 };
 
 @Injectable()
-export class QueueService implements OnModuleInit, OnModuleDestroy {
+export class QueueService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(QueueService.name);
   private readonly redis: Redis;
   private queue: Queue | null = null;
   private engagementQueue: Queue | null = null;
+  private readonly workerConnections: Redis[] = [];
 
   constructor(config: ConfigService<AppEnvironment, true>) {
     this.redis = new Redis({
@@ -70,7 +71,10 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       lazyConnect: true,
       enableOfflineQueue: false,
       maxRetriesPerRequest: 1,
+      connectTimeout: 5000,
+      commandTimeout: 5000,
     });
+    this.redis.on('error', () => this.logger.warn('Queue connection unavailable'));
   }
 
   async onModuleInit(): Promise<void> {
@@ -83,10 +87,18 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  onModuleDestroy(): void {
-    void this.queue?.close();
-    void this.engagementQueue?.close();
-    void this.redis.quit();
+  async onApplicationShutdown(): Promise<void> {
+    await Promise.all([this.queue?.close(), this.engagementQueue?.close()]);
+    for (const connection of this.workerConnections) connection.disconnect();
+    this.redis.disconnect();
+  }
+
+  createWorkerConnection(): Redis {
+    // Blocking consumers must retry indefinitely; API producers must not.
+    const connection = this.redis.duplicate({ maxRetriesPerRequest: null, commandTimeout: undefined, enableOfflineQueue: true, lazyConnect: true });
+    connection.on('error', () => this.logger.warn('Worker queue connection unavailable'));
+    this.workerConnections.push(connection);
+    return connection;
   }
 
   /**
@@ -97,7 +109,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     if (!this.queue) {
       throw new Error('Media processing queue is not initialized');
     }
-    await this.queue.add(PROCESS_MEDIA_JOB, data, QUEUE_OPTIONS);
+    await this.queue.add(PROCESS_MEDIA_JOB, data, { ...QUEUE_OPTIONS, jobId: `media-${data.mediaId}` });
   }
 
   /**

@@ -8,11 +8,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
-import { Showcase, ShowcaseStatus, Store } from '@app/database';
+import { Showcase, ShowcaseStatus, Store, User, effectiveLimits, assertQuota } from '@app/database';
 import { CreateShowcaseDto } from './dto/create-showcase.dto';
 import { UpdateShowcaseDto } from './dto/update-showcase.dto';
 import { ShowcaseResponseDto } from './dto/showcase-response.dto';
-import { getMaxPostsPerMonth, isUnlimited } from '@app/config';
 import { SeoService } from '../seo/seo.service';
 
 @Injectable()
@@ -108,14 +107,24 @@ export class ShowcasesService {
     ownerId: string,
   ): Promise<ShowcaseResponseDto> {
     try {
-      const existing = await this.showcases.findOneBy({ slug: dto.slug });
+      const { saved, store } = await this.showcases.manager.transaction(async (manager) => {
+      await manager.findOneOrFail(User, { where: { id: ownerId }, lock: { mode: 'pessimistic_write' } });
+      const limits = await effectiveLimits(manager, ownerId);
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      const total = await manager.countBy(Showcase, { ownerId });
+      const monthly = await manager.getRepository(Showcase).createQueryBuilder('post').where('post.ownerId = :ownerId AND post.createdAt >= :start AND post.createdAt < :end', { ownerId, start, end }).getCount();
+      assertQuota(total, limits.maxTotalPosts, 'Total post');
+      assertQuota(monthly, limits.maxPostsPerMonth, 'Monthly post');
+      const existing = await manager.findOneBy(Showcase, { slug: dto.slug });
       if (existing) {
         throw new ConflictException('A post with this slug already exists');
       }
 
       let store: Store | null = null;
       if (dto.storeId) {
-        store = await this.stores.findOneBy({ id: dto.storeId });
+        store = await manager.findOneBy(Store, { id: dto.storeId });
         if (!store) {
           throw new NotFoundException('Store not found');
         }
@@ -123,18 +132,9 @@ export class ShowcasesService {
           throw new ForbiddenException('You do not own this store');
         }
 
-        // Enforce subscription-based post limits before creating the post.
-        const maxPosts = getMaxPostsPerMonth(store.subscriptionTier);
-        if (!isUnlimited(store.subscriptionTier)) {
-          if (store.postsCountThisMonth >= maxPosts!) {
-            throw new ConflictException(
-              'Post limit reached for your subscription tier',
-            );
-          }
-        }
       }
 
-      const showcase = this.showcases.create({
+      const showcase = manager.create(Showcase, {
         slug: dto.slug,
         title: dto.title,
         description: dto.description ?? null,
@@ -145,12 +145,9 @@ export class ShowcasesService {
           dto.status === ShowcaseStatus.PUBLISHED ? new Date() : null,
       });
 
-      const saved = await this.showcases.save(showcase);
-
-      // Increment the store's monthly post counter within the same flow.
-      if (store) {
-        await this.stores.increment({ id: store.id }, 'postsCountThisMonth', 1);
-      }
+      const saved = await manager.save(showcase);
+      return { saved, store };
+      });
 
       // Auto-generate SEO for the new showcase
       try {

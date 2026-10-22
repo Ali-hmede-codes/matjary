@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   UnsupportedMediaTypeException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
@@ -22,18 +23,13 @@ export type AuthenticatedRequest = Request & { user: PublicUser };
 export class AdminGuard implements CanActivate {
   constructor(private readonly config: ConfigService<AppEnvironment, true>) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const user = request.user;
-    if (!user) {
-      throw new ForbiddenException('Authentication required');
-    }
-    const adminEmails = this.config.get('ADMIN_EMAILS', { infer: true });
-    const adminList = adminEmails
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean);
-    if (!adminList.includes(user.email.toLowerCase())) {
+  isAdmin(user: PublicUser | undefined): boolean {
+    const emails = this.config.get('ADMIN_EMAILS', { infer: true }) ?? '';
+    return Boolean(user && emails.split(',').map((email) => email.trim().toLowerCase()).filter(Boolean).includes(user.email.toLowerCase()));
+  }
+
+  canActivate(context: ExecutionContext): boolean {
+    if (!this.isAdmin(context.switchToHttp().getRequest<AuthenticatedRequest>().user)) {
       throw new ForbiddenException('Admin access required');
     }
     return true;
@@ -71,6 +67,48 @@ export class AuthRateLimitGuard implements CanActivate {
       context.getHandler().name,
     );
     return true;
+  }
+}
+
+@Injectable()
+export class BinaryOriginGuard implements CanActivate {
+  constructor(private readonly config: ConfigService<AppEnvironment, true>) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<Request>();
+    if (request.headers.origin !== this.config.get('APP_ORIGIN', { infer: true })) {
+      throw new ForbiddenException('Request origin is not allowed');
+    }
+    return true;
+  }
+}
+
+@Injectable()
+export class OptionalSessionGuard implements CanActivate {
+  constructor(private readonly auth: AuthService, private readonly cookies: AuthCookies) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<Request & { user?: PublicUser }>();
+    const token = this.cookies.read(request, 'session');
+    if (token) {
+      try { request.user = await this.auth.currentUser(token); }
+      catch (error) {
+        // Expired sessions may browse anonymously, but outages must fail closed.
+        if (!(error instanceof UnauthorizedException)) throw error;
+      }
+    }
+    return true;
+  }
+}
+
+@Injectable()
+export class MutationGuard implements CanActivate {
+  constructor(private readonly origin: AuthOriginGuard, private readonly rate: AuthRateLimitGuard) {}
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const method = context.switchToHttp().getRequest<Request>().method;
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
+    this.origin.canActivate(context);
+    return this.rate.canActivate(context);
   }
 }
 

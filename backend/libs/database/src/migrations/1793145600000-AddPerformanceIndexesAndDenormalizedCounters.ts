@@ -44,17 +44,17 @@ export class AddPerformanceIndexesAndDenormalizedCounters1793145600000 implement
     // likes_count from post_engagements
     await queryRunner.query(`
       UPDATE \`showcases\` s
-      SET \`likes_count\` = (
-        SELECT COALESCE(pe.\`likes_count\`, 0) FROM \`post_engagements\` pe WHERE pe.\`post_id\` = s.\`id\`
-      )
+      SET \`likes_count\` = COALESCE((
+        SELECT pe.\`likes_count\` FROM \`post_engagement\` pe WHERE pe.\`post_id\` = s.\`id\`
+      ), 0)
     `);
 
     // views_count from post_engagements
     await queryRunner.query(`
       UPDATE \`showcases\` s
-      SET \`views_count\` = (
-        SELECT COALESCE(pe.\`views_count\`, 0) FROM \`post_engagements\` pe WHERE pe.\`post_id\` = s.\`id\`
-      )
+      SET \`views_count\` = COALESCE((
+        SELECT pe.\`views_count\` FROM \`post_engagement\` pe WHERE pe.\`post_id\` = s.\`id\`
+      ), 0)
     `);
   }
 

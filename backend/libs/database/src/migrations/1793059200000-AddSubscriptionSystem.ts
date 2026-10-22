@@ -7,7 +7,7 @@ export class AddSubscriptionSystem1793059200000 implements MigrationInterface {
     // Create subscription_plans table
     await queryRunner.query(`
       CREATE TABLE \`subscription_plans\` (
-        \`id\` CHAR(36) NOT NULL,
+        \`id\` VARCHAR(36) NOT NULL,
         \`created_at\` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         \`updated_at\` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         \`name\` VARCHAR(100) NOT NULL,
@@ -29,15 +29,15 @@ export class AddSubscriptionSystem1793059200000 implements MigrationInterface {
     // Create user_subscriptions table
     await queryRunner.query(`
       CREATE TABLE \`user_subscriptions\` (
-        \`id\` CHAR(36) NOT NULL,
+        \`id\` VARCHAR(36) NOT NULL,
         \`created_at\` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         \`updated_at\` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-        \`user_id\` CHAR(36) NOT NULL,
-        \`plan_id\` CHAR(36) NOT NULL,
+        \`user_id\` VARCHAR(36) NOT NULL,
+        \`plan_id\` VARCHAR(36) NOT NULL,
         \`status\` ENUM('active', 'expired', 'cancelled', 'pending') NOT NULL DEFAULT 'pending',
         \`starts_at\` DATETIME(6) NOT NULL,
         \`expires_at\` DATETIME(6) NULL,
-        \`assigned_by\` CHAR(36) NULL,
+        \`assigned_by\` VARCHAR(36) NULL,
         \`notes\` TEXT NULL,
         \`external_id\` VARCHAR(255) NULL,
         \`external_status\` VARCHAR(50) NULL,

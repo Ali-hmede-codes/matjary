@@ -7,20 +7,13 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# System deps needed to build native modules (e.g. sharp) during npm ci.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install dependencies (includes dev deps needed for the build).
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # Copy source and build the worker bundle.
 COPY . .
-RUN npm run build:worker
+RUN npm run build:worker && npm prune --omit=dev
 
 # ---------------------------------------------------------------------------
 # Runtime stage
@@ -29,13 +22,11 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# libvips is a hard runtime dependency of sharp.
-# ffmpeg/ffprobe are required for video transcoding and probing.
-# Both come from the system image, not from npm (per infrastructure doc).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvips \
-    ffmpeg \
+# Sharp supplies its matching libvips through npm platform packages.
+# Only the worker needs the system FFmpeg/ffprobe executables.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /var/lib/matjary/media /app/.tmp/media && chown -R node:node /var/lib/matjary /app
 
 # Copy only the built output and production dependencies from the builder.
 COPY --from=builder /app/dist/apps/worker ./dist/apps/worker
@@ -43,6 +34,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
 ENV NODE_ENV=production
+USER node
 
 # The worker runs queue consumers only; no HTTP port is exposed.
 CMD ["node", "dist/apps/worker/main.js"]

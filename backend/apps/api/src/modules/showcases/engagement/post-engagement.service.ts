@@ -5,6 +5,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -13,7 +14,8 @@ import type { Request } from 'express';
 import { randomBytes } from 'node:crypto';
 import { parse } from 'cookie';
 import type { AppEnvironment } from '@app/config';
-import { PostEngagement, PostLike, Showcase } from '@app/database';
+import { PostEngagement, PostLike, Showcase, ShowcaseStatus } from '@app/database';
+import { hydrateEngagement, readEngagement, mutateEngagement, type EngagementState } from '@app/queue/engagement-buffer';
 import { RedisService } from '@app/queue';
 import { QueueService, type EngagementFlushJob } from '@app/queue';
 import { AuthService } from '../../auth/auth.service';
@@ -22,9 +24,6 @@ const VISITOR_COOKIE_NAME = 'matjary_visitor';
 // Visitors keep their id for a year so their likes/views accumulate stably.
 const VISITOR_COOKIE_TTL_SECONDS = 365 * 24 * 3600;
 
-const LIKE_SET_PREFIX = 'matjary:eng:like:set:';
-const VIEW_COUNTER_PREFIX = 'matjary:eng:views:';
-const DIRTY_SET_KEY = 'matjary:eng:dirty';
 const FLUSH_LOCK_KEY = 'matjary:eng:flush:lock';
 const RATE_PREFIX = 'matjary:eng:rate:';
 
@@ -79,7 +78,7 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (error) {
         // Redis down: skip this scheduling tick; engagement keeps buffering.
-        this.logger.warn('Flush scheduling tick skipped', error);
+        this.logger.warn('Flush scheduling tick skipped');
       }
     }, interval * 1000);
     this.flushTimer.unref?.();
@@ -111,21 +110,22 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
     const cookies = parse(request.headers.cookie ?? '');
 
     // 1. A valid session means a logged-in user (accounts are for shops).
-    const sessionToken = cookies['matjary_session'];
+    const secure = this.config.get('APP_ORIGIN', { infer: true }).startsWith('https:');
+    const sessionToken = cookies[secure ? '__Host-matjary_session' : 'matjary_session'];
     if (sessionToken) {
       try {
         const user = await this.auth.currentUser(sessionToken);
         if (user) {
           return { voterId: user.id, voterType: 'user' };
         }
-      } catch {
-        // Invalid or expired session: fall through to visitor identification.
+      } catch (error) {
+        if (!(error instanceof UnauthorizedException)) throw error;
       }
     }
 
     // 2. Visitor cookie.
     const visitorToken = cookies[VISITOR_COOKIE_NAME];
-    if (visitorToken) {
+    if (visitorToken && /^[0-9a-f]{32}$/.test(visitorToken)) {
       return { voterId: visitorToken, voterType: 'visitor' };
     }
 
@@ -139,35 +139,31 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private likeSetKey(postId: string): string {
-    return `${LIKE_SET_PREFIX}${postId}`;
-  }
-
-  private viewCounterKey(postId: string): string {
-    return `${VIEW_COUNTER_PREFIX}${postId}`;
-  }
-
   private rateKey(action: string, voterId: string): string {
     return `${RATE_PREFIX}${action}:${voterId}`;
   }
 
   private async ensurePost(postId: string): Promise<void> {
     const post = await this.showcases.findOneBy({ id: postId });
-    if (!post) {
+    if (!post || post.status !== ShowcaseStatus.PUBLISHED) {
       throw new NotFoundException('Post not found');
     }
   }
 
-  /**
-   * Mark a post as needing its engagement flushed to MySQL. Called after every
-   * like/view change so the worker only touches active posts.
-   */
-  private async markDirty(postId: string): Promise<void> {
-    const ttl = this.config.get('ENGAGEMENT_REDIS_KEY_TTL_SECONDS', {
-      infer: true,
+  private async hydratedState(postId: string): Promise<EngagementState> {
+    let state = await readEngagement(this.redis, postId);
+    if (state) return state;
+    // Serialize cold hydration against the worker's commit. An old baseline
+    // must never replace a freshly committed snapshot after cache loss.
+    await this.showcases.manager.transaction(async (manager) => {
+      await manager.findOneOrFail(Showcase, { where: { id: postId }, lock: { mode: 'pessimistic_write' } });
+      const likes = await manager.findBy(PostLike, { postId });
+      const row = await manager.findOneBy(PostEngagement, { postId });
+      await hydrateEngagement(this.redis, postId, Object.fromEntries(likes.map((like) => [like.voterId, like.voterType])), row?.viewsCount ?? 0);
     });
-    await this.redis.sadd(DIRTY_SET_KEY, postId);
-    await this.redis.expire(DIRTY_SET_KEY, ttl);
+    state = await readEngagement(this.redis, postId);
+    if (!state) throw new ServiceUnavailableException('Engagement temporarily unavailable');
+    return state;
   }
 
   /**
@@ -204,27 +200,14 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
     await this.rateLimit(viewer.voterId, 'like');
     await this.ensurePost(postId);
 
-    const key = this.likeSetKey(postId);
-    const alreadyLiked = await this.redis.hexists(key, viewer.voterId);
-
-    let liked: boolean;
-    if (alreadyLiked) {
-      await this.redis.hdel(key, viewer.voterId);
-      liked = false;
-    } else {
-      await this.redis.hset(key, viewer.voterId, '1');
-      liked = true;
+    try {
+      await this.hydratedState(postId);
+      const state = await mutateEngagement(this.redis, postId, 'like', viewer.voterId, viewer.voterType, 1);
+      if (!state) throw new Error('Cache changed');
+      return { liked: Boolean(state.likes[viewer.voterId]), likes: Object.keys(state.likes).length };
+    } catch {
+      throw new ServiceUnavailableException('Engagement temporarily unavailable');
     }
-
-    const ttl = this.config.get('ENGAGEMENT_REDIS_KEY_TTL_SECONDS', {
-      infer: true,
-    });
-    await this.redis.expire(key, ttl);
-
-    await this.markDirty(postId);
-
-    const likes = await this.redis.hlen(key);
-    return { liked, likes };
   }
 
   /**
@@ -242,25 +225,10 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.rateLimit(viewer.voterId, 'view');
 
-      const seenKey = `matjary:eng:view:seen:${postId}:${viewer.voterId}`;
-      const alreadySeen = await this.redis.hexists(seenKey, '1');
-      if (!alreadySeen) {
-        const ttl = this.config.get('ENGAGEMENT_VIEW_DEDUPE_TTL_SECONDS', {
-          infer: true,
-        });
-        await this.redis.hset(seenKey, '1', '1');
-        await this.redis.expire(seenKey, ttl);
-        await this.redis.incrementWithTtl(
-          this.viewCounterKey(postId),
-          this.config.get('ENGAGEMENT_REDIS_KEY_TTL_SECONDS', { infer: true }),
-        );
-        await this.markDirty(postId);
-      }
-
-      const views = Number(
-        (await this.redis.get(this.viewCounterKey(postId))) ?? '0',
-      );
-      return { views };
+      await this.hydratedState(postId);
+      const state = await mutateEngagement(this.redis, postId, 'view', viewer.voterId, viewer.voterType, this.config.get('ENGAGEMENT_VIEW_DEDUPE_TTL_SECONDS', { infer: true }));
+      if (!state) throw new Error('Cache changed');
+      return { views: state.views };
     } catch (error) {
       // Views should never break a page load: fall back to the last flushed count.
       if (error instanceof ServiceUnavailableException) throw error;
@@ -280,123 +248,19 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ likes: number; views: number; viewerLiked: boolean }> {
     await this.ensurePost(postId);
 
-    let likes = 0;
-    let views = 0;
-    let viewerLiked = false;
-    let redisAvailable = true;
-
     try {
-      const likeKey = this.likeSetKey(postId);
-      const [likesRaw, viewsRaw] = await Promise.all([
-        this.redis.hlen(likeKey),
-        this.redis.get(this.viewCounterKey(postId)),
-      ]);
-      likes = likesRaw;
-      views = Number(viewsRaw ?? '0');
-      if (viewer) {
-        viewerLiked = await this.redis.hexists(likeKey, viewer.voterId);
-      }
+      const state = await this.hydratedState(postId);
+      // views includes the hydrated durable baseline plus every new event;
+      // acknowledgement does not add the committed batch a second time.
+      return { likes: Object.keys(state.likes).length, views: state.views, viewerLiked: Boolean(viewer && state.likes[viewer.voterId]) };
     } catch {
-      redisAvailable = false;
-    }
-
-    if (!redisAvailable) {
       const row = await this.engagement.findOneBy({ postId });
-      likes = row?.likesCount ?? 0;
-      views = row?.viewsCount ?? 0;
-      viewerLiked = false;
+      const like = viewer ? await this.postLikes.findOneBy({ postId, voterId: viewer.voterId }) : null;
+      return { likes: row?.likesCount ?? 0, views: row?.viewsCount ?? 0, viewerLiked: Boolean(like) };
     }
-
-    return { likes, views, viewerLiked };
   }
 
-  /**
-   * Flush buffered engagement for the given posts from Redis into MySQL.
-   * When `postIds` is omitted, flushes every post in the dirty set and then
-   * clears it. Idempotent and safe to run concurrently.
-   */
   async flushEngagement(postIds?: string[]): Promise<void> {
-    const targets = postIds ?? (await this.redis.smembers(DIRTY_SET_KEY));
-    for (const postId of targets) {
-      try {
-        await this.flushPost(postId);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to flush engagement for post ${postId}`,
-          error,
-        );
-      }
-    }
-
-    if (postIds) {
-      for (const postId of postIds) {
-        await this.redis.srem(DIRTY_SET_KEY, postId);
-      }
-    } else {
-      await this.redis.remove(DIRTY_SET_KEY);
-    }
-  }
-
-  private async flushPost(postId: string): Promise<void> {
-    // --- Like set -----------------------------------------------------
-    const likeKey = this.likeSetKey(postId);
-    const voters = await this.redis.hgetall(likeKey);
-    const likesCount = Object.keys(voters).length;
-
-    let row = await this.engagement.findOneBy({ postId });
-    if (row) {
-      row.likesCount = likesCount;
-      await this.engagement.save(row);
-    } else {
-      await this.engagement.save(
-        this.engagement.create({ postId, likesCount, viewsCount: 0 }),
-      );
-    }
-
-    // Mirror individual votes into post_likes: insert new likes, remove
-    // unlikes, so the durable record matches Redis.
-    const existing = await this.postLikes.find({ where: { postId } });
-    const existingVoters = new Set(existing.map((like) => like.voterId));
-    const redisVoters = new Set(Object.keys(voters));
-
-    for (const voterId of redisVoters) {
-      if (!existingVoters.has(voterId)) {
-        const like = this.postLikes.create({
-          postId,
-          voterId,
-          voterType: this.voterTypeFor(voterId),
-        });
-        await this.postLikes.save(like);
-      }
-    }
-    for (const like of existing) {
-      if (!redisVoters.has(like.voterId)) {
-        await this.postLikes.remove(like);
-      }
-    }
-    await this.redis.remove(likeKey);
-
-    // --- View counter -------------------------------------------------
-    const viewKey = this.viewCounterKey(postId);
-    const raw = await this.redis.get(viewKey);
-    const delta = Number(raw ?? '0');
-    if (delta) {
-      let viewRow = await this.engagement.findOneBy({ postId });
-      if (viewRow) {
-        viewRow.viewsCount += delta;
-        await this.engagement.save(viewRow);
-      } else {
-        await this.engagement.save(
-          this.engagement.create({ postId, likesCount: 0, viewsCount: delta }),
-        );
-      }
-      await this.redis.remove(viewKey);
-    }
-  }
-
-  private voterTypeFor(voterId: string): 'user' | 'visitor' {
-    // User ids are uuids; visitor ids are raw hex. Heuristic only, used for
-    // the durable like log; reads re-identify type from the session.
-    return /^[0-9a-f-]{36}$/.test(voterId) ? 'user' : 'visitor';
+    await this.queue.enqueueEngagementFlush(postIds ? { postIds } : { all: true });
   }
 }

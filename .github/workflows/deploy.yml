@@ -1,18 +1,39 @@
 name: CI/CD
 
 on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy this revision after checks
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 env:
   WORKING_DIRECTORY: backend
 
 jobs:
   ci:
-    name: CI (typecheck, format, tests)
+    name: CI (typecheck, format, tests, build)
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: matjary_test
+          MYSQL_USER: matjary
+          MYSQL_PASSWORD: integration-test-only
+          MYSQL_ROOT_PASSWORD: integration-root-only
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="MYSQL_PWD=integration-test-only mysql -h 127.0.0.1 -u matjary matjary_test -e 'SELECT 1'"
+          --health-interval=10s --health-timeout=5s --health-retries=12
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,27 +57,75 @@ jobs:
         working-directory: backend
         run: npm run format:check
 
+      - name: Install worker encoding tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Run unit tests
         working-directory: backend
         run: npm test
+
+      - name: Test isolated empty database
+        working-directory: backend
+        env:
+          MYSQL_TEST_ALLOW_DDL: '1'
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_DATABASE: matjary_test
+          MYSQL_USER: matjary
+          MYSQL_PASSWORD: integration-test-only
+        run: npm run test:integration
+
+      - name: Build API, worker, and migration runner
+        working-directory: backend
+        run: npm run build
 
   cd:
     name: CD (deploy to VPS)
     needs: ci
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
+    environment: production
+    concurrency:
+      group: production-release
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
+        env:
+          RELEASE_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          fingerprint: ${{ secrets.VPS_HOST_FINGERPRINT }}
+          envs: RELEASE_SHA
+          command_timeout: 40m
           script: |
-            cd /opt/matjary/backend
-            git pull origin main
-            docker compose -f infra/compose.yaml build
-            docker compose -f infra/compose.yaml up -d
+            set -eu
+            test "${#RELEASE_SHA}" -eq 40
+            case "$RELEASE_SHA" in *[!0-9a-f]*) exit 1;; esac
+            cd /opt/matjary
+            exec 9>/opt/matjary-release.lock
+            flock -n 9
+            git fetch origin "$RELEASE_SHA"
+            release="/opt/matjary-releases/$RELEASE_SHA"
+            if [ ! -d "$release" ]; then
+              git worktree add --detach "$release" "$RELEASE_SHA"
+            fi
+            test "$(git -C "$release" rev-parse HEAD)" = "$RELEASE_SHA"
+            test -z "$(git -C "$release" status --porcelain)"
+            export APP_ENV_FILE=/opt/matjary/backend/.env
+            export RELEASE_TAG="$RELEASE_SHA"
+            test -f "$APP_ENV_FILE"
+            cd "$release/backend"
+            dc() { docker compose --env-file "$APP_ENV_FILE" -f infra/compose.yaml -f infra/compose.production.yaml --profile app "$@"; }
+            dc build api worker
+            dc up -d --wait --wait-timeout 180 mysql redis
+            dc stop api worker
+            dc run --rm --no-deps api node dist/apps/migrations/main.js
+            dc up -d --wait --wait-timeout 180 api worker
+            dc exec -T api node -e "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+            dc exec -T worker node -e "const fs=require('node:fs');const age=Date.now()-Number(fs.readFileSync(process.env.WORKER_HEARTBEAT_FILE,'utf8'));process.exit(age>=0&&age<30000?0:1)"

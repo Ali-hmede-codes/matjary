@@ -27,6 +27,7 @@ import {
   AuthRateLimitGuard,
   SessionGuard,
   AuthenticatedRequest,
+  OptionalSessionGuard,
 } from '../auth/guards/auth.guards';
 import { ProductStatus, ProductCategory } from '@app/database';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
@@ -57,7 +58,7 @@ export class ProductsController {
       storeSlug,
       safeLimit,
       safeOffset,
-      status,
+      ProductStatus.ACTIVE,
       category,
     );
   }
@@ -79,6 +80,7 @@ export class ProductsController {
   }
 
   @Get(':slug')
+  @UseGuards(OptionalSessionGuard)
   async getOne(
     @Param('slug') slug: string,
     @Req() request: AuthenticatedRequest | { user?: { id: string } },

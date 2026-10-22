@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   Query,
+  Req,
   UseGuards,
   HttpStatus,
   HttpCode,
@@ -18,7 +19,7 @@ export class UserDashboardController {
   @Get()
   @UseGuards(SessionGuard)
   async getDashboard(
-    @Query() request: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
   ): Promise<DashboardSummaryDto> {
     const userId = request.user?.id;
     if (!userId) {
@@ -29,7 +30,7 @@ export class UserDashboardController {
 
   @Get('stores')
   @UseGuards(SessionGuard)
-  async getStores(@Query() request: AuthenticatedRequest) {
+  async getStores(@Req() request: AuthenticatedRequest) {
     const userId = request.user?.id;
     if (!userId) {
       throw new Error('User not authenticated');
@@ -41,7 +42,7 @@ export class UserDashboardController {
   @UseGuards(SessionGuard)
   async getStore(
     @Param('storeId') storeId: string,
-    @Query() request: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     const userId = request.user?.id;
     if (!userId) {
@@ -53,7 +54,7 @@ export class UserDashboardController {
   @Get('posts')
   @UseGuards(SessionGuard)
   async getPosts(
-    @Query() request: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
     @Query('status') status?: string,
     @Query('storeId') storeId?: string,
     @Query('limit') limit?: string,
@@ -76,7 +77,7 @@ export class UserDashboardController {
   @Get('products')
   @UseGuards(SessionGuard)
   async getProducts(
-    @Query() request: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
     @Query('status') status?: string,
     @Query('storeId') storeId?: string,
     @Query('limit') limit?: string,
@@ -100,7 +101,7 @@ export class UserDashboardController {
   @UseGuards(SessionGuard)
   async getShowcaseMedia(
     @Param('showcaseId') showcaseId: string,
-    @Query() request: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     const userId = request.user?.id;
     if (!userId) {

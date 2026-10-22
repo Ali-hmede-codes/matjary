@@ -2,14 +2,17 @@
 
 > Goal: a showcase platform with many visitors, lots of photos and videos, small storage use, good quality, modern formats. Hosting: Contabo.
 
-## 🧠 Mental Model
-Three things must be kept apart, because they stress the server differently:
-1. **App** (Next.js + NestJS + MySQL 8.4): mostly cheap reads, easy to cache.
-2. **Media storage + delivery** (images, video files): lots of bytes. Keep it **off the VPS disk and off the VPS network port**; use object storage.
-3. **Media processing** (resize photos, encode videos): spiky and CPU-heavy. Run it in a **background worker** so it never slows the website.
+## Current architecture and scope
+1. **Application:** NestJS 11/Node.js 22.12+, MySQL 8.4 and Redis/BullMQ. The frontend is not included.
+2. **Media storage and delivery:** local disk is the selected mode now, including deployment. API and worker share a persistent volume at `/var/lib/matjary/media`; no S3 account or credentials are required. The API streams authorized bytes, so disk and network capacity are shared with the application.
+3. **Processing:** a separate non-root worker runs Sharp and FFmpeg. CPU/memory limits reduce interference but do not guarantee API latency under overload.
 
-## 🔍 Research Summary
-| What I Searched | What I Found | Source |
+S3 remains optional. No payment gateway, HLS, or AV1 is included. Repository changes are not a production deployment or a production-readiness certification.
+
+## Historical research (not reverified)
+The following are the old document's claims, retained only as research leads. Prices, bandwidth allowances, request limits, CDN arrangements, browser percentages and codec comparisons have **not** been reverified. None is a current procurement assumption or launch guarantee; confirm official terms and measure your own workload. HLS references are background only, not implemented scope.
+
+| Historical topic | Previously recorded claim — unverified | Original source |
 |---|---|---|
 | Contabo Cloud VPS plans | Range from about 4 vCPU / 8 GB RAM up to 18 vCPU / 96 GB RAM, NVMe/SSD disks (roughly 75–600 GB depending on plan and source), 1 Gbit/s port, DDoS protection. Traffic is listed as 32 TB/month by one source and "unlimited / fair use" by others. Plan names and prices differ between sources, so check contabo.com. Reviews warn the vCPUs are shared/oversold and performance can vary. | [vpsbenchmarks](https://www.vpsbenchmarks.com/hosters/contabo/plans/cloud-vps-50), [learnwithhasan](https://learnwithhasan.com/self-hosting-hub/vps-providers/contabo-vps/), [toolradar](https://toolradar.com/tools/contabo/pricing) |
 | Contabo Object Storage | S3-compatible; from €2.49 (about $2.99) per 250 GB per month; no data-transfer fees. Public files are rate limited to 250 requests/second per file. Outbound traffic goes through Contabo's Cloudflare CDN arrangement. | [Contabo blog](https://contabo.com/blog/most-storage-per-euro-vps-comparison/), [Owncast docs](https://owncast.online/docs/storage/contabo/) |
@@ -18,31 +21,22 @@ Three things must be kept apart, because they stress the server differently:
 | Cloudflare and video | Cloudflare's CDN allows video/large files only when hosted on a Cloudflare service (R2, Stream, Images). Video hosted elsewhere (e.g. on your VPS) is restricted on its CDN. | [Cloudflare blog](https://blog.cloudflare.com/updated-tos/) |
 | FFmpeg HLS flags | `-f hls -hls_time 6 -hls_playlist_type vod -hls_list_size 0 -hls_segment_filename ...`; `-hls_segment_type fmp4`; multiple renditions via `-var_stream_map` + `-master_pl_name`. | [docs.rs example](https://docs.rs/crate/ez-ffmpeg/latest/source/examples/cli_emitted_hls.rs), [OTTVerse](https://ottverse.com/hls-packaging-using-ffmpeg-live-vod/) |
 
-## 🖥️ VPS Sizing (planning guide, confirm with a load test)
+## VPS sizing and limits
+- Start with one media job (`MEDIA_WORKER_CONCURRENCY=1`), two worker CPU cores and 2 GB memory. Compose also budgets API 768 MB, MySQL 2 GB and Redis 512 MB. Reserve additional memory for the OS, proxy, filesystem cache, container runtime, and backups. Tune against actual workload; these are not validated concurrency guarantees.
+- Local storage capacity must cover processed variants, pending originals, worker temporary input/output, MySQL/Redis, logs and backup staging. Keep operational headroom and alert before disk/inodes fill. Increasing worker concurrency multiplies temporary-disk and memory demand.
+- Separate workers or multiple API nodes require a coordinated shared-storage strategy or an object migration. Independent local volumes will not work as one media store.
+- Use a supported Ubuntu LTS and benchmark actual CPU/disk/network performance. Verify the selected provider's current plan and transfer limits; shared CPU performance can vary.
+- phpMyAdmin is an administration UI, not a database engine. Keep its optional `tools` profile private behind loopback/SSH/VPN.
 
-| Stage | What runs | Suggested Contabo size |
-|---|---|---|
-| **1. Launch** | One server: reverse proxy (Caddy/Nginx), Next.js, NestJS, MySQL 8.4, Redis, media worker (1 job at a time) | 6–8 vCPU, 12–24 GB RAM, 100 GB+ NVMe. Minimum workable: 4 vCPU / 8 GB. Media files NOT on this disk. |
-| **2. Growth** | Split into 3: (a) web + API, (b) database, (c) media worker | (a) 8 vCPU / 24 GB, (b) 8 vCPU / 24–32 GB NVMe (consider a dedicated-core plan), (c) 6–8 vCPU only when queue is busy |
-| **3. Big** | 2+ web/API nodes behind a load balancer, MySQL 8.4 primary + replica, separate Redis, several workers | Scale horizontally; consider moving video to a managed service if encoding load grows |
-
-- **OS:** latest Ubuntu LTS. **Backend scaffold:** NestJS 11 on Node.js 22 LTS (22.12+).
-- **Deploy:** Docker Compose (one compose file per server), GitHub Actions → SSH.
-- **Security:** SSH keys only, firewall (ufw), fail2ban, automatic security updates.
-- **Backups:** nightly `mysqldump --single-transaction` for InnoDB tables (and later binary-log archiving for point-in-time recovery) to private object storage; test a restore.
-- **Database administration:** phpMyAdmin manages MySQL; it is not a database engine. Keep it private on localhost, behind an SSH tunnel, or on a VPN. The API uses MySQL through TypeORM + mysql2, not through phpMyAdmin.
-- **Monitoring:** Uptime Kuma + simple CPU/RAM/disk alerts.
-- **Caveat:** Contabo CPUs are shared, so benchmark your actual VPS before launch and keep the database on a plan you trust. Ask for a data center near most visitors.
-
-## 🧮 Why not serve video from the VPS?
-A 1 Gbit/s port is about 125 MB/s. At about 1 Mbps per stream, that is roughly 1,000 simultaneous viewers at the theoretical best, and your website and API share that port. Serve media from object storage instead.
+## Local bandwidth trade-offs
+A nominal 1 Gbit/s port is at most 125 MB/s before protocol overhead and contention; it is not a promised viewer capacity. At 2 Mbps, a 30-second clip is about 7.5 MB and 1,000 complete plays transfer about 7.5 GB. Measure bitrate distributions, cache hit rates, API latency and actual monthly transfer. Local delivery is simpler now but competes for the same server/network resources. Move delivery later when measured limits justify the operational cost.
 
 ## 🖼️ Image Pipeline
-1. Owner uploads **directly to object storage** with a pre-signed URL (the API never touches the bytes).
-2. API enqueues a job (BullMQ + Redis).
-3. Worker with `sharp`: auto-rotate, **strip EXIF/GPS**, resize to 3 widths, encode **AVIF + WebP**.
-4. Store only the processed versions (keep originals for a short time or not at all).
-5. Page serves `<picture>` with AVIF → WebP → JPEG fallback.
+1. Owner negotiates an asset, then streams its bytes to the encoded `/api/v1/uploads/:key` URL with the owner session. Only pending, unexpired, owned originals can be written, with exclusive promotion, byte limits, deadline and disconnect cleanup. Ordinary JSON remains limited to 16 KB.
+2. Completion checks actual stored size and transactionally creates a unique outbox record. Worker dispatch/reconciliation retries missing jobs with deterministic IDs.
+3. Worker validates signatures, decoded dimensions and pixel count; auto-orients and strips EXIF/GPS. AVIF50/WebP75/JPEG80 variants target widths 480/1080/1600 without upscaling. Persist actual output dimensions/bytes.
+4. Commit READY variants before removing the original; storage deletion failures remain retryable. Expired/failed uploads are cleaned after the default 24-hour retention, excluding active processing.
+5. Public downloads serve only READY variants on published posts. Owners alone can access originals/drafts (`private, no-store`). Trusted MIME types, `nosniff`, short public caching and single-byte-range video downloads are enforced. Do not bypass these checks with an unguarded static directory.
 
 ```ts
 import sharp from 'sharp';
@@ -52,6 +46,7 @@ for (const w of widths) {
   const base = sharp(inputBuffer).rotate().resize({ width: w, withoutEnlargement: true });
   await base.clone().avif({ quality: 50 }).toFile(`${id}-${w}.avif`);
   await base.clone().webp({ quality: 75 }).toFile(`${id}-${w}.webp`);
+  await base.clone().jpeg({ quality: 80 }).toFile(`${id}-${w}.jpg`);
 }
 ```
 ```html
@@ -61,47 +56,38 @@ for (const w of widths) {
   <img src="photo-1080.jpg" alt="..." loading="lazy" width="1080" height="1350">
 </picture>
 ```
-Start at AVIF quality 50 / WebP 75 and compare visually on real photos; adjust per quality vs size.
+This snippet illustrates encoding choices, not the full validation/timeout pipeline. Compare all three formats on real photos before changing defaults.
 
-## 🎬 Video Pipeline
-**Phase 1 (simple, reliable):** limit uploads (e.g. 60–90 s, max 1080p, max 200 MB). Worker makes one **720p H.264 MP4** + poster image, then deletes the original.
-```bash
-ffmpeg -i in.mp4 -vf "scale=-2:720" -c:v libx264 -crf 26 -preset medium \
-  -c:a aac -b:a 96k -movflags +faststart out.mp4
-```
-**Phase 2 (smoother on weak connections):** HLS with 2–3 renditions (360p / 720p / 1080p), fMP4 segments:
-```bash
-ffmpeg -i in.mp4 -c:v libx264 -crf 23 -c:a aac -f hls -hls_time 6 \
-  -hls_playlist_type vod -hls_list_size 0 -hls_segment_type fmp4 out.m3u8
-# multiple renditions: use -var_stream_map and -master_pl_name
-```
-**Phase 3 (smaller files):** add **AV1** (e.g. SVT-AV1) only for popular videos, keeping H.264 as fallback. AV1 encoding on a shared CPU is slow, so queue it for off-peak hours.
+## Video pipeline and configuration
+- Hard ceilings: images 10 MiB; video 200 MiB, 90 seconds, 1080p-equivalent input. Subscription limits can be stricter. Null/unlimited subscription settings never bypass global safety limits.
+- Validate container, streams, finite duration and dimensions before expensive encoding. Generate one aspect-preserving, no-upscale H.264 MP4 up to 720p plus a JPEG poster. Strip metadata/chapters, constrain input protocols, threads, output size and subprocess lifetime. HLS and AV1 are outside current scope.
+- `MEDIA_JOB_TIMEOUT_MS` and `MEDIA_UPLOAD_TIMEOUT_MS` default 300000, maximum 900000. `MEDIA_TEMP_DIR` defaults `.tmp/media`; use bounded fast local temporary storage. `FFMPEG_PATH`/`FFPROBE_PATH` default to binaries on PATH and exist only in the worker image. Always smoke-test the installed version.
+- `MEDIA_MAX_IMAGE_PIXELS` defaults 40000000. `.env.example` and `libs/config/src/environment.ts` define current names and validated bounds; old `VIDEO_*`/`IMAGE_*` placeholder variables are not used.
+- BullMQ retries transient processing failures; permanent validation or exhausted attempts marks FAILED. Idempotent variants/outbox recovery prevent lost completion requests from leaving assets stranded.
 
-Always test on your FFmpeg version.
+## Capacity measurement
+Measure the sum of all nine image variants (three widths × three formats), MP4/poster pairs, pending original reservations and temporary encoding output. Small inputs may produce duplicate dimensions because upscaling is disabled. Use representative uploads to estimate median/p95 bytes and encoding time; fixed per-photo estimates are not reliable across content. Plan media growth and retention separately from database storage, and test disk-full failures before launch.
 
-## 📦 Storage Estimate (rough rules of thumb; verify with your own uploads)
-- Photo: about 50–150 KB per size in AVIF, so about 200–400 KB for 3 sizes (+WebP copies roughly double that).
-- 720p H.264 clip: about 1–2 Mbps, so a 30 s clip is about 4–8 MB.
-- 100,000 photos ≈ 40–80 GB with AVIF + WebP; 10,000 short clips ≈ 40–80 GB.
-- Object storage is sold in 250 GB steps (€2.49 each), so this is cheap. Do not store media on the VPS disk.
+## TLS, proxy and future object delivery
+- Terminate HTTPS at a maintained Caddy/Nginx reverse proxy. Set exact HTTPS `APP_ORIGIN`, register the Google client origin and set `TRUST_PROXY_CIDRS` to only the actual proxy addresses. Never trust arbitrary forwarded headers. The API binds `0.0.0.0:3000` inside containers but publishes only to host loopback.
+- Preserve encoded keys/range headers and owner cookies. Disable request-body buffering for upload routes or separately budget and limit proxy temporary files. Apply a 200 MiB maximum media body and compatible timeouts while leaving JSON at 16 KB. Keep private/auth responses out of shared caches. Forward root crawler paths (`/robots.txt`, `/sitemap.xml`, `/llms.txt`, `/ai.txt`) to their `/api/v1/seo/` endpoints if exposing those conventional paths.
+- Local `STORAGE_PUBLIC_BASE_URL` defaults to the application origin. Keep delivery same-origin where owner cookies are needed; do not expose the underlying volume directly.
+- Future S3 migration: choose a private bucket/provider, copy objects with exact case-sensitive keys, verify counts/size/checksums, test signed uploads and private/public delivery, pause writes or synchronize the delta, switch configuration, and retain a recoverable local copy until validation. A configuration flip alone does not migrate bytes.
+- Any CDN needs current contractual approval for the selected video use, verified limits/pricing and cache/privacy testing. Earlier CDN/price/traffic claims in this document were not reverified and are not deployment assumptions.
 
-## 🌐 CDN Plan
-- Put **Cloudflare (free)** in front of the **website pages** (DDoS protection, caching).
-- For **images/video**: use Contabo Object Storage on its own domain (no egress fees). Remember the **250 requests/second per file** limit; if one viral file hits it, move media to **Cloudflare R2** (S3-compatible, zero egress fees) with no code change, because both speak the S3 API.
-- Do **not** proxy large video hosted on your VPS through Cloudflare's CDN; their terms restrict video not hosted on their services.
+## Deployment and database recovery
+- Run commands from `backend/`. `infra:up` remains local dependencies only; `stack:up` explicitly selects the app profile. Migrations are explicit (`db:migrate` locally); runtime never synchronizes schema automatically.
+- Production combines `infra/compose.yaml` and `infra/compose.production.yaml` with an explicit private `APP_ENV_FILE`. Keep the production Compose project name stable to retain named MySQL/Redis/media volumes. Both application images run as the matching `node` user and share the same media mount path; verify ownership and persistence across recreation without deleting volumes.
+- CI runs typecheck, formatting, unit/integration tests and all three builds. Deployment requires manual workflow dispatch with `deploy=true`, main branch and configured production environment approval. It serializes releases, builds a clean worktree at the selected SHA, stops writers, runs compiled migrations, then checks API readiness and worker heartbeat. Configure SSH host fingerprint and narrowly scoped deployment credentials; no deployment is performed by this repair work.
+- A failed migration leaves applications stopped. MySQL DDL may already have committed even if `schema_migrations` lacks the row. Preserve logs and backups; inspect the failing migration and `SHOW CREATE TABLE`/indexes/constraints against its intended steps. Reproduce recovery on an isolated restore, then apply an explicitly reviewed forward repair or restore the coordinated backup. Do not blindly rerun, mark migrations complete, reset databases, or remove volumes.
+- Before changing these corrected initial migrations on any preexisting scaffold database, inspect its schema separately. The repair assumes no existing data; it does not authorize destroying a schema.
 
-## ⚠️ Gotchas
-- **Upload abuse:** size/time limits, rate limits, magic-byte file-type checks, no executable files.
-- **Worker isolation:** run FFmpeg with `nice`, concurrency 1, timeouts and a memory limit so one bad video cannot freeze the server.
-- **Privacy:** strip GPS/EXIF from photos; strip metadata from videos.
-- **Lifecycle:** delete originals and failed temp files; set bucket lifecycle rules.
-- **Database:** use bounded mysql2/TypeORM connection pools per API/worker process; budget total connections across nodes. Manage schema changes with migrations, not manual phpMyAdmin edits. Consider ProxySQL only if a database proxy is needed later.
-- **Load test** (k6) before launch and after each stage.
-
-## 🚦 Next steps
-1. Order a Stage-1 VPS and benchmark it (CPU, disk, network).
-2. Create the object storage bucket + test a pre-signed upload.
-3. Build the image pipeline first (biggest win), then video Phase 1.
+## Backups, monitoring and acceptance gates
+- Back up **both media and MySQL**, encrypted to a private off-server destination chosen by the operator (another server/disk service is acceptable; S3 is optional). Same-VPS copies and named volumes are not backups. Schedule consistent InnoDB dumps (`mysqldump --single-transaction`) plus media snapshots/manifests; pause uploads/cleanup briefly or use coordinated snapshots to avoid missing referenced files. Consider binary logs for point-in-time recovery.
+- Preserve necessary private configuration separately. Rehearse restoring database plus media into an isolated environment, verifying checksums, ownership, download authorization and representative media. Record recovery time/data-loss objectives and retention; remote schedules/destinations are not provisioned here.
+- Redis runs AOF with `appendfsync everysec` and `noeviction`. Engagement batches never expire and durable MySQL receipts prevent replay double-counting, but complete Redis loss can lose unflushed events; everysec can lose recent writes on a crash. Monitor persistence health and account for that recovery point.
+- Alert on API readiness, worker stale heartbeat, queue lag/retries/failed assets/outbox age, cleanup backlog, MySQL errors/connections, Redis memory/AOF errors, CPU, RAM, disk/inodes, transfer and backup freshness. Heartbeat is a dependency/consumer liveness signal, not proof every job succeeds.
+- Operational prerequisites remain: host hardening/firewall/SSH keys/security updates, TLS certificates, trusted proxy verification, private off-server backups, restore rehearsal, monitoring installation, disk/network capacity tests and production load approval. Unit/build success alone does not satisfy these gates.
 
 ## 📚 References
 - [Contabo Object Storage guide (Owncast)](https://owncast.online/docs/storage/contabo/)

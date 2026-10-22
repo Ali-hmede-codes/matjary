@@ -15,6 +15,7 @@ import { AddSeoSystem1793232000000 } from './migrations/1793232000000-AddSeoSyst
 import { AddStoreLocation1793318400000 } from './migrations/1793318400000-AddStoreLocation';
 import { AddVerificationBadge1792657536000 } from './migrations/1792657536000-AddVerificationBadge';
 import { AddBoostSystem1793400000000 } from './migrations/1793400000000-AddBoostSystem';
+import { AddDurableProcessing1793486400000 } from './migrations/1793486400000-AddDurableProcessing';
 
 export function createDatabaseOptions(
   env: DatabaseEnvironment,
@@ -52,6 +53,7 @@ export function createDatabaseOptions(
       AddStoreLocation1793318400000,
       AddVerificationBadge1792657536000,
       AddBoostSystem1793400000000,
+      AddDurableProcessing1793486400000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

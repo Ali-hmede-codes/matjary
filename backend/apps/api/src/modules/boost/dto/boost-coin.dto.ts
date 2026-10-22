@@ -10,6 +10,8 @@ import {
   ValidateNested,
   IsArray,
   IsObject,
+  IsInt,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -132,11 +134,16 @@ export class UpdateBoostSettingsDto {
 // ============================================
 
 export class AdminAdjustBalanceDto {
+  @IsUUID()
+  operationId!: string;
+
   @IsString()
   @IsUUID()
   userId!: string;
 
-  @IsNumber()
+  @IsInt()
+  @Min(-Number.MAX_SAFE_INTEGER)
+  @Max(Number.MAX_SAFE_INTEGER)
   amount!: number; // Positive to add, negative to deduct
 
   @IsOptional()
@@ -146,6 +153,16 @@ export class AdminAdjustBalanceDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+}
+
+export class ReviewCampaignDto {
+  @IsEnum({ approve: 'approve', reject: 'reject' })
+  action!: 'approve' | 'reject';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  rejectionReason?: string;
 }
 
 export class AdminAdjustBalanceResponseDto {

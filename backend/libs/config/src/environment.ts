@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 export interface DatabaseEnvironment {
   MYSQL_HOST: string;
   MYSQL_PORT: number;
@@ -18,8 +20,8 @@ export interface AppEnvironment extends DatabaseEnvironment {
   REDIS_HOST: string;
   REDIS_PORT: number;
   REDIS_PASSWORD: string;
-  // Media storage provider: 's3' (object storage, production recommendation)
-  // or 'local' (files on this VPS disk). Flipped by config, no code change.
+  // Local disk is supported in development and deployment. Changing providers
+  // requires copying/verifying existing objects and arranging delivery.
   STORAGE_PROVIDER: 's3' | 'local';
   STORAGE_LOCAL_DIR: string;
   STORAGE_PUBLIC_BASE_URL: string;
@@ -29,8 +31,7 @@ export interface AppEnvironment extends DatabaseEnvironment {
   ENGAGEMENT_VIEW_DEDUPE_TTL_SECONDS: number;
   ENGAGEMENT_FLUSH_INTERVAL_SECONDS: number;
   ENGAGEMENT_REDIS_KEY_TTL_SECONDS: number;
-  // S3-compatible object storage for direct media uploads. Credentials are
-  // optional until media upload is wired up; empty values disable presigned URLs.
+  // S3 credentials are required only when the optional S3 provider is selected.
   S3_ENDPOINT: string;
   S3_REGION: string;
   S3_BUCKET: string;
@@ -44,6 +45,17 @@ export interface AppEnvironment extends DatabaseEnvironment {
   MEDIA_MAX_VIDEO_DURATION_SECONDS: number;
   // Comma-separated list of admin email addresses. Empty means no admins.
   ADMIN_EMAILS: string;
+  MEDIA_WORKER_CONCURRENCY: number;
+  MEDIA_JOB_TIMEOUT_MS: number;
+  MEDIA_UPLOAD_TIMEOUT_MS: number;
+  MEDIA_ORIGINAL_RETENTION_HOURS: number;
+  MEDIA_MAX_IMAGE_PIXELS: number;
+  MEDIA_MAX_VIDEO_HEIGHT: number;
+  MEDIA_TEMP_DIR: string;
+  FFMPEG_PATH: string;
+  FFPROBE_PATH: string;
+  TRUST_PROXY_CIDRS: string;
+  WORKER_HEARTBEAT_FILE: string;
 }
 
 type Environment = Record<string, unknown>;
@@ -135,6 +147,35 @@ export function validateEnvironment(
       'GOOGLE_CLIENT_ID must be a Google web client ID; required in production',
     );
   }
+  const storageProvider = String(env.STORAGE_PROVIDER ?? 'local');
+  if (!['local', 's3'].includes(storageProvider)) throw new Error("STORAGE_PROVIDER must be 's3' or 'local'");
+  if (storageProvider === 's3') {
+    for (const key of ['S3_ENDPOINT', 'S3_REGION', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) text(env, key);
+    try {
+      const endpoint = new URL(String(env.S3_ENDPOINT));
+      if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || (nodeEnv === 'production' && endpoint.protocol !== 'https:')) throw new Error();
+    } catch { throw new Error('S3_ENDPOINT must be an HTTP(S) URL; HTTPS is required in production'); }
+  }
+  const localBase = String(env.STORAGE_PUBLIC_BASE_URL || appOrigin);
+  try {
+    const base = new URL(localBase);
+    if (base.origin !== localBase || !['http:', 'https:'].includes(base.protocol) || (nodeEnv === 'production' && base.protocol !== 'https:')) throw new Error();
+  } catch { throw new Error('STORAGE_PUBLIC_BASE_URL must be an HTTP(S) origin; HTTPS is required in production'); }
+  const proxies = String(env.TRUST_PROXY_CIDRS ?? '');
+  for (const cidr of proxies ? proxies.split(',').map((value) => value.trim()) : []) {
+    const [address, prefix, extra] = cidr.split('/');
+    const family = isIP(address ?? '');
+    if (!family || extra !== undefined || (prefix !== undefined && (!/^\d+$/.test(prefix) || Number(prefix) > (family === 4 ? 32 : 128)))) throw new Error('TRUST_PROXY_CIDRS must contain IP addresses or CIDRs');
+  }
+  const pathStyle = String(env.S3_FORCE_PATH_STYLE ?? 'true').toLowerCase();
+  if (!['true', 'false'].includes(pathStyle)) throw new Error('S3_FORCE_PATH_STYLE must be true or false');
+  const mediaBase = String(env.MEDIA_PUBLIC_BASE_URL ?? '');
+  if (mediaBase) {
+    try {
+      const mediaUrl = new URL(mediaBase);
+      if (!['http:', 'https:'].includes(mediaUrl.protocol) || mediaUrl.username || mediaUrl.password || mediaUrl.search || mediaUrl.hash || (nodeEnv === 'production' && mediaUrl.protocol !== 'https:')) throw new Error();
+    } catch { throw new Error('MEDIA_PUBLIC_BASE_URL must be an HTTP(S) URL; HTTPS is required in production'); }
+  }
   return {
     ...env,
     ...validateDatabaseEnvironment(env),
@@ -153,47 +194,39 @@ export function validateEnvironment(
     REDIS_HOST: text(env, 'REDIS_HOST', '127.0.0.1'),
     REDIS_PORT: integer(env, 'REDIS_PORT', 6379, 1, 65535),
     REDIS_PASSWORD: text(env, 'REDIS_PASSWORD'),
-    // Storage credentials are optional until media upload is wired up; empty
-    // values disable presigned URLs (sanitized 503 from S3Service).
+    // Local storage does not require an external account or credentials.
     S3_ENDPOINT: String(env.S3_ENDPOINT ?? ''),
     S3_REGION: String(env.S3_REGION ?? 'us-east-1'),
     S3_BUCKET: String(env.S3_BUCKET ?? ''),
     S3_ACCESS_KEY_ID: String(env.S3_ACCESS_KEY_ID ?? ''),
     S3_SECRET_ACCESS_KEY: String(env.S3_SECRET_ACCESS_KEY ?? ''),
-    S3_FORCE_PATH_STYLE:
-      String(env.S3_FORCE_PATH_STYLE ?? 'true').toLowerCase() === 'true',
-    MEDIA_PUBLIC_BASE_URL: String(env.MEDIA_PUBLIC_BASE_URL ?? ''),
+    S3_FORCE_PATH_STYLE: pathStyle === 'true',
+    MEDIA_PUBLIC_BASE_URL: mediaBase,
     MEDIA_MAX_IMAGE_SIZE_BYTES: integer(
       env,
       'MEDIA_MAX_IMAGE_SIZE_BYTES',
       10485760,
       1,
-      104857600,
+      10485760,
     ),
     MEDIA_MAX_VIDEO_SIZE_BYTES: integer(
       env,
       'MEDIA_MAX_VIDEO_SIZE_BYTES',
       209715200,
       1,
-      1073741824,
+      209715200,
     ),
     MEDIA_MAX_VIDEO_DURATION_SECONDS: integer(
       env,
       'MEDIA_MAX_VIDEO_DURATION_SECONDS',
       90,
       1,
-      3600,
+      90,
     ),
     // Storage provider selection: 's3' (object storage) or 'local' (VPS disk).
-    STORAGE_PROVIDER: (() => {
-      const value = String(env.STORAGE_PROVIDER ?? 's3');
-      if (value !== 's3' && value !== 'local') {
-        throw new Error("STORAGE_PROVIDER must be 's3' or 'local'");
-      }
-      return value as AppEnvironment['STORAGE_PROVIDER'];
-    })(),
-    STORAGE_LOCAL_DIR: String(env.STORAGE_LOCAL_DIR ?? 'storage'),
-    STORAGE_PUBLIC_BASE_URL: String(env.STORAGE_PUBLIC_BASE_URL ?? ''),
+    STORAGE_PROVIDER: storageProvider as AppEnvironment['STORAGE_PROVIDER'],
+    STORAGE_LOCAL_DIR: text(env, 'STORAGE_LOCAL_DIR', 'storage'),
+    STORAGE_PUBLIC_BASE_URL: localBase,
     // Engagement counters: buffered in Redis, flushed to MySQL asynchronously.
     ENGAGEMENT_RATE_LIMIT_PER_MIN: integer(
       env,
@@ -226,5 +259,16 @@ export function validateEnvironment(
     // Admin emails (comma-separated) that can access admin-only boost endpoints.
     // Empty means no admin endpoints are accessible.
     ADMIN_EMAILS: String(env.ADMIN_EMAILS ?? ''),
+    MEDIA_WORKER_CONCURRENCY: integer(env, 'MEDIA_WORKER_CONCURRENCY', 1, 1, 4),
+    MEDIA_JOB_TIMEOUT_MS: integer(env, 'MEDIA_JOB_TIMEOUT_MS', 300000, 1000, 900000),
+    MEDIA_UPLOAD_TIMEOUT_MS: integer(env, 'MEDIA_UPLOAD_TIMEOUT_MS', 300000, 1000, 900000),
+    MEDIA_ORIGINAL_RETENTION_HOURS: integer(env, 'MEDIA_ORIGINAL_RETENTION_HOURS', 24, 1, 168),
+    MEDIA_MAX_IMAGE_PIXELS: integer(env, 'MEDIA_MAX_IMAGE_PIXELS', 40000000, 1, 100000000),
+    MEDIA_MAX_VIDEO_HEIGHT: integer(env, 'MEDIA_MAX_VIDEO_HEIGHT', 1080, 240, 1080),
+    MEDIA_TEMP_DIR: text(env, 'MEDIA_TEMP_DIR', '.tmp/media'),
+    FFMPEG_PATH: text(env, 'FFMPEG_PATH', 'ffmpeg'),
+    FFPROBE_PATH: text(env, 'FFPROBE_PATH', 'ffprobe'),
+    TRUST_PROXY_CIDRS: proxies,
+    WORKER_HEARTBEAT_FILE: text(env, 'WORKER_HEARTBEAT_FILE', '.tmp/worker-heartbeat'),
   };
 }

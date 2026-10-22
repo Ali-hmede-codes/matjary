@@ -7,9 +7,21 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  PrimaryColumn,
   Relation,
   UpdateDateColumn,
 } from 'typeorm';
+
+import { StoreSeo, ProductSeo, ShowcaseSeo, SeoRedirect, SeoSettings } from './seo.entities';
+import { MediaProcessingOutbox, EngagementFlushReceipt, type ProcessingLimits } from './durability.entities';
+
+abstract class TimestampedEntity {
+  @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 6 })
+  updatedAt!: Date;
+}
 
 export enum ShowcaseStatus {
   DRAFT = 'draft',
@@ -50,25 +62,25 @@ export enum BillingCycle {
 
 export interface SubscriptionLimits {
   // Video limits
-  maxVideoDurationSeconds?: number; // null = unlimited
-  maxVideoSizeBytes?: number; // null = unlimited
-  maxVideoQuality?: string; // e.g., '1080p', '720p', '480p'
+  maxVideoDurationSeconds?: number | null; // null = unlimited
+  maxVideoSizeBytes?: number | null; // null = unlimited
+  maxVideoQuality?: string | null; // e.g., '1080p', '720p', '480p'
 
   // Image limits
-  maxImageCount?: number; // null = unlimited
-  maxImageSizeBytes?: number; // null = unlimited
-  maxImageWidth?: number; // null = unlimited
-  maxImageHeight?: number; // null = unlimited
+  maxImageCount?: number | null; // null = unlimited
+  maxImageSizeBytes?: number | null; // null = unlimited
+  maxImageWidth?: number | null; // null = unlimited
+  maxImageHeight?: number | null; // null = unlimited
 
   // Post limits
-  maxPostsPerMonth?: number; // null = unlimited
-  maxTotalPosts?: number; // null = unlimited
+  maxPostsPerMonth?: number | null; // null = unlimited
+  maxTotalPosts?: number | null; // null = unlimited
 
   // Product limits (for ecommerce)
-  maxProducts?: number; // null = unlimited (for ecommerce shops)
+  maxProducts?: number | null; // null = unlimited (for ecommerce shops)
 
   // Storage limits
-  maxStorageBytes?: number; // null = unlimited
+  maxStorageBytes?: number | null; // null = unlimited
 
   // Feature flags
   enableCart?: boolean;
@@ -78,8 +90,8 @@ export interface SubscriptionLimits {
   enablePrioritySupport?: boolean;
 
   // Verification Badge limits
-  maxVerificationBadges?: number; // null = unlimited, 0 = no badges allowed
-  verificationBadgePriceCents?: number; // price per badge in cents (0 or null = free)
+  maxVerificationBadges?: number | null; // null = unlimited, 0 = no badges allowed
+  verificationBadgePriceCents?: number | null; // price per badge in cents (0 or null = free)
 }
 
 export interface DesignSettings {
@@ -264,6 +276,7 @@ export class Store extends BaseEntity {
   bannerKey!: string | null;
 
   @Column({
+    name: 'subscription_tier',
     type: 'enum',
     enum: StoreSubscriptionTier,
     default: StoreSubscriptionTier.FREE,
@@ -424,6 +437,7 @@ export class SubscriptionPlan extends BaseEntity {
   currency!: string;
 
   @Column({
+    name: 'billing_cycle',
     type: 'enum',
     enum: BillingCycle,
     default: BillingCycle.MONTHLY,
@@ -678,7 +692,7 @@ export class CartItem extends BaseEntity {
   @Column({ name: 'cart_id', type: 'varchar', length: 36 })
   cartId!: string;
 
-  @ManyToOne(() => Cart, (cart) => cart.items, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Cart, (cart) => cart.items, { onDelete: 'RESTRICT' })
   @JoinColumn({
     name: 'cart_id',
     foreignKeyConstraintName: 'fk_cart_items_cart',
@@ -716,6 +730,12 @@ export class CartItem extends BaseEntity {
 @Index('idx_media_assets_status_created', ['status', 'createdAt'])
 @Index('uq_media_assets_original_key', ['originalKey'], { unique: true })
 export class MediaAsset extends BaseEntity {
+  @Column({ name: 'processing_limits', type: 'json', nullable: true })
+  processingLimits!: ProcessingLimits | null;
+
+  @Column({ name: 'upload_expires_at', type: 'datetime', precision: 6, nullable: true })
+  uploadExpiresAt!: Date | null;
+
   // Ownership is inherited from the showcase, avoiding conflicting owner IDs.
   @Column({ name: 'showcase_id', type: 'varchar', length: 36 })
   showcaseId!: string;
@@ -817,6 +837,9 @@ export class MediaVariant extends BaseEntity {
 
 @Entity({ name: 'post_engagement', engine: 'InnoDB' })
 export class PostEngagement extends BaseEntity {
+  @Column({ name: 'last_batch_id', type: 'varchar', length: 36, nullable: true })
+  lastBatchId!: string | null;
+
   @Column({ name: 'post_id', type: 'varchar', length: 36 })
   postId!: string;
 
@@ -901,11 +924,11 @@ export enum BoostBidStrategy {
 }
 
 @Entity({ name: 'boost_coins', engine: 'InnoDB' })
-export class BoostCoin extends BaseEntity {
-  @Column({ name: 'user_id', type: 'varchar', length: 36, unique: true })
+export class BoostCoin extends TimestampedEntity {
+  @PrimaryColumn({ name: 'user_id', type: 'varchar', length: 36 })
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
   @JoinColumn({
     name: 'user_id',
     foreignKeyConstraintName: 'fk_boost_coins_user',
@@ -929,11 +952,20 @@ export interface BoostTransactionMetadata {
 @Index('idx_boost_transactions_user', ['userId'])
 @Index('idx_boost_transactions_reference', ['referenceId', 'referenceType'])
 @Index('idx_boost_transactions_created', ['createdAt'])
-export class BoostTransaction extends BaseEntity {
+export class BoostTransaction {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
+  createdAt!: Date;
+
+  @Column({ name: 'operation_id', type: 'varchar', length: 100, nullable: true, unique: true, collation: 'utf8mb4_bin' })
+  operationId!: string | null;
+
   @Column({ name: 'user_id', type: 'varchar', length: 36 })
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
   @JoinColumn({
     name: 'user_id',
     foreignKeyConstraintName: 'fk_boost_transactions_user',
@@ -1017,14 +1049,14 @@ export interface BoostCreative {
 
 @Entity({ name: 'boost_campaigns', engine: 'InnoDB' })
 @Index('idx_boost_campaigns_user', ['userId'])
-@Index('idx_boost_campaigns_target', ['targetType', 'targetId'])
+@Index('idx_boost_campaigns_target', ['targetType', 'targetStoreId', 'targetShowcaseId'])
 @Index('idx_boost_campaigns_status', ['status'])
 @Index('idx_boost_campaigns_schedule', ['startAt', 'endAt'])
 export class BoostCampaign extends BaseEntity {
   @Column({ name: 'user_id', type: 'varchar', length: 36 })
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
   @JoinColumn({
     name: 'user_id',
     foreignKeyConstraintName: 'fk_boost_campaigns_user',
@@ -1041,8 +1073,28 @@ export class BoostCampaign extends BaseEntity {
   })
   targetType!: BoostTargetType;
 
-  @Column({ name: 'target_id', type: 'varchar', length: 36 })
-  targetId!: string; // Showcase ID or Store ID
+  @Column({ name: 'target_store_id', type: 'varchar', length: 36, nullable: true })
+  targetStoreId!: string | null;
+
+  @Column({ name: 'target_showcase_id', type: 'varchar', length: 36, nullable: true })
+  targetShowcaseId!: string | null;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'target_store_id', foreignKeyConstraintName: 'fk_boost_campaigns_store' })
+  targetStore!: Relation<Store | null>;
+
+  @ManyToOne(() => Showcase, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'target_showcase_id', foreignKeyConstraintName: 'fk_boost_campaigns_showcase' })
+  targetShowcase!: Relation<Showcase | null>;
+
+  get targetId(): string {
+    return this.targetType === BoostTargetType.STORE ? this.targetStoreId! : this.targetShowcaseId!;
+  }
+
+  toJSON() {
+    const { targetStoreId, targetShowcaseId, ...campaign } = this;
+    return { ...campaign, targetId: this.targetId };
+  }
 
   @Column({
     name: 'status',
@@ -1130,19 +1182,19 @@ export interface BoostCampaignPerformanceData {
 
 @Entity({ name: 'boost_campaign_performance', engine: 'InnoDB' })
 @Index('idx_boost_performance_date', ['date'])
-export class BoostCampaignPerformance extends BaseEntity {
-  @Column({ name: 'campaign_id', type: 'varchar', length: 36 })
+export class BoostCampaignPerformance extends TimestampedEntity {
+  @PrimaryColumn({ name: 'campaign_id', type: 'varchar', length: 36 })
   campaignId!: string;
 
-  @ManyToOne(() => BoostCampaign, { onDelete: 'CASCADE' })
+  @ManyToOne(() => BoostCampaign, { onDelete: 'RESTRICT' })
   @JoinColumn({
     name: 'campaign_id',
     foreignKeyConstraintName: 'fk_boost_performance_campaign',
   })
   campaign!: Relation<BoostCampaign>;
 
-  @Column({ type: 'date' })
-  date!: Date; // UTC date
+  @PrimaryColumn({ type: 'date' })
+  date!: string; // UTC date
 
   @Column({ name: 'impressions', type: 'bigint', unsigned: true, default: '0' })
   impressions!: string;
@@ -1155,8 +1207,11 @@ export class BoostCampaignPerformance extends BaseEntity {
 }
 
 @Entity({ name: 'boost_settings', engine: 'InnoDB' })
-export class BoostSetting extends BaseEntity {
-  @Column({ name: 'key', type: 'varchar', length: 100, unique: true })
+export class BoostSetting {
+  @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 6 })
+  updatedAt!: Date;
+
+  @PrimaryColumn({ name: 'key', type: 'varchar', length: 100 })
   key!: string;
 
   @Column({ name: 'value', type: 'json' })
@@ -1190,4 +1245,11 @@ export const databaseEntities = [
   BoostCampaign,
   BoostCampaignPerformance,
   BoostSetting,
+  StoreSeo,
+  ProductSeo,
+  ShowcaseSeo,
+  SeoRedirect,
+  SeoSettings,
+  MediaProcessingOutbox,
+  EngagementFlushReceipt,
 ];

@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   ServiceUnavailableException,
+  HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
@@ -13,6 +14,9 @@ import {
   SubscriptionLimits,
   SubscriptionStatus,
   BillingCycle,
+  User,
+  effectiveLimits,
+  effectiveSubscription,
 } from '@app/database';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
@@ -28,6 +32,7 @@ export class SubscriptionPlansService {
   ) {}
 
   private sanitize(error: unknown): never {
+    if (error instanceof HttpException) throw error;
     if (error instanceof QueryFailedError && error.driverError) {
       const mysqlError = error.driverError as { code?: string; errno?: number };
       if (mysqlError.code === 'ER_DUP_ENTRY') {
@@ -191,12 +196,12 @@ export class SubscriptionPlansService {
 
       // Check if any users are subscribed to this plan
       const activeSubscriptions = await this.userSubscriptions.count({
-        where: { planId: id, status: SubscriptionStatus.ACTIVE },
+        where: { planId: id },
       });
 
       if (activeSubscriptions > 0) {
         throw new BadRequestException(
-          `Cannot delete plan: ${activeSubscriptions} active subscription(s) exist. Cancel them first.`,
+          'Cannot delete a referenced plan. Deactivate it to retain subscription history.',
         );
       }
 
@@ -219,11 +224,7 @@ export class SubscriptionPlansService {
     userId: string,
   ): Promise<UserSubscription | null> {
     try {
-      return this.userSubscriptions.findOne({
-        where: { userId, status: SubscriptionStatus.ACTIVE },
-        relations: ['plan'],
-        order: { expiresAt: 'DESC' },
-      });
+      return await effectiveSubscription(this.userSubscriptions.manager, userId);
     } catch (error) {
       this.sanitize(error);
     }
@@ -233,37 +234,7 @@ export class SubscriptionPlansService {
    * Get effective limits for a user (from their active subscription or default free plan)
    */
   async getEffectiveLimits(userId: string): Promise<SubscriptionLimits> {
-    const subscription = await this.getUserActiveSubscription(userId);
-
-    if (subscription && subscription.plan) {
-      return subscription.plan.limits;
-    }
-
-    // Fallback to free plan
-    const freePlan = await this.plans.findOneBy({ slug: 'free' });
-    if (freePlan) {
-      return freePlan.limits;
-    }
-
-    // Ultimate fallback - minimal limits
-    return {
-      maxVideoDurationSeconds: 60,
-      maxVideoSizeBytes: 52428800,
-      maxVideoQuality: '720p',
-      maxImageCount: 10,
-      maxImageSizeBytes: 10485760,
-      maxImageWidth: 1920,
-      maxImageHeight: 1080,
-      maxPostsPerMonth: 5,
-      maxTotalPosts: 20,
-      maxProducts: 10,
-      maxStorageBytes: 1073741824,
-      enableCart: true,
-      enableWhatsAppCheckout: false,
-      enableAnalytics: false,
-      enableCustomDomain: false,
-      enablePrioritySupport: false,
-    };
+    return effectiveLimits(this.plans.manager, userId);
   }
 
   /**
@@ -277,28 +248,15 @@ export class SubscriptionPlansService {
     notes?: string,
   ): Promise<UserSubscription> {
     try {
-      const plan = await this.plans.findOneBy({ id: planId });
-      if (!plan) {
-        throw new NotFoundException('Subscription plan not found');
-      }
-
-      // Cancel any existing active subscription
-      await this.userSubscriptions.update(
-        { userId, status: SubscriptionStatus.ACTIVE },
-        { status: SubscriptionStatus.CANCELLED },
-      );
-
-      const subscription = this.userSubscriptions.create({
-        userId,
-        planId,
-        status: SubscriptionStatus.ACTIVE,
-        startsAt: new Date(),
-        expiresAt: expiresAt ?? null,
-        assignedBy,
-        notes: notes ?? null,
+      if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) throw new BadRequestException('Subscription expiry must be in the future');
+      return await this.userSubscriptions.manager.transaction(async (manager) => {
+        const user = await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
+        if (!user) throw new NotFoundException('User not found');
+        const plan = await manager.findOne(SubscriptionPlan, { where: { id: planId }, lock: { mode: 'pessimistic_read' } });
+        if (!plan || !plan.isActive) throw new NotFoundException('Active subscription plan not found');
+        await manager.update(UserSubscription, { userId, status: SubscriptionStatus.ACTIVE }, { status: SubscriptionStatus.CANCELLED });
+        return manager.save(UserSubscription, manager.create(UserSubscription, { userId, planId, status: SubscriptionStatus.ACTIVE, startsAt: new Date(), expiresAt: expiresAt ?? null, assignedBy, notes: notes ?? null }));
       });
-
-      return this.userSubscriptions.save(subscription);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -327,7 +285,7 @@ export class SubscriptionPlansService {
       if (
         value !== undefined &&
         value !== null &&
-        (typeof value !== 'number' || value <= 0)
+        (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0)
       ) {
         throw new BadRequestException(
           `${field} must be a positive number or null for unlimited`,
@@ -346,7 +304,7 @@ export class SubscriptionPlansService {
       if (
         value !== undefined &&
         value !== null &&
-        (typeof value !== 'number' || value < 0)
+        (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
       ) {
         throw new BadRequestException(
           `${field} must be a non-negative number or null`,

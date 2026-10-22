@@ -8,9 +8,10 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "npm run build:api && npm run build:worker",
+    "build": "npm run build:api && npm run build:worker && npm run build:migrations",
     "build:api": "nest build api",
     "build:worker": "nest build worker",
+    "build:migrations": "nest build migrations",
     "dev:api": "nest start api --watch",
     "dev:worker": "nest start worker --watch",
     "start:api": "node dist/apps/api/main.js",
@@ -18,7 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write \"{apps,libs,test,scripts}/**/*.{ts,json,cjs}\" \"*.json\" \"infra/**/*.yaml\"",
     "format:check": "prettier --check \"{apps,libs,test,scripts}/**/*.{ts,json,cjs}\" \"*.json\" \"infra/**/*.yaml\"",
-    "test": "node -r ts-node/register -r tsconfig-paths/register --test test/unit/environment.test.ts test/unit/database.test.ts test/unit/health.test.ts test/unit/auth.test.ts test/unit/showcases.test.ts test/unit/engagement.test.ts",
+    "test": "node -r ./test/setup-unit.cjs -r ts-node/register -r tsconfig-paths/register --test test/unit/environment.test.ts test/unit/database.test.ts test/unit/health.test.ts test/unit/auth.test.ts test/unit/authorization.test.ts test/unit/showcases.test.ts test/unit/engagement.test.ts test/unit/media.test.ts",
     "test:integration": "node -r ts-node/register -r tsconfig-paths/register --test test/integration/database.test.ts",
     "env:init": "node scripts/init-env.cjs",
     "db:migrate": "typeorm-ts-node-commonjs migration:run -d libs/database/src/data-source.ts",
@@ -26,7 +27,8 @@
     "db:migration:generate": "typeorm-ts-node-commonjs migration:generate -d libs/database/src/data-source.ts",
     "db:migration:revert": "typeorm-ts-node-commonjs migration:revert -d libs/database/src/data-source.ts",
     "infra:up": "docker compose --env-file .env -f infra/compose.yaml --profile tools up -d --wait --wait-timeout 180",
-    "infra:down": "docker compose --env-file .env -f infra/compose.yaml --profile tools down"
+    "infra:down": "docker compose --env-file .env -f infra/compose.yaml --profile tools down",
+    "stack:up": "docker compose --env-file .env -f infra/compose.yaml --profile app up -d --build --wait --wait-timeout 180"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",

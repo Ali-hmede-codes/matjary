@@ -19,6 +19,15 @@
         "tsConfigPath": "apps/api/tsconfig.app.json"
       }
     },
+    "migrations": {
+      "type": "application",
+      "root": "apps/migrations",
+      "entryFile": "main",
+      "sourceRoot": "apps/migrations/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/migrations/tsconfig.app.json"
+      }
+    },
     "worker": {
       "type": "application",
       "root": "apps/worker",

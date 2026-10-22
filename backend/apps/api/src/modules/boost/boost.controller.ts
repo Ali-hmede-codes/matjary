@@ -34,6 +34,7 @@ import {
   BoostedContentResponseDto,
   BoostTargetingDto,
   BoostCreativeDto,
+  ReviewCampaignDto,
 } from './dto/boost-coin.dto';
 import { BoostBidStrategy } from '@app/database';
 import {
@@ -294,6 +295,7 @@ export class BoostController {
 
   // Track ad impression (called by frontend when ad is shown)
   @Post('ads/:campaignId/impression')
+  @UseGuards(AuthOriginGuard, AuthRateLimitGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async recordImpression(
     @Param('campaignId') campaignId: string,
@@ -303,6 +305,7 @@ export class BoostController {
 
   // Track ad click (called by frontend when ad is clicked)
   @Post('ads/:campaignId/click')
+  @UseGuards(AuthOriginGuard, AuthRateLimitGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async recordClick(@Param('campaignId') campaignId: string): Promise<void> {
     await this.boostService.recordClick(campaignId);
@@ -368,6 +371,7 @@ export class BoostController {
         dto.userId,
         dto.amount,
         dto.description || `Admin adjustment by ${request.user.id}`,
+        dto.operationId,
         dto.metadata,
       );
 
@@ -411,7 +415,7 @@ export class BoostController {
   @UseGuards(SessionGuard, AdminGuard, AuthOriginGuard, AuthRateLimitGuard)
   async adminReviewCampaign(
     @Param('campaignId') campaignId: string,
-    @Body() body: { action: 'approve' | 'reject'; rejectionReason?: string },
+    @Body() body: ReviewCampaignDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<CampaignActionResponseDto> {
     const campaign = await this.boostService.adminReviewCampaign(

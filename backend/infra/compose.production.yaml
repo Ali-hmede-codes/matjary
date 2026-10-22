@@ -1,0 +1,34 @@
+# Requires an explicit APP_ENV_FILE path, HTTPS origin, and configured TLS proxy.
+# Compose project/volume names are stable across revision-specific worktrees.
+name: matjary
+services:
+  mysql:
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+  redis:
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 384mb
+      - --maxmemory-policy
+      - noeviction
+      - --requirepass
+      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+  api:
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:?Set a production HTTPS APP_ORIGIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}
+  worker:
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:?Set a production HTTPS APP_ORIGIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}

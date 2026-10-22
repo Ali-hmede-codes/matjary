@@ -7,20 +7,15 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# System deps needed to build native modules (e.g. sharp) during npm ci.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install dependencies (includes dev deps needed for the build).
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # Copy source and build the API bundle.
 COPY . .
-RUN npm run build:api
+RUN npm run build:api && npm run build:migrations && npm prune --omit=dev
+# Sharp is used only by the worker, never by the API or migration runner.
+RUN npm uninstall --no-save --ignore-scripts --omit=dev sharp
 
 # ---------------------------------------------------------------------------
 # Runtime stage
@@ -29,17 +24,17 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# libvips is a hard runtime dependency of sharp (image processing).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvips \
-    && rm -rf /var/lib/apt/lists/*
+# Node's image provides the runtime; the API contains no encoding tools.
+RUN mkdir -p /var/lib/matjary/media /app/.tmp && chown -R node:node /var/lib/matjary /app
 
 # Copy only the built output and production dependencies from the builder.
 COPY --from=builder /app/dist/apps/api ./dist/apps/api
+COPY --from=builder /app/dist/apps/migrations ./dist/apps/migrations
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3000
+USER node
 
 # The API listens on the port configured by API_PORT (default 3000).
 EXPOSE 3000

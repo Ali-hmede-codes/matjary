@@ -1,14 +1,15 @@
 import {
   Injectable,
   Logger,
-  OnModuleDestroy,
+  BeforeApplicationShutdown,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
-import { PostEngagement, PostLike, Showcase } from '@app/database';
+import { PostEngagement, PostLike, Showcase, EngagementFlushReceipt } from '@app/database';
+import { stageEngagement, acknowledgeEngagement, ENGAGEMENT_DIRTY } from '@app/queue/engagement-buffer';
 import { RedisService } from '@app/queue';
 import {
   QueueService,
@@ -17,12 +18,10 @@ import {
 } from '@app/queue';
 import { Worker } from 'bullmq';
 
-const LIKE_SET_PREFIX = 'matjary:eng:like:set:';
-const VIEW_COUNTER_PREFIX = 'matjary:eng:views:';
-const DIRTY_SET_KEY = 'matjary:eng:dirty';
+// Persistence is worker-only; Redis owns the immutable batch until commit.
 
 @Injectable()
-export class EngagementFlusher implements OnModuleInit, OnModuleDestroy {
+export class EngagementFlusher implements OnModuleInit, BeforeApplicationShutdown {
   private readonly logger = new Logger(EngagementFlusher.name);
   private worker: Worker | null = null;
 
@@ -45,11 +44,14 @@ export class EngagementFlusher implements OnModuleInit, OnModuleDestroy {
         const data = job.data as EngagementFlushJob;
         await this.flushJob(data);
       },
-      { connection: this.queue.getRedis() },
+      { connection: this.queue.createWorkerConnection(), concurrency: 1 },
     );
+    this.worker.on('error', () => this.logger.warn('Engagement queue unavailable'));
   }
 
-  async onModuleDestroy(): Promise<void> {
+  isRunning(): boolean { return this.worker?.isRunning() ?? false; }
+
+  async beforeApplicationShutdown(): Promise<void> {
     if (this.worker) {
       await this.worker.close();
     }
@@ -59,87 +61,38 @@ export class EngagementFlusher implements OnModuleInit, OnModuleDestroy {
     // When `postIds` is given flush exactly those posts; otherwise flush every
     // post currently marked dirty in Redis. Dirty-only flushing keeps the cost
     // proportional to activity, not to the total number of posts.
-    const postIds = data.postIds ?? (await this.redis.smembers(DIRTY_SET_KEY));
+    const postIds = data.postIds ?? (await this.redis.smembers(ENGAGEMENT_DIRTY));
+    let failed = false;
     for (const postId of postIds) {
-      try {
-        await this.flushPost(postId);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to flush engagement for post ${postId}`,
-          error as Error,
-        );
-      }
+      try { await this.flushPost(postId); }
+      catch { failed = true; this.logger.warn(`Engagement flush deferred for ${postId}`); }
     }
-
-    if (data.postIds) {
-      for (const postId of data.postIds) {
-        await this.redis.srem(DIRTY_SET_KEY, postId);
-      }
-    } else {
-      await this.redis.remove(DIRTY_SET_KEY);
-    }
+    if (failed) throw new Error('Engagement flush will retry');
   }
 
-  private async flushPost(postId: string): Promise<void> {
-    // --- Like set -----------------------------------------------------
-    const likeKey = `${LIKE_SET_PREFIX}${postId}`;
-    const voters = await this.redis.hgetall(likeKey);
-    const likesCount = Object.keys(voters).length;
-
-    let row = await this.engagement.findOneBy({ postId });
-    if (row) {
-      row.likesCount = likesCount;
-      await this.engagement.save(row);
-    } else {
-      await this.engagement.save(
-        this.engagement.create({ postId, likesCount, viewsCount: 0 }),
-      );
-    }
-
-    // Mirror individual votes into post_likes so the durable record matches
-    // Redis: insert new likes, remove unlikes.
-    const existing = await this.postLikes.find({ where: { postId } });
-    const existingVoters = new Set(existing.map((like) => like.voterId));
-    const redisVoters = new Set(Object.keys(voters));
-
-    for (const voterId of redisVoters) {
-      if (!existingVoters.has(voterId)) {
-        const like = this.postLikes.create({
-          postId,
-          voterId,
-          voterType: this.voterTypeFor(voterId),
-        });
-        await this.postLikes.save(like);
+  async flushPost(postId: string): Promise<void> {
+    const batchId = await this.showcases.manager.transaction(async (manager) => {
+      // Every flusher and cold-cache hydrator uses this same lock order.
+      await manager.findOneOrFail(Showcase, { where: { id: postId }, lock: { mode: 'pessimistic_write' } });
+      const batch = await stageEngagement(this.redis, postId);
+      if (!batch) return null;
+      if (await manager.existsBy(EngagementFlushReceipt, { batchId: batch.id })) return batch.id;
+      const existing = await manager.findBy(PostLike, { postId });
+      const voters = new Set(existing.map((like) => like.voterId));
+      for (const [voterId, voterType] of Object.entries(batch.likes)) {
+        if (!voters.has(voterId)) await manager.save(PostLike, manager.create(PostLike, { postId, voterId, voterType }));
       }
-    }
-    for (const like of existing) {
-      if (!redisVoters.has(like.voterId)) {
-        await this.postLikes.remove(like);
-      }
-    }
-    await this.redis.remove(likeKey);
-
-    // --- View counter -------------------------------------------------
-    const viewKey = `${VIEW_COUNTER_PREFIX}${postId}`;
-    const raw = await this.redis.get(viewKey);
-    const delta = Number(raw ?? '0');
-    if (delta) {
-      let viewRow = await this.engagement.findOneBy({ postId });
-      if (viewRow) {
-        viewRow.viewsCount += delta;
-        await this.engagement.save(viewRow);
-      } else {
-        await this.engagement.save(
-          this.engagement.create({ postId, likesCount: 0, viewsCount: delta }),
-        );
-      }
-      await this.redis.remove(viewKey);
-    }
-  }
-
-  private voterTypeFor(voterId: string): 'user' | 'visitor' {
-    // User ids are uuids; visitor ids are raw hex. Heuristic only, used for
-    // the durable like log; reads re-identify type from the session.
-    return /^[0-9a-f-]{36}$/.test(voterId) ? 'user' : 'visitor';
+      for (const like of existing) if (!batch.likes[like.voterId]) await manager.delete(PostLike, { id: like.id });
+      const row = await manager.findOneBy(PostEngagement, { postId }) ?? manager.create(PostEngagement, { postId, viewsCount: 0 });
+      row.likesCount = Object.keys(batch.likes).length;
+      row.viewsCount += batch.views;
+      row.lastBatchId = batch.id;
+      await manager.save(row);
+      await manager.update(Showcase, { id: postId }, { likesCount: row.likesCount, viewsCount: row.viewsCount });
+      await manager.insert(EngagementFlushReceipt, { batchId: batch.id, postId });
+      return batch.id;
+    });
+    // A crash here replays the batch but the durable receipt prevents double-counting.
+    if (batchId) await acknowledgeEngagement(this.redis, postId, batchId);
   }
 }

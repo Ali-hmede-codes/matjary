@@ -14,8 +14,17 @@ import {
   Between,
   LessThanOrEqual,
   MoreThanOrEqual,
+  type EntityManager,
 } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'node:crypto';
+
+export function coinAmount(value: string | number, signed = false): bigint {
+  const text = String(value);
+  if (!(signed ? /^-?(0|[1-9]\d*)$/ : /^(0|[1-9]\d*)$/).test(text)) throw new BadRequestException('Coins must be integers');
+  const amount = BigInt(text);
+  if (amount > BigInt(Number.MAX_SAFE_INTEGER) || amount < -BigInt(Number.MAX_SAFE_INTEGER)) throw new BadRequestException('Coin amount is out of range');
+  return amount;
+}
 import {
   BoostCoin,
   BoostTransaction,
@@ -139,9 +148,10 @@ export class BoostService {
     adminUserId: string,
   ): Promise<void> {
     for (const [key, value] of Object.entries(dto)) {
+      const storedKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
       await this.boostSettingRepo.upsert(
         {
-          key,
+          key: storedKey,
           value: value as Record<string, unknown>,
           updatedBy: adminUserId,
         } as any,
@@ -167,13 +177,27 @@ export class BoostService {
   // Boost Coin Balance
   // ============================================
 
-  async getOrCreateBalance(userId: string): Promise<BoostCoin> {
-    let balance = await this.boostCoinRepo.findOne({ where: { userId } });
-    if (!balance) {
-      balance = this.boostCoinRepo.create({ userId, balance: '0' });
-      await this.boostCoinRepo.save(balance);
-    }
+  private async lockedBalance(manager: EntityManager, userId: string): Promise<BoostCoin> {
+    // Stable lock order: owner -> wallet -> campaign -> daily totals.
+    const user = await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
+    if (!user) throw new NotFoundException('User not found');
+    let balance = await manager.findOne(BoostCoin, { where: { userId }, lock: { mode: 'pessimistic_write' } });
+    if (!balance) balance = await manager.save(BoostCoin, manager.create(BoostCoin, { userId, balance: '0' }));
     return balance;
+  }
+
+  private async mutateCampaign<T>(id: string, ownerId: string | undefined, action: (campaign: BoostCampaign, wallet: BoostCoin, manager: EntityManager) => Promise<T>): Promise<T> {
+    const current = await this.getCampaign(id, ownerId);
+    return this.dataSource.transaction(async (manager) => {
+      const wallet = await this.lockedBalance(manager, current.userId);
+      const campaign = await manager.findOneOrFail(BoostCampaign, { where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (ownerId && campaign.userId !== ownerId) throw new ForbiddenException('Not your campaign');
+      return action(campaign, wallet, manager);
+    });
+  }
+
+  async getOrCreateBalance(userId: string): Promise<BoostCoin> {
+    return this.dataSource.transaction((manager) => this.lockedBalance(manager, userId));
   }
 
   async getBalance(userId: string): Promise<{
@@ -183,37 +207,17 @@ export class BoostService {
     availableBalance: string;
     availableBalanceNumber: number;
   }> {
-    const balance = await this.getOrCreateBalance(userId);
-    const pendingSpend = await this.getPendingSpend(userId);
-    const balanceNum = parseInt(balance.balance, 10);
-    const pendingNum = parseInt(pendingSpend, 10);
-    const availableBalanceNumber = Math.max(0, balanceNum - pendingNum);
-    return {
-      balance: balance.balance,
-      balanceNumber: balanceNum,
-      pendingSpend,
-      availableBalance: String(availableBalanceNumber),
-      availableBalanceNumber,
-    };
+    return this.dataSource.transaction(async (manager) => {
+      const balance = await this.lockedBalance(manager, userId);
+      const pendingSpend = await this.getPendingSpend(userId, manager);
+      const available = coinAmount(balance.balance) - pendingSpend;
+      return { balance: balance.balance, balanceNumber: Number(balance.balance), pendingSpend: String(pendingSpend), availableBalance: String(available), availableBalanceNumber: Number(available) };
+    });
   }
 
-  private async getPendingSpend(userId: string): Promise<string> {
-    // Sum of (budget - spent) for active campaigns
-    const campaigns = await this.boostCampaignRepo
-      .createQueryBuilder('campaign')
-      .where('campaign.userId = :userId', { userId })
-      .andWhere('campaign.status IN (:...statuses)', {
-        statuses: [
-          BoostCampaignStatus.ACTIVE,
-          BoostCampaignStatus.PENDING_REVIEW,
-        ],
-      })
-      .select(
-        'SUM(CAST(campaign.budget_coins AS UNSIGNED) - CAST(campaign.spent_coins AS UNSIGNED))',
-        'pending',
-      )
-      .getRawOne();
-    return campaigns?.pending || '0';
+  private async getPendingSpend(userId: string, manager: EntityManager): Promise<bigint> {
+    const campaigns = await manager.find(BoostCampaign, { where: { userId, status: In([BoostCampaignStatus.DRAFT, BoostCampaignStatus.PENDING_REVIEW, BoostCampaignStatus.ACTIVE, BoostCampaignStatus.PAUSED]) } });
+    return campaigns.reduce((sum, campaign) => sum + coinAmount(campaign.budgetCoins) - coinAmount(campaign.spentCoins), 0n);
   }
 
   // ============================================
@@ -228,43 +232,26 @@ export class BoostService {
     referenceType: BoostTransactionReferenceType | null,
     description: string | null,
     metadata: Record<string, unknown> | null,
-    queryRunner?: any,
+    operationId: string,
   ): Promise<BoostTransaction> {
-    const balance = await this.getOrCreateBalance(userId);
-    const balanceBefore = parseInt(balance.balance, 10);
-    const balanceAfter = balanceBefore + amount;
-
-    if (balanceAfter < 0) {
-      throw new BadRequestException('Insufficient boost coin balance');
-    }
-
-    const transaction = this.boostTransactionRepo.create({
-      id: uuidv4(),
-      userId,
-      type,
-      amount: String(amount),
-      balanceBefore: String(balanceBefore),
-      balanceAfter: String(balanceAfter),
-      referenceId,
-      referenceType,
-      description,
-      metadata,
+    const delta = coinAmount(amount, true);
+    if (!delta || !/^[a-zA-Z0-9_-]{1,100}$/.test(operationId)) throw new BadRequestException('A nonzero amount and operation ID are required');
+    return this.dataSource.transaction(async (manager) => {
+      const balance = await this.lockedBalance(manager, userId);
+      const existing = await manager.findOneBy(BoostTransaction, { operationId });
+      if (existing) {
+        if (existing.userId !== userId || existing.type !== type || existing.amount !== String(delta) || existing.referenceId !== referenceId) throw new BadRequestException('Operation ID was already used');
+        return existing;
+      }
+      const before = coinAmount(balance.balance);
+      const after = before + delta;
+      coinAmount(String(after));
+      if (after < await this.getPendingSpend(userId, manager)) throw new BadRequestException('Insufficient unreserved boost coins');
+      const transaction = manager.create(BoostTransaction, { id: uuidv4(), operationId, userId, type, amount: String(delta), balanceBefore: String(before), balanceAfter: String(after), referenceId, referenceType, description, metadata });
+      balance.balance = String(after);
+      await manager.save(balance);
+      return manager.save(transaction);
     });
-
-    // Update balance
-    balance.balance = String(balanceAfter);
-
-    const repo = queryRunner
-      ? queryRunner.manager.getRepository(BoostTransaction)
-      : this.boostTransactionRepo;
-    const balanceRepo = queryRunner
-      ? queryRunner.manager.getRepository(BoostCoin)
-      : this.boostCoinRepo;
-
-    await repo.save(transaction);
-    await balanceRepo.save(balance);
-
-    return transaction;
   }
 
   async addCoins(
@@ -275,52 +262,8 @@ export class BoostService {
     description: string,
     metadata: Record<string, unknown> | null = null,
   ): Promise<BoostTransaction> {
-    if (amount <= 0) throw new BadRequestException('Amount must be positive');
-    return this.createTransaction(
-      userId,
-      BoostTransactionType.PURCHASE,
-      amount,
-      referenceId,
-      referenceType,
-      description,
-      metadata,
-    );
-  }
-
-  async spendCoins(
-    userId: string,
-    amount: number,
-    campaignId: string,
-    description: string,
-  ): Promise<BoostTransaction> {
-    if (amount <= 0) throw new BadRequestException('Amount must be positive');
-    return this.createTransaction(
-      userId,
-      BoostTransactionType.CAMPAIGN_SPEND,
-      -amount,
-      campaignId,
-      BoostTransactionReferenceType.CAMPAIGN,
-      description,
-      null,
-    );
-  }
-
-  async refundCoins(
-    userId: string,
-    amount: number,
-    campaignId: string,
-    description: string,
-  ): Promise<BoostTransaction> {
-    if (amount <= 0) throw new BadRequestException('Amount must be positive');
-    return this.createTransaction(
-      userId,
-      BoostTransactionType.REFUND,
-      amount,
-      campaignId,
-      BoostTransactionReferenceType.CAMPAIGN,
-      description,
-      null,
-    );
+    if (coinAmount(amount) <= 0n || !referenceId) throw new BadRequestException('Positive amount and unique reference are required');
+    return this.createTransaction(userId, BoostTransactionType.PURCHASE, amount, referenceId, referenceType, description, metadata, `purchase-${referenceId}`);
   }
 
   async getTransactions(
@@ -346,6 +289,7 @@ export class BoostService {
     targetUserId: string,
     amount: number, // positive = grant, negative = deduct
     description: string,
+    operationId: string,
     metadata: Record<string, unknown> | null = null,
   ): Promise<{ transaction: BoostTransaction; newBalance: string }> {
     const targetUser = await this.userRepo.findOne({
@@ -367,10 +311,10 @@ export class BoostService {
       BoostTransactionReferenceType.ADMIN,
       description,
       { ...metadata, adminUserId },
+      operationId,
     );
 
-    const balance = await this.getOrCreateBalance(targetUserId);
-    return { transaction, newBalance: balance.balance };
+    return { transaction, newBalance: transaction.balanceAfter };
   }
 
   // ============================================
@@ -466,19 +410,11 @@ export class BoostService {
     );
 
     // Validate budget
-    const budgetCoins = parseInt(dto.budgetCoins, 10);
+    const budgetCoins = coinAmount(dto.budgetCoins);
     const minBudget = await this.getMinCampaignBudgetCoins();
-    if (budgetCoins < minBudget) {
+    if (budgetCoins < BigInt(minBudget)) {
       throw new BadRequestException(
         `Minimum campaign budget is ${minBudget} coins`,
-      );
-    }
-
-    // Check user balance
-    const balance = await this.getBalance(userId);
-    if (balance.availableBalanceNumber < budgetCoins) {
-      throw new BadRequestException(
-        'Insufficient boost coin balance for campaign budget',
       );
     }
 
@@ -490,7 +426,7 @@ export class BoostService {
       now.getTime() + maxDuration * 24 * 60 * 60 * 1000,
     );
 
-    if (dto.endAt && dto.endAt > maxEndAt) {
+    if (!Number.isFinite(startAt.getTime()) || (dto.endAt && (!Number.isFinite(dto.endAt.getTime()) || dto.endAt <= startAt || dto.endAt > maxEndAt))) {
       throw new BadRequestException(
         `Campaign duration cannot exceed ${maxDuration} days`,
       );
@@ -499,12 +435,12 @@ export class BoostService {
     // Validate bid amounts
     if (dto.bidStrategy === BoostBidStrategy.CPC) {
       const minBid = await this.getCpcMinBidCoins();
-      if (!dto.bidAmountCoins || parseInt(dto.bidAmountCoins, 10) < minBid) {
+      if (!dto.bidAmountCoins || coinAmount(dto.bidAmountCoins) < BigInt(minBid)) {
         throw new BadRequestException(`Minimum CPC bid is ${minBid} coins`);
       }
     } else if (dto.bidStrategy === BoostBidStrategy.CPM) {
       const minBid = await this.getCpmMinBidCoins();
-      if (!dto.bidAmountCoins || parseInt(dto.bidAmountCoins, 10) < minBid) {
+      if (!dto.bidAmountCoins || coinAmount(dto.bidAmountCoins) < BigInt(minBid)) {
         throw new BadRequestException(`Minimum CPM bid is ${minBid} coins`);
       }
     }
@@ -514,22 +450,24 @@ export class BoostService {
     const autoApproveThreshold = await this.getAutoApproveThresholdCoins();
     let status = BoostCampaignStatus.DRAFT;
 
-    if (reviewRequired && budgetCoins > autoApproveThreshold) {
+    if (reviewRequired && budgetCoins > BigInt(autoApproveThreshold)) {
       status = BoostCampaignStatus.PENDING_REVIEW;
     } else {
       status = BoostCampaignStatus.ACTIVE;
     }
 
-    // Reserve budget by creating spend transaction
-    // Note: We don't actually spend until impressions are served, but we reserve
-    // For now, we'll just track it via pendingSpend
-
-    const campaign = this.boostCampaignRepo.create({
+    if (dto.dailyBudgetCoins && (coinAmount(dto.dailyBudgetCoins) <= 0n || coinAmount(dto.dailyBudgetCoins) > budgetCoins)) throw new BadRequestException('Invalid daily budget');
+    if (dto.bidAmountCoins) coinAmount(dto.bidAmountCoins);
+    return this.dataSource.transaction(async (manager) => {
+    const wallet = await this.lockedBalance(manager, userId);
+    if (coinAmount(wallet.balance) - await this.getPendingSpend(userId, manager) < budgetCoins) throw new BadRequestException('Insufficient boost coin balance for campaign budget');
+    const campaign = manager.create(BoostCampaign, {
       id: uuidv4(),
       userId,
       name: dto.name,
       targetType: dto.targetType,
-      targetId: dto.targetId,
+      targetStoreId: dto.targetType === BoostTargetType.STORE ? dto.targetId : null,
+      targetShowcaseId: dto.targetType === BoostTargetType.SHOWCASE ? dto.targetId : null,
       status,
       budgetCoins: dto.budgetCoins,
       spentCoins: '0',
@@ -542,7 +480,8 @@ export class BoostService {
       endAt: dto.endAt || null,
     });
 
-    return this.boostCampaignRepo.save(campaign);
+    return manager.save(campaign);
+    });
   }
 
   async getCampaign(
@@ -588,8 +527,7 @@ export class BoostService {
       endAt: Date;
     }>,
   ): Promise<BoostCampaign> {
-    const campaign = await this.getCampaign(campaignId, userId);
-
+    return this.mutateCampaign(campaignId, userId, async (campaign, wallet, manager) => {
     // Only allow updates for draft or pending_review campaigns
     if (
       ![BoostCampaignStatus.DRAFT, BoostCampaignStatus.PENDING_REVIEW].includes(
@@ -603,14 +541,13 @@ export class BoostService {
 
     // Validate budget increase
     if (dto.budgetCoins) {
-      const newBudget = parseInt(dto.budgetCoins, 10);
-      const oldBudget = parseInt(campaign.budgetCoins, 10);
+      const newBudget = coinAmount(dto.budgetCoins);
+      const oldBudget = coinAmount(campaign.budgetCoins);
       if (newBudget < oldBudget) {
         throw new BadRequestException('Cannot reduce campaign budget');
       }
       const additional = newBudget - oldBudget;
-      const balance = await this.getBalance(userId);
-      if (balance.availableBalanceNumber < additional) {
+      if (coinAmount(wallet.balance) - await this.getPendingSpend(userId, manager) < additional) {
         throw new BadRequestException(
           'Insufficient balance for budget increase',
         );
@@ -628,28 +565,37 @@ export class BoostService {
       }
     }
 
-    Object.assign(campaign, dto);
-    return this.boostCampaignRepo.save(campaign);
+    for (const key of ['name', 'budgetCoins', 'dailyBudgetCoins', 'bidStrategy', 'bidAmountCoins', 'targeting', 'creative', 'startAt', 'endAt'] as const) {
+      if (dto[key] !== undefined) Object.assign(campaign, { [key]: dto[key] });
+    }
+    if (campaign.dailyBudgetCoins && (coinAmount(campaign.dailyBudgetCoins) <= 0n || coinAmount(campaign.dailyBudgetCoins) > coinAmount(campaign.budgetCoins))) throw new BadRequestException('Invalid daily budget');
+    if (campaign.bidAmountCoins) coinAmount(campaign.bidAmountCoins);
+    if (campaign.endAt && (!Number.isFinite(campaign.endAt.getTime()) || campaign.endAt <= (campaign.startAt ?? new Date()))) throw new BadRequestException('Invalid campaign dates');
+    return manager.save(campaign);
+    });
   }
 
   async pauseCampaign(
     campaignId: string,
     userId: string,
   ): Promise<BoostCampaign> {
-    const campaign = await this.getCampaign(campaignId, userId);
+    return this.mutateCampaign(campaignId, userId, async (campaign, _wallet, manager) => {
+    if (campaign.status === BoostCampaignStatus.PAUSED) return campaign;
     if (campaign.status !== BoostCampaignStatus.ACTIVE) {
       throw new BadRequestException('Only active campaigns can be paused');
     }
     campaign.status = BoostCampaignStatus.PAUSED;
     campaign.pausedAt = new Date();
-    return this.boostCampaignRepo.save(campaign);
+    return manager.save(campaign);
+    });
   }
 
   async resumeCampaign(
     campaignId: string,
     userId: string,
   ): Promise<BoostCampaign> {
-    const campaign = await this.getCampaign(campaignId, userId);
+    return this.mutateCampaign(campaignId, userId, async (campaign, _wallet, manager) => {
+    if (campaign.status === BoostCampaignStatus.ACTIVE) return campaign;
     if (campaign.status !== BoostCampaignStatus.PAUSED) {
       throw new BadRequestException('Only paused campaigns can be resumed');
     }
@@ -658,42 +604,28 @@ export class BoostService {
       throw new BadRequestException('Campaign has expired');
     }
     // Check budget
-    const spent = parseInt(campaign.spentCoins, 10);
-    const budget = parseInt(campaign.budgetCoins, 10);
+    const spent = coinAmount(campaign.spentCoins);
+    const budget = coinAmount(campaign.budgetCoins);
     if (spent >= budget) {
       throw new BadRequestException('Campaign budget exhausted');
     }
     campaign.status = BoostCampaignStatus.ACTIVE;
     campaign.pausedAt = null;
-    return this.boostCampaignRepo.save(campaign);
+    return manager.save(campaign);
+    });
   }
 
   async cancelCampaign(
     campaignId: string,
     userId: string,
   ): Promise<BoostCampaign> {
-    const campaign = await this.getCampaign(campaignId, userId);
-    if (
-      [BoostCampaignStatus.COMPLETED, BoostCampaignStatus.CANCELLED].includes(
-        campaign.status,
-      )
-    ) {
-      throw new BadRequestException('Campaign already finished');
-    }
-    campaign.status = BoostCampaignStatus.CANCELLED;
-    campaign.completedAt = new Date();
-    // Refund unspent budget
-    const unspent =
-      parseInt(campaign.budgetCoins, 10) - parseInt(campaign.spentCoins, 10);
-    if (unspent > 0) {
-      await this.refundCoins(
-        userId,
-        unspent,
-        campaignId,
-        `Campaign cancelled: ${campaign.name}`,
-      );
-    }
-    return this.boostCampaignRepo.save(campaign);
+    return this.mutateCampaign(campaignId, userId, async (campaign, _wallet, manager) => {
+      if ([BoostCampaignStatus.COMPLETED, BoostCampaignStatus.CANCELLED, BoostCampaignStatus.REJECTED].includes(campaign.status)) return campaign;
+      campaign.status = BoostCampaignStatus.CANCELLED;
+      campaign.completedAt = new Date();
+      // The budget was reserved, never debited. Releasing it is not a credit.
+      return manager.save(campaign);
+    });
   }
 
   // ============================================
@@ -704,62 +636,53 @@ export class BoostService {
     campaignId: string,
     date: Date = new Date(),
   ): Promise<void> {
-    const dateStr = date.toISOString().split('T')[0];
-    await this.boostPerformanceRepo
-      .createQueryBuilder()
-      .insert()
-      .into(BoostCampaignPerformance)
-      .values({
-        campaignId,
-        date: dateStr,
-        impressions: '1',
-      })
-      .orUpdate(['impressions'], ['campaign_id', 'date'])
-      .execute();
+    await this.incrementPerformance(campaignId, 'impressions', date);
   }
 
   async recordClick(
     campaignId: string,
     date: Date = new Date(),
   ): Promise<void> {
-    const dateStr = date.toISOString().split('T')[0];
-    await this.boostPerformanceRepo
-      .createQueryBuilder()
-      .insert()
-      .into(BoostCampaignPerformance)
-      .values({
-        campaignId,
-        date: dateStr,
-        clicks: '1',
-      })
-      .orUpdate(['clicks'], ['campaign_id', 'date'])
-      .execute();
+    await this.incrementPerformance(campaignId, 'clicks', date);
   }
 
-  async recordSpend(
-    campaignId: string,
-    coins: number,
-    date: Date = new Date(),
-  ): Promise<void> {
-    const dateStr = date.toISOString().split('T')[0];
-    await this.boostPerformanceRepo
-      .createQueryBuilder()
-      .insert()
-      .into(BoostCampaignPerformance)
-      .values({
-        campaignId,
-        date: dateStr,
-        spendCoins: String(coins),
-      })
-      .orUpdate(['spend_coins'], ['campaign_id', 'date'])
-      .execute();
+  private assertActive(campaign: BoostCampaign, date: Date): void {
+    if (!Number.isFinite(date.getTime()) || campaign.status !== BoostCampaignStatus.ACTIVE || (campaign.startAt && campaign.startAt > date) || (campaign.endAt && campaign.endAt <= date)) throw new BadRequestException('Campaign is not active');
+  }
 
-    // Also update campaign spent_coins
-    await this.boostCampaignRepo.increment(
-      { id: campaignId },
-      'spentCoins',
-      coins,
-    );
+  private async incrementPerformance(campaignId: string, metric: 'clicks' | 'impressions', date: Date): Promise<void> {
+    await this.mutateCampaign(campaignId, undefined, async (campaign, _wallet, manager) => {
+      this.assertActive(campaign, date);
+      await manager.query(`INSERT INTO boost_campaign_performance (campaign_id, date, ${metric}) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE ${metric} = ${metric} + 1`, [campaignId, date.toISOString().slice(0, 10)]);
+    });
+  }
+
+  // Internal accounting entry point only. Public analytics cannot debit coins.
+  async recordSpend(campaignId: string, coins: number, operationId: string, date = new Date()): Promise<void> {
+    const amount = coinAmount(coins);
+    if (amount <= 0n || !/^[a-zA-Z0-9_-]{1,100}$/.test(operationId)) throw new BadRequestException('Positive coins and an operation ID are required');
+    await this.mutateCampaign(campaignId, undefined, async (campaign, wallet, manager) => {
+      const previous = await manager.findOneBy(BoostTransaction, { operationId });
+      if (previous) {
+        if (previous.referenceId !== campaignId || previous.type !== BoostTransactionType.CAMPAIGN_SPEND || previous.amount !== String(-amount) || previous.metadata?.date !== date.toISOString().slice(0, 10)) throw new BadRequestException('Operation ID was already used');
+        return;
+      }
+      this.assertActive(campaign, date);
+      const dateStr = date.toISOString().slice(0, 10);
+      const daily = await manager.findOneBy(BoostCampaignPerformance, { campaignId, date: dateStr }) ?? manager.create(BoostCampaignPerformance, { campaignId, date: dateStr, impressions: '0', clicks: '0', spendCoins: '0' });
+      const spent = coinAmount(campaign.spentCoins) + amount;
+      const today = coinAmount(daily.spendCoins) + amount;
+      const before = coinAmount(wallet.balance);
+      if (spent > coinAmount(campaign.budgetCoins) || before < amount || (campaign.dailyBudgetCoins && today > coinAmount(campaign.dailyBudgetCoins))) throw new BadRequestException('Campaign budget exceeded');
+      wallet.balance = String(before - amount);
+      campaign.spentCoins = String(spent);
+      daily.spendCoins = String(today);
+      if (spent === coinAmount(campaign.budgetCoins)) { campaign.status = BoostCampaignStatus.COMPLETED; campaign.completedAt = new Date(); }
+      await manager.save(wallet);
+      await manager.save(campaign);
+      await manager.save(daily);
+      await manager.insert(BoostTransaction, { id: uuidv4(), operationId, userId: campaign.userId, type: BoostTransactionType.CAMPAIGN_SPEND, amount: String(-amount), balanceBefore: String(before), balanceAfter: wallet.balance, referenceId: campaignId, referenceType: BoostTransactionReferenceType.CAMPAIGN, description: 'Campaign delivery', metadata: { date: dateStr } });
+    });
   }
 
   async getCampaignPerformance(
@@ -772,7 +695,7 @@ export class BoostService {
     return this.boostPerformanceRepo.find({
       where: {
         campaignId,
-        date: Between(startDate, endDate),
+        date: Between(startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)),
       },
       order: { date: 'ASC' },
     });
@@ -833,7 +756,7 @@ export class BoostService {
       avgCtr,
       avgCpcCoins,
       dailyData: data.map((d) => ({
-        date: d.date.toISOString().split('T')[0] ?? '',
+        date: d.date,
         impressions: parseInt(d.impressions, 10),
         clicks: parseInt(d.clicks, 10),
         spendCoins: parseInt(d.spendCoins, 10),
@@ -890,7 +813,7 @@ export class BoostService {
       (campaign.daily_budget_coins IS NULL OR
        (SELECT COALESCE(SUM(CAST(p.spend_coins AS UNSIGNED)), 0)
         FROM boost_campaign_performance p
-        WHERE p.campaign_id = campaign.id AND p.date = CURDATE()) < CAST(campaign.daily_budget_coins AS UNSIGNED))
+        WHERE p.campaign_id = campaign.id AND p.date = UTC_DATE()) < CAST(campaign.daily_budget_coins AS UNSIGNED))
     `);
 
     // Targeting filters
@@ -955,6 +878,7 @@ export class BoostService {
         const showcase = await this.showcaseRepo.findOne({
           where: { id: campaign.targetId },
         });
+        if (!showcase || showcase.status !== 'published') continue;
         if (showcase) {
           targetName = showcase.title;
           targetSlug = showcase.slug;
@@ -997,10 +921,9 @@ export class BoostService {
     action: 'approve' | 'reject',
     rejectionReason?: string,
   ): Promise<BoostCampaign> {
-    const campaign = await this.boostCampaignRepo.findOne({
-      where: { id: campaignId },
-    });
-    if (!campaign) throw new NotFoundException('Campaign not found');
+    if (!['approve', 'reject'].includes(action)) throw new BadRequestException('Invalid review action');
+    return this.mutateCampaign(campaignId, undefined, async (campaign, _wallet, manager) => {
+    if ((action === 'approve' && campaign.status === BoostCampaignStatus.ACTIVE) || (action === 'reject' && campaign.status === BoostCampaignStatus.REJECTED)) return campaign;
     if (campaign.status !== BoostCampaignStatus.PENDING_REVIEW) {
       throw new BadRequestException('Campaign is not pending review');
     }
@@ -1013,7 +936,8 @@ export class BoostService {
       campaign.rejectionReason = rejectionReason || 'Rejected by admin';
     }
 
-    return this.boostCampaignRepo.save(campaign);
+    return manager.save(campaign);
+    });
   }
 
   async adminGetAllCampaigns(

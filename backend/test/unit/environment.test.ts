@@ -149,8 +149,8 @@ test('environment rejects unsupported runtime modes and unbounded pools', () => 
   );
 });
 
-test('storage provider defaults to s3 and accepts local', () => {
-  assert.equal(validateEnvironment({ ...required }).STORAGE_PROVIDER, 's3');
+test('storage provider defaults to local without cloud credentials', () => {
+  assert.equal(validateEnvironment({ ...required }).STORAGE_PROVIDER, 'local');
   assert.equal(
     validateEnvironment({ ...required, STORAGE_PROVIDER: 'local' })
       .STORAGE_PROVIDER,
@@ -162,8 +162,38 @@ test('storage provider defaults to s3 and accepts local', () => {
   );
   assert.equal(
     validateEnvironment({ ...required }).STORAGE_PUBLIC_BASE_URL,
-    '',
+    'http://localhost:3000',
   );
+});
+
+test('S3 selection requires credentials but local selection does not', () => {
+  assert.throws(() => validateEnvironment({ ...required, STORAGE_PROVIDER: 's3' }), /S3_ENDPOINT/);
+  const cloud = {
+    ...required, STORAGE_PROVIDER: 's3', S3_ENDPOINT: 'https://objects.example.test',
+    S3_REGION: 'test', S3_BUCKET: 'test', S3_ACCESS_KEY_ID: 'test', S3_SECRET_ACCESS_KEY: 'test',
+  };
+  assert.equal(validateEnvironment(cloud).STORAGE_PROVIDER, 's3');
+  assert.throws(() => validateEnvironment({ ...cloud, S3_FORCE_PATH_STYLE: 'perhaps' }), /S3_FORCE_PATH_STYLE/);
+});
+
+test('media safety ceilings cannot be raised by configuration', () => {
+  for (const [key, value] of Object.entries({
+    MEDIA_MAX_IMAGE_SIZE_BYTES: 10485761,
+    MEDIA_MAX_VIDEO_SIZE_BYTES: 209715201,
+    MEDIA_MAX_VIDEO_DURATION_SECONDS: 91,
+    MEDIA_MAX_VIDEO_HEIGHT: 1081,
+    MEDIA_WORKER_CONCURRENCY: 5,
+  })) {
+    assert.throws(() => validateEnvironment({ ...required, [key]: String(value) }), new RegExp(key));
+  }
+});
+
+test('trusted proxy addresses are explicit and media origins reject credentials', () => {
+  assert.equal(validateEnvironment({ ...required, TRUST_PROXY_CIDRS: '127.0.0.1,::1/128' }).TRUST_PROXY_CIDRS, '127.0.0.1,::1/128');
+  for (const value of ['true', 'loopback', '10.0.0.1/33', '::1/129']) {
+    assert.throws(() => validateEnvironment({ ...required, TRUST_PROXY_CIDRS: value }), /TRUST_PROXY_CIDRS/);
+  }
+  assert.throws(() => validateEnvironment({ ...required, MEDIA_PUBLIC_BASE_URL: 'https://user:secret@example.test' }), /MEDIA_PUBLIC_BASE_URL/);
 });
 
 test('storage provider rejects invalid values', () => {

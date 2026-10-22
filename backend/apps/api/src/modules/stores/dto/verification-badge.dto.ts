@@ -5,9 +5,6 @@ export class GrantVerificationBadgeDto {
   @IsUUID()
   storeId!: string;
 
-  @IsOptional()
-  @IsBoolean()
-  isAdminGrant?: boolean; // If true, bypasses subscription limits/pricing
 }
 
 export class RevokeVerificationBadgeDto {

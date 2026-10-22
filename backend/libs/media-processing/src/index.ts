@@ -3,4 +3,4 @@
 // Phase 1: FFmpeg for 720p H.264 MP4 plus a poster and metadata removal.
 // Later: HLS renditions and selective AV1 with H.264 fallback.
 // FFmpeg/ffprobe must be installed in the future worker runtime, not via npm.
-export {};
+export * from './encode';

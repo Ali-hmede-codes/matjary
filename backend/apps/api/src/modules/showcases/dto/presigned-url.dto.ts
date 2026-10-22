@@ -6,20 +6,22 @@ import {
   Min,
   Max,
   IsPositive,
+  IsInt,
+  Length,
+  IsIn,
 } from 'class-validator';
 import { MediaKind } from '@app/database';
 
 export class PresignedUrlDto {
   @IsString()
-  @Min(1)
-  @Max(255)
+  @Length(1, 255)
   fileName!: string;
 
-  @IsString()
-  @Min(1)
+  @IsIn(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4', 'video/quicktime', 'video/webm'])
   fileType!: string;
 
   @IsPositive()
+  @IsInt()
   @Max(209715200)
   fileSize!: number;
 

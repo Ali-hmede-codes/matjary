@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
-import { Store, Product, ProductStatus, ProductCategory } from '@app/database';
+import { Store, Product, ProductStatus, ProductCategory, User, effectiveLimits, assertQuota } from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import {
@@ -98,10 +98,7 @@ export class ProductsService {
       }
 
       // For non-active products, only allow owner to see
-      if (
-        product.status !== ProductStatus.ACTIVE &&
-        product.storeId !== userId
-      ) {
+      if (product.status !== ProductStatus.ACTIVE) {
         const store = await this.stores.findOneBy({ id: product.storeId });
         if (!store || store.ownerId !== userId) {
           throw new NotFoundException('Product not found');
@@ -123,8 +120,12 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto> {
     try {
-      // Verify store exists and user owns it
-      const store = await this.stores.findOneBy({ id: storeId });
+      const { saved, store } = await this.products.manager.transaction(async (manager) => {
+      await manager.findOneOrFail(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
+      const limits = await effectiveLimits(manager, userId);
+      const count = await manager.count(Product, { where: { store: { ownerId: userId } } });
+      assertQuota(count, limits.maxProducts, 'Product');
+      const store = await manager.findOneBy(Store, { id: storeId });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -132,12 +133,12 @@ export class ProductsService {
         throw new ForbiddenException('You do not own this store');
       }
 
-      const existing = await this.products.findOneBy({ slug: dto.slug });
+      const existing = await manager.findOneBy(Product, { slug: dto.slug });
       if (existing) {
         throw new ConflictException('A product with this slug already exists');
       }
 
-      const product = this.products.create({
+      const product = manager.create(Product, {
         slug: dto.slug,
         name: dto.name,
         description: dto.description ?? null,
@@ -155,7 +156,9 @@ export class ProductsService {
         storeId,
       });
 
-      const saved = await this.products.save(product);
+      const saved = await manager.save(product);
+      return { saved, store };
+      });
 
       // Auto-generate SEO for the new product
       try {

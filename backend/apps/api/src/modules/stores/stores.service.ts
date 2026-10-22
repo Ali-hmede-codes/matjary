@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
   BadRequestException,
   Logger,
+  HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
@@ -16,6 +17,10 @@ import {
   Product,
   ProductStatus,
   SubscriptionPlan,
+  User,
+  effectiveLimits,
+  effectiveSubscription,
+  assertQuota,
 } from '@app/database';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
 import { UpdateStoreDto, UpdateStoreLocationDto } from './dto/update-store.dto';
@@ -25,6 +30,7 @@ import {
   LocationValidationResult,
 } from './services/location.service';
 import { SeoService } from '../seo/seo.service';
+import { AdminGuard } from '../auth/guards/auth.guards';
 
 @Injectable()
 export class StoresService {
@@ -39,9 +45,11 @@ export class StoresService {
     private readonly plans: Repository<SubscriptionPlan>,
     private readonly locationService: LocationService,
     private readonly seoService: SeoService,
+    private readonly admin: AdminGuard,
   ) {}
 
   private sanitize(error: unknown): never {
+    if (error instanceof HttpException) throw error;
     throw new ServiceUnavailableException(
       'Store storage is temporarily unavailable',
     );
@@ -720,174 +728,54 @@ export class StoresService {
   /**
    * Check if a store can have a verification badge based on their subscription
    */
-  async checkBadgeEligibility(storeId: string): Promise<{
-    eligible: boolean;
-    reason?: string;
-    currentBadges: number;
-    maxBadges: number | null;
-    badgePriceCents: number | null;
+  async checkBadgeEligibility(storeId: string, actorId: string): Promise<{
+    eligible: boolean; reason?: string; currentBadges: number; maxBadges: number | null; badgePriceCents: number | null;
   }> {
-    try {
-      const store = await this.stores.findOneBy({ id: storeId });
-      if (!store) {
-        return {
-          eligible: false,
-          reason: 'Store not found',
-          currentBadges: 0,
-          maxBadges: null,
-          badgePriceCents: null,
-        };
-      }
+    const store = await this.stores.findOneBy({ id: storeId });
+    const actor = await this.stores.manager.findOneBy(User, { id: actorId });
+    if (!store || !actor) throw new NotFoundException('Store not found');
+    if (store.ownerId !== actorId && !this.admin.isAdmin(actor)) throw new ForbiddenException('You do not own this store');
+    const limits = await effectiveLimits(this.stores.manager, store.ownerId);
+    const currentBadges = await this.activeBadgeCount(this.stores.manager, store.ownerId);
+    const maxBadges = limits.maxVerificationBadges === undefined ? 0 : limits.maxVerificationBadges;
+    const alreadyActive = store.hasVerificationBadge && (!store.verificationBadgeExpiresAt || store.verificationBadgeExpiresAt > new Date());
+    const eligible = alreadyActive || maxBadges === null || currentBadges < maxBadges;
+    return { eligible, reason: eligible ? undefined : 'Badge limit reached for your subscription', currentBadges, maxBadges, badgePriceCents: limits.verificationBadgePriceCents ?? 0 };
+  }
 
-      // If store already has badge, it's eligible (already granted)
-      if (store.hasVerificationBadge) {
-        return {
-          eligible: true,
-          currentBadges: 1,
-          maxBadges: 1,
-          badgePriceCents: 0,
-        };
-      }
-
-      // Get the store owner's active subscription
-      const subscription = await this.getUserActiveSubscription(store.ownerId);
-
-      if (!subscription || !subscription.plan) {
-        // No active subscription - check free plan
-        const freePlan = await this.plans.findOneBy({ slug: 'free' });
-        const maxBadges = freePlan?.limits?.maxVerificationBadges ?? 0;
-        const badgePrice =
-          freePlan?.limits?.verificationBadgePriceCents ?? null;
-
-        return {
-          eligible: maxBadges > 0,
-          reason:
-            maxBadges > 0
-              ? undefined
-              : 'Free plan does not include verification badges',
-          currentBadges: 0,
-          maxBadges,
-          badgePriceCents: badgePrice,
-        };
-      }
-
-      const limits = subscription.plan.limits;
-      const maxBadges = limits.maxVerificationBadges ?? 0;
-      const badgePrice = limits.verificationBadgePriceCents ?? 0;
-
-      if (maxBadges === 0) {
-        return {
-          eligible: false,
-          reason:
-            'Current subscription plan does not include verification badges',
-          currentBadges: 0,
-          maxBadges: null,
-          badgePriceCents: badgePrice,
-        };
-      }
-
-      // Count how many stores this user has with badges
-      const userBadgeCount = await this.stores.count({
-        where: { ownerId: store.ownerId, hasVerificationBadge: true },
-      });
-
-      if (userBadgeCount >= maxBadges) {
-        return {
-          eligible: false,
-          reason: `Badge limit reached (${maxBadges} badge(s) allowed for this plan)`,
-          currentBadges: userBadgeCount,
-          maxBadges,
-          badgePriceCents: badgePrice,
-        };
-      }
-
-      return {
-        eligible: true,
-        currentBadges: userBadgeCount,
-        maxBadges,
-        badgePriceCents: badgePrice,
-      };
-    } catch (error) {
-      this.sanitize(error);
-      return {
-        eligible: false,
-        reason: 'Error checking eligibility',
-        currentBadges: 0,
-        maxBadges: 0,
-        badgePriceCents: 0,
-      };
-    }
+  private activeBadgeCount(manager: import('typeorm').EntityManager, ownerId: string): Promise<number> {
+    return manager.getRepository(Store).createQueryBuilder('store').where('store.ownerId = :ownerId AND store.hasVerificationBadge = true AND (store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :now)', { ownerId, now: new Date() }).getCount();
   }
 
   /**
    * Grant a verification badge to a store
    * Can be called by admin (free grant) or by store owner (paid via subscription)
    */
-  async grantVerificationBadge(
-    storeId: string,
-    grantedBy: string,
-    isAdminGrant = false,
-  ): Promise<{
-    success: boolean;
-    error?: string;
-    requiresPayment?: boolean;
-    priceCents?: number;
-  }> {
+  async grantVerificationBadge(storeId: string, grantedBy: string): Promise<{ success: boolean; error?: string; requiresPayment?: boolean; priceCents?: number }> {
     try {
-      const store = await this.stores.findOneBy({ id: storeId });
-      if (!store) {
-        return { success: false, error: 'Store not found' };
-      }
-
-      if (store.hasVerificationBadge) {
-        return {
-          success: false,
-          error: 'Store already has a verification badge',
-        };
-      }
-
-      // Check eligibility
-      const eligibility = await this.checkBadgeEligibility(storeId);
-
-      if (!eligibility.eligible) {
-        // If admin grant, allow override
-        if (!isAdminGrant) {
-          const badgePrice = eligibility.badgePriceCents ?? 0;
-          return {
-            success: false,
-            error: eligibility.reason || 'Not eligible for verification badge',
-            requiresPayment: badgePrice > 0,
-            priceCents: badgePrice > 0 ? badgePrice : undefined,
-          };
-        }
-      }
-
-      // Grant the badge
-      store.hasVerificationBadge = true;
-      store.verificationBadgeGrantedAt = new Date();
-      store.verificationBadgeGrantedBy = grantedBy;
-
-      // If not admin grant and there's a price, set expiration based on subscription
-      if (
-        !isAdminGrant &&
-        eligibility.badgePriceCents &&
-        eligibility.badgePriceCents > 0
-      ) {
-        // Badge expires when subscription expires
-        const subscription = await this.getUserActiveSubscription(
-          store.ownerId,
-        );
-        if (subscription?.expiresAt) {
-          store.verificationBadgeExpiresAt = subscription.expiresAt;
-        }
-      }
-
-      await this.stores.save(store);
-      return { success: true };
-    } catch (error) {
-      this.sanitize(error);
-      return { success: false, error: 'Failed to grant verification badge' };
-    }
+      const existing = await this.stores.findOneBy({ id: storeId });
+      if (!existing) throw new NotFoundException('Store not found');
+      return await this.stores.manager.transaction(async (manager) => {
+        await manager.findOneOrFail(User, { where: { id: existing.ownerId }, lock: { mode: 'pessimistic_write' } });
+        const actor = await manager.findOneBy(User, { id: grantedBy });
+        const store = await manager.findOneOrFail(Store, { where: { id: storeId }, lock: { mode: 'pessimistic_write' } });
+        const adminGrant = Boolean(actor && this.admin.isAdmin(actor));
+        if (!actor || (!adminGrant && store.ownerId !== grantedBy)) throw new ForbiddenException('You do not own this store');
+        if (store.hasVerificationBadge && (!store.verificationBadgeExpiresAt || store.verificationBadgeExpiresAt > new Date())) return { success: true };
+        if (!adminGrant) {
+          const limits = await effectiveLimits(manager, store.ownerId);
+          assertQuota(await this.activeBadgeCount(manager, store.ownerId), limits.maxVerificationBadges, 'Verification badge');
+          const price = limits.verificationBadgePriceCents ?? 0;
+          if (price > 0) return { success: false, requiresPayment: true, priceCents: price, error: 'Paid badge checkout is not available' };
+          store.verificationBadgeExpiresAt = (await effectiveSubscription(manager, store.ownerId))?.expiresAt ?? null;
+        } else store.verificationBadgeExpiresAt = null;
+        store.hasVerificationBadge = true;
+        store.verificationBadgeGrantedAt = new Date();
+        store.verificationBadgeGrantedBy = grantedBy;
+        await manager.save(store);
+        return { success: true };
+      });
+    } catch (error) { this.sanitize(error); }
   }
 
   /**
@@ -895,54 +783,26 @@ export class StoresService {
    */
   async revokeVerificationBadge(
     storeId: string,
+    actorId: string,
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const store = await this.stores.findOneBy({ id: storeId });
-      if (!store) {
-        return { success: false, error: 'Store not found' };
-      }
-
-      if (!store.hasVerificationBadge) {
-        return {
-          success: false,
-          error: 'Store does not have a verification badge',
-        };
-      }
-
-      store.hasVerificationBadge = false;
-      store.verificationBadgeGrantedAt = null;
-      store.verificationBadgeGrantedBy = null;
-      store.verificationBadgeExpiresAt = null;
-
-      await this.stores.save(store);
-      return { success: true };
+      const actor = await this.stores.manager.findOneBy(User, { id: actorId });
+      if (!actor || !this.admin.isAdmin(actor)) throw new ForbiddenException('Administrator access required');
+      const existing = await this.stores.findOneBy({ id: storeId });
+      if (!existing) throw new NotFoundException('Store not found');
+      return await this.stores.manager.transaction(async (manager) => {
+        await manager.findOneOrFail(User, { where: { id: existing.ownerId }, lock: { mode: 'pessimistic_write' } });
+        const store = await manager.findOneOrFail(Store, { where: { id: storeId }, lock: { mode: 'pessimistic_write' } });
+        store.hasVerificationBadge = false;
+        store.verificationBadgeGrantedAt = null;
+        store.verificationBadgeGrantedBy = null;
+        store.verificationBadgeExpiresAt = null;
+        await manager.save(store);
+        return { success: true };
+      });
     } catch (error) {
       this.sanitize(error);
-      return { success: false, error: 'Failed to revoke verification badge' };
     }
   }
 
-  /**
-   * Get user's active subscription (helper for badge eligibility)
-   */
-  private async getUserActiveSubscription(userId: string) {
-    // We need to use the subscription plans service - for now, query directly
-    const subscription = await this.stores.manager
-      .createQueryBuilder()
-      .select('us.*')
-      .from('user_subscriptions', 'us')
-      .innerJoin('subscription_plans', 'sp', 'sp.id = us.plan_id')
-      .where('us.user_id = :userId', { userId })
-      .andWhere('us.status = :status', { status: 'active' })
-      .andWhere('(us.expires_at IS NULL OR us.expires_at > NOW())')
-      .orderBy('us.expires_at', 'DESC')
-      .limit(1)
-      .getRawOne();
-
-    if (!subscription) return null;
-
-    // Get the plan
-    const plan = await this.plans.findOneBy({ id: subscription.us_plan_id });
-    return { ...subscription, plan };
-  }
 }

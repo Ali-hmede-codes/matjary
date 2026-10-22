@@ -26,6 +26,7 @@ import {
   AuthOriginGuard,
   AuthRateLimitGuard,
   SessionGuard,
+  AdminGuard,
   AuthenticatedRequest,
 } from '../auth/guards/auth.guards';
 import {
@@ -181,15 +182,7 @@ export class StoresController {
     @Param('storeId') storeId: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<CheckBadgeEligibilityResponseDto> {
-    // Check if user owns the store or is admin
-    const store = await this.stores.findStoreEntityBySlug(storeId);
-    if (!store) {
-      // Try by ID
-      const storeById = await this.stores.findStoreEntityBySlug(storeId);
-      // If not found by slug, we'd need a findById method
-    }
-    // For now, just check eligibility
-    return this.stores.checkBadgeEligibility(storeId);
+    return this.stores.checkBadgeEligibility(storeId, request.user.id);
   }
 
   /**
@@ -203,26 +196,18 @@ export class StoresController {
     @Body() dto: GrantVerificationBadgeDto,
     @Req() request: AuthenticatedRequest,
   ): Promise<BadgeOperationResponseDto> {
-    // For admin grants, we'd check admin role here
-    // For now, isAdminGrant in DTO is used
-    return this.stores.grantVerificationBadge(
-      dto.storeId,
-      request.user.id,
-      dto.isAdminGrant ?? false,
-    );
+    return this.stores.grantVerificationBadge(dto.storeId, request.user.id);
   }
 
   /**
    * Revoke a verification badge from a store (admin only)
    */
   @Post('badge/revoke')
-  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  @UseGuards(SessionGuard, AdminGuard, AuthOriginGuard, AuthRateLimitGuard)
   async revokeBadge(
     @Body() dto: RevokeVerificationBadgeDto,
-    // @Req() request: AuthenticatedRequest, // Admin check would go here
+    @Req() request: AuthenticatedRequest,
   ): Promise<BadgeOperationResponseDto> {
-    // Admin check would go here - for now, allow any authenticated user
-    // In production, add an AdminGuard
-    return this.stores.revokeVerificationBadge(dto.storeId);
+    return this.stores.revokeVerificationBadge(dto.storeId, request.user.id);
   }
 }

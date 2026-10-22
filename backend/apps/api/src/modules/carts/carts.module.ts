@@ -4,6 +4,7 @@ import { CartsController } from './carts.controller';
 import { CartsService } from './carts.service';
 import { Store, Product, Cart, CartItem } from '@app/database';
 import { AuthModule } from '../auth/auth.module';
+import { CartIdentityGuard } from './cart-identity.guard';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   controllers: [CartsController],
-  providers: [CartsService],
+  providers: [CartsService, CartIdentityGuard],
   exports: [CartsService],
 })
 export class CartsModule {}

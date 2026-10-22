@@ -2,10 +2,19 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
+  ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryBuilder, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
+import { plainToInstance, ClassConstructor } from 'class-transformer';
+import { validate } from 'class-validator';
+import { AdminGuard } from '../auth/guards/auth.guards';
+import { StorageService } from '@app/storage';
+import { StoreSeoDto, ProductSeoDto, ShowcaseSeoDto, SeoSettingsDto, CreateRedirectDto, UpdateRedirectDto, IndexNowDto } from './seo.dto';
+
+type SeoKind = 'store' | 'product' | 'showcase';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import {
@@ -23,6 +32,10 @@ import {
   Showcase,
   ShowcaseStatus,
   MediaAsset,
+  MediaVariant,
+  MediaStatus,
+  ProductStatus,
+  User,
 } from '@app/database';
 
 export interface MetaTags {
@@ -116,6 +129,8 @@ export class SeoService {
     private readonly settingsRepo: Repository<SeoSettings>,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly admin: AdminGuard,
+    private readonly storage: StorageService,
   ) {
     this.baseUrl =
       this.configService.get<string>('APP_ORIGIN') || 'http://localhost:3000';
@@ -127,16 +142,105 @@ export class SeoService {
   // Settings
   // ============================================
 
-  async getSettings(): Promise<SeoSettings> {
-    let settings = await this.settingsRepo.findOne({});
-    if (!settings) {
-      settings = this.settingsRepo.create({});
-      await this.settingsRepo.save(settings);
+  private async validated<T extends object>(type: ClassConstructor<T>, data: T): Promise<T> {
+    const dto = plainToInstance(type, data);
+    if ((await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).length) {
+      throw new BadRequestException('Invalid SEO fields');
     }
+    return dto;
+  }
+
+  private async requireAdmin(actorId: string): Promise<void> {
+    const actor = await this.dataSource.manager.findOneBy(User, { id: actorId });
+    if (!actor || !this.admin.isAdmin(actor)) throw new ForbiddenException('Admin access required');
+  }
+
+  private async ownedEntity(kind: SeoKind, id: string, actorId: string) {
+    const manager = this.dataSource.manager;
+    if (kind === 'store') {
+      const store = await manager.findOneBy(Store, { id, ownerId: actorId });
+      if (!store) throw new NotFoundException('Store not found');
+      return { store, product: null, showcase: null };
+    }
+    if (kind === 'product') {
+      const product = await manager.findOne(Product, { where: { id, store: { ownerId: actorId } }, relations: ['store'] });
+      if (!product) throw new NotFoundException('Product not found');
+      return { store: product.store, product, showcase: null };
+    }
+    const showcase = await manager.findOne(Showcase, { where: { id, ownerId: actorId }, relations: ['store'] });
+    if (!showcase) throw new NotFoundException('Post not found');
+    return { store: showcase.store ?? null, product: null, showcase };
+  }
+
+  async getOwnedSeo(kind: SeoKind, id: string, actorId: string) {
+    await this.ownedEntity(kind, id, actorId);
+    if (kind === 'store') return this.getStoreSeo(id);
+    if (kind === 'product') return this.getProductSeo(id);
+    return this.getShowcaseSeo(id);
+  }
+
+  async autoGenerateOwnedSeo(kind: SeoKind, id: string, actorId: string) {
+    const { store, product, showcase } = await this.ownedEntity(kind, id, actorId);
+    if (showcase) return this.autoGenerateShowcaseSeo(showcase, store);
+    if (product && store) return this.autoGenerateProductSeo(product, store);
+    return this.autoGenerateStoreSeo(store!);
+  }
+
+  async getMetaBySlug(kind: SeoKind, slug: string, storeSlug?: string): Promise<MetaTags> {
+    const manager = this.dataSource.manager;
+    if (kind === 'store') {
+      const store = await manager.findOneBy(Store, { slug });
+      if (!store) throw new NotFoundException('Store not found');
+      return this.generateStoreMetaTags(store);
+    }
+    if (kind === 'product') {
+      // Honor optional store context and reject ambiguous legacy slug data.
+      const products = await manager.find(Product, { where: { slug, status: ProductStatus.ACTIVE, ...(storeSlug ? { store: { slug: storeSlug } } : {}) }, relations: ['store'], take: 2 });
+      if (!products.length) throw new NotFoundException('Product not found');
+      if (products.length !== 1) throw new BadRequestException('Specify storeSlug for this product');
+      return this.generateProductMetaTags(products[0]!, products[0]!.store);
+    }
+    const showcase = await manager.findOne(Showcase, { where: { slug, status: ShowcaseStatus.PUBLISHED }, relations: ['store'] });
+    if (!showcase) throw new NotFoundException('Post not found');
+    return this.generateShowcaseMetaTags(showcase, showcase.store ?? null);
+  }
+
+  private assertSiteUrl(value: string): void {
+    try {
+      const url = new URL(value);
+      if (url.origin === new URL(this.baseUrl).origin && !url.username && !url.password) return;
+    } catch { /* Invalid URLs fail closed. */ }
+    throw new BadRequestException('URL must belong to the application origin');
+  }
+
+  private async checkMetadata(data: { canonicalUrl?: string | null; ogImageKey?: string | null }, actorId: string) {
+    if (data.canonicalUrl) this.assertSiteUrl(data.canonicalUrl);
+    if (data.ogImageKey) {
+      const variant = await this.dataSource.manager.findOne(MediaVariant, { where: { storageKey: data.ogImageKey, asset: { showcase: { ownerId: actorId }, status: MediaStatus.READY } } });
+      if (!variant) throw new BadRequestException('Image must be an owned ready media variant');
+    }
+  }
+
+  async getAdminSettings(actorId: string): Promise<SeoSettings> {
+    await this.requireAdmin(actorId);
+    return this.getSettings();
+  }
+
+  private async getSettings(): Promise<SeoSettings> {
+    // The migration seeds settings. Reads must not create competing singleton
+    // rows, and TypeORM findOne requires a where clause.
+    const [settings] = await this.settingsRepo.find({ take: 1, order: { createdAt: 'ASC' } });
+    if (!settings) throw new ServiceUnavailableException('SEO settings are unavailable');
     return settings;
   }
 
-  async updateSettings(data: Partial<SeoSettings>): Promise<SeoSettings> {
+  async updateSettings(data: SeoSettingsDto, actorId: string): Promise<SeoSettings> {
+    await this.requireAdmin(actorId);
+    data = await this.validated(SeoSettingsDto, data);
+    if (data.indexNowKeyLocation) this.assertSiteUrl(data.indexNowKeyLocation);
+    for (const key of [data.defaultOgImageKey, data.organizationLogoKey]) {
+      if (key && !(await this.buildImageUrl(key))) throw new BadRequestException('Image must be a public ready variant');
+    }
     const settings = await this.getSettings();
     Object.assign(settings, data);
     return this.settingsRepo.save(settings);
@@ -146,14 +250,18 @@ export class SeoService {
   // Store SEO
   // ============================================
 
-  async getStoreSeo(storeId: string): Promise<StoreSeo | null> {
+  private async getStoreSeo(storeId: string): Promise<StoreSeo | null> {
     return this.storeSeoRepo.findOneBy({ storeId });
   }
 
   async upsertStoreSeo(
     storeId: string,
-    data: Partial<StoreSeo>,
+    data: StoreSeoDto,
+    actorId: string,
   ): Promise<StoreSeo> {
+    await this.ownedEntity('store', storeId, actorId);
+    data = await this.validated(StoreSeoDto, data);
+    await this.checkMetadata(data, actorId);
     let seo = await this.storeSeoRepo.findOneBy({ storeId });
     if (!seo) {
       seo = this.storeSeoRepo.create({ storeId, ...data });
@@ -163,7 +271,8 @@ export class SeoService {
     return this.storeSeoRepo.save(seo);
   }
 
-  async deleteStoreSeo(storeId: string): Promise<void> {
+  async deleteStoreSeo(storeId: string, actorId: string): Promise<void> {
+    await this.ownedEntity('store', storeId, actorId);
     await this.storeSeoRepo.delete({ storeId });
   }
 
@@ -171,15 +280,19 @@ export class SeoService {
   // Product SEO
   // ============================================
 
-  async getProductSeo(productId: string): Promise<ProductSeo | null> {
+  private async getProductSeo(productId: string): Promise<ProductSeo | null> {
     return this.productSeoRepo.findOneBy({ productId });
   }
 
   async upsertProductSeo(
     productId: string,
-    storeId: string,
-    data: Partial<ProductSeo>,
+    data: ProductSeoDto,
+    actorId: string,
   ): Promise<ProductSeo> {
+    const { product } = await this.ownedEntity('product', productId, actorId);
+    const storeId = product!.storeId;
+    data = await this.validated(ProductSeoDto, data);
+    await this.checkMetadata(data, actorId);
     let seo = await this.productSeoRepo.findOneBy({ productId });
     if (!seo) {
       seo = this.productSeoRepo.create({ productId, storeId, ...data });
@@ -189,7 +302,8 @@ export class SeoService {
     return this.productSeoRepo.save(seo);
   }
 
-  async deleteProductSeo(productId: string): Promise<void> {
+  async deleteProductSeo(productId: string, actorId: string): Promise<void> {
+    await this.ownedEntity('product', productId, actorId);
     await this.productSeoRepo.delete({ productId });
   }
 
@@ -197,15 +311,19 @@ export class SeoService {
   // Showcase/Post SEO
   // ============================================
 
-  async getShowcaseSeo(showcaseId: string): Promise<ShowcaseSeo | null> {
+  private async getShowcaseSeo(showcaseId: string): Promise<ShowcaseSeo | null> {
     return this.showcaseSeoRepo.findOneBy({ showcaseId });
   }
 
   async upsertShowcaseSeo(
     showcaseId: string,
-    storeId: string,
-    data: Partial<ShowcaseSeo>,
+    data: ShowcaseSeoDto,
+    actorId: string,
   ): Promise<ShowcaseSeo> {
+    const { showcase } = await this.ownedEntity('showcase', showcaseId, actorId);
+    const storeId = showcase!.storeId;
+    data = await this.validated(ShowcaseSeoDto, data);
+    await this.checkMetadata(data, actorId);
     let seo = await this.showcaseSeoRepo.findOneBy({ showcaseId });
     if (!seo) {
       seo = this.showcaseSeoRepo.create({ showcaseId, storeId, ...data });
@@ -215,7 +333,8 @@ export class SeoService {
     return this.showcaseSeoRepo.save(seo);
   }
 
-  async deleteShowcaseSeo(showcaseId: string): Promise<void> {
+  async deleteShowcaseSeo(showcaseId: string, actorId: string): Promise<void> {
+    await this.ownedEntity('showcase', showcaseId, actorId);
     await this.showcaseSeoRepo.delete({ showcaseId });
   }
 
@@ -227,12 +346,17 @@ export class SeoService {
     return this.redirectRepo.findOneBy({ fromPath, isActive: true });
   }
 
-  async getRedirects(storeId?: string): Promise<SeoRedirect[]> {
+  async getRedirects(actorId: string, storeId?: string): Promise<SeoRedirect[]> {
+    await this.requireAdmin(actorId);
     const where = storeId ? { storeId, isActive: true } : { isActive: true };
     return this.redirectRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
-  async createRedirect(data: Partial<SeoRedirect>): Promise<SeoRedirect> {
+  async createRedirect(data: CreateRedirectDto, actorId: string): Promise<SeoRedirect> {
+    await this.requireAdmin(actorId);
+    data = await this.validated(CreateRedirectDto, data);
+    this.assertSiteUrl(new URL(data.fromPath, this.baseUrl).href);
+    this.assertSiteUrl(new URL(data.toPath, this.baseUrl).href);
     const existing = await this.redirectRepo.findOneBy({
       fromPath: data.fromPath!,
     });
@@ -245,8 +369,13 @@ export class SeoService {
 
   async updateRedirect(
     id: string,
-    data: Partial<SeoRedirect>,
+    data: UpdateRedirectDto,
+    actorId: string,
   ): Promise<SeoRedirect> {
+    await this.requireAdmin(actorId);
+    data = await this.validated(UpdateRedirectDto, data);
+    if (data.fromPath) this.assertSiteUrl(new URL(data.fromPath, this.baseUrl).href);
+    if (data.toPath) this.assertSiteUrl(new URL(data.toPath, this.baseUrl).href);
     const redirect = await this.redirectRepo.findOneBy({ id });
     if (!redirect) {
       throw new NotFoundException('Redirect not found');
@@ -255,7 +384,8 @@ export class SeoService {
     return this.redirectRepo.save(redirect);
   }
 
-  async deleteRedirect(id: string): Promise<void> {
+  async deleteRedirect(id: string, actorId: string): Promise<void> {
+    await this.requireAdmin(actorId);
     await this.redirectRepo.delete(id);
   }
 
@@ -454,7 +584,7 @@ export class SeoService {
     if (!seo) {
       seo = this.showcaseSeoRepo.create({
         showcaseId: showcase.id,
-        storeId: store?.id || '',
+        storeId: showcase.storeId ?? null,
       });
     }
 
@@ -586,7 +716,7 @@ export class SeoService {
       '';
     const canonical = seo.canonicalUrl || this.baseUrl + '/shop/' + store.slug;
 
-    const ogImage = this.buildImageUrl(
+    const ogImage = await this.buildImageUrl(
       seo.ogImageKey || store.logoKey || settings.defaultOgImageKey,
     );
     const ogTitle = seo.ogTitle || store.name;
@@ -621,7 +751,7 @@ export class SeoService {
         description: this.truncate(ogDescription, 200),
         image: ogImage,
       },
-      jsonLd: this.buildStoreJsonLd(store, seo, settings),
+      jsonLd: await this.buildStoreJsonLd(store, seo, settings),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
@@ -632,6 +762,7 @@ export class SeoService {
     product: Product,
     store: Store,
   ): Promise<MetaTags> {
+    if (product.status !== ProductStatus.ACTIVE) throw new NotFoundException('Product not found');
     // Ensure SEO exists (auto-generate if needed)
     let seo = await this.getProductSeo(product.id);
     if (!seo) {
@@ -645,7 +776,7 @@ export class SeoService {
       seo.canonicalUrl ||
       this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug;
 
-    const ogImage = this.buildImageUrl(
+    const ogImage = await this.buildImageUrl(
       seo.ogImageKey ??
         product.imageKeys?.[0] ??
         store.logoKey ??
@@ -686,7 +817,7 @@ export class SeoService {
         description: this.truncate(ogDescription, 200),
         image: ogImage,
       },
-      jsonLd: this.buildProductJsonLd(product, store, seo, price, isInStock),
+      jsonLd: await this.buildProductJsonLd(product, store, seo, price, isInStock),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
@@ -697,6 +828,7 @@ export class SeoService {
     showcase: Showcase,
     store: Store | null,
   ): Promise<MetaTags> {
+    if (showcase.status !== ShowcaseStatus.PUBLISHED) throw new NotFoundException('Post not found');
     // Ensure SEO exists (auto-generate if needed)
     let seo = await this.getShowcaseSeo(showcase.id);
     if (!seo) {
@@ -712,7 +844,7 @@ export class SeoService {
         ? this.baseUrl + '/shop/' + store.slug + '/post/' + showcase.slug
         : this.baseUrl + '/post/' + showcase.slug);
 
-    const ogImage = this.buildImageUrl(
+    const ogImage = await this.buildImageUrl(
       seo.ogImageKey ?? store?.logoKey ?? settings.defaultOgImageKey,
     );
     const ogTitle = seo.ogTitle || showcase.title;
@@ -746,14 +878,14 @@ export class SeoService {
         description: this.truncate(ogDescription, 200),
         image: ogImage,
       },
-      jsonLd: this.buildArticleJsonLd(showcase, store, seo),
+      jsonLd: await this.buildArticleJsonLd(showcase, store, seo),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
     };
   }
 
-  generateGenericMetaTags(
+  async generateGenericMetaTags(
     path: string,
     options: {
       title?: string;
@@ -761,7 +893,7 @@ export class SeoService {
       robots?: RobotsDirective;
       ogType?: string;
     } = {},
-  ): MetaTags {
+  ): Promise<MetaTags> {
     const canonical = this.baseUrl + path;
 
     return {
@@ -774,7 +906,7 @@ export class SeoService {
       og: {
         title: options.title || 'Matjary',
         description: options.description || '',
-        image: this.buildImageUrl(this.defaultImageKey),
+        image: await this.buildImageUrl(this.defaultImageKey),
         type: options.ogType || 'website',
         siteName: 'Matjary',
         url: canonical,
@@ -784,7 +916,7 @@ export class SeoService {
         card: 'summary_large_image',
         title: options.title || 'Matjary',
         description: options.description || '',
-        image: this.buildImageUrl(this.defaultImageKey),
+        image: await this.buildImageUrl(this.defaultImageKey),
       },
     };
   }
@@ -793,11 +925,11 @@ export class SeoService {
   // JSON-LD Structured Data Builders (Enhanced 2026)
   // ============================================
 
-  private buildStoreJsonLd(
+  private async buildStoreJsonLd(
     store: Store,
     seo: StoreSeo | null,
     settings: SeoSettings,
-  ): Record<string, unknown>[] {
+  ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
 
     // Organization schema
@@ -808,7 +940,7 @@ export class SeoService {
         name: settings.organizationName,
         url: settings.organizationUrl || this.baseUrl,
         logo: settings.organizationLogoKey
-          ? this.buildImageUrl(settings.organizationLogoKey)
+          ? await this.buildImageUrl(settings.organizationLogoKey)
           : undefined,
         sameAs: settings.organizationSameAs || [],
       });
@@ -840,7 +972,7 @@ export class SeoService {
         name: store.name,
         url: this.baseUrl + '/shop/' + store.slug,
         description: store.description,
-        image: store.logoKey ? this.buildImageUrl(store.logoKey) : undefined,
+        image: await this.buildImageUrl(store.logoKey),
         address: {
           '@type': 'PostalAddress',
           // Address fields would come from store entity if available
@@ -867,13 +999,13 @@ export class SeoService {
     return jsonLd;
   }
 
-  private buildProductJsonLd(
+  private async buildProductJsonLd(
     product: Product,
     store: Store,
     seo: ProductSeo | null,
     price: string,
     isInStock: boolean,
-  ): Record<string, unknown>[] {
+  ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
 
     const offers = {
@@ -908,10 +1040,7 @@ export class SeoService {
       '@type': 'Product',
       name: product.name,
       description: product.description,
-      image:
-        product.imageKeys
-          ?.map((key) => this.buildImageUrl(key))
-          .filter(Boolean) || [],
+      image: (await Promise.all((product.imageKeys ?? []).map((key) => this.buildImageUrl(key)))).filter(Boolean),
       sku: seo?.sku || product.sku,
       mpn: seo?.mpn,
       gtin: seo?.gtin,
@@ -954,11 +1083,11 @@ export class SeoService {
     return jsonLd;
   }
 
-  private buildArticleJsonLd(
+  private async buildArticleJsonLd(
     showcase: Showcase,
     store: Store | null,
     seo: ShowcaseSeo | null,
-  ): Record<string, unknown>[] {
+  ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
 
     const articleSchema: Record<string, unknown> = {
@@ -966,7 +1095,7 @@ export class SeoService {
       '@type': 'Article',
       headline: showcase.title,
       description: showcase.description,
-      image: seo?.ogImageKey ? this.buildImageUrl(seo.ogImageKey) : undefined,
+      image: await this.buildImageUrl(seo?.ogImageKey),
       datePublished:
         seo?.articlePublishedTime?.toISOString() ||
         showcase.publishedAt?.toISOString() ||
@@ -983,7 +1112,7 @@ export class SeoService {
         name: 'Matjary',
         logo: {
           '@type': 'ImageObject',
-          url: this.buildImageUrl(this.defaultImageKey) || this.baseUrl,
+          url: (await this.buildImageUrl(this.defaultImageKey)) || this.baseUrl,
         },
       },
       mainEntityOfPage: {
@@ -1096,11 +1225,10 @@ export class SeoService {
     const stores = await this.storeSeoRepo
       .createQueryBuilder('ss')
       .leftJoinAndSelect('ss.store', 'store')
-      .where('store.isActive = true')
       .getMany();
 
     for (const seo of stores) {
-      if (seo.store && seo.robots !== RobotsDirective.NOINDEX_NOFOLLOW) {
+      if (seo.store && !seo.robots?.includes('noindex')) {
         entries.push({
           title: seo.store.name,
           url: this.baseUrl + '/shop/' + seo.store.slug,
@@ -1132,23 +1260,12 @@ export class SeoService {
         seo.robots === RobotsDirective.NOINDEX_FOLLOW
       )
         continue;
-      const product = await this.productSeoRepo.manager
-        .createQueryBuilder(Product, 'p')
-        .select(['p.id', 'p.slug', 'p.name', 'p.description'])
-        .where('p.id = :id', { id: seo.productId })
-        .andWhere('p.status = :status', { status: 'active' })
-        .getRawOne();
+      const product = await this.dataSource.manager.findOne(Product, { where: { id: seo.productId, status: ProductStatus.ACTIVE }, relations: ['store'] });
       if (product) {
         entries.push({
-          title: product.p_name,
-          url:
-            this.baseUrl +
-            '/shop/' +
-            seo.storeId +
-            '/product/' +
-            product.p_slug,
-          description:
-            product.p_description?.substring(0, 200) || product.p_name,
+          title: product.name,
+          url: `${this.baseUrl}/shop/${product.store.slug}/product/${product.slug}`,
+          description: product.description?.substring(0, 200) || product.name,
           priority: 'medium',
         });
       }
@@ -1274,7 +1391,13 @@ export class SeoService {
    * Notifies search engines of URL changes instantly.
    * See: https://www.indexnow.org/
    */
-  async submitToIndexNow(
+  async submitAdminIndexNow(data: IndexNowDto, actorId: string) {
+    await this.requireAdmin(actorId);
+    data = await this.validated(IndexNowDto, data);
+    return this.submitToIndexNow(data.urls);
+  }
+
+  private async submitToIndexNow(
     urls: string[],
   ): Promise<{ success: boolean; results: Record<string, boolean> }> {
     const settings = await this.getSettings();
@@ -1282,6 +1405,7 @@ export class SeoService {
       return { success: false, results: {} };
     }
 
+    urls.forEach((url) => this.assertSiteUrl(url));
     const key = settings.indexNowKey;
     const keyLocation =
       settings.indexNowKeyLocation || this.baseUrl + '/' + key + '.txt';
@@ -1355,9 +1479,12 @@ export class SeoService {
       url = this.baseUrl + '/shop/' + (entity as Store).slug;
     } else if (entityType === 'product') {
       const product = entity as Product;
-      // Need store slug - would require loading store
-      url = this.baseUrl + '/product/' + product.slug; // Simplified
+      if (product.status !== ProductStatus.ACTIVE) return;
+      const store = await this.dataSource.manager.findOneBy(Store, { id: product.storeId });
+      if (!store) return;
+      url = this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug;
     } else {
+      if ((entity as Showcase).status !== ShowcaseStatus.PUBLISHED) return;
       url = this.baseUrl + '/post/' + (entity as Showcase).slug;
     }
 
@@ -1368,118 +1495,44 @@ export class SeoService {
   // Sitemap Generation (Enhanced)
   // ============================================
 
-  async generateSitemapUrls(): Promise<SitemapUrl[]> {
+  async generateSitemapUrls(kind?: SeoKind): Promise<SitemapUrl[]> {
     const settings = await this.getSettings();
+    if (!settings.sitemapEnabled) return [];
     const urls: SitemapUrl[] = [];
-
-    urls.push({
-      url: this.baseUrl,
-      changefreq: settings.sitemapChangefreq,
-      priority: 1.0,
-      lastmod: new Date().toISOString().split('T')[0],
-    });
-
-    // Stores
-    const stores = await this.storeSeoRepo
-      .createQueryBuilder('ss')
-      .leftJoinAndSelect('ss.store', 'store')
-      .where('store.isActive = true')
-      .getMany();
-
-    for (const seo of stores) {
-      if (
-        seo.store &&
-        seo.robots !== RobotsDirective.NOINDEX_NOFOLLOW &&
-        seo.robots !== RobotsDirective.NOINDEX_FOLLOW
-      ) {
-        urls.push({
-          url: this.baseUrl + '/shop/' + seo.store.slug,
-          lastmod: seo.updatedAt.toISOString().split('T')[0],
-          changefreq: 'weekly',
-          priority: 0.8,
-        });
-
-        urls.push({
-          url: this.baseUrl + '/shop/' + seo.store.slug + '/products',
-          lastmod: seo.updatedAt.toISOString().split('T')[0],
-          changefreq: 'daily',
-          priority: 0.7,
-        });
-
-        urls.push({
-          url: this.baseUrl + '/shop/' + seo.store.slug + '/posts',
-          lastmod: seo.updatedAt.toISOString().split('T')[0],
-          changefreq: 'daily',
-          priority: 0.7,
-        });
+    const indexable = (seo: { robots: RobotsDirective } | null) => !seo?.robots?.includes('noindex');
+    const manager = this.dataSource.manager;
+    if (!kind) urls.push({ url: this.baseUrl, changefreq: settings.sitemapChangefreq, priority: 1 });
+    if (!kind || kind === 'store') {
+      for (const store of await manager.find(Store)) {
+        const seo = await this.getStoreSeo(store.id);
+        if (!indexable(seo)) continue;
+        urls.push({ url: seo?.canonicalUrl || `${this.baseUrl}/shop/${store.slug}`, lastmod: store.updatedAt.toISOString().split('T')[0], changefreq: 'weekly', priority: 0.8 });
       }
     }
-
-    // Products
-    const productSeos = await this.productSeoRepo.find();
-    for (const seo of productSeos) {
-      if (
-        seo.robots === RobotsDirective.NOINDEX_NOFOLLOW ||
-        seo.robots === RobotsDirective.NOINDEX_FOLLOW
-      )
-        continue;
-      const product = await this.productSeoRepo.manager
-        .createQueryBuilder(Product, 'p')
-        .select(['p.id', 'p.slug', 'p.name', 'p.image_keys', 'p.status'])
-        .where('p.id = :id', { id: seo.productId })
-        .andWhere('p.status = :status', { status: 'active' })
-        .getRawOne();
-
-      if (product) {
-        urls.push({
-          url:
-            seo.canonicalUrl ||
-            this.baseUrl +
-              '/shop/' +
-              seo.storeId +
-              '/product/' +
-              product.p_slug,
-          lastmod: seo.updatedAt.toISOString().split('T')[0],
-          changefreq: 'weekly',
-          priority: 0.6,
-          images: product.p_image_keys?.map((key: string) => ({
-            url: this.buildImageUrl(key)!,
-            title: product.p_name,
-          })),
-        });
+    if (!kind || kind === 'product') {
+      for (const product of await manager.find(Product, { where: { status: ProductStatus.ACTIVE }, relations: ['store'] })) {
+        const seo = await this.getProductSeo(product.id);
+        if (!indexable(seo)) continue;
+        const images: SitemapImage[] = [];
+        for (const key of product.imageKeys ?? []) {
+          const url = await this.buildImageUrl(key);
+          if (url) images.push({ url, title: product.name });
+        }
+        urls.push({ url: seo?.canonicalUrl || `${this.baseUrl}/shop/${product.store.slug}/product/${product.slug}`, lastmod: product.updatedAt.toISOString().split('T')[0], changefreq: 'weekly', priority: 0.6, images });
       }
     }
-
-    // Showcases
-    const showcaseSeos = await this.showcaseSeoRepo.find();
-    for (const seo of showcaseSeos) {
-      if (
-        seo.robots === RobotsDirective.NOINDEX_NOFOLLOW ||
-        seo.robots === RobotsDirective.NOINDEX_FOLLOW
-      )
-        continue;
-      const showcase = await this.showcaseSeoRepo.manager
-        .createQueryBuilder(Showcase, 's')
-        .select(['s.id', 's.slug', 's.title', 's.status', 's.store_id'])
-        .where('s.id = :id', { id: seo.showcaseId })
-        .andWhere('s.status = :status', { status: ShowcaseStatus.PUBLISHED })
-        .getRawOne();
-
-      if (showcase) {
-        urls.push({
-          url: seo.canonicalUrl || this.baseUrl + '/post/' + showcase.s_slug,
-          lastmod: seo.updatedAt.toISOString().split('T')[0],
-          changefreq: 'monthly',
-          priority: 0.5,
-        });
+    if (!kind || kind === 'showcase') {
+      for (const showcase of await manager.find(Showcase, { where: { status: ShowcaseStatus.PUBLISHED } })) {
+        const seo = await this.getShowcaseSeo(showcase.id);
+        if (!indexable(seo)) continue;
+        urls.push({ url: seo?.canonicalUrl || `${this.baseUrl}/post/${showcase.slug}`, lastmod: showcase.updatedAt.toISOString().split('T')[0], changefreq: 'monthly', priority: 0.5 });
       }
     }
-
     return urls;
   }
 
-  async generateSitemapXml(): Promise<string> {
-    const urls = await this.generateSitemapUrls();
+  async generateSitemapXml(kind?: SeoKind): Promise<string> {
+    const urls = await this.generateSitemapUrls(kind);
     const settings = await this.getSettings();
 
     if (!settings.sitemapEnabled) {
@@ -1612,14 +1665,14 @@ export class SeoService {
   // Helpers
   // ============================================
 
-  private buildImageUrl(key: string | null | undefined): string | undefined {
+  private async buildImageUrl(key: string | null | undefined): Promise<string | undefined> {
     if (!key) return undefined;
-    if (key.startsWith('http://') || key.startsWith('https://')) {
-      return key;
-    }
-    const cdnBase =
-      this.configService.get<string>('CDN_BASE_URL') || this.baseUrl;
-    return cdnBase + '/media/' + key;
+    // Never advertise originals, arbitrary keys, or media belonging to drafts.
+    const variant = await this.dataSource.manager.findOne(MediaVariant, {
+      where: { storageKey: key, asset: { status: MediaStatus.READY, showcase: { status: ShowcaseStatus.PUBLISHED } } },
+    });
+    if (!variant || !variant.mimeType.startsWith('image/')) return undefined;
+    return this.storage.presignedGetUrl(key);
   }
 
   private truncate(str: string, maxLen: number): string {
@@ -1629,10 +1682,10 @@ export class SeoService {
 
   private escapeXml(str: string): string {
     return str
-      .replace(/&/g, '&')
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/"/g, '"')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
   }
 
@@ -1641,21 +1694,21 @@ export class SeoService {
     if (settings.googleSiteVerification) {
       tags.push(
         '<meta name="google-site-verification" content="' +
-          settings.googleSiteVerification +
+          this.escapeXml(settings.googleSiteVerification) +
           '">',
       );
     }
     if (settings.bingSiteVerification) {
       tags.push(
         '<meta name="msvalidate.01" content="' +
-          settings.bingSiteVerification +
+          this.escapeXml(settings.bingSiteVerification) +
           '">',
       );
     }
     if (settings.yandexSiteVerification) {
       tags.push(
         '<meta name="yandex-verification" content="' +
-          settings.yandexSiteVerification +
+          this.escapeXml(settings.yandexSiteVerification) +
           '">',
       );
     }
@@ -1745,7 +1798,7 @@ export class SeoService {
   /**
    * Generates HowTo structured data
    */
-  buildHowToJsonLd(data: {
+  async buildHowToJsonLd(data: {
     name: string;
     description: string;
     steps: { name: string; text: string; image?: string }[];
@@ -1753,19 +1806,19 @@ export class SeoService {
     estimatedCost?: { currency: string; value: number };
     supply?: { '@type': 'HowToSupply'; name: string }[];
     tool?: { '@type': 'HowToTool'; name: string }[];
-  }): Record<string, unknown> {
+  }): Promise<Record<string, unknown>> {
     return {
       '@context': 'https://schema.org',
       '@type': 'HowTo',
       name: data.name,
       description: data.description,
-      step: data.steps.map((step, index) => ({
+      step: await Promise.all(data.steps.map(async (step, index) => ({
         '@type': 'HowToStep',
         position: index + 1,
         name: step.name,
         text: step.text,
-        image: step.image ? this.buildImageUrl(step.image) : undefined,
-      })),
+        image: await this.buildImageUrl(step.image),
+      }))),
       totalTime: data.totalTime,
       estimatedCost: data.estimatedCost,
       supply: data.supply,
