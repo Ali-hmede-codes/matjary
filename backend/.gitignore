@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+# Worker scratch space only; permanent media belongs in object storage.
+.tmp/
+# Never commit database dumps or backup archives.
+*.sql
+*.sql.gz
+*.dump

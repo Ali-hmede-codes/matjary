@@ -1,0 +1,151 @@
+import {
+  IsString,
+  Length,
+  Matches,
+  IsOptional,
+  IsHexColor,
+  IsObject,
+  ValidateNested,
+  IsUrl,
+  IsEnum,
+  IsNumber,
+  Min,
+  Max,
+  IsLatitude,
+  IsLongitude,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { SocialMediaLinks, StoreType } from '@app/database';
+
+export class CreateSocialMediaLinksDto implements SocialMediaLinks {
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  instagram?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  facebook?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  twitter?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  tiktok?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  youtube?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  website?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  whatsapp?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  telegram?: string;
+}
+
+export class CreateStoreLocationDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  address?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  city?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 100)
+  country?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 20)
+  postalCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 200)
+  locationName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 30)
+  phone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  website?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  openingHours?: Record<string, string> | null;
+}
+
+export class CreateStoreDto {
+  @IsString()
+  @Length(1, 200)
+  name!: string;
+
+  @IsString()
+  @Length(1, 191)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  slug!: string;
+
+  @IsOptional()
+  @IsHexColor()
+  brandColor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 65535)
+  description?: string | null;
+
+  @IsOptional()
+  @IsEnum(StoreType)
+  storeType?: StoreType;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => CreateSocialMediaLinksDto)
+  socialMediaLinks?: SocialMediaLinks | null;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => CreateStoreLocationDto)
+  location?: CreateStoreLocationDto | null;
+
+  // logoKey and bannerKey are set via media upload, not directly in create
+}

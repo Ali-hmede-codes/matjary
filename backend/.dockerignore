@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+*.log
+*.tsbuildinfo
+.tmp/
+*.sql
+*.sql.gz
+*.dump
+.git/
+.gitignore
+.dockerignore
+npm-debug.log
+README.md

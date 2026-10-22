@@ -1,0 +1,10 @@
+# OAuth downloads contain credentials and must stay local.
+client_secret_*.json
+**/client_secret_*.json
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+*.log
