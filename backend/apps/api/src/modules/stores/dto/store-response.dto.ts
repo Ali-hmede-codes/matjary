@@ -63,7 +63,19 @@ export function toStoreResponseDto(
   postsCount?: number,
   productsCount?: number,
 ): StoreResponseDto {
-  const hasCoordinates = store.latitude !== null && store.longitude !== null;
+  const hasCoordinates = store.latitude != null && store.longitude != null;
+  const hasLocation =
+    hasCoordinates ||
+    [
+      store.address,
+      store.city,
+      store.country,
+      store.postalCode,
+      store.locationName,
+      store.phone,
+      store.website,
+    ].some(Boolean) ||
+    Object.keys(store.openingHours ?? {}).length > 0;
   const mapUrl = hasCoordinates
     ? `https://www.openstreetmap.org/?mlat=${store.latitude}&mlon=${store.longitude}#map=16/${store.latitude}/${store.longitude}`
     : null;
@@ -91,23 +103,22 @@ export function toStoreResponseDto(
         store.verificationBadgeExpiresAt > new Date()),
     verificationBadgeGrantedAt: store.verificationBadgeGrantedAt,
     verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
-    location:
-      store.latitude || store.longitude
-        ? {
-            latitude: store.latitude,
-            longitude: store.longitude,
-            address: store.address,
-            city: store.city,
-            country: store.country,
-            postalCode: store.postalCode,
-            locationName: store.locationName,
-            phone: store.phone,
-            website: store.website,
-            openingHours: store.openingHours,
-            hasCoordinates,
-            mapUrl,
-          }
-        : null,
+    location: hasLocation
+      ? {
+          latitude: store.latitude,
+          longitude: store.longitude,
+          address: store.address,
+          city: store.city,
+          country: store.country,
+          postalCode: store.postalCode,
+          locationName: store.locationName,
+          phone: store.phone,
+          website: store.website,
+          openingHours: store.openingHours,
+          hasCoordinates,
+          mapUrl,
+        }
+      : null,
     postsCount,
     productsCount,
   };

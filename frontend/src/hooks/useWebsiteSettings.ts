@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { assetUrl, getJson } from '../lib/api';
 import { contrastColor, defaults, normalizeSettings } from '../lib/website';
 
-export function useWebsiteSettings() {
+export function useWebsiteSettings(applyMetadata = true) {
   const settingsQuery = useQuery({
     queryKey: ['website-settings'],
     queryFn: async ({ signal }) =>
@@ -13,6 +13,7 @@ export function useWebsiteSettings() {
   });
   const settings = settingsQuery.data ?? defaults;
   useEffect(() => {
+    if (!applyMetadata) return;
     document.title = `${settings.siteName} — ${settings.tagline || 'Discover something good'}`;
     document
       .querySelector('meta[name="description"]')
@@ -27,7 +28,7 @@ export function useWebsiteSettings() {
     document
       .getElementById('site-favicon')
       ?.setAttribute('href', assetUrl(settings.faviconUrl) || '/favicon.svg');
-  }, [settings]);
+  }, [settings, applyMetadata]);
   const theme = {
     '--brand-primary': settings.primaryColor,
     '--brand-secondary': settings.secondaryColor,

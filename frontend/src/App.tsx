@@ -7,9 +7,18 @@ import { PostDialog } from './components/PostDialog';
 import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
 import { StoreStrip } from './components/StoreStrip';
+import { StorePage } from './components/StorePage';
+import { storeSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 
 export default function App() {
+  const pathname = window.location.pathname;
+  if (pathname !== '/')
+    return <StorePage key={pathname} slug={storeSlugFromPath(pathname)} />;
+  return <DiscoveryPage />;
+}
+
+function DiscoveryPage() {
   const discovery = useDiscoveryFeed();
   const {
     settings,
@@ -30,7 +39,6 @@ export default function App() {
     notice,
     liking,
     navigate,
-    chooseStore,
     toggleDemo,
     savePost,
     likePost,
@@ -91,7 +99,7 @@ export default function App() {
               stores={stores}
               selectedStore={store}
               posts={source}
-              onSelectStore={chooseStore}
+              demo={demo}
               onClearStore={() => {
                 setStore(null);
                 setCategory('');
@@ -118,7 +126,7 @@ export default function App() {
             stores={stores}
             savedCount={saved.length}
             settings={settings}
-            onSelectStore={chooseStore}
+            demo={demo}
             onOpenSaved={() => navigate('saved')}
           />
           <SiteFooter

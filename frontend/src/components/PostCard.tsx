@@ -7,7 +7,7 @@ import {
   Layers,
   Play,
 } from 'lucide-react';
-import type { Store } from '../lib/api';
+import { storePath } from '../lib/storefront';
 import { MediaView } from './MediaView';
 import { PostActions, type PostActionProps } from './PostActions';
 import { StoreAvatar } from './StoreAvatar';
@@ -22,13 +22,11 @@ export function PostCard({
   onSave,
   onNotice,
   onOpen,
-  onStore,
   demo,
 }: PostActionProps & {
   index: number;
   preferVideo: boolean;
   onOpen: (index: number) => void;
-  onStore: (store: Store) => void;
   demo: boolean;
 }) {
   const [mediaIndex, setMediaIndex] = useState(() =>
@@ -51,10 +49,9 @@ export function PostCard({
       style={{ animationDelay: `${Math.min(index, 5) * 55}ms` }}
     >
       <header className="post-header">
-        <button
+        <a
           className="store-identity"
-          onClick={() => post.store && onStore(post.store)}
-          disabled={!post.store}
+          href={post.store ? storePath(post.store.slug, demo) : undefined}
         >
           <StoreAvatar store={post.store} />
           <span>
@@ -65,7 +62,7 @@ export function PostCard({
                 : post.store?.location?.city || 'Independent store'}
             </small>
           </span>
-        </button>
+        </a>
         {demo && <span className="sample-label">SAMPLE</span>}
         <button
           className="icon-button post-expand"

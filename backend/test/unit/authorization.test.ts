@@ -56,6 +56,37 @@ import {
   SubscriptionStatus,
 } from '../../libs/database/src/entities';
 import { StorageService } from '../../libs/storage/src/storage.service';
+import { toStoreResponseDto } from '../../apps/api/src/modules/stores/dto/store-response.dto';
+
+test('storefront contact details do not require map coordinates', () => {
+  const store = Object.assign(new Store(), {
+    latitude: null,
+    longitude: null,
+    address: null,
+    city: null,
+    country: null,
+    postalCode: null,
+    locationName: null,
+    phone: '+961 1 234567',
+    website: 'https://example.test',
+    openingHours: { monday: '09:00–17:00' },
+  });
+  const location = toStoreResponseDto(store).location;
+  assert.equal(location?.phone, store.phone);
+  assert.equal(location?.website, store.website);
+  assert.deepEqual(location?.openingHours, store.openingHours);
+  assert.equal(location?.hasCoordinates, false);
+  assert.equal(location?.mapUrl, null);
+
+  Object.assign(store, { phone: null, website: null, openingHours: null });
+  assert.equal(toStoreResponseDto(store).location, null);
+  Object.assign(store, { latitude: 0, longitude: 0 });
+  assert.equal(toStoreResponseDto(store).location?.hasCoordinates, true);
+  assert.match(
+    toStoreResponseDto(store).location?.mapUrl ?? '',
+    /mlat=0&mlon=0/u,
+  );
+});
 
 function config(origin = 'http://localhost:3000') {
   return new ConfigService<AppEnvironment, true>(

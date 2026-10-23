@@ -24,7 +24,6 @@ type FeedPostsProps = Pick<
   | 'saved'
   | 'savePost'
   | 'openPost'
-  | 'chooseStore'
   | 'source'
   | 'navigate'
   | 'toggleDemo'
@@ -43,7 +42,6 @@ export function FeedPosts({
   saved,
   savePost,
   openPost,
-  chooseStore,
   source,
   navigate,
   toggleDemo,
@@ -104,7 +102,6 @@ export function FeedPosts({
               saved={saved.includes(post.id)}
               onSave={() => savePost(post.id)}
               onOpen={(index) => openPost(post, index)}
-              onStore={chooseStore}
               demo={demo}
             />
           ))}

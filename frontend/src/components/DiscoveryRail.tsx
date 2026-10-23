@@ -6,19 +6,20 @@ import {
 } from 'lucide-react';
 import { assetUrl, type Store } from '../lib/api';
 import type { WebsiteSettings } from '../lib/website';
+import { storePath } from '../lib/storefront';
 import { StoreAvatar } from './StoreAvatar';
 
 export function DiscoveryRail({
   stores,
   savedCount,
   settings,
-  onSelectStore,
+  demo,
   onOpenSaved,
 }: {
   stores: Store[];
   savedCount: number;
   settings: WebsiteSettings;
-  onSelectStore: (store: Store) => void;
+  demo: boolean;
   onOpenSaved: () => void;
 }) {
   return (
@@ -28,10 +29,10 @@ export function DiscoveryRail({
         <StoreIcon size={18} />
       </div>
       {stores.slice(0, 5).map((item) => (
-        <button
+        <a
           className="suggested-store"
           key={item.id}
-          onClick={() => onSelectStore(item)}
+          href={storePath(item.slug, demo)}
         >
           <StoreAvatar store={item} />
           <span>
@@ -39,7 +40,7 @@ export function DiscoveryRail({
             <small>{item.location?.city || 'Explore store'}</small>
           </span>
           <ArrowUpRight size={17} />
-        </button>
+        </a>
       ))}
       {!stores.length && (
         <p className="rail-empty">Stores will appear here as they join.</p>

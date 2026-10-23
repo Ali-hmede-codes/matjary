@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { MediaView } from './MediaView';
+import { storePath } from '../lib/storefront';
 import { PostActions, type PostActionProps } from './PostActions';
 
 export function PostDialog({
@@ -94,9 +95,12 @@ export function PostDialog({
             </p>
           )}
           {demo && <span className="sample-label">Sample post</span>}
-          <span className="eyebrow">
+          <a
+            className="eyebrow"
+            href={post.store ? storePath(post.store.slug, demo) : undefined}
+          >
             {post.store?.name || 'Independent creator'}
-          </span>
+          </a>
           <h2 id="detail-title">{post.title}</h2>
           <p>{post.description}</p>
         </div>

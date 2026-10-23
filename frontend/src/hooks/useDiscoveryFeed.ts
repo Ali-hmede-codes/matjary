@@ -26,7 +26,9 @@ export function useDiscoveryFeed() {
   const [store, setStore] = useState<Store | null>(null);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
-  const [demo, setDemo] = useState(false);
+  const [demo, setDemo] = useState(
+    () => new URLSearchParams(window.location.search).get('demo') === '1',
+  );
   const [selected, setSelected] = useState<Post | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [notice, setNotice] = useState('');
@@ -104,13 +106,6 @@ export function useDiscoveryFeed() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const goToFeed = () =>
-    document.getElementById('discover-feed')?.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'instant'
-        : 'smooth',
-      block: 'start',
-    });
   function navigate(next: View) {
     setView(next);
     setStore(null);
@@ -119,14 +114,11 @@ export function useDiscoveryFeed() {
     setAlgorithm(next === 'trending' ? 'trending' : 'mixed');
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
-  function chooseStore(next: Store) {
-    setStore(next);
-    setView('discover');
-    setCategory('');
-    setSearch('');
-    goToFeed();
-  }
   function toggleDemo() {
+    const url = new URL(window.location.href);
+    if (demo) url.searchParams.delete('demo');
+    else url.searchParams.set('demo', '1');
+    window.history.replaceState(null, '', url);
     setDemo(!demo);
     navigate('discover');
   }
@@ -226,7 +218,6 @@ export function useDiscoveryFeed() {
     setFiltersOpen,
     setLayout,
     navigate,
-    chooseStore,
     toggleDemo,
     savePost,
     likePost,

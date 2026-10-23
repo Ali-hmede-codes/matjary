@@ -1,4 +1,4 @@
-import type { Post, Store } from './api';
+import type { Post, Product, Store } from './api';
 
 // Opt-in visual examples only. Never substituted for real API results silently.
 export const inspirationPhoto =
@@ -48,13 +48,49 @@ const examples = [
   ],
 ] as const;
 
-export const demoStores: Store[] = examples.map(([name], index) => ({
-  id: `demo-store-${index}`,
-  slug: `demo-store-${index}`,
-  name,
-  brandColor: null,
-  description: 'Independent finds, thoughtfully curated.',
-}));
+export const demoStores: Store[] = examples.map(
+  ([name, , description, photo, category], index) => ({
+    id: `demo-store-${index}`,
+    slug: `demo-store-${index}`,
+    name,
+    brandColor:
+      ['#75604b', '#88452c', '#384e60', '#637348', '#426751', '#91614c'][
+        index
+      ] ?? null,
+    storeType: category === 'merchandise' ? 'ecommerce' : 'restaurant_menu',
+    description,
+    bannerKey: `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1600&q=85`,
+    location: { city: 'Beirut', country: 'Lebanon' },
+  }),
+);
+
+const productNames = [
+  ['Everyday ceramic mug', 'Handmade serving bowl', 'Sunday breakfast set'],
+  ['House espresso', 'Iced oat latte', 'Morning pour-over'],
+  ['The lounge chair', 'Linen cushion', 'Oak side table'],
+  ['Garden harvest bowl', 'Seasonal lunch plate', 'Fresh lemonade'],
+  ['Fresh green arrangement', 'Terracotta planter', 'Everyday herb set'],
+  ['Everyday tote', 'Weekend bag', 'The little carryall'],
+];
+
+export const demoProducts: Product[] = examples.flatMap(
+  ([, , description, photo, category], storeIndex) =>
+    (productNames[storeIndex] ?? []).map((name, index) => ({
+      id: `demo-product-${storeIndex}-${index}`,
+      storeId: `demo-store-${storeIndex}`,
+      slug: `demo-product-${storeIndex}-${index}`,
+      name,
+      description,
+      priceCents: String((storeIndex === 1 ? 350 : 1800) + index * 250),
+      currency: 'USD',
+      category: storeIndex === 3 && index === 2 ? 'beverage' : category,
+      stockQuantity: null,
+      imageKeys: [
+        `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=600&q=85`,
+      ],
+      tags: null,
+    })),
+);
 
 export const demoPosts: (Post & { category: string })[] = examples.map(
   ([, title, description, photo, category], index) => ({

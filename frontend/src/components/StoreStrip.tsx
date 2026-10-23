@@ -1,19 +1,20 @@
 import { BadgeCheck, Compass, Plus } from 'lucide-react';
 import { loginUrl, type Post, type Store } from '../lib/api';
 import { enableMouseScrolling } from '../lib/website';
+import { storePath } from '../lib/storefront';
 import { StoreAvatar } from './StoreAvatar';
 
 export function StoreStrip({
   stores,
   selectedStore,
   posts,
-  onSelectStore,
+  demo,
   onClearStore,
 }: {
   stores: Store[];
   selectedStore: Store | null;
   posts: Post[];
-  onSelectStore: (store: Store) => void;
+  demo: boolean;
   onClearStore: () => void;
 }) {
   return (
@@ -40,11 +41,10 @@ export function StoreStrip({
         <span>All stores</span>
       </button>
       {stores.map((item) => (
-        <button
+        <a
           className={`story ${selectedStore?.id === item.id ? 'selected' : ''}`}
           key={item.id}
-          aria-pressed={selectedStore?.id === item.id}
-          onClick={() => onSelectStore(item)}
+          href={storePath(item.slug, demo)}
         >
           <span className="story-ring">
             <StoreAvatar
@@ -57,7 +57,7 @@ export function StoreStrip({
           </span>
           <span>{item.name}</span>
           {item.hasVerificationBadge && <BadgeCheck size={15} />}
-        </button>
+        </a>
       ))}
     </section>
   );

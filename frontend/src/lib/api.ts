@@ -7,7 +7,38 @@ export interface Store {
   description?: string | null;
   brandColor: string | null;
   hasVerificationBadge?: boolean;
-  location?: { city: string | null; country: string | null } | null;
+  storeType?: 'ecommerce' | 'restaurant_menu';
+  logoKey?: string | null;
+  bannerKey?: string | null;
+  socialMediaLinks?: Record<string, string> | null;
+  location?: {
+    city: string | null;
+    country: string | null;
+    address?: string | null;
+    phone?: string | null;
+    website?: string | null;
+    openingHours?: Record<string, string> | null;
+    mapUrl?: string | null;
+  } | null;
+}
+
+export interface Product {
+  id: string;
+  storeId: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  priceCents: string;
+  currency: string;
+  category: string;
+  stockQuantity: number | null;
+  imageKeys: string[] | null;
+  tags: string[] | null;
+}
+
+export interface ProductList {
+  items: Product[];
+  total: number;
 }
 
 export interface Media {
@@ -71,6 +102,16 @@ export async function togglePostLike(postId: string) {
   return parseLikeResponse(await response.json());
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super('This content is temporarily unavailable.');
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export async function getJson<T>(
   path: string,
   signal?: AbortSignal,
@@ -83,6 +124,6 @@ export async function getJson<T>(
       : AbortSignal.timeout(12_000),
   });
   // Never display driver errors, response bodies, or credentials in the UI.
-  if (!response.ok) throw new Error('This content is temporarily unavailable.');
+  if (!response.ok) throw new ApiError(response.status);
   return response.json() as Promise<T>;
 }
