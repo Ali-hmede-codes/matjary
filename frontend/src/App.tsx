@@ -1,6 +1,7 @@
 import {
   useDeferredValue,
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
 } from 'react';
@@ -14,6 +15,11 @@ import {
   Compass,
   Film,
   Flame,
+  House,
+  LayoutGrid,
+  Rows3,
+  SlidersHorizontal,
+  UserRound,
   LoaderCircle,
   Mail,
   Plus,
@@ -27,6 +33,7 @@ import {
   assetUrl,
   getJson,
   loginUrl,
+  togglePostLike,
   type Category,
   type Feed,
   type Post,
@@ -38,11 +45,11 @@ import {
   normalizeSettings,
   readSavedIds,
 } from './lib/website';
-import { demoPosts, demoStores, inspirationPhoto } from './lib/demo';
+import { demoPosts, demoStores } from './lib/demo';
 import { PostCard, PostDialog, StoreAvatar } from './components/PostCard';
 
 const navigation = [
-  { id: 'discover', label: 'Discover', icon: Compass },
+  { id: 'discover', label: 'Home', icon: House },
   { id: 'trending', label: 'Trending', icon: Flame },
   { id: 'videos', label: 'Videos', icon: Film },
   { id: 'saved', label: 'Saved', icon: Bookmark },
@@ -64,7 +71,16 @@ export default function App() {
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
   const [demo, setDemo] = useState(false);
   const [selected, setSelected] = useState<Post | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [notice, setNotice] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [layout, setLayout] = useState<'feed' | 'grid'>('feed');
+  const [likes, setLikes] = useState<
+    Record<string, Pick<Post['engagement'], 'likes' | 'viewerLiked'>>
+  >({});
+  const [liking, setLiking] = useState(false);
+  const likeLock = useRef(false);
   const [saved, setSaved] = useState<string[]>(() => {
     try {
       return readSavedIds(window.localStorage);
@@ -174,6 +190,7 @@ export default function App() {
     setCategory('');
     setSearch('');
     setAlgorithm(next === 'trending' ? 'trending' : 'mixed');
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
   function chooseStore(next: Store) {
     setStore(next);
@@ -201,6 +218,34 @@ export default function App() {
       setNotice('Saved for this visit only. Browser storage is unavailable.');
     }
   }
+  async function likePost(post: Post) {
+    // Serialize first-time visitor mutations so the server can establish one cookie.
+    if (likeLock.current) return;
+    likeLock.current = true;
+    setLiking(true);
+    const previous = likes[post.id] ?? post.engagement;
+    const optimistic = {
+      viewerLiked: !previous.viewerLiked,
+      likes: Math.max(0, previous.likes + (previous.viewerLiked ? -1 : 1)),
+    };
+    setLikes((current) => ({ ...current, [post.id]: optimistic }));
+    try {
+      if (!demo) {
+        const result = await togglePostLike(post.id);
+        setLikes((current) => ({ ...current, [post.id]: result }));
+      }
+    } catch {
+      setLikes((current) => ({ ...current, [post.id]: previous }));
+      setNotice('Couldn’t update your like. Please try again.');
+    } finally {
+      likeLock.current = false;
+      setLiking(false);
+    }
+  }
+  const withLikes = (post: Post): Post => ({
+    ...post,
+    engagement: { ...post.engagement, ...likes[post.id] },
+  });
   const isLoading =
     settingsQuery.isLoading ||
     (!demo &&
@@ -208,14 +253,14 @@ export default function App() {
   const feedTitle =
     store?.name ||
     {
-      discover: 'Discover something new',
-      trending: 'Trending right now',
-      videos: 'Watch & discover',
-      saved: 'Your saved finds',
+      discover: algorithm === 'recent' ? 'Latest' : 'For you',
+      trending: 'Trending',
+      videos: 'Videos',
+      saved: 'Saved',
     }[view];
 
   return (
-    <div className="app" style={theme}>
+    <div className={`app ${searchOpen ? 'search-open' : ''}`} style={theme}>
       <a className="skip-link" href="#discover-feed">
         Skip to discoveries
       </a>
@@ -257,12 +302,12 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <label className="search-box">
+          <label className="search-box" id="feed-search">
             <Search size={18} />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search your feed…"
+              placeholder="Search posts and stores"
               aria-label="Search loaded posts and stores"
             />
             {search && (
@@ -275,128 +320,105 @@ export default function App() {
               </button>
             )}
           </label>
-          <a className="sign-in" href={loginUrl}>
-            Sign in <ArrowUpRight size={16} />
-          </a>
+          <div className="header-actions">
+            <button
+              className="icon-button search-toggle"
+              aria-label="Search posts and stores"
+              aria-controls="feed-search"
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen(!searchOpen)}
+            >
+              {searchOpen ? <X size={22} /> : <Search size={22} />}
+            </button>
+            <a
+              className="create-button"
+              href={loginUrl}
+              aria-label="Sign in to share a post"
+            >
+              <Plus size={20} />
+              <span>Create</span>
+            </a>
+            <a
+              className="profile-button"
+              href={loginUrl}
+              aria-label="Sign in to your account"
+            >
+              <UserRound size={21} />
+            </a>
+          </div>
         </div>
       </header>
 
       <div className="page-shell">
         <main className="main-content">
-          {demo && (
-            <div className="status-banner demo-banner" role="status">
-              <Sparkles size={17} />
-              <span>
-                Design preview · Sample stores and photos, not live content.
-              </span>
-              <button onClick={toggleDemo}>
-                View live feed <ArrowRight size={15} />
-              </button>
-            </div>
-          )}
-          {settingsQuery.isError && (
-            <div className="status-banner" role="status">
-              <span>
-                Website settings are unavailable.{' '}
-                {settingsQuery.data
-                  ? 'The last loaded branding is shown.'
-                  : 'Default branding is shown.'}
-              </span>
-              <button onClick={() => void settingsQuery.refetch()}>
-                Retry settings
-              </button>
-            </div>
-          )}
-          <section className="hero" aria-labelledby="welcome-title">
-            <div className="hero-copy">
-              <span className="eyebrow hero-label">
-                <Sparkles size={15} /> A fresh way to discover
-              </span>
-              <h1 id="welcome-title">
-                {settings.tagline || (
-                  <>
-                    Good finds.
-                    <br />
-                    <span>Your kind of vibe.</span>
-                  </>
-                )}
-              </h1>
-              <p>
-                {settings.description ||
-                  'Explore stores, watch their stories, and save what you love. All in one place.'}
-              </p>
-              <div className="hero-actions">
-                <button className="primary-button" onClick={goToFeed}>
-                  Start exploring <ArrowRight size={17} />
-                </button>
-                <button
-                  className="text-button"
-                  onClick={() => {
-                    navigate('videos');
-                    goToFeed();
-                  }}
-                >
-                  <Film size={17} /> Watch videos
-                </button>
-              </div>
-            </div>
-            <div
-              className={`hero-visual ${settings.bannerUrl ? 'custom-banner' : ''}`}
-            >
-              <img
-                src={assetUrl(settings.bannerUrl) || inspirationPhoto}
-                alt={
-                  settings.bannerUrl
-                    ? `${settings.siteName} banner`
-                    : 'Thoughtfully crafted objects for everyday living'
-                }
-                fetchPriority="high"
-              />
-              <div className="photo-caption">
-                <span className="caption-icon">
-                  <StoreIcon size={21} />
-                </span>
-                <span>
-                  <strong>Small stores. Big ideas.</strong>
-                  <span>Find your next favorite.</span>
-                </span>
-                <ArrowUpRight size={19} />
-              </div>
-            </div>
-          </section>
-
           <div className="feed-column">
-            {stores.length > 0 && (
-              <section className="store-strip" aria-label="Discover stores">
+            {demo && (
+              <div className="status-banner demo-banner" role="status">
+                <Sparkles size={17} />
+                <span>
+                  Design preview · Sample stores and photos, not live content.
+                </span>
+                <button onClick={toggleDemo}>
+                  View live feed <ArrowRight size={15} />
+                </button>
+              </div>
+            )}
+            {settingsQuery.isError && (
+              <div className="status-banner" role="status">
+                <span>
+                  Website settings are unavailable.{' '}
+                  {settingsQuery.data
+                    ? 'The last loaded branding is shown.'
+                    : 'Default branding is shown.'}
+                </span>
+                <button onClick={() => void settingsQuery.refetch()}>
+                  Retry settings
+                </button>
+              </div>
+            )}
+            <h1 className="sr-only">{settings.siteName} social feed</h1>
+            <section className="store-strip" aria-label="Browse store posts">
+              <a className="story your-store" href={loginUrl}>
+                <span className="story-ring">
+                  <Plus size={25} />
+                </span>
+                <span>Your store</span>
+              </a>
+              <button
+                className={`story all-stores ${!store ? 'selected' : ''}`}
+                aria-pressed={!store}
+                onClick={() => {
+                  setStore(null);
+                  setCategory('');
+                }}
+              >
+                <span className="story-ring">
+                  <Compass size={25} />
+                </span>
+                <span>All stores</span>
+              </button>
+              {stores.map((item) => (
                 <button
-                  className={`story all-stores ${!store ? 'selected' : ''}`}
-                  aria-pressed={!store}
-                  onClick={() => {
-                    setStore(null);
-                    setCategory('');
-                  }}
+                  className={`story ${store?.id === item.id ? 'selected' : ''}`}
+                  key={item.id}
+                  aria-pressed={store?.id === item.id}
+                  onClick={() => chooseStore(item)}
                 >
                   <span className="story-ring">
-                    <Compass size={25} />
+                    <StoreAvatar
+                      store={item}
+                      large
+                      preview={
+                        source.find((post) => post.store?.id === item.id)
+                          ?.media[0]
+                      }
+                    />
                   </span>
-                  <span>All stores</span>
+                  <span>{item.name}</span>
+                  {item.hasVerificationBadge && <BadgeCheck size={15} />}
                 </button>
-                {stores.map((item) => (
-                  <button
-                    className={`story ${store?.id === item.id ? 'selected' : ''}`}
-                    key={item.id}
-                    aria-pressed={store?.id === item.id}
-                    onClick={() => chooseStore(item)}
-                  >
-                    <span className="story-ring">
-                      <StoreAvatar store={item} large />
-                    </span>
-                    <span>{item.name}</span>
-                    {item.hasVerificationBadge && <BadgeCheck size={15} />}
-                  </button>
-                ))}
-              </section>
-            )}
+              ))}
+            </section>
             {!demo && storesQuery.isError && (
               <div className="status-banner" role="status">
                 <span>Stores couldn’t load right now.</span>
@@ -410,22 +432,83 @@ export default function App() {
               className="discover-feed"
               aria-labelledby="feed-title"
             >
-              <div className="section-heading">
-                <div>
-                  <span className="eyebrow">
-                    {demo ? 'Sample feed' : 'Your daily scroll, upgraded'}
-                  </span>
-                  <h2 id="feed-title">{feedTitle}</h2>
+              <div className="feed-toolbar">
+                <h2
+                  id="feed-title"
+                  className={
+                    view === 'discover' && !store ? 'sr-only' : 'feed-title'
+                  }
+                >
+                  {feedTitle}
+                </h2>
+                {view === 'discover' && !store && (
+                  <div className="feed-tabs" aria-label="Feed order">
+                    <button
+                      className={algorithm === 'mixed' ? 'selected' : ''}
+                      aria-pressed={algorithm === 'mixed'}
+                      onClick={() => setAlgorithm('mixed')}
+                    >
+                      For you
+                    </button>
+                    <button
+                      className={algorithm === 'recent' ? 'selected' : ''}
+                      aria-pressed={algorithm === 'recent'}
+                      disabled={demo}
+                      onClick={() => setAlgorithm('recent')}
+                    >
+                      Latest
+                    </button>
+                  </div>
+                )}
+                <div className="feed-tools">
+                  {!store && (
+                    <button
+                      className={`icon-button ${filtersOpen || category ? 'tool-active' : ''}`}
+                      aria-label="Filter your feed"
+                      aria-expanded={filtersOpen}
+                      aria-controls="feed-filters"
+                      onClick={() => setFiltersOpen(!filtersOpen)}
+                    >
+                      <SlidersHorizontal size={20} />
+                    </button>
+                  )}
+                  <button
+                    className="icon-button"
+                    aria-label={
+                      layout === 'feed'
+                        ? 'Switch to grid view'
+                        : 'Switch to feed view'
+                    }
+                    onClick={() =>
+                      setLayout(layout === 'feed' ? 'grid' : 'feed')
+                    }
+                  >
+                    {layout === 'feed' ? (
+                      <LayoutGrid size={20} />
+                    ) : (
+                      <Rows3 size={20} />
+                    )}
+                  </button>
+                  {store && (
+                    <button
+                      className="icon-button"
+                      aria-label="Show all stores"
+                      onClick={() => setStore(null)}
+                    >
+                      <X size={20} />
+                    </button>
+                  )}
                 </div>
-                {!store && (
+              </div>
+              {!store && filtersOpen && (
+                <div className="feed-filters" id="feed-filters">
                   <label className="sort-select">
-                    <span className="sr-only">Sort discoveries</span>
+                    Sort by
                     <select
                       value={algorithm}
                       disabled={demo}
                       onChange={(event) => {
-                        const value = event.target.value as Algorithm;
-                        setAlgorithm(value);
+                        setAlgorithm(event.target.value as Algorithm);
                         if (view === 'trending') setView('discover');
                       }}
                     >
@@ -434,57 +517,54 @@ export default function App() {
                       <option value="trending">Trending</option>
                     </select>
                   </label>
-                )}
-                {store && (
-                  <button
-                    className="icon-button"
-                    aria-label="Show all stores"
-                    onClick={() => setStore(null)}
-                  >
-                    <X size={19} />
-                  </button>
-                )}
-              </div>
-              {!store && (
-                <div className="category-tabs" aria-label="Categories">
-                  <button
-                    className={!category ? 'selected' : ''}
-                    aria-pressed={!category}
-                    onClick={() => setCategory('')}
-                  >
-                    <Sparkles size={15} />
-                    All finds
-                  </button>
-                  {categories.map((item) => (
+                  <div className="category-tabs" aria-label="Categories">
                     <button
-                      key={item.category}
-                      className={category === item.category ? 'selected' : ''}
-                      aria-pressed={category === item.category}
-                      onClick={() => setCategory(item.category)}
+                      className={!category ? 'selected' : ''}
+                      aria-pressed={!category}
+                      onClick={() => setCategory('')}
                     >
-                      {item.label}
+                      All
                     </button>
-                  ))}
+                    {categories.map((item) => (
+                      <button
+                        key={item.category}
+                        className={category === item.category ? 'selected' : ''}
+                        aria-pressed={category === item.category}
+                        onClick={() => setCategory(item.category)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              )}
+              {category && !filtersOpen && (
+                <button
+                  className="active-filter"
+                  onClick={() => setCategory('')}
+                >
+                  {categories.find((item) => item.category === category)
+                    ?.label || category}
+                  <X size={14} />
+                </button>
               )}
               {(view === 'saved' || view === 'videos' || search) && (
                 <p className="filter-note">
                   {view === 'saved'
-                    ? 'Saved on this device. Showing saved posts from the loaded feed.'
+                    ? 'Saved on this device · Matches from loaded posts'
                     : view === 'videos'
-                      ? 'Showing videos from the loaded feed.'
-                      : 'Searching titles, descriptions, and stores in the loaded feed.'}{' '}
-                  Load more to discover more matches.
+                      ? 'Videos from loaded posts · Load more to keep exploring'
+                      : 'Search results from loaded posts'}
                 </p>
               )}
               {!demo && feed.isPending && (
                 <div
-                  className="post-grid"
+                  className={`post-grid ${layout === 'grid' ? 'compact-grid' : ''} ${view === 'videos' ? 'video-feed' : ''}`}
                   role="status"
                   aria-label="Loading discoveries"
                 >
                   <span className="sr-only">Finding your next favorites…</span>
-                  {[0, 1, 2, 3, 4, 5].map((id) => (
+                  {[0, 1].map((id) => (
                     <div key={id} className="skeleton-card" aria-hidden="true">
                       <div />
                       <div />
@@ -516,15 +596,24 @@ export default function App() {
                 </div>
               )}
               {posts.length > 0 && (
-                <div className="post-grid">
+                <div
+                  className={`post-grid ${layout === 'grid' ? 'compact-grid' : ''} ${view === 'videos' ? 'video-feed' : ''}`}
+                >
                   {posts.map((post, index) => (
                     <PostCard
-                      key={post.id}
-                      post={post}
+                      key={`${view}:${post.id}`}
+                      post={withLikes(post)}
+                      preferVideo={view === 'videos'}
                       index={index}
+                      liking={liking}
+                      onLike={() => void likePost(post)}
+                      onNotice={setNotice}
                       saved={saved.includes(post.id)}
                       onSave={() => savePost(post.id)}
-                      onOpen={() => setSelected(post)}
+                      onOpen={(index) => {
+                        setSelected(post);
+                        setSelectedIndex(index);
+                      }}
                       onStore={chooseStore}
                       demo={demo}
                     />
@@ -575,7 +664,7 @@ export default function App() {
                   ) : (
                     <Plus size={17} />
                   )}
-                  Load more discoveries
+                  Load more posts
                 </button>
               )}
               {posts.length > 0 && (demo || !feed.hasNextPage) && (
@@ -586,18 +675,60 @@ export default function App() {
               )}
             </section>
           </div>
-          <section className="join-banner" aria-labelledby="join-title">
-            <span className="invite-icon">
-              <StoreIcon size={23} />
-            </span>
-            <div>
-              <h2 id="join-title">Have a store? Get discovered.</h2>
-              <p>Share what you do. Find your people.</p>
+          <aside className="discovery-rail" aria-label="More to explore">
+            <div className="rail-heading">
+              <h2>Stores to explore</h2>
+              <StoreIcon size={18} />
             </div>
-            <a className="secondary-button" href={loginUrl}>
-              Get started <ArrowUpRight size={16} />
-            </a>
-          </section>
+            {stores.slice(0, 5).map((item) => (
+              <button
+                className="suggested-store"
+                key={item.id}
+                onClick={() => chooseStore(item)}
+              >
+                <StoreAvatar store={item} />
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>{item.location?.city || 'Explore store'}</small>
+                </span>
+                <ArrowUpRight size={17} />
+              </button>
+            ))}
+            {!stores.length && (
+              <p className="rail-empty">
+                Stores will appear here as they join.
+              </p>
+            )}
+            <div className="saved-shortcut">
+              <span className="saved-shortcut-icon">
+                <Bookmark size={22} />
+              </span>
+              <div>
+                <strong>Your collection</strong>
+                <span>{saved.length} saved on this device</span>
+              </div>
+              <button
+                className="icon-button"
+                aria-label="Open saved posts"
+                onClick={() => navigate('saved')}
+              >
+                <ArrowRight size={18} />
+              </button>
+            </div>
+            {settings.bannerUrl && (
+              <img
+                className="community-banner"
+                src={assetUrl(settings.bannerUrl)}
+                alt={`${settings.siteName} banner`}
+                loading="lazy"
+              />
+            )}
+            {(settings.tagline || settings.description) && (
+              <p className="rail-about">
+                {settings.tagline || settings.description}
+              </p>
+            )}
+          </aside>
           <footer className="site-footer">
             <p>
               {settings.footerText ||
@@ -626,7 +757,15 @@ export default function App() {
       {selected && (
         <PostDialog
           key={selected.id}
-          post={selected}
+          post={withLikes(selected)}
+          initialIndex={selectedIndex}
+          notice={notice}
+          saved={saved.includes(selected.id)}
+          onSave={() => savePost(selected.id)}
+          liking={liking}
+          onLike={() => void likePost(selected)}
+          onNotice={setNotice}
+          demo={demo}
           onClose={() => setSelected(null)}
         />
       )}

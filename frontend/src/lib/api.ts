@@ -1,4 +1,4 @@
-import { mediaUrl } from './website';
+import { mediaUrl, parseLikeResponse } from './website';
 
 export interface Store {
   id: string;
@@ -50,6 +50,26 @@ export interface Category {
 export const loginUrl = `${__DEV_BACKEND_ORIGIN__ ?? ''}/api/v1/auth/login`;
 export const assetUrl = (value: string | null | undefined) =>
   mediaUrl(value, __DEV_BACKEND_ORIGIN__);
+
+export async function togglePostLike(postId: string) {
+  // This endpoint takes the post ID, even though its route parameter is named slug.
+  // Do not retry a toggle automatically: the first request may have succeeded.
+  const response = await fetch(
+    `/api/v1/posts/${encodeURIComponent(postId)}/like`,
+    {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(12_000),
+    },
+  );
+  if (!response.ok) throw new Error('Could not update this like.');
+  return parseLikeResponse(await response.json());
+}
 
 export async function getJson<T>(
   path: string,

@@ -95,6 +95,44 @@ export function mediaUrl(
     : safe;
 }
 
+export function parseLikeResponse(input: unknown): {
+  likes: number;
+  viewerLiked: boolean;
+} {
+  if (input && typeof input === 'object') {
+    const likes: unknown = Reflect.get(input, 'likes');
+    const viewerLiked: unknown = Reflect.get(input, 'viewerLiked');
+    if (
+      typeof likes === 'number' &&
+      Number.isSafeInteger(likes) &&
+      likes >= 0 &&
+      typeof viewerLiked === 'boolean'
+    ) {
+      return { likes, viewerLiked };
+    }
+  }
+  throw new Error('Could not update this like.');
+}
+
+export function isLocalFrontendRequest(
+  origin: string | undefined,
+  host: string | undefined,
+): boolean {
+  if (!origin || !host) return false;
+  try {
+    const url = new URL(origin);
+    return (
+      url.origin === origin &&
+      url.protocol === 'http:' &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) &&
+      ['5173', '4173'].includes(url.port) &&
+      url.host === host
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function readSavedIds(storage: Pick<Storage, 'getItem'>): string[] {
   try {
     const value: unknown = JSON.parse(

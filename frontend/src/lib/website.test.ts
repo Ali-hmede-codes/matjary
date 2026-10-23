@@ -5,6 +5,8 @@ import {
   defaults,
   mediaUrl,
   normalizeSettings,
+  parseLikeResponse,
+  isLocalFrontendRequest,
   readSavedIds,
   safeUrl,
 } from './website.ts';
@@ -84,6 +86,51 @@ test('saved IDs tolerate blocked storage and malformed or oversized data', () =>
     }).length,
     500,
   );
+});
+
+test('like responses accept only bounded counts and explicit viewer state', () => {
+  assert.deepEqual(
+    parseLikeResponse({ likes: 12, viewerLiked: true, views: 0 }),
+    { likes: 12, viewerLiked: true },
+  );
+  assert.deepEqual(parseLikeResponse({ likes: 0, viewerLiked: false }), {
+    likes: 0,
+    viewerLiked: false,
+  });
+  for (const value of [
+    null,
+    {},
+    { likes: -1, viewerLiked: false },
+    { likes: 1.5, viewerLiked: true },
+    { likes: 1, viewerLiked: 'yes' },
+    { likes: Infinity, viewerLiked: false },
+    { likes: Number.MAX_SAFE_INTEGER + 1, viewerLiked: true },
+  ]) {
+    assert.throws(() => parseLikeResponse(value), {
+      message: 'Could not update this like.',
+    });
+  }
+});
+
+test('local mutation bridge rejects missing, cross-origin, and non-preview origins', () => {
+  for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+    for (const port of ['5173', '4173']) {
+      assert.equal(
+        isLocalFrontendRequest(`http://${host}:${port}`, `${host}:${port}`),
+        true,
+      );
+    }
+  }
+  for (const [origin, host] of [
+    [undefined, 'localhost:5173'],
+    ['null', 'localhost:5173'],
+    ['https://evil.example', 'localhost:5173'],
+    ['http://localhost:5173', '127.0.0.1:5173'],
+    ['http://localhost:3000', 'localhost:3000'],
+    ['http://localhost:5173/path', 'localhost:5173'],
+    ['http://user:pass@localhost:5173', 'localhost:5173'],
+  ])
+    assert.equal(isLocalFrontendRequest(origin, host), false);
 });
 
 test('buttons choose readable text for light and dark brand colors', () => {
