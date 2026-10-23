@@ -11,6 +11,7 @@ import type { AppEnvironment } from '@app/config';
 import { RedisService } from '@app/queue';
 import { UsersService, type PublicUser } from '../users/users.service';
 import { GoogleTokenVerifier } from './google-token-verifier';
+import { isAdminEmail } from '../../../../../libs/database/src/admin-policy';
 
 export const NONCE_TTL_SECONDS = 600;
 export const validToken = (token: unknown): token is string =>
@@ -28,6 +29,13 @@ export class AuthService {
     private readonly redis: RedisService,
     private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
+
+  isAdmin(user: PublicUser): boolean {
+    return isAdminEmail(
+      user.email,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
+  }
 
   private async storage<T>(operation: () => Promise<T>): Promise<T> {
     try {
@@ -87,13 +95,16 @@ export class AuthService {
       );
     }
     const user = await this.users.findOrCreateGoogleUser(profile);
+    const account = await this.users.findSessionAccount(user.id);
+    if (!account)
+      throw new UnauthorizedException('Account access is unavailable');
     // Rotate the browser's session on every login; old tokens stop working.
     await this.logout(previousSession);
     const token = randomBytes(32).toString('base64url');
     await this.storage(() =>
       this.redis.setWithTtl(
         key('session', token),
-        user.id,
+        JSON.stringify({ userId: user.id, version: account.version }),
         this.config.get('AUTH_SESSION_TTL_SECONDS', { infer: true }),
       ),
     );
@@ -102,19 +113,33 @@ export class AuthService {
 
   async currentUser(token?: string): Promise<PublicUser> {
     if (!validToken(token)) throw new UnauthorizedException('Please sign in');
-    const userId = await this.storage(() =>
+    const stored = await this.storage(() =>
       this.redis.get(key('session', token)),
     );
-    if (!userId)
+    if (!stored)
       throw new UnauthorizedException(
         'Your session expired. Please sign in again.',
       );
-    const user = await this.users.findById(userId);
-    if (!user) {
+    let session: { userId: string; version: number };
+    try {
+      session = JSON.parse(stored) as typeof session;
+      if (
+        !session ||
+        typeof session.userId !== 'string' ||
+        !Number.isSafeInteger(session.version) ||
+        session.version < 0
+      )
+        throw new Error();
+    } catch {
       await this.logout(token);
       throw new UnauthorizedException('Please sign in again');
     }
-    return user;
+    const account = await this.users.findSessionAccount(session.userId);
+    if (!account || account.version !== session.version) {
+      await this.logout(token);
+      throw new UnauthorizedException('Please sign in again');
+    }
+    return account.user;
   }
 
   async logout(token?: string): Promise<void> {

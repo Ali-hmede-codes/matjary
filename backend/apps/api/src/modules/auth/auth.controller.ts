@@ -69,13 +69,13 @@ export class AuthController {
     );
     this.cookies.clear(response, 'nonce');
     this.cookies.set(response, 'session', result.token);
-    return { user: result.user };
+    return { user: result.user, isAdmin: this.auth.isAdmin(result.user) };
   }
 
   @Get('me')
   @UseGuards(SessionGuard)
   me(@Req() request: AuthenticatedRequest) {
-    return { user: request.user };
+    return { user: request.user, isAdmin: this.auth.isAdmin(request.user) };
   }
 
   @Post('logout')

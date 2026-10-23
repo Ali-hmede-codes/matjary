@@ -209,13 +209,34 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
     asset,
     mimeType: 'video/mp4',
   } as MediaVariant;
+  let restrictedParent = false;
+  const hidden = () =>
+    Boolean(
+      asset.adminArchivedAt || showcase.adminArchivedAt || restrictedParent,
+    );
+  config.set('ADMIN_EMAILS', 'admin@example.test');
   const assets = {
-    findOne: async (options: { where: { originalKey: string } }) =>
-      options.where.originalKey === asset.originalKey ? asset : null,
+    findOne: async (options: {
+      where: { originalKey: string; adminArchivedAt?: unknown };
+    }) =>
+      options.where.originalKey === asset.originalKey &&
+      (!options.where.adminArchivedAt || !hidden())
+        ? asset
+        : null,
     manager: {
+      findOneBy: async () => ({
+        id: 'admin',
+        email: 'admin@example.test',
+        suspendedAt: null,
+      }),
       getRepository: () => ({
-        findOne: async (options: { where: { storageKey: string } }) =>
-          options.where.storageKey === variant.storageKey ? variant : null,
+        findOne: async (options: {
+          where: { storageKey: string; asset?: unknown };
+        }) =>
+          options.where.storageKey === variant.storageKey &&
+          (!options.where.asset || !hidden())
+            ? variant
+            : null,
       }),
     },
   } as unknown as Repository<MediaAsset>;
@@ -229,7 +250,7 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
   );
   const auth = {
     currentUser: async (token?: string) => {
-      if (!['owner', 'other'].includes(token ?? ''))
+      if (!['owner', 'other', 'admin'].includes(token ?? ''))
         throw new UnauthorizedException();
       return { id: token, email: `${token}@example.test`, displayName: token };
     },
@@ -295,7 +316,10 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
     assert.equal(part.status, 206);
     assert.equal(part.headers.get('content-range'), 'bytes 2-5/10');
     assert.equal(part.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(part.headers.get('cache-control'), 'public, max-age=60');
+    assert.equal(
+      part.headers.get('cache-control'),
+      'public, max-age=0, must-revalidate',
+    );
     assert.equal(await part.text(), '2345');
     const invalid = await fetch(url(variant.storageKey), {
       headers: { Range: 'bytes=10-' },
@@ -304,6 +328,39 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
     assert.equal(invalid.headers.get('content-range'), 'bytes */10');
     assert.equal((await fetch(url('../escape'))).status, 404);
     assert.equal((await fetch(url('unregistered'))).status, 404);
+    for (const restriction of ['asset', 'post', 'parent']) {
+      asset.adminArchivedAt = restriction === 'asset' ? new Date() : null;
+      showcase.adminArchivedAt = restriction === 'post' ? new Date() : null;
+      restrictedParent = restriction === 'parent';
+      for (const cookie of ['', 'matjary_session=owner']) {
+        assert.equal(
+          (
+            await fetch(url(variant.storageKey), {
+              headers: { Cookie: cookie },
+            })
+          ).status,
+          404,
+        );
+        assert.equal(
+          (
+            await fetch(url(asset.originalKey!), {
+              headers: { Cookie: cookie },
+            })
+          ).status,
+          404,
+        );
+      }
+      const preview = await fetch(url(variant.storageKey), {
+        headers: { Cookie: 'matjary_session=admin' },
+      });
+      assert.equal(preview.status, 200);
+      assert.equal(preview.headers.get('cache-control'), 'private, no-store');
+      assert.equal(await preview.text(), bytes.toString());
+    }
+    asset.adminArchivedAt = null;
+    showcase.adminArchivedAt = null;
+    restrictedParent = false;
+    assert.equal((await fetch(url(variant.storageKey))).status, 200);
     config.set('STORAGE_PROVIDER', 's3');
     assert.equal((await fetch(url(variant.storageKey))).status, 404);
     assert.equal((await upload()).status, 404);

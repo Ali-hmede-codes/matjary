@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
@@ -31,6 +32,26 @@ export class UsersService {
     @InjectRepository(User) private readonly users: Repository<User>,
   ) {}
 
+  async findSessionAccount(
+    id: string,
+  ): Promise<{ user: PublicUser; version: number } | null> {
+    try {
+      const account = await this.users.findOneBy({ id });
+      if (!account || account.suspendedAt) return null;
+      return { user: publicUser(account), version: account.sessionVersion };
+    } catch {
+      throw new ServiceUnavailableException(
+        'Account storage is temporarily unavailable',
+      );
+    }
+  }
+
+  private activeUser(account: User): PublicUser {
+    if (account.suspendedAt)
+      throw new UnauthorizedException('Account access is unavailable');
+    return publicUser(account);
+  }
+
   async findById(id: string): Promise<PublicUser | null> {
     try {
       const user = await this.users.findOneBy({ id });
@@ -48,12 +69,12 @@ export class UsersService {
       const existing = await this.users.findOneBy({
         googleSubject: profile.subject,
       });
-      if (existing) return publicUser(existing);
+      if (existing) return this.activeUser(existing);
       if (await this.users.existsBy({ email: profile.email })) {
         const concurrent = await this.users.findOneBy({
           googleSubject: profile.subject,
         });
-        if (concurrent) return publicUser(concurrent);
+        if (concurrent) return this.activeUser(concurrent);
         throw new ConflictException(
           'This email already belongs to another account. Account linking is required.',
         );
@@ -78,13 +99,17 @@ export class UsersService {
         const winner = await this.users.findOneBy({
           googleSubject: profile.subject,
         });
-        if (winner) return publicUser(winner);
+        if (winner) return this.activeUser(winner);
         throw new ConflictException(
           'This email already belongs to another account. Account linking is required.',
         );
       }
     } catch (error) {
-      if (error instanceof ConflictException) throw error;
+      if (
+        error instanceof ConflictException ||
+        error instanceof UnauthorizedException
+      )
+        throw error;
       throw new ServiceUnavailableException(
         'Account storage is temporarily unavailable',
       );

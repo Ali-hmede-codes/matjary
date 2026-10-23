@@ -12,6 +12,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { MediaProcessor } from './jobs/media.process';
 import { EngagementFlusher } from './jobs/engagement.flush';
+import { processSnapshot, WORKER_METRICS_KEY } from '@app/observability';
 
 @Injectable()
 export class WorkerHeartbeat
@@ -51,12 +52,18 @@ export class WorkerHeartbeat
       throw new Error('Consumer stopped');
     await Promise.all([this.database.query('SELECT 1'), this.redis.ping()]);
     // Freshness only advances after both dependencies and consumers are healthy.
+    await this.redis.setWithTtl(
+      WORKER_METRICS_KEY,
+      JSON.stringify(processSnapshot()),
+      30,
+    );
     await fs.writeFile(file, String(Date.now()), { mode: 0o600 });
   }
 
   async beforeApplicationShutdown(): Promise<void> {
     clearInterval(this.timer);
     await this.pending;
+    await this.redis.remove(WORKER_METRICS_KEY).catch(() => undefined);
     await fs.writeFile(
       this.config.get('WORKER_HEARTBEAT_FILE', { infer: true }),
       '0',

@@ -7,7 +7,7 @@ import {
   ConflictException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { QueryFailedError, type Repository } from 'typeorm';
+import { QueryFailedError, FindOperator, type Repository } from 'typeorm';
 import {
   Showcase,
   ShowcaseStatus,
@@ -31,6 +31,7 @@ function makeShowcase(overrides: Partial<Showcase> = {}): Showcase {
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ownerId: 'owner-1',
+    adminArchivedAt: null,
     ...overrides,
   } as Showcase;
 }
@@ -66,23 +67,29 @@ class FakeRepository {
       }),
   };
 
+  private matches(item: Showcase, where: Record<string, unknown>): boolean {
+    return Object.entries(where).every(([key, value]) => {
+      if (value instanceof FindOperator) {
+        assert.equal(key, 'adminArchivedAt');
+        assert.equal(value.type, 'raw');
+        assert.match(
+          value.getSql!('showcase.adminArchivedAt'),
+          /suspended_at IS NULL/,
+        );
+        return item.adminArchivedAt == null;
+      }
+      return item[key as keyof Showcase] === value;
+    });
+  }
+
   async findOneBy(where: Record<string, unknown>): Promise<Showcase | null> {
-    const key = Object.keys(where)[0]!;
-    const value = where[key];
-    return (
-      this.items.find((item) => item[key as keyof Showcase] === value) ?? null
-    );
+    return this.items.find((item) => this.matches(item, where)) ?? null;
   }
 
   async findAndCount(options: any): Promise<[Showcase[], number]> {
     let filtered = this.items;
-    if (options.where) {
-      const key = Object.keys(options.where)[0]!;
-      const value = options.where[key];
-      filtered = filtered.filter(
-        (item) => item[key as keyof Showcase] === value,
-      );
-    }
+    if (options.where)
+      filtered = filtered.filter((item) => this.matches(item, options.where));
     const take = options.take ?? filtered.length;
     const skip = Math.max(options.skip ?? 0, 0);
     const page = filtered.slice(skip, skip + take);
@@ -117,6 +124,22 @@ function serviceWith(fake: FakeRepository): ShowcasesService {
 function controllerWith(service: ShowcasesService): ShowcasesController {
   return new ShowcasesController(service);
 }
+
+test('administratively archived posts are hidden from public and owner reads', async () => {
+  const fake = new FakeRepository();
+  fake.items.push(makeShowcase({ adminArchivedAt: new Date() }));
+  const service = serviceWith(fake);
+  assert.equal((await service.findAll(undefined, 20, 0)).total, 0);
+  assert.equal((await service.findAll('owner-1', 20, 0)).total, 0);
+  await assert.rejects(
+    service.findOneBySlug('my-post', 'owner-1'),
+    NotFoundException,
+  );
+  await assert.rejects(
+    service.update('my-post', { status: ShowcaseStatus.PUBLISHED }, 'owner-1'),
+    NotFoundException,
+  );
+});
 
 // ── Service: create ──
 

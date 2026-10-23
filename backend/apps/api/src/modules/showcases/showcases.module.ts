@@ -15,6 +15,7 @@ import {
   MediaVariant,
   PostEngagement,
   PostLike,
+  Product,
 } from '@app/database';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '@app/storage';
@@ -38,6 +39,7 @@ import { SeoModule } from '../seo/seo.module';
       MediaVariant,
       PostEngagement,
       PostLike,
+      Product,
     ]),
     AuthModule,
     StorageModule,
@@ -58,6 +60,6 @@ import { SeoModule } from '../seo/seo.module';
     PostEngagementService,
     FeedExploreService,
   ],
-  exports: [ShowcasesService, FeedExploreService],
+  exports: [ShowcasesService, FeedExploreService, MediaService],
 })
 export class ShowcasesModule {}

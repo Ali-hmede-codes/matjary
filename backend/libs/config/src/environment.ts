@@ -45,6 +45,9 @@ export interface AppEnvironment extends DatabaseEnvironment {
   MEDIA_MAX_VIDEO_DURATION_SECONDS: number;
   // Comma-separated list of admin email addresses. Empty means no admins.
   ADMIN_EMAILS: string;
+  PROMETHEUS_URL: string;
+  METRICS_TOKEN_FILE: string;
+  ERROR_RETENTION_DAYS: number;
   MEDIA_WORKER_CONCURRENCY: number;
   MEDIA_JOB_TIMEOUT_MS: number;
   MEDIA_UPLOAD_TIMEOUT_MS: number;
@@ -224,6 +227,40 @@ export function validateEnvironment(
       );
     }
   }
+  const adminEmails = String(env.ADMIN_EMAILS ?? '')
+    .trim()
+    .toLowerCase();
+  if (
+    adminEmails &&
+    adminEmails
+      .split(',')
+      .some(
+        (email) =>
+          !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email.trim()) ||
+          email.trim().length > 254,
+      )
+  ) {
+    throw new Error(
+      'ADMIN_EMAILS must be a comma-separated list of email addresses',
+    );
+  }
+  const prometheusUrl = String(env.PROMETHEUS_URL ?? '');
+  if (prometheusUrl) {
+    try {
+      const parsed = new URL(prometheusUrl);
+      if (
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        parsed.origin !== prometheusUrl ||
+        parsed.username ||
+        parsed.password
+      )
+        throw new Error();
+    } catch {
+      throw new Error(
+        'PROMETHEUS_URL must be an HTTP(S) origin without credentials or a path',
+      );
+    }
+  }
   return {
     ...env,
     ...validateDatabaseEnvironment(env),
@@ -306,7 +343,10 @@ export function validateEnvironment(
     ),
     // Admin emails (comma-separated) that can access admin-only boost endpoints.
     // Empty means no admin endpoints are accessible.
-    ADMIN_EMAILS: String(env.ADMIN_EMAILS ?? ''),
+    ADMIN_EMAILS: adminEmails,
+    PROMETHEUS_URL: prometheusUrl,
+    METRICS_TOKEN_FILE: String(env.METRICS_TOKEN_FILE ?? ''),
+    ERROR_RETENTION_DAYS: integer(env, 'ERROR_RETENTION_DAYS', 30, 1, 90),
     MEDIA_WORKER_CONCURRENCY: integer(env, 'MEDIA_WORKER_CONCURRENCY', 1, 1, 4),
     MEDIA_JOB_TIMEOUT_MS: integer(
       env,

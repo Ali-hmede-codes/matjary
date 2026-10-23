@@ -21,6 +21,11 @@ import {
   effectiveLimits,
   effectiveSubscription,
   assertQuota,
+  moderationWhere,
+  visibilitySql,
+  ShowcaseStatus,
+  actorContext,
+  appendAdminAudit,
 } from '@app/database';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
 import { UpdateStoreDto, UpdateStoreLocationDto } from './dto/update-store.dto';
@@ -61,7 +66,10 @@ export class StoresService {
     offset: number,
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
     try {
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = {
+        ...moderationWhere('store'),
+        ...(ownerId ? { ownerId } : {}),
+      };
 
       const [items, total] = await this.stores.findAndCount({
         where,
@@ -98,7 +106,10 @@ export class StoresService {
     userId: string | undefined,
   ): Promise<StoreResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug });
+      const store = await this.stores.findOneBy({
+        slug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -123,7 +134,10 @@ export class StoresService {
     userId: string | undefined,
   ): Promise<StoreResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ id });
+      const store = await this.stores.findOneBy({
+        id,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -145,7 +159,7 @@ export class StoresService {
 
   async findStoreEntityBySlug(slug: string): Promise<Store | null> {
     try {
-      return await this.stores.findOneBy({ slug });
+      return await this.stores.findOneBy({ slug, ...moderationWhere('store') });
     } catch (error) {
       this.sanitize(error);
     }
@@ -248,7 +262,10 @@ export class StoresService {
     userId: string,
   ): Promise<StoreResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug });
+      const store = await this.stores.findOneBy({
+        slug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -392,7 +409,10 @@ export class StoresService {
 
   async remove(slug: string, userId: string): Promise<void> {
     try {
-      const store = await this.stores.findOneBy({ slug });
+      const store = await this.stores.findOneBy({
+        slug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -428,7 +448,10 @@ export class StoresService {
 
   async getUserStores(userId: string): Promise<StoreResponseDto[]> {
     try {
-      const stores = await this.stores.findBy({ ownerId: userId });
+      const stores = await this.stores.findBy({
+        ownerId: userId,
+        ...moderationWhere('store'),
+      });
       const storeIds = stores.map((s) => s.id);
       const [postsCounts, productsCounts] = await Promise.all([
         this.getPostsCounts(storeIds),
@@ -449,12 +472,22 @@ export class StoresService {
   }
 
   private async getPostsCount(storeId: string): Promise<number> {
-    return this.stores.manager.count('showcases', { where: { storeId } });
+    return this.stores.manager.count('showcases', {
+      where: {
+        storeId,
+        status: ShowcaseStatus.PUBLISHED,
+        ...moderationWhere('post'),
+      },
+    });
   }
 
   private async getProductsCount(storeId: string): Promise<number> {
     return this.products.count({
-      where: { storeId, status: ProductStatus.ACTIVE },
+      where: {
+        storeId,
+        status: ProductStatus.ACTIVE,
+        ...moderationWhere('product'),
+      },
     });
   }
 
@@ -468,6 +501,10 @@ export class StoresService {
       .addSelect('COUNT(*)', 'count')
       .from('showcases', 'showcase')
       .where('storeId IN (:...storeIds)', { storeIds })
+      .andWhere('showcase.status = :status', {
+        status: ShowcaseStatus.PUBLISHED,
+      })
+      .andWhere(visibilitySql('post', 'showcase'))
       .groupBy('storeId')
       .getRawMany();
 
@@ -488,6 +525,7 @@ export class StoresService {
       .addSelect('COUNT(*)', 'count')
       .where('storeId IN (:...storeIds)', { storeIds })
       .andWhere('status = :status', { status: ProductStatus.ACTIVE })
+      .andWhere(visibilitySql('product', 'product'))
       .groupBy('storeId')
       .getRawMany();
 
@@ -524,6 +562,7 @@ export class StoresService {
       const stores = await this.stores
         .createQueryBuilder('store')
         .where('store.latitude IS NOT NULL')
+        .andWhere(visibilitySql('store', 'store'))
         .andWhere('store.longitude IS NOT NULL')
         .andWhere('store.latitude BETWEEN :minLat AND :maxLat', {
           minLat: bounds.minLat,
@@ -585,7 +624,7 @@ export class StoresService {
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
     try {
       const [items, total] = await this.stores.findAndCount({
-        where: { city },
+        where: { city, ...moderationWhere('store') },
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
@@ -623,7 +662,7 @@ export class StoresService {
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
     try {
       const [items, total] = await this.stores.findAndCount({
-        where: { country },
+        where: { country, ...moderationWhere('store') },
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
@@ -738,7 +777,10 @@ export class StoresService {
     maxBadges: number | null;
     badgePriceCents: number | null;
   }> {
-    const store = await this.stores.findOneBy({ id: storeId });
+    const store = await this.stores.findOneBy({
+      id: storeId,
+      ...moderationWhere('store'),
+    });
     const actor = await this.stores.manager.findOneBy(User, { id: actorId });
     if (!store || !actor) throw new NotFoundException('Store not found');
     if (store.ownerId !== actorId && !this.admin.isAdmin(actor))
@@ -797,7 +839,10 @@ export class StoresService {
     priceCents?: number;
   }> {
     try {
-      const existing = await this.stores.findOneBy({ id: storeId });
+      const existing = await this.stores.findOneBy({
+        id: storeId,
+        ...moderationWhere('store'),
+      });
       if (!existing) throw new NotFoundException('Store not found');
       return await this.stores.manager.transaction(async (manager) => {
         await manager.findOneOrFail(User, {
@@ -809,8 +854,14 @@ export class StoresService {
           where: { id: storeId },
           lock: { mode: 'pessimistic_write' },
         });
-        const adminGrant = Boolean(actor && this.admin.isAdmin(actor));
-        if (!actor || (!adminGrant && store.ownerId !== grantedBy))
+        const adminGrant = Boolean(
+          actor && !actor.suspendedAt && this.admin.isAdmin(actor),
+        );
+        if (
+          !actor ||
+          actor.suspendedAt ||
+          (!adminGrant && store.ownerId !== grantedBy)
+        )
           throw new ForbiddenException('You do not own this store');
         if (
           store.hasVerificationBadge &&
@@ -841,6 +892,15 @@ export class StoresService {
         store.verificationBadgeGrantedAt = new Date();
         store.verificationBadgeGrantedBy = grantedBy;
         await manager.save(store);
+        if (adminGrant)
+          await appendAdminAudit(
+            manager,
+            actorContext(grantedBy),
+            'stores',
+            storeId,
+            'badge.grant',
+            ['hasVerificationBadge'],
+          );
         return { success: true };
       });
     } catch (error) {
@@ -857,9 +917,12 @@ export class StoresService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const actor = await this.stores.manager.findOneBy(User, { id: actorId });
-      if (!actor || !this.admin.isAdmin(actor))
+      if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
         throw new ForbiddenException('Administrator access required');
-      const existing = await this.stores.findOneBy({ id: storeId });
+      const existing = await this.stores.findOneBy({
+        id: storeId,
+        ...moderationWhere('store'),
+      });
       if (!existing) throw new NotFoundException('Store not found');
       return await this.stores.manager.transaction(async (manager) => {
         await manager.findOneOrFail(User, {
@@ -870,11 +933,26 @@ export class StoresService {
           where: { id: storeId },
           lock: { mode: 'pessimistic_write' },
         });
+        const currentActor = await manager.findOneBy(User, { id: actorId });
+        if (
+          !currentActor ||
+          currentActor.suspendedAt ||
+          !this.admin.isAdmin(currentActor)
+        )
+          throw new ForbiddenException('Administrator access required');
         store.hasVerificationBadge = false;
         store.verificationBadgeGrantedAt = null;
         store.verificationBadgeGrantedBy = null;
         store.verificationBadgeExpiresAt = null;
         await manager.save(store);
+        await appendAdminAudit(
+          manager,
+          actorContext(actorId),
+          'stores',
+          storeId,
+          'badge.revoke',
+          ['hasVerificationBadge'],
+        );
         return { success: true };
       });
     } catch (error) {

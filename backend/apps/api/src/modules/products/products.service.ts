@@ -16,6 +16,7 @@ import {
   User,
   effectiveLimits,
   assertQuota,
+  moderationWhere,
 } from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -52,7 +53,7 @@ export class ProductsService {
     category?: ProductCategory,
   ): Promise<ProductListResponseDto> {
     try {
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = { ...moderationWhere('product') };
       if (storeId) where.storeId = storeId;
       if (status) where.status = status;
       if (category) where.category = category;
@@ -81,7 +82,10 @@ export class ProductsService {
     category?: ProductCategory,
   ): Promise<ProductListResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -100,14 +104,20 @@ export class ProductsService {
     userId: string | undefined,
   ): Promise<ProductResponseDto> {
     try {
-      const product = await this.products.findOneBy({ slug });
+      const product = await this.products.findOneBy({
+        slug,
+        ...moderationWhere('product'),
+      });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
 
       // For non-active products, only allow owner to see
       if (product.status !== ProductStatus.ACTIVE) {
-        const store = await this.stores.findOneBy({ id: product.storeId });
+        const store = await this.stores.findOneBy({
+          id: product.storeId,
+          ...moderationWhere('store'),
+        });
         if (!store || store.ownerId !== userId) {
           throw new NotFoundException('Product not found');
         }
@@ -139,7 +149,10 @@ export class ProductsService {
             where: { store: { ownerId: userId } },
           });
           assertQuota(count, limits.maxProducts, 'Product');
-          const store = await manager.findOneBy(Store, { id: storeId });
+          const store = await manager.findOneBy(Store, {
+            id: storeId,
+            ...moderationWhere('store'),
+          });
           if (!store) {
             throw new NotFoundException('Store not found');
           }
@@ -210,13 +223,19 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto> {
     try {
-      const product = await this.products.findOneBy({ slug });
+      const product = await this.products.findOneBy({
+        slug,
+        ...moderationWhere('product'),
+      });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
 
       // Verify user owns the store
-      const store = await this.stores.findOneBy({ id: product.storeId });
+      const store = await this.stores.findOneBy({
+        id: product.storeId,
+        ...moderationWhere('store'),
+      });
       if (!store || store.ownerId !== userId) {
         throw new ForbiddenException('You do not own this product');
       }
@@ -270,13 +289,19 @@ export class ProductsService {
 
   async remove(slug: string, userId: string): Promise<void> {
     try {
-      const product = await this.products.findOneBy({ slug });
+      const product = await this.products.findOneBy({
+        slug,
+        ...moderationWhere('product'),
+      });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
 
       // Verify user owns the store
-      const store = await this.stores.findOneBy({ id: product.storeId });
+      const store = await this.stores.findOneBy({
+        id: product.storeId,
+        ...moderationWhere('store'),
+      });
       if (!store || store.ownerId !== userId) {
         throw new ForbiddenException('You do not own this product');
       }
@@ -298,7 +323,10 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto[]> {
     try {
-      const store = await this.stores.findOneBy({ id: storeId });
+      const store = await this.stores.findOneBy({
+        id: storeId,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -307,7 +335,7 @@ export class ProductsService {
       }
 
       const products = await this.products.find({
-        where: { storeId },
+        where: { storeId, ...moderationWhere('product') },
         order: { sortOrder: 'ASC', createdAt: 'DESC' },
       });
 

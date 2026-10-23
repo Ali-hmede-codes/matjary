@@ -48,9 +48,10 @@ export class SubscriptionPlansController {
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() dto: CreateSubscriptionPlanDto,
+    @Req() request: AuthenticatedRequest,
     @Query('includeInactive') includeInactive?: string,
   ): Promise<SubscriptionPlanResponseDto> {
-    return this.plans.create(dto);
+    return this.plans.create(dto, request.user.id);
   }
 
   @Get()
@@ -82,14 +83,18 @@ export class SubscriptionPlansController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateSubscriptionPlanDto,
+    @Req() request: AuthenticatedRequest,
   ): Promise<SubscriptionPlanResponseDto> {
-    return this.plans.update(id, dto);
+    return this.plans.update(id, dto, request.user.id);
   }
 
   @Delete(':id')
   @UseGuards(SessionGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param('id') id: string): Promise<void> {
-    return this.plans.delete(id);
+  async delete(
+    @Param('id') id: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
+    return this.plans.delete(id, request.user.id);
   }
 }

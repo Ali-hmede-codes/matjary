@@ -1,6 +1,7 @@
 import type { MysqlConnectionOptions } from 'typeorm/driver/mysql/MysqlConnectionOptions';
 import type { DatabaseEnvironment } from '../../config/src/environment';
 import { databaseEntities } from './entities';
+import { AdminOperations1793572800000 } from './migrations/1793572800000-AdminOperations';
 import { InitialSchema1792368000000 } from './migrations/1792368000000-InitialSchema';
 import { GoogleAuthentication1792454400000 } from './migrations/1792454400000-GoogleAuthentication';
 import { AddStoresAndSubscription1792540800000 } from './migrations/1792540800000-AddStoresAndSubscription';
@@ -54,6 +55,7 @@ export function createDatabaseOptions(
       AddVerificationBadge1792657536000,
       AddBoostSystem1793400000000,
       AddDurableProcessing1793486400000,
+      AdminOperations1793572800000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

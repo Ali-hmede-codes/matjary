@@ -5,10 +5,17 @@ import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
 import { AppModule } from './app.module';
 import { setupApp } from './setup-app';
+import {
+  SafeLogger,
+  errorTracker,
+  installFatalReporting,
+} from '@app/observability';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
+    logger: new SafeLogger('api'),
+    abortOnError: false,
   });
   const config = app.get(ConfigService<AppEnvironment, true>);
   setupApp(app, config.get('NODE_ENV', { infer: true }) === 'production');
@@ -31,7 +38,8 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-bootstrap().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
+installFatalReporting('api');
+bootstrap().catch(() => {
+  errorTracker.capture('api', 'application', 'STARTUP_FAILURE');
+  process.exit(1);
 });

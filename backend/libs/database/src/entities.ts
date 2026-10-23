@@ -12,6 +12,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { AdminAuditLog, SystemErrorRecord } from './admin.entities';
+
 import {
   StoreSeo,
   ProductSeo,
@@ -149,6 +151,17 @@ abstract class BaseEntity {
 @Index('uq_users_email', ['email'], { unique: true })
 @Index('uq_users_google_subject', ['googleSubject'], { unique: true })
 export class User extends BaseEntity {
+  @Column({
+    name: 'suspended_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  suspendedAt!: Date | null;
+
+  @Column({ name: 'session_version', type: 'int', unsigned: true, default: 0 })
+  sessionVersion!: number;
+
   @Column({ type: 'varchar', length: 254 })
   email!: string;
 
@@ -189,7 +202,18 @@ export class User extends BaseEntity {
 @Index('idx_showcases_store', ['storeId'])
 @Index('idx_showcases_owner_status_created', ['ownerId', 'status', 'createdAt'])
 @Index('idx_showcases_store_created', ['storeId', 'createdAt'])
+@Index('idx_showcases_admin_archive', ['adminArchivedAt'])
 export class Showcase extends BaseEntity {
+  // Ordinary and worker saves must never overwrite a concurrent moderation action.
+  @Column({
+    name: 'admin_archived_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    update: false,
+  })
+  adminArchivedAt!: Date | null;
+
   @Column({ name: 'owner_id', type: 'varchar', length: 36 })
   ownerId!: string;
 
@@ -247,7 +271,18 @@ export class Showcase extends BaseEntity {
 @Entity({ name: 'stores', engine: 'InnoDB' })
 @Index('uq_stores_slug', ['slug'], { unique: true })
 @Index('idx_stores_owner', ['ownerId'])
+@Index('idx_stores_admin_archive', ['adminArchivedAt'])
 export class Store extends BaseEntity {
+  // Ordinary and worker saves must never overwrite a concurrent moderation action.
+  @Column({
+    name: 'admin_archived_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    update: false,
+  })
+  adminArchivedAt!: Date | null;
+
   @Column({ type: 'varchar', length: 200 })
   name!: string;
 
@@ -570,7 +605,18 @@ export enum ProductCategory {
 @Index('idx_products_status', ['status'])
 @Index('idx_products_category', ['category'])
 @Index('idx_products_store_status_created', ['storeId', 'status', 'createdAt'])
+@Index('idx_products_admin_archive', ['adminArchivedAt'])
 export class Product extends BaseEntity {
+  // Ordinary and worker saves must never overwrite a concurrent moderation action.
+  @Column({
+    name: 'admin_archived_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    update: false,
+  })
+  adminArchivedAt!: Date | null;
+
   @Column({ name: 'store_id', type: 'varchar', length: 36 })
   storeId!: string;
 
@@ -739,7 +785,18 @@ export class CartItem extends BaseEntity {
 @Index('idx_media_assets_showcase_position', ['showcaseId', 'position'])
 @Index('idx_media_assets_status_created', ['status', 'createdAt'])
 @Index('uq_media_assets_original_key', ['originalKey'], { unique: true })
+@Index('idx_media_assets_admin_archive', ['adminArchivedAt'])
 export class MediaAsset extends BaseEntity {
+  // Ordinary and worker saves must never overwrite a concurrent moderation action.
+  @Column({
+    name: 'admin_archived_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    update: false,
+  })
+  adminArchivedAt!: Date | null;
+
   @Column({ name: 'processing_limits', type: 'json', nullable: true })
   processingLimits!: ProcessingLimits | null;
 
@@ -1264,7 +1321,7 @@ export class BoostSetting {
   key!: string;
 
   @Column({ name: 'value', type: 'json' })
-  value!: Record<string, unknown>;
+  value!: number | boolean;
 
   @Column({ name: 'description', type: 'varchar', length: 500, nullable: true })
   description!: string | null;
@@ -1277,6 +1334,8 @@ export class BoostSetting {
 }
 
 export const databaseEntities = [
+  AdminAuditLog,
+  SystemErrorRecord,
   User,
   Showcase,
   Store,

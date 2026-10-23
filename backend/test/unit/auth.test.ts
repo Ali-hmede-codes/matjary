@@ -87,7 +87,9 @@ class MemoryRedis {
 function fixture() {
   const redis = new MemoryRedis();
   let deleted = false;
+  let version = 0;
   const users = {
+    findSessionAccount: async () => (deleted ? null : { user, version }),
     findById: async () => (deleted ? null : user),
     findOrCreateGoogleUser: async () => user,
   } as unknown as UsersService;
@@ -108,6 +110,9 @@ function fixture() {
   return {
     auth,
     redis,
+    revokeSessions: () => {
+      version++;
+    },
     deleteUser: () => {
       deleted = true;
     },
@@ -267,6 +272,36 @@ test('sessions expire and deleted accounts lose access', async () => {
   assert.equal(
     await f.redis.get(`matjary:auth:session:${hashToken(session.token)}`),
     null,
+  );
+});
+
+test('revoked session versions and legacy sessions require fresh Google login', async () => {
+  const f = fixture();
+  const challenge = await f.auth.begin();
+  const session = await f.auth.signIn('valid.token.signature', challenge.token);
+  f.revokeSessions();
+  await assert.rejects(
+    f.auth.currentUser(session.token),
+    UnauthorizedException,
+  );
+  const legacy = 'z'.repeat(43);
+  await f.redis.setWithTtl(
+    `matjary:auth:session:${hashToken(legacy)}`,
+    user.id,
+    600,
+  );
+  await assert.rejects(f.auth.currentUser(legacy), UnauthorizedException);
+});
+
+test('suspended Google identities cannot sign in or restore sessions', async () => {
+  const account = { ...user, suspendedAt: new Date(), sessionVersion: 1 };
+  const service = new UsersService({
+    findOneBy: async () => account,
+  } as unknown as Repository<User>);
+  assert.equal(await service.findSessionAccount(user.id), null);
+  await assert.rejects(
+    service.findOrCreateGoogleUser(profile),
+    UnauthorizedException,
   );
 });
 
@@ -525,6 +560,7 @@ test('HTTP auth flow enforces CSRF, validates input, restores sessions and revok
     assert.equal(login.status, 200);
     assert.deepEqual(await login.json(), {
       user: { ...user, createdAt: user.createdAt.toISOString() },
+      isAdmin: false,
     });
     const sessionHeader = login.headers
       .getSetCookie()

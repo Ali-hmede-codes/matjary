@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, type EntityManager } from 'typeorm';
 import { plainToInstance, ClassConstructor } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminGuard } from '../auth/guards/auth.guards';
@@ -24,7 +24,7 @@ import {
 
 type SeoKind = 'store' | 'product' | 'showcase';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import {
   StoreSeo,
   ProductSeo,
@@ -44,6 +44,11 @@ import {
   MediaStatus,
   ProductStatus,
   User,
+  moderationWhere,
+  visibilitySql,
+  appendAdminAudit,
+  adminContext,
+  type AdminActor,
 } from '@app/database';
 
 export interface MetaTags {
@@ -164,31 +169,192 @@ export class SeoService {
     return dto;
   }
 
-  private async requireAdmin(actorId: string): Promise<void> {
-    const actor = await this.dataSource.manager.findOneBy(User, {
+  private async requireAdmin(
+    actorId: string,
+    manager = this.dataSource.manager,
+  ): Promise<void> {
+    const actor = await manager.findOneBy(User, {
       id: actorId,
     });
-    if (!actor || !this.admin.isAdmin(actor))
+    if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
       throw new ForbiddenException('Admin access required');
+  }
+
+  private async adminWrite<T>(
+    actorId: string,
+    action: string,
+    resourceId: string,
+    changed: string[],
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return this.dataSource.transaction(async (manager) => {
+      await this.requireAdmin(actorId, manager);
+      const context = adminContext.getStore();
+      const actor =
+        context?.id === actorId
+          ? context
+          : { id: actorId, requestId: randomUUID() };
+      const result = await work(manager);
+      await appendAdminAudit(
+        manager,
+        actor,
+        'seo',
+        resourceId,
+        action,
+        changed,
+      );
+      return result;
+    });
+  }
+
+  private scoped(manager: EntityManager): SeoService {
+    return new SeoService(
+      manager.getRepository(StoreSeo),
+      manager.getRepository(ProductSeo),
+      manager.getRepository(ShowcaseSeo),
+      manager.getRepository(SeoRedirect),
+      manager.getRepository(SeoSettings),
+      this.configService,
+      this.dataSource,
+      this.admin,
+      this.storage,
+    );
+  }
+
+  async autoGenerateAdminSeo(kind: SeoKind, id: string, actor: AdminActor) {
+    try {
+      return await adminContext.run(actor, () =>
+        this.adminWrite(
+          actor.id,
+          'metadata.generate',
+          id,
+          [],
+          async (manager) => {
+            const scoped = this.scoped(manager);
+            if (kind === 'store') {
+              const store = await manager.findOneBy(Store, { id });
+              if (!store) throw new NotFoundException('Store not found');
+              return scoped.autoGenerateStoreSeo(store);
+            }
+            if (kind === 'product') {
+              const product = await manager.findOne(Product, {
+                where: { id },
+                relations: ['store'],
+              });
+              if (!product) throw new NotFoundException('Product not found');
+              return scoped.autoGenerateProductSeo(product, product.store);
+            }
+            const post = await manager.findOne(Showcase, {
+              where: { id },
+              relations: ['store'],
+            });
+            if (!post) throw new NotFoundException('Post not found');
+            return scoped.autoGenerateShowcaseSeo(post, post.store ?? null);
+          },
+        ),
+      );
+    } catch (error) {
+      this.logger.warn('Admin SEO generation failed');
+      throw error;
+    }
+  }
+
+  async getAdminEntitySeo(kind: SeoKind, id: string, actorId: string) {
+    await this.requireAdmin(actorId);
+    if (kind === 'store') return this.getStoreSeo(id);
+    if (kind === 'product') return this.getProductSeo(id);
+    return this.getShowcaseSeo(id);
+  }
+
+  async upsertAdminSeo(
+    kind: SeoKind,
+    id: string,
+    input: StoreSeoDto | ProductSeoDto | ShowcaseSeoDto,
+    actor: AdminActor,
+  ) {
+    await this.requireAdmin(actor.id);
+    const data = await this.validated(
+      kind === 'store'
+        ? StoreSeoDto
+        : kind === 'product'
+          ? ProductSeoDto
+          : ShowcaseSeoDto,
+      input,
+    );
+    return adminContext.run(actor, () =>
+      this.adminWrite(
+        actor.id,
+        'metadata.update',
+        id,
+        Object.keys(data),
+        async (manager) => {
+          if (kind === 'store') {
+            const store = await manager.findOneBy(Store, { id });
+            if (!store) throw new NotFoundException('Store not found');
+            await this.checkMetadata(data, store.ownerId);
+            const seo =
+              (await manager.findOneBy(StoreSeo, { storeId: id })) ??
+              manager.create(StoreSeo, { storeId: id });
+            Object.assign(seo, data);
+            return manager.save(seo);
+          }
+          if (kind === 'product') {
+            const product = await manager.findOne(Product, {
+              where: { id },
+              relations: ['store'],
+            });
+            if (!product) throw new NotFoundException('Product not found');
+            await this.checkMetadata(data, product.store.ownerId);
+            const seo =
+              (await manager.findOneBy(ProductSeo, { productId: id })) ??
+              manager.create(ProductSeo, {
+                productId: id,
+                storeId: product.storeId,
+              });
+            Object.assign(seo, data);
+            return manager.save(seo);
+          }
+          const post = await manager.findOneBy(Showcase, { id });
+          if (!post) throw new NotFoundException('Post not found');
+          await this.checkMetadata(data, post.ownerId);
+          const seo =
+            (await manager.findOneBy(ShowcaseSeo, { showcaseId: id })) ??
+            manager.create(ShowcaseSeo, {
+              showcaseId: id,
+              storeId: post.storeId,
+            });
+          Object.assign(seo, data);
+          return manager.save(seo);
+        },
+      ),
+    );
   }
 
   private async ownedEntity(kind: SeoKind, id: string, actorId: string) {
     const manager = this.dataSource.manager;
     if (kind === 'store') {
-      const store = await manager.findOneBy(Store, { id, ownerId: actorId });
+      const store = await manager.findOneBy(Store, {
+        id,
+        ownerId: actorId,
+        ...moderationWhere('store'),
+      });
       if (!store) throw new NotFoundException('Store not found');
       return { store, product: null, showcase: null };
     }
     if (kind === 'product') {
       const product = await manager.findOne(Product, {
-        where: { id, store: { ownerId: actorId } },
+        where: {
+          id,
+          store: { ownerId: actorId },
+          ...moderationWhere('product'),
+        },
         relations: ['store'],
       });
       if (!product) throw new NotFoundException('Product not found');
       return { store: product.store, product, showcase: null };
     }
     const showcase = await manager.findOne(Showcase, {
-      where: { id, ownerId: actorId },
+      where: { id, ownerId: actorId, ...moderationWhere('post') },
       relations: ['store'],
     });
     if (!showcase) throw new NotFoundException('Post not found');
@@ -220,7 +386,10 @@ export class SeoService {
   ): Promise<MetaTags> {
     const manager = this.dataSource.manager;
     if (kind === 'store') {
-      const store = await manager.findOneBy(Store, { slug });
+      const store = await manager.findOneBy(Store, {
+        slug,
+        ...moderationWhere('store'),
+      });
       if (!store) throw new NotFoundException('Store not found');
       return this.generateStoreMetaTags(store);
     }
@@ -229,6 +398,7 @@ export class SeoService {
       const products = await manager.find(Product, {
         where: {
           slug,
+          ...moderationWhere('product'),
           status: ProductStatus.ACTIVE,
           ...(storeSlug ? { store: { slug: storeSlug } } : {}),
         },
@@ -241,7 +411,11 @@ export class SeoService {
       return this.generateProductMetaTags(products[0]!, products[0]!.store);
     }
     const showcase = await manager.findOne(Showcase, {
-      where: { slug, status: ShowcaseStatus.PUBLISHED },
+      where: {
+        slug,
+        status: ShowcaseStatus.PUBLISHED,
+        ...moderationWhere('post'),
+      },
       relations: ['store'],
     });
     if (!showcase) throw new NotFoundException('Post not found');
@@ -272,7 +446,11 @@ export class SeoService {
       const variant = await this.dataSource.manager.findOne(MediaVariant, {
         where: {
           storageKey: data.ogImageKey,
-          asset: { showcase: { ownerId: actorId }, status: MediaStatus.READY },
+          asset: {
+            showcase: { ownerId: actorId },
+            status: MediaStatus.READY,
+            ...moderationWhere('media'),
+          },
         },
       });
       if (!variant)
@@ -284,7 +462,7 @@ export class SeoService {
 
   async getAdminSettings(actorId: string): Promise<SeoSettings> {
     await this.requireAdmin(actorId);
-    return this.getSettings();
+    return { ...(await this.getSettings()), indexNowKey: null };
   }
 
   private async getSettings(): Promise<SeoSettings> {
@@ -310,9 +488,22 @@ export class SeoService {
       if (key && !(await this.buildImageUrl(key)))
         throw new BadRequestException('Image must be a public ready variant');
     }
-    const settings = await this.getSettings();
-    Object.assign(settings, data);
-    return this.settingsRepo.save(settings);
+    return this.adminWrite(
+      actorId,
+      'settings.update',
+      'global',
+      Object.keys(data),
+      async (manager) => {
+        const [settings] = await manager.find(SeoSettings, {
+          take: 1,
+          order: { createdAt: 'ASC' },
+        });
+        if (!settings)
+          throw new ServiceUnavailableException('SEO settings are unavailable');
+        Object.assign(settings, data);
+        return { ...(await manager.save(settings)), indexNowKey: null };
+      },
+    );
   }
 
   // ============================================
@@ -444,8 +635,15 @@ export class SeoService {
     if (existing) {
       throw new BadRequestException('Redirect for this path already exists');
     }
-    const redirect = this.redirectRepo.create(data);
-    return this.redirectRepo.save(redirect);
+    const id = randomUUID();
+    return this.adminWrite(
+      actorId,
+      'redirect.create',
+      id,
+      Object.keys(data),
+      async (manager) =>
+        manager.save(manager.create(SeoRedirect, { ...data, id })),
+    );
   }
 
   async updateRedirect(
@@ -459,17 +657,26 @@ export class SeoService {
       this.assertSiteUrl(new URL(data.fromPath, this.baseUrl).href);
     if (data.toPath)
       this.assertSiteUrl(new URL(data.toPath, this.baseUrl).href);
-    const redirect = await this.redirectRepo.findOneBy({ id });
-    if (!redirect) {
-      throw new NotFoundException('Redirect not found');
-    }
-    Object.assign(redirect, data);
-    return this.redirectRepo.save(redirect);
+    return this.adminWrite(
+      actorId,
+      'redirect.update',
+      id,
+      Object.keys(data),
+      async (manager) => {
+        const redirect = await manager.findOne(SeoRedirect, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!redirect) throw new NotFoundException('Redirect not found');
+        Object.assign(redirect, data);
+        return manager.save(redirect);
+      },
+    );
   }
 
   async deleteRedirect(id: string, actorId: string): Promise<void> {
     await this.requireAdmin(actorId);
-    await this.redirectRepo.delete(id);
+    await this.updateRedirect(id, { isActive: false }, actorId);
   }
 
   // ============================================
@@ -1320,6 +1527,7 @@ export class SeoService {
     const stores = await this.storeSeoRepo
       .createQueryBuilder('ss')
       .leftJoinAndSelect('ss.store', 'store')
+      .andWhere(visibilitySql('store', 'store'))
       .getMany();
 
     for (const seo of stores) {
@@ -1356,7 +1564,11 @@ export class SeoService {
       )
         continue;
       const product = await this.dataSource.manager.findOne(Product, {
-        where: { id: seo.productId, status: ProductStatus.ACTIVE },
+        where: {
+          id: seo.productId,
+          status: ProductStatus.ACTIVE,
+          ...moderationWhere('product'),
+        },
         relations: ['store'],
       });
       if (product) {
@@ -1382,6 +1594,7 @@ export class SeoService {
         .select(['s.id', 's.slug', 's.title', 's.description', 's.status'])
         .where('s.id = :id', { id: seo.showcaseId })
         .andWhere('s.status = :status', { status: ShowcaseStatus.PUBLISHED })
+        .andWhere(visibilitySql('post', 's'))
         .getRawOne();
       if (showcase) {
         entries.push({
@@ -1492,7 +1705,23 @@ export class SeoService {
   async submitAdminIndexNow(data: IndexNowDto, actorId: string) {
     await this.requireAdmin(actorId);
     data = await this.validated(IndexNowDto, data);
-    return this.submitToIndexNow(data.urls);
+    const operationId = randomUUID();
+    await this.adminWrite(
+      actorId,
+      'indexnow.started',
+      operationId,
+      [],
+      async () => undefined,
+    );
+    const result = await this.submitToIndexNow(data.urls);
+    await this.adminWrite(
+      actorId,
+      result.success ? 'indexnow.completed' : 'indexnow.failed',
+      operationId,
+      [],
+      async () => undefined,
+    );
+    return result;
   }
 
   private async submitToIndexNow(
@@ -1609,7 +1838,9 @@ export class SeoService {
         priority: 1,
       });
     if (!kind || kind === 'store') {
-      for (const store of await manager.find(Store)) {
+      for (const store of await manager.find(Store, {
+        where: moderationWhere('store'),
+      })) {
         const seo = await this.getStoreSeo(store.id);
         if (!indexable(seo)) continue;
         urls.push({
@@ -1622,7 +1853,7 @@ export class SeoService {
     }
     if (!kind || kind === 'product') {
       for (const product of await manager.find(Product, {
-        where: { status: ProductStatus.ACTIVE },
+        where: { status: ProductStatus.ACTIVE, ...moderationWhere('product') },
         relations: ['store'],
       })) {
         const seo = await this.getProductSeo(product.id);
@@ -1645,7 +1876,7 @@ export class SeoService {
     }
     if (!kind || kind === 'showcase') {
       for (const showcase of await manager.find(Showcase, {
-        where: { status: ShowcaseStatus.PUBLISHED },
+        where: { status: ShowcaseStatus.PUBLISHED, ...moderationWhere('post') },
       })) {
         const seo = await this.getShowcaseSeo(showcase.id);
         if (!indexable(seo)) continue;
@@ -1803,6 +2034,7 @@ export class SeoService {
       where: {
         storageKey: key,
         asset: {
+          ...moderationWhere('media'),
           status: MediaStatus.READY,
           showcase: { status: ShowcaseStatus.PUBLISHED },
         },

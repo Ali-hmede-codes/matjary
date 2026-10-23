@@ -8,6 +8,7 @@ coverage/
 *.tsbuildinfo
 # Worker scratch space only; permanent media belongs in object storage.
 .tmp/
+.monitoring/
 # Never commit database dumps or backup archives.
 *.sql
 *.sql.gz

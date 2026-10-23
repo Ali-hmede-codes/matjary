@@ -27,6 +27,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
 import { pipeline } from 'node:stream/promises';
+import { randomUUID } from 'node:crypto';
+import { isAdminEmail, type AdminActor } from '@app/database';
 import {
   BinaryOriginGuard,
   OptionalSessionGuard,
@@ -67,6 +69,26 @@ export class MediaController {
     private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
 
+  private administrator(
+    request: Request & { user?: { id: string; email?: string } },
+  ): AdminActor | undefined {
+    if (
+      !request.user ||
+      !isAdminEmail(
+        request.user.email,
+        this.config.get('ADMIN_EMAILS', { infer: true }),
+      )
+    )
+      return undefined;
+    return {
+      id: request.user.id,
+      requestId:
+        typeof request.res?.locals.requestId === 'string'
+          ? request.res.locals.requestId
+          : randomUUID(),
+    };
+  }
+
   @Post('posts/:slug/media/presigned-url')
   @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
   async presignedUrl(
@@ -95,13 +117,19 @@ export class MediaController {
     @Req() request: Request & { user?: { id: string } },
     @Res() response: Response,
   ): Promise<void> {
-    const access = await this.media.authorizeDownload(key, request.user?.id);
+    const access = await this.media.authorizeDownload(
+      key,
+      request.user?.id,
+      this.administrator(request),
+    );
     const { size } = await this.storage.statObject(key);
     const header = request.headers.range;
     const range = header ? parseMediaRange(header, size) : undefined;
     response.setHeader(
       'Cache-Control',
-      access.public ? 'public, max-age=60' : 'private, no-store',
+      access.public
+        ? 'public, max-age=0, must-revalidate'
+        : 'private, no-store',
     );
     response.setHeader('Vary', 'Cookie');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -139,7 +167,12 @@ export class MediaController {
     @Param('key') key: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<{ key: string }> {
-    const asset = await this.media.authorizeUpload(key, request.user.id);
+    const administrator = this.administrator(request);
+    const asset = await this.media.authorizeUpload(
+      key,
+      request.user.id,
+      administrator,
+    );
     const size = Number(asset.sizeBytes);
     if (
       request.headers['content-encoding'] ||
@@ -160,10 +193,22 @@ export class MediaController {
     );
     timer.unref();
     try {
+      if (administrator)
+        await this.media.recordAdminUpload(
+          asset.id,
+          administrator,
+          'upload.bytes.started',
+        );
       await this.storage.putStream(key, request, asset.mimeType, size, {
         exclusive: true,
         signal: abort.signal,
       });
+      if (administrator)
+        await this.media.recordAdminUpload(
+          asset.id,
+          administrator,
+          'upload.bytes.completed',
+        );
       return { key };
     } catch (error) {
       if (abort.signal.aborted)

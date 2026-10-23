@@ -15,6 +15,7 @@ import { MediaProcessor } from './jobs/media.process';
 import { MediaRecovery } from './jobs/media.recovery';
 import { EngagementFlusher } from './jobs/engagement.flush';
 import { WorkerHeartbeat } from './worker-heartbeat';
+import { ObservabilityModule } from '@app/observability';
 
 // Queue consumers belong in jobs/; encoding must stay outside the API process.
 // StorageModule (StorageService), QueueModule (QueueService), and the TypeORM
@@ -25,6 +26,7 @@ import { WorkerHeartbeat } from './worker-heartbeat';
   imports: [
     ConfigurationModule,
     DatabaseModule,
+    ObservabilityModule.forWorker(),
     RedisModule,
     QueueModule,
     StorageModule,

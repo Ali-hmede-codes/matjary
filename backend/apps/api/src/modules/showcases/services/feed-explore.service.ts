@@ -17,6 +17,9 @@ import {
   Product,
   ProductStatus,
   PostEngagement,
+  MediaVariant,
+  moderationWhere,
+  visibilitySql,
 } from '@app/database';
 import {
   PostEngagementService,
@@ -152,7 +155,7 @@ export class FeedExploreService {
     try {
       // Get stores the user owns (their own posts)
       const userStores = await this.stores.find({
-        where: { ownerId: userId },
+        where: { ownerId: userId, ...moderationWhere('store') },
         select: ['id'],
       });
       const userStoreIds = userStores.map((s) => s.id);
@@ -172,7 +175,8 @@ export class FeedExploreService {
         .where('showcase.status = :status', {
           status: ShowcaseStatus.PUBLISHED,
         })
-        .andWhere('showcase.publishedAt IS NOT NULL');
+        .andWhere('showcase.publishedAt IS NOT NULL')
+        .andWhere(visibilitySql('post', 'showcase'));
 
       if (relevantStoreIds.length > 0) {
         query = query.andWhere('showcase.storeId IN (:...storeIds)', {
@@ -327,6 +331,7 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.publishedAt IS NOT NULL')
       .andWhere('showcase.storeId IS NOT NULL');
 
@@ -363,6 +368,7 @@ export class FeedExploreService {
       query = query
         .innerJoin('store.products', 'product')
         .andWhere('product.category = :category', { category })
+        .andWhere(visibilitySql('product', 'product'))
         .andWhere('product.status = :productStatus', {
           productStatus: ProductStatus.ACTIVE,
         });
@@ -414,6 +420,7 @@ export class FeedExploreService {
       .innerJoin('showcases', 'showcase', 'showcase.id = engagement.postId')
       .innerJoin('stores', 'store', 'store.id = showcase.storeId')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.publishedAt >= :since', { since })
       .andWhere('showcase.storeId IS NOT NULL')
       .orderBy('(engagement.likesCount + engagement.viewsCount * 0.1)', 'DESC')
@@ -429,6 +436,10 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.id IN (:...postIds)', { postIds })
+      .andWhere(visibilitySql('post', 'showcase'))
+      .andWhere('showcase.status = :visibleStatus', {
+        visibleStatus: ShowcaseStatus.PUBLISHED,
+      })
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer?.voterId);
@@ -452,6 +463,7 @@ export class FeedExploreService {
       .innerJoin('showcases', 'showcase', 'showcase.id = engagement.postId')
       .innerJoin('stores', 'store', 'store.id = showcase.storeId')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.storeId IS NOT NULL')
       .orderBy('engagement.likesCount', 'DESC')
       .addOrderBy('engagement.viewsCount', 'DESC')
@@ -467,6 +479,10 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.id IN (:...postIds)', { postIds })
+      .andWhere(visibilitySql('post', 'showcase'))
+      .andWhere('showcase.status = :visibleStatus', {
+        visibleStatus: ShowcaseStatus.PUBLISHED,
+      })
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer?.voterId);
@@ -490,6 +506,7 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.publishedAt IS NOT NULL')
       .andWhere('showcase.storeId IS NOT NULL');
 
@@ -519,6 +536,7 @@ export class FeedExploreService {
       query = query
         .innerJoin('store.products', 'product')
         .andWhere('product.category = :category', { category })
+        .andWhere(visibilitySql('product', 'product'))
         .andWhere('product.status = :productStatus', {
           productStatus: ProductStatus.ACTIVE,
         });
@@ -559,6 +577,7 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.publishedAt IS NOT NULL')
       .andWhere('store.latitude IS NOT NULL')
       .andWhere('store.longitude IS NOT NULL')
@@ -764,6 +783,7 @@ export class FeedExploreService {
       where: {
         showcaseId: In(showcaseIds),
         status: MediaStatus.READY,
+        ...moderationWhere('media'),
       },
       order: { position: 'ASC' },
     });
@@ -775,7 +795,12 @@ export class FeedExploreService {
 
     // Fetch stores
     const stores =
-      storeIds.length > 0 ? await this.stores.findBy({ id: In(storeIds) }) : [];
+      storeIds.length > 0
+        ? await this.stores.findBy({
+            id: In(storeIds),
+            ...moderationWhere('store'),
+          })
+        : [];
     const storeMap = new Map(stores.map((s) => [s.id, s]));
 
     // Group media by showcase
@@ -862,16 +887,14 @@ export class FeedExploreService {
     for (const asset of assets) {
       // Get variants for this asset using the repository - use getRawMany for proper typing
       const variants = await this.mediaAssets.manager
-        .getRepository(MediaAsset)
+        .getRepository(MediaVariant)
         .createQueryBuilder('variant')
         .where('variant.assetId = :assetId', { assetId: asset.id })
-        .select([
-          'variant.label',
-          'variant.storageKey',
-          'variant.mimeType',
-          'variant.width',
-          'variant.height',
-        ])
+        .select('variant.label', 'label')
+        .addSelect('variant.storageKey', 'storageKey')
+        .addSelect('variant.mimeType', 'mimeType')
+        .addSelect('variant.width', 'width')
+        .addSelect('variant.height', 'height')
         .getRawMany<{
           label: string;
           storageKey: string;
@@ -965,7 +988,7 @@ export class FeedExploreService {
       return url;
     } catch {
       // Fallback for local storage
-      return `/api/v1/posts/uploads/${storageKey}`;
+      return `/api/v1/uploads/${encodeURIComponent(storageKey)}`;
     }
   }
 
@@ -1018,6 +1041,8 @@ export class FeedExploreService {
       .createQueryBuilder('product')
       .innerJoin('showcases', 'showcase', 'showcase.storeId = product.storeId')
       .where('product.status = :status', { status: ProductStatus.ACTIVE })
+      .andWhere(visibilitySql('product', 'product'))
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.status = :showcaseStatus', {
         showcaseStatus: ShowcaseStatus.PUBLISHED,
       })
@@ -1058,6 +1083,7 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoin('stores', 'store', 'store.id = showcase.storeId')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('store.city IS NOT NULL')
       .andWhere('store.country IS NOT NULL');
 
@@ -1100,7 +1126,7 @@ export class FeedExploreService {
 
     // Find store by slug
     const store = await this.stores.findOne({
-      where: { slug: storeSlug },
+      where: { slug: storeSlug, ...moderationWhere('store') },
       select: ['id'],
     });
 
@@ -1119,6 +1145,7 @@ export class FeedExploreService {
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(visibilitySql('post', 'showcase'))
       .andWhere('showcase.publishedAt IS NOT NULL')
       .andWhere('showcase.storeId = :storeId', { storeId: store.id })
       .orderBy('showcase.publishedAt', 'DESC')

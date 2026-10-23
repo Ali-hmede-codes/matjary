@@ -19,6 +19,7 @@ import {
   PostLike,
   Showcase,
   ShowcaseStatus,
+  moderationWhere,
 } from '@app/database';
 import {
   hydrateEngagement,
@@ -157,7 +158,10 @@ export class PostEngagementService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async ensurePost(postId: string): Promise<void> {
-    const post = await this.showcases.findOneBy({ id: postId });
+    const post = await this.showcases.findOneBy({
+      id: postId,
+      ...moderationWhere('post'),
+    });
     if (!post || post.status !== ShowcaseStatus.PUBLISHED) {
       throw new NotFoundException('Post not found');
     }

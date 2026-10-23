@@ -3,7 +3,7 @@
 > Goal: a showcase platform with many visitors, lots of photos and videos, small storage use, good quality, modern formats. Hosting: Contabo.
 
 ## Current architecture and scope
-1. **Application:** NestJS 11/Node.js 22.12+, MySQL 8.4 and Redis/BullMQ. The frontend is not included.
+1. **Application:** NestJS 11/Node.js 22.12+, MySQL 8.4 and Redis/BullMQ. The backend serves its administrator dashboard; a separate customer frontend is not included.
 2. **Media storage and delivery:** local disk is the selected mode now, including deployment. API and worker share a persistent volume at `/var/lib/matjary/media`; no S3 account or credentials are required. The API streams authorized bytes, so disk and network capacity are shared with the application.
 3. **Processing:** a separate non-root worker runs Sharp and FFmpeg. CPU/memory limits reduce interference but do not guarantee API latency under overload.
 
@@ -36,7 +36,7 @@ A nominal 1 Gbit/s port is at most 125 MB/s before protocol overhead and content
 2. Completion checks actual stored size and transactionally creates a unique outbox record. Worker dispatch/reconciliation retries missing jobs with deterministic IDs.
 3. Worker validates signatures, decoded dimensions and pixel count; auto-orients and strips EXIF/GPS. AVIF50/WebP75/JPEG80 variants target widths 480/1080/1600 without upscaling. Persist actual output dimensions/bytes.
 4. Commit READY variants before removing the original; storage deletion failures remain retryable. Expired/failed uploads are cleaned after the default 24-hour retention, excluding active processing.
-5. Public downloads serve only READY variants on published posts. Owners alone can access originals/drafts (`private, no-store`). Trusted MIME types, `nosniff`, short public caching and single-byte-range video downloads are enforced. Do not bypass these checks with an unguarded static directory.
+5. Public downloads serve only READY variants on published, unmoderated posts with active owners/parents. Owner access remains restricted to unmoderated content; allowlisted administrators can privately preview registered bytes. Private responses use `private, no-store`; public bytes require revalidation (`max-age=0, must-revalidate`) so moderation is checked on subsequent requests. Trusted MIME types, `nosniff`, and single-byte ranges are enforced. Do not bypass these checks with an unguarded static directory.
 
 ```ts
 import sharp from 'sharp';
@@ -88,6 +88,30 @@ Measure the sum of all nine image variants (three widths × three formats), MP4/
 - Redis runs AOF with `appendfsync everysec` and `noeviction`. Engagement batches never expire and durable MySQL receipts prevent replay double-counting, but complete Redis loss can lose unflushed events; everysec can lose recent writes on a crash. Monitor persistence health and account for that recovery point.
 - Alert on API readiness, worker stale heartbeat, queue lag/retries/failed assets/outbox age, cleanup backlog, MySQL errors/connections, Redis memory/AOF errors, CPU, RAM, disk/inodes, transfer and backup freshness. Heartbeat is a dependency/consumer liveness signal, not proof every job succeeds.
 - Operational prerequisites remain: host hardening/firewall/SSH keys/security updates, TLS certificates, trusted proxy verification, private off-server backups, restore rehearsal, monitoring installation, disk/network capacity tests and production load approval. Unit/build success alone does not satisfy these gates.
+
+## Administrator dashboard and real Google setup
+- Dashboard: `/api/v1/admin`; sign-in: `/api/v1/auth/login`. Dashboard assets and APIs require a current administrator session. Accounts are created by their first real Google login, not by administrator-generated identities.
+- In Google Auth Platform, create/select a project, complete branding and audience configuration, and create a **Web application** OAuth client. Add the exact application origin to **Authorized JavaScript origins**: `http://localhost:3000` locally and the real HTTPS origin in production. Add your Google account as a test user if required by the audience configuration. This popup ID-credential flow does not need a client secret or a redirect URI.
+- Set these values in the private application environment, then restart the API. Never put passwords, session cookies, or Google ID credentials in configuration or source control:
+  ```env
+  APP_ORIGIN=http://localhost:3000
+  GOOGLE_CLIENT_ID=<public-web-client-id>.apps.googleusercontent.com
+  ADMIN_EMAILS=<your-google-account-email>
+  ```
+- Sign in personally with that account. Admin rights are derived from the server allowlist; the dashboard cannot change the allowlist or Google identity/email. Existing users not on the list retain ordinary account access. Versioned sessions deliberately require a fresh login once after this migration. Suspending/restoring a user or revoking sessions invalidates their old sessions.
+- Administrator Delete is reversible archive/suspension. Archive flags preserve publication and processing state, suppress descendants, and cannot be cleared by owner or worker saves. Audit/financial history is immutable through the API. Archived bytes still count toward quotas. Failed media can be retried only while a valid original is retained and no active processing exists.
+
+## Private Linux monitoring setup (operator action)
+- The dashboard shows API/worker process measurements separately from real host readings. Linux host charts require the opt-in `infra/compose.monitoring.yaml` overlay. Windows without that collector displays unavailable VPS readings, never invented zero usage.
+- Choose an existing **private Docker bridge gateway IPv4** on the Linux VPS, such as its actual `docker0` address, and set `MONITORING_HOST_ADDRESS`. Do not assume the example `172.17.0.1` matches your host. The validation script rejects missing addresses, public/non-Docker interfaces, and Windows.
+- From `backend/` on the authorized Linux host, run `npm run monitoring:init` as UID 1000 or root after setting the bridge address. It creates `.monitoring/metrics-token` exclusively, without printing it. Protect and preserve the file; set `METRICS_TOKEN_HOST_FILE` to its absolute path in the private Compose environment. Do not commit or display the token. Rotation requires a new private file and coordinated API/Prometheus restart.
+- Combine `infra/compose.yaml`, `infra/compose.production.yaml`, and `infra/compose.monitoring.yaml` with `--profile app` and the existing private deployment environment. Run `npm run monitoring:validate` for a secret-free structural check using synthetic values; validate the private operator configuration with `docker compose ... config --quiet` before any separately authorized deployment. Never print expanded Compose configuration containing credentials. The overlay sets the API's internal `PROMETHEUS_URL` and `METRICS_TOKEN_FILE`; the browser never receives the scrape token.
+- node_exporter uses the host PID/network namespaces and read-only root mount, binding only the validated private bridge address. Prometheus has **no published port**, uses a private bridge network with routing to that host address, and retains 7 days / 2 GB at 15-second collection. API/worker receive no host mounts, Docker socket, privileged mode, shell, or reboot control. Keep host firewall rules blocking external access to exporter ports.
+- Include `infra/nginx/monitoring-private.conf` in the public TLS server (or equivalent Caddy deny rules). It returns 404 for `/api/v1/internal/metrics`; the underlying endpoint also requires the private bearer token. Do not add public Prometheus or exporter proxy routes.
+- Validate configuration on Linux with `promtool check config` and `promtool check rules` from the pinned Prometheus image, using the same read-only config/secret mounts. After installation, compare CPU, RAM, root disk/inodes, network rates, load, and uptime against actual host tools before describing the charts as live VPS monitoring.
+- MySQL stores sanitized, fingerprinted error groups: default `ERROR_RETENTION_DAYS=30`, at most 10,000 groups, bounded queues/batches, worker-side pruning. Error-storage outages use sanitized stderr and dropped counters without blocking requests. Administrative audit writes are mandatory and transactional. No raw request bodies, cookies, SQL arguments, or exception messages are captured.
+- Built-in alert rules cover missing host/API/worker data, high CPU/RAM, disk/inodes, dependencies, elevated 5xx and processing/cleanup backlog. Email/Telegram notifications and backup-freshness checks require a separately configured provider/signal. The dashboard cannot remain reachable during an API outage; Prometheus continues independently, but off-site outage notification is not supplied.
+- Verification from `backend/`: `npm run typecheck`, `npm run format:check`, `npm test`, and `npm run build`. `npm run test:admin:browser` starts a **test-only loopback fixture on port 3105**, using in-memory providers and no real authentication/data connections. Its `/api/v1/fixture/admin`, `/owner`, `/expire`, `/up`, and `/unavailable` controls are compiled only as test code, never registered in the production application. It auto-stops after 30 minutes. This fixture does not verify real Google sign-in or live host measurements.
 
 ## 📚 References
 - [Contabo Object Storage guide (Owncast)](https://owncast.online/docs/storage/contabo/)

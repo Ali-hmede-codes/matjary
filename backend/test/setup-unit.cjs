@@ -2,7 +2,7 @@
 // or inherit connection targets. Integration tests intentionally do not use this.
 for (const key of Object.keys(process.env)) {
   if (
-    /^(MYSQL_|REDIS_|S3_|STORAGE_|MEDIA_|AUTH_|ENGAGEMENT_|API_|APP_|GOOGLE_|ADMIN_|TRUST_|WORKER_|FFMPEG_|FFPROBE_)/.test(
+    /^(MYSQL_|REDIS_|S3_|STORAGE_|MEDIA_|AUTH_|ENGAGEMENT_|API_|APP_|GOOGLE_|ADMIN_|TRUST_|WORKER_|FFMPEG_|FFPROBE_|PROMETHEUS_|METRICS_|MONITORING_|ERROR_RETENTION_)/.test(
       key,
     )
   ) {

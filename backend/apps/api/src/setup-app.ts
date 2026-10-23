@@ -2,6 +2,9 @@ import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
+import { randomUUID } from 'node:crypto';
+import { httpMetrics } from '@app/observability';
+import { SafeValidationException } from './modules/monitoring/monitoring.filter';
 
 export function setupApp(
   app: NestExpressApplication,
@@ -29,7 +32,12 @@ export function setupApp(
     }),
   );
   app.use((request: Request, response: Response, next: NextFunction) => {
+    response.locals.requestId = randomUUID();
+    response.setHeader('X-Request-ID', response.locals.requestId);
     response.setHeader('Cache-Control', 'no-store');
+    httpMetrics.observe(request, response);
+    if (request.path.startsWith('/api/v1/admin'))
+      response.setHeader('X-Robots-Tag', 'noindex, nofollow');
     if (request.method === 'GET' && request.path === '/') {
       response.redirect('/api/v1/auth/login');
       return;
@@ -44,6 +52,7 @@ export function setupApp(
       forbidNonWhitelisted: true,
       transform: true,
       validationError: { target: false, value: false },
+      exceptionFactory: (errors) => new SafeValidationException(errors),
     }),
   );
 }

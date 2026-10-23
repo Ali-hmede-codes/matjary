@@ -17,6 +17,7 @@ import {
   CartItem,
   CartStatus,
   effectiveLimits,
+  moderationWhere,
 } from '@app/database';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -148,7 +149,10 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<CartResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -186,14 +190,20 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<CartResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
 
       await this.checkCartEnabled(store);
 
-      const product = await this.products.findOneBy({ id: dto.productId });
+      const product = await this.products.findOneBy({
+        id: dto.productId,
+        ...moderationWhere('product'),
+      });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
@@ -271,7 +281,10 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<CartResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -290,6 +303,7 @@ export class CartsService {
 
       const product = await this.products.findOneBy({
         id: cartItem.productId,
+        ...moderationWhere('product'),
         storeId: store.id,
         status: ProductStatus.ACTIVE,
       });
@@ -332,7 +346,10 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<CartResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -369,7 +386,10 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<CartResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -396,7 +416,10 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<CheckoutResponseDto> {
     try {
-      const store = await this.stores.findOneBy({ slug: storeSlug });
+      const store = await this.stores.findOneBy({
+        slug: storeSlug,
+        ...moderationWhere('store'),
+      });
       if (!store) {
         throw new NotFoundException('Store not found');
       }
@@ -415,7 +438,10 @@ export class CartsService {
 
       // Verify all products are still available and in stock
       for (const item of items) {
-        const product = await this.products.findOneBy({ id: item.productId });
+        const product = await this.products.findOneBy({
+          id: item.productId,
+          ...moderationWhere('product'),
+        });
         if (!product || product.storeId !== store.id) {
           throw new BadRequestException(
             `Product "${item.productName}" is no longer available`,

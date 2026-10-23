@@ -15,7 +15,14 @@ import {
   MediaKind,
   MediaStatus,
   MediaVariant,
+  Store,
+  Product,
+  ProductStatus,
 } from '../../libs/database/src/entities';
+
+import { moderationWhere } from '../../libs/database/src/visibility-policy';
+import { appendAdminAudit } from '../../libs/database/src/admin-policy';
+import { AdminAuditLog } from '../../libs/database/src/admin.entities';
 
 // Run only against a dedicated, empty database granted to the configured user.
 // Supply MYSQL_HOST/PORT/DATABASE/USER/PASSWORD explicitly; no .env is loaded.
@@ -198,6 +205,133 @@ test('MySQL migrations and relational persistence', async (t) => {
           await runner.rollbackTransaction();
           await runner.release();
         }
+      },
+    );
+
+    await t.test(
+      'moderation suppresses descendants and stale saves cannot undo archive flags',
+      async () => {
+        const runner = source.createQueryRunner();
+        await runner.connect();
+        await runner.startTransaction();
+        try {
+          const manager = runner.manager;
+          const owner = await manager.save(
+            User,
+            manager.create(User, {
+              email: 'moderation@example.test',
+              displayName: 'Owner',
+            }),
+          );
+          const store = await manager.save(
+            Store,
+            manager.create(Store, {
+              ownerId: owner.id,
+              name: 'Store',
+              slug: 'moderation-store',
+            }),
+          );
+          const product = await manager.save(
+            Product,
+            manager.create(Product, {
+              storeId: store.id,
+              name: 'Product',
+              slug: 'moderation-product',
+              priceCents: '100',
+              status: ProductStatus.ACTIVE,
+            }),
+          );
+          const post = await manager.save(
+            Showcase,
+            manager.create(Showcase, {
+              ownerId: owner.id,
+              storeId: store.id,
+              slug: 'moderation-post',
+              title: 'Post',
+              status: ShowcaseStatus.PUBLISHED,
+            }),
+          );
+          const media = await manager.save(
+            MediaAsset,
+            manager.create(MediaAsset, {
+              showcaseId: post.id,
+              kind: MediaKind.IMAGE,
+              mimeType: 'image/jpeg',
+              sizeBytes: '100',
+              status: MediaStatus.READY,
+            }),
+          );
+          const resources = [
+            ['store', Store, store.id],
+            ['product', Product, product.id],
+            ['post', Showcase, post.id],
+            ['media', MediaAsset, media.id],
+          ] as const;
+          const available = async () =>
+            Promise.all(
+              resources.map(([kind, target, id]) =>
+                manager
+                  .getRepository(target)
+                  .existsBy({ id, ...moderationWhere(kind) }),
+              ),
+            );
+          assert.deepEqual(await available(), [true, true, true, true]);
+          await manager.query(
+            'UPDATE stores SET admin_archived_at = UTC_TIMESTAMP(6) WHERE id = ?',
+            [store.id],
+          );
+          assert.deepEqual(await available(), [false, false, false, false]);
+          store.name = 'Stale owner edit';
+          store.adminArchivedAt = null;
+          await manager.save(store);
+          assert.ok(
+            (await manager.findOneByOrFail(Store, { id: store.id }))
+              .adminArchivedAt,
+          );
+          await manager.query(
+            'UPDATE media_assets SET admin_archived_at = UTC_TIMESTAMP(6) WHERE id = ?',
+            [media.id],
+          );
+          await manager.query(
+            'UPDATE stores SET admin_archived_at = NULL WHERE id = ?',
+            [store.id],
+          );
+          assert.deepEqual(await available(), [true, true, true, false]);
+          await manager.update(
+            User,
+            { id: owner.id },
+            { suspendedAt: new Date(), sessionVersion: 1 },
+          );
+          assert.deepEqual(await available(), [false, false, false, false]);
+          await manager.update(
+            User,
+            { id: owner.id },
+            { suspendedAt: null, sessionVersion: 2 },
+          );
+          assert.deepEqual(await available(), [true, true, true, false]);
+          await manager.query(
+            'UPDATE showcases SET admin_archived_at = UTC_TIMESTAMP(6) WHERE id = ?',
+            [post.id],
+          );
+          assert.deepEqual(await available(), [true, true, false, false]);
+          assert.equal(
+            (await manager.findOneByOrFail(Showcase, { id: post.id })).status,
+            ShowcaseStatus.PUBLISHED,
+          );
+          await appendAdminAudit(
+            manager,
+            { id: owner.id, requestId: randomUUID(), reason: 'Isolated test' },
+            'posts',
+            post.id,
+            'archive',
+            ['adminArchivedAt'],
+          );
+          assert.equal(await manager.count(AdminAuditLog), 1);
+        } finally {
+          await runner.rollbackTransaction();
+          await runner.release();
+        }
+        assert.equal(await source.manager.count(AdminAuditLog), 0);
       },
     );
 

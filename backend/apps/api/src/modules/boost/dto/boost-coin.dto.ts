@@ -12,6 +12,10 @@ import {
   IsObject,
   IsInt,
   MaxLength,
+  Length,
+  Matches,
+  IsDate,
+  IsDefined,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -146,9 +150,9 @@ export class AdminAdjustBalanceDto {
   @Max(Number.MAX_SAFE_INTEGER)
   amount!: number; // Positive to add, negative to deduct
 
-  @IsOptional()
   @IsString()
-  description?: string;
+  @Length(3, 500)
+  description!: string;
 
   @IsOptional()
   @IsObject()
@@ -280,8 +284,7 @@ export class BoostCreativeDto {
 
 export class CreateBoostCampaignDto {
   @IsString()
-  @Min(1)
-  @Max(100)
+  @Length(1, 100)
   name!: string;
 
   @IsEnum(BoostTargetType)
@@ -292,10 +295,12 @@ export class CreateBoostCampaignDto {
   targetId!: string;
 
   @IsString() // BIGINT as string
+  @Matches(/^(0|[1-9]\d{0,15})$/)
   budgetCoins!: string;
 
   @IsOptional()
   @IsString() // BIGINT as string
+  @Matches(/^(0|[1-9]\d{0,15})$/)
   dailyBudgetCoins?: string;
 
   @IsOptional()
@@ -304,8 +309,11 @@ export class CreateBoostCampaignDto {
 
   @IsOptional()
   @IsString() // BIGINT as string
+  @Matches(/^(0|[1-9]\d{0,15})$/)
   bidAmountCoins?: string;
 
+  @IsDefined()
+  @IsObject()
   @ValidateNested()
   @Type(() => BoostTargetingDto)
   targeting!: BoostTargetingDto;
@@ -316,10 +324,12 @@ export class CreateBoostCampaignDto {
   creative?: BoostCreativeDto;
 
   @IsOptional()
+  @IsDate()
   @Type(() => Date)
   startAt?: Date;
 
   @IsOptional()
+  @IsDate()
   @Type(() => Date)
   endAt?: Date;
 }
@@ -327,16 +337,17 @@ export class CreateBoostCampaignDto {
 export class UpdateBoostCampaignDto {
   @IsOptional()
   @IsString()
-  @Min(1)
-  @Max(100)
+  @Length(1, 100)
   name?: string;
 
   @IsOptional()
   @IsString() // BIGINT as string
+  @Matches(/^(0|[1-9]\d{0,15})$/)
   budgetCoins?: string;
 
   @IsOptional()
   @IsString() // BIGINT as string
+  @Matches(/^(0|[1-9]\d{0,15})$/)
   dailyBudgetCoins?: string;
 
   @IsOptional()
@@ -345,6 +356,7 @@ export class UpdateBoostCampaignDto {
 
   @IsOptional()
   @IsString() // BIGINT as string
+  @Matches(/^(0|[1-9]\d{0,15})$/)
   bidAmountCoins?: string;
 
   @IsOptional()
@@ -358,10 +370,12 @@ export class UpdateBoostCampaignDto {
   creative?: BoostCreativeDto;
 
   @IsOptional()
+  @IsDate()
   @Type(() => Date)
   startAt?: Date;
 
   @IsOptional()
+  @IsDate()
   @Type(() => Date)
   endAt?: Date;
 }

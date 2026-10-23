@@ -1,0 +1,89 @@
+# Linux-only opt-in overlay. Prepare the private token with monitoring:init.
+# Combine with compose.yaml and compose.production.yaml; never expose metrics publicly.
+services:
+  api:
+    networks: [default, monitoring]
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
+    secrets: [metrics_token]
+    logging: &bounded-logs
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+  worker:
+    logging: *bounded-logs
+  monitoring-validate:
+    image: node:22.14.0-alpine
+    network_mode: host
+    read_only: true
+    user: '1000:1000'
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    environment:
+      MONITORING_HOST_ADDRESS: ${MONITORING_HOST_ADDRESS:?Set the private Docker bridge gateway address}
+    volumes:
+      - ../scripts/check-monitoring.cjs:/check-monitoring.cjs:ro
+    command: ['node', '/check-monitoring.cjs']
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *bounded-logs
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.9.1
+    network_mode: host
+    pid: host
+    user: '65534:65534'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=${MONITORING_HOST_ADDRESS:?Set the private Docker bridge gateway address}:9100
+      - --no-collector.timex
+    volumes:
+      - /:/host:ro,rslave
+    depends_on:
+      monitoring-validate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *bounded-logs
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    # Preserve the image's data-volume UID; group 1000 can read the shared token.
+    user: '65534:1000'
+    networks: [monitoring]
+    extra_hosts:
+      - metrics-host:${MONITORING_HOST_ADDRESS:?Set the private Docker bridge gateway address}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+      - --web.listen-address=0.0.0.0:9090
+    volumes:
+      - ./monitoring/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./monitoring/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+      - prometheus-data:/prometheus
+    secrets: [metrics_token]
+    depends_on:
+      monitoring-validate:
+        condition: service_completed_successfully
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *bounded-logs
+networks:
+  monitoring:
+    # No published ports. Egress is needed to reach the existing host bridge
+    # gateway; an internal-only network has no route to a different bridge.
+    driver: bridge
+volumes:
+  prometheus-data:
+secrets:
+  metrics_token:
+    file: ${METRICS_TOKEN_HOST_FILE:?Set the absolute path to the private metrics-token file}

@@ -5,3 +5,6 @@ export * from './entities';
 export * from './seo.entities';
 export * from './durability.entities';
 export * from './subscription-policy';
+export * from './admin.entities';
+export * from './admin-policy';
+export * from './visibility-policy';

@@ -15,6 +15,7 @@ import {
   User,
   effectiveLimits,
   assertQuota,
+  moderationWhere,
 } from '@app/database';
 import { CreateShowcaseDto } from './dto/create-showcase.dto';
 import { UpdateShowcaseDto } from './dto/update-showcase.dto';
@@ -45,7 +46,7 @@ export class ShowcasesService {
     offset: number,
   ): Promise<{ items: ShowcaseResponseDto[]; total: number }> {
     try {
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = { ...moderationWhere('post') };
       if (ownerId) {
         where.ownerId = ownerId;
       } else {
@@ -84,7 +85,10 @@ export class ShowcasesService {
     userId: string | undefined,
   ): Promise<ShowcaseResponseDto> {
     try {
-      const showcase = await this.showcases.findOneBy({ slug });
+      const showcase = await this.showcases.findOneBy({
+        slug,
+        ...moderationWhere('post'),
+      });
       if (!showcase) {
         throw new NotFoundException('Post not found');
       }
@@ -148,7 +152,10 @@ export class ShowcasesService {
 
           let store: Store | null = null;
           if (dto.storeId) {
-            store = await manager.findOneBy(Store, { id: dto.storeId });
+            store = await manager.findOneBy(Store, {
+              id: dto.storeId,
+              ...moderationWhere('store'),
+            });
             if (!store) {
               throw new NotFoundException('Store not found');
             }
@@ -206,7 +213,10 @@ export class ShowcasesService {
     userId: string,
   ): Promise<ShowcaseResponseDto> {
     try {
-      const showcase = await this.showcases.findOneBy({ slug });
+      const showcase = await this.showcases.findOneBy({
+        slug,
+        ...moderationWhere('post'),
+      });
       if (!showcase) {
         throw new NotFoundException('Post not found');
       }
@@ -267,7 +277,10 @@ export class ShowcasesService {
 
   async remove(slug: string, userId: string): Promise<void> {
     try {
-      const showcase = await this.showcases.findOneBy({ slug });
+      const showcase = await this.showcases.findOneBy({
+        slug,
+        ...moderationWhere('post'),
+      });
       if (!showcase) {
         throw new NotFoundException('Post not found');
       }

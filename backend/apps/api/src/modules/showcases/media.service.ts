@@ -24,6 +24,10 @@ import {
   effectiveLimits,
   boundedLimit,
   assertQuota,
+  moderationWhere,
+  requireAdmin,
+  appendAdminAudit,
+  type AdminActor,
 } from '@app/database';
 import { QueueService } from '@app/queue';
 import { StorageService } from '@app/storage';
@@ -54,14 +58,24 @@ export class MediaService {
     dto: PresignedUrlDto,
     slug: string,
     ownerId: string,
+    administrator?: AdminActor,
   ): Promise<{ url: string; mediaId: string; key: string }> {
     try {
       return await this.mediaAssets.manager.transaction(async (manager) => {
+        if (administrator)
+          await requireAdmin(
+            manager,
+            administrator,
+            this.config.get('ADMIN_EMAILS', { infer: true }),
+          );
         await manager.findOneOrFail(User, {
           where: { id: ownerId },
           lock: { mode: 'pessimistic_write' },
         });
-        const showcase = await manager.findOneBy(Showcase, { slug });
+        const showcase = await manager.findOneBy(Showcase, {
+          slug,
+          ...moderationWhere('post'),
+        });
         if (!showcase) throw new NotFoundException('Post not found');
         if (showcase.ownerId !== ownerId)
           throw new ForbiddenException('You do not own this post');
@@ -85,11 +99,11 @@ export class MediaService {
         }
         if (limits.maxStorageBytes != null) {
           const usage = (await manager.query(
-            `SELECT COALESCE(SUM(a.size_bytes), 0) AS used FROM media_assets a JOIN showcases s ON s.id = a.showcase_id WHERE s.owner_id = ? AND a.status IN ('pending', 'processing', 'ready') AND a.original_key IS NOT NULL`,
+            `SELECT COALESCE(SUM(a.size_bytes), 0) AS used FROM media_assets a JOIN showcases s ON s.id = a.showcase_id WHERE s.owner_id = ? AND a.original_key IS NOT NULL`,
             [ownerId],
           )) as Array<{ used: string }>;
           const variants = (await manager.query(
-            `SELECT COALESCE(SUM(v.size_bytes), 0) AS used FROM media_variants v JOIN media_assets a ON a.id = v.asset_id JOIN showcases s ON s.id = a.showcase_id WHERE s.owner_id = ? AND a.status != 'failed'`,
+            `SELECT COALESCE(SUM(v.size_bytes), 0) AS used FROM media_variants v JOIN media_assets a ON a.id = v.asset_id JOIN showcases s ON s.id = a.showcase_id WHERE s.owner_id = ?`,
             [ownerId],
           )) as Array<{ used: string }>;
           if (
@@ -177,6 +191,15 @@ export class MediaService {
         });
 
         await manager.save(mediaAsset);
+        if (administrator)
+          await appendAdminAudit(
+            manager,
+            administrator,
+            'media',
+            mediaId,
+            'upload.negotiate',
+            ['showcaseId', 'kind', 'sizeBytes'],
+          );
         const { url } = await this.storage.presignedPutUrl(
           originalKey,
           dto.fileType,
@@ -205,9 +228,19 @@ export class MediaService {
     dto: MediaCompleteDto,
     slug: string,
     ownerId: string,
+    administrator?: AdminActor,
   ): Promise<void> {
     try {
-      const showcase = await this.showcases.findOneBy({ slug });
+      if (administrator)
+        await requireAdmin(
+          this.mediaAssets.manager,
+          administrator,
+          this.config.get('ADMIN_EMAILS', { infer: true }),
+        );
+      const showcase = await this.showcases.findOneBy({
+        slug,
+        ...moderationWhere('post'),
+      });
       if (!showcase) {
         throw new NotFoundException('Post not found');
       }
@@ -216,7 +249,10 @@ export class MediaService {
         throw new ForbiddenException('You do not own this post');
       }
 
-      const mediaAsset = await this.mediaAssets.findOneBy({ id: dto.mediaId });
+      const mediaAsset = await this.mediaAssets.findOneBy({
+        id: dto.mediaId,
+        ...moderationWhere('media'),
+      });
       if (!mediaAsset) {
         throw new NotFoundException('Media asset not found');
       }
@@ -256,6 +292,21 @@ export class MediaService {
         current.status = MediaStatus.PROCESSING;
         await manager.save(current);
         await manager.insert(MediaProcessingOutbox, { assetId: current.id });
+        if (administrator) {
+          await requireAdmin(
+            manager,
+            administrator,
+            this.config.get('ADMIN_EMAILS', { infer: true }),
+          );
+          await appendAdminAudit(
+            manager,
+            administrator,
+            'media',
+            current.id,
+            'upload.complete',
+            ['status'],
+          );
+        }
       });
     } catch (error) {
       if (
@@ -269,13 +320,23 @@ export class MediaService {
     }
   }
 
-  async authorizeUpload(key: string, ownerId: string): Promise<MediaAsset> {
+  async authorizeUpload(
+    key: string,
+    ownerId: string,
+    administrator?: AdminActor,
+  ): Promise<MediaAsset> {
     this.requireLocal();
+    if (administrator)
+      await requireAdmin(
+        this.mediaAssets.manager,
+        administrator,
+        this.config.get('ADMIN_EMAILS', { infer: true }),
+      );
     const asset = await this.mediaAssets.findOne({
-      where: { originalKey: key },
+      where: { originalKey: key, ...moderationWhere('media') },
       relations: ['showcase'],
     });
-    if (!asset || asset.showcase.ownerId !== ownerId)
+    if (!asset || (!administrator && asset.showcase.ownerId !== ownerId))
       throw new NotFoundException('Media asset not found');
     if (
       asset.status !== MediaStatus.PENDING ||
@@ -289,15 +350,26 @@ export class MediaService {
   async authorizeDownload(
     key: string,
     ownerId?: string,
+    administrator?: AdminActor,
   ): Promise<{ mimeType: string; public: boolean }> {
     this.requireLocal();
+    if (administrator)
+      await requireAdmin(
+        this.mediaAssets.manager,
+        administrator,
+        this.config.get('ADMIN_EMAILS', { infer: true }),
+      );
     const variant = await this.mediaAssets.manager
       .getRepository(MediaVariant)
       .findOne({
-        where: { storageKey: key },
+        where: {
+          storageKey: key,
+          ...(administrator ? {} : { asset: moderationWhere('media') }),
+        },
         relations: ['asset', 'asset.showcase'],
       });
     if (variant) {
+      if (administrator) return { mimeType: variant.mimeType, public: false };
       const visible =
         variant.asset.status === MediaStatus.READY &&
         variant.asset.showcase.status === ShowcaseStatus.PUBLISHED;
@@ -305,12 +377,66 @@ export class MediaService {
         return { mimeType: variant.mimeType, public: visible };
     }
     const original = await this.mediaAssets.findOne({
-      where: { originalKey: key },
+      where: {
+        originalKey: key,
+        ...(administrator ? {} : moderationWhere('media')),
+      },
       relations: ['showcase'],
     });
-    if (original && original.showcase.ownerId === ownerId)
+    if (original && (administrator || original.showcase.ownerId === ownerId))
       return { mimeType: original.mimeType, public: false };
     throw new NotFoundException('Media asset not found');
+  }
+
+  async adminPresigned(
+    dto: PresignedUrlDto,
+    postId: string,
+    actor: AdminActor,
+  ) {
+    await requireAdmin(
+      this.mediaAssets.manager,
+      actor,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
+    const post = await this.showcases.findOneBy({
+      id: postId,
+      ...moderationWhere('post'),
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    return this.presignedUrl(dto, post.slug, post.ownerId, actor);
+  }
+
+  async adminComplete(
+    dto: MediaCompleteDto,
+    postId: string,
+    actor: AdminActor,
+  ) {
+    await requireAdmin(
+      this.mediaAssets.manager,
+      actor,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
+    const post = await this.showcases.findOneBy({
+      id: postId,
+      ...moderationWhere('post'),
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    return this.mediaComplete(dto, post.slug, post.ownerId, actor);
+  }
+
+  async recordAdminUpload(
+    id: string,
+    actor: AdminActor,
+    action: string,
+  ): Promise<void> {
+    await this.mediaAssets.manager.transaction(async (manager) => {
+      await requireAdmin(
+        manager,
+        actor,
+        this.config.get('ADMIN_EMAILS', { infer: true }),
+      );
+      await appendAdminAudit(manager, actor, 'media', id, action);
+    });
   }
 
   requireLocal(): void {

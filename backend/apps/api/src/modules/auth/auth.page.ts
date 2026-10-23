@@ -66,7 +66,8 @@ export const AUTH_HTML = String.raw`<!doctype html>
           <h2>Welcome to Matjary</h2>
           <p class="intro">Sign in or create your account with Google.<br>No extra password to remember.</p>
           <div id="google-button" class="button-wrap"></div>
-          <p class="note">New here? Your account is created automatically the first time you continue with Google.</p>
+          <p class="note">New here? Your account is created automatically the first time you continue with Google. Authorized administrators are taken to the admin workspace.</p>
+          <details class="note"><summary>Setting up Google sign-in for this server</summary><p>In Google Auth Platform, configure branding and audience, then create a Web application client. Register this site's exact origin under Authorized JavaScript origins. Set GOOGLE_CLIENT_ID, APP_ORIGIN, and your administrator email in ADMIN_EMAILS in the server's private environment, then restart the API. Add your account as a test user if your Google audience settings require it. Use localhost consistently for local development and HTTPS in production. This sign-in flow needs no Google password or client secret.</p></details>
         </div>
         <div id="signed-in" hidden>
           <span class="badge">YOU’RE SIGNED IN</span>
@@ -145,6 +146,7 @@ export const AUTH_SCRIPT = String.raw`'use strict';
     el('google-button').hidden = true;
     try {
       const data = await api('google', { credential: result.credential });
+      if (data.isAdmin) { window.location.assign('/api/v1/admin'); return; }
       showUser(data.user);
     } catch (error) {
       failure(error);
@@ -179,6 +181,7 @@ export const AUTH_SCRIPT = String.raw`'use strict';
     try {
       try {
         const data = await api('me');
+        if (data.isAdmin) { window.location.assign('/api/v1/admin'); return; }
         showUser(data.user);
         return;
       } catch (error) {

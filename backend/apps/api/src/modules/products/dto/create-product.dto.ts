@@ -3,7 +3,10 @@ import {
   Length,
   Matches,
   IsOptional,
-  IsNumber,
+  IsInt,
+  Max,
+  ArrayMaxSize,
+  IsBoolean,
   Min,
   IsEnum,
   IsArray,
@@ -28,8 +31,9 @@ export class CreateProductDto {
   @Length(0, 65535)
   description?: string | null;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   priceCents!: number;
 
   @IsOptional()
@@ -51,30 +55,38 @@ export class CreateProductDto {
   sku?: string | null;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(4294967295)
   stockQuantity?: number | null;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(4294967295)
   weightGrams?: number | null;
 
   @IsOptional()
   @IsArray()
-  @IsUrl({}, { each: true })
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @Length(1, 512, { each: true })
   imageKeys?: string[] | null;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(20)
+  @Length(1, 100, { each: true })
   tags?: string[] | null;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(4294967295)
   sortOrder?: number;
 
   @IsOptional()
+  @IsBoolean()
   requiresShipping?: boolean;
 }

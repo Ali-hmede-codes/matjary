@@ -7,7 +7,10 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { Repository, QueryFailedError, type EntityManager } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import type { AppEnvironment } from '@app/config';
 import {
   SubscriptionPlan,
   UserSubscription,
@@ -17,6 +20,10 @@ import {
   User,
   effectiveLimits,
   effectiveSubscription,
+  actorContext,
+  appendAdminAudit,
+  requireAdmin,
+  StoreSubscriptionTier,
 } from '@app/database';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
@@ -29,7 +36,35 @@ export class SubscriptionPlansService {
     private readonly plans: Repository<SubscriptionPlan>,
     @InjectRepository(UserSubscription)
     private readonly userSubscriptions: Repository<UserSubscription>,
+    private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
+
+  private async adminWrite<T>(
+    actorId: string,
+    action: string,
+    id: string,
+    fields: string[],
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    const actor = actorContext(actorId);
+    return this.plans.manager.transaction(async (manager) => {
+      await requireAdmin(
+        manager,
+        actor,
+        this.config.get('ADMIN_EMAILS', { infer: true }),
+      );
+      const result = await work(manager);
+      await appendAdminAudit(
+        manager,
+        actor,
+        'subscriptions',
+        id,
+        action,
+        fields,
+      );
+      return result;
+    });
+  }
 
   private sanitize(error: unknown): never {
     if (error instanceof HttpException) throw error;
@@ -48,6 +83,7 @@ export class SubscriptionPlansService {
 
   async create(
     dto: CreateSubscriptionPlanDto,
+    actorId: string,
   ): Promise<SubscriptionPlanResponseDto> {
     try {
       // Check if slug already exists
@@ -61,7 +97,15 @@ export class SubscriptionPlansService {
       // Validate limits
       this.validateLimits(dto.limits);
 
+      if (
+        dto.slug === 'free' &&
+        (dto.isActive === false || (dto.priceCents ?? 0) !== 0)
+      )
+        throw new BadRequestException(
+          'The free fallback must remain active and free',
+        );
       const plan = this.plans.create({
+        id: randomUUID(),
         name: dto.name,
         slug: dto.slug,
         description: dto.description ?? null,
@@ -74,7 +118,13 @@ export class SubscriptionPlansService {
         legacyTier: (dto.legacyTier as any) ?? null,
       });
 
-      const saved = await this.plans.save(plan);
+      const saved = await this.adminWrite(
+        actorId,
+        'plan.save',
+        plan.id ?? plan.slug,
+        Object.keys(dto),
+        (manager) => manager.save(plan),
+      );
       return SubscriptionPlanResponseDto.fromEntity(saved);
     } catch (error) {
       if (
@@ -137,43 +187,75 @@ export class SubscriptionPlansService {
   async update(
     id: string,
     dto: UpdateSubscriptionPlanDto,
+    actorId: string,
   ): Promise<SubscriptionPlanResponseDto> {
     try {
-      const plan = await this.plans.findOneBy({ id });
-      if (!plan) {
-        throw new NotFoundException('Subscription plan not found');
-      }
+      const saved = await this.adminWrite(
+        actorId,
+        'plan.save',
+        id,
+        Object.keys(dto),
+        async (manager) => {
+          const plan = await manager.findOne(SubscriptionPlan, {
+            where: { id },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!plan) {
+            throw new NotFoundException('Subscription plan not found');
+          }
 
-      // If slug is being changed, check for conflicts
-      if (dto.slug && dto.slug !== plan.slug) {
-        const existing = await this.plans.findOneBy({ slug: dto.slug });
-        if (existing) {
-          throw new ConflictException(
-            'A subscription plan with this slug already exists',
-          );
-        }
-      }
+          if (
+            plan.slug === 'free' &&
+            ((dto.slug !== undefined && dto.slug !== 'free') ||
+              dto.isActive === false ||
+              (dto.priceCents !== undefined && dto.priceCents !== 0))
+          )
+            throw new BadRequestException(
+              'The free fallback must remain active and free',
+            );
 
-      // Validate limits if provided
-      if (dto.limits) {
-        this.validateLimits(dto.limits);
-      }
+          // If slug is being changed, check for conflicts
+          if (dto.slug && dto.slug !== plan.slug) {
+            const existing = await manager.findOneBy(SubscriptionPlan, {
+              slug: dto.slug,
+            });
+            if (existing) {
+              throw new ConflictException(
+                'A subscription plan with this slug already exists',
+              );
+            }
+          }
 
-      // Update fields
-      if (dto.name !== undefined) plan.name = dto.name;
-      if (dto.slug !== undefined) plan.slug = dto.slug;
-      if (dto.description !== undefined) plan.description = dto.description;
-      if (dto.priceCents !== undefined)
-        plan.priceCents = dto.priceCents.toString();
-      if (dto.currency !== undefined) plan.currency = dto.currency;
-      if (dto.billingCycle !== undefined) plan.billingCycle = dto.billingCycle;
-      if (dto.limits !== undefined)
-        plan.limits = dto.limits as SubscriptionLimits;
-      if (dto.isActive !== undefined) plan.isActive = dto.isActive;
-      if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
-      if (dto.legacyTier !== undefined) plan.legacyTier = dto.legacyTier as any;
+          // Validate limits if provided
+          if (dto.limits) {
+            this.validateLimits(dto.limits);
+          }
 
-      const saved = await this.plans.save(plan);
+          // Update fields
+          if (dto.name !== undefined) plan.name = dto.name;
+          if (dto.slug !== undefined) plan.slug = dto.slug;
+          if (dto.description !== undefined) plan.description = dto.description;
+          if (dto.priceCents !== undefined)
+            plan.priceCents = dto.priceCents.toString();
+          if (dto.currency !== undefined) plan.currency = dto.currency;
+          if (dto.billingCycle !== undefined)
+            plan.billingCycle = dto.billingCycle;
+          if (dto.limits !== undefined)
+            plan.limits = dto.limits as SubscriptionLimits;
+          if (dto.isActive !== undefined) plan.isActive = dto.isActive;
+          if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
+          if (dto.legacyTier !== undefined)
+            plan.legacyTier = dto.legacyTier as StoreSubscriptionTier | null;
+          if (
+            plan.slug === 'free' &&
+            (!plan.isActive || plan.priceCents !== '0')
+          )
+            throw new BadRequestException(
+              'The free fallback must remain active and free',
+            );
+          return manager.save(plan);
+        },
+      );
       return SubscriptionPlanResponseDto.fromEntity(saved);
     } catch (error) {
       if (
@@ -187,34 +269,31 @@ export class SubscriptionPlansService {
     }
   }
 
-  async delete(id: string): Promise<void> {
-    try {
-      const plan = await this.plans.findOneBy({ id });
-      if (!plan) {
-        throw new NotFoundException('Subscription plan not found');
-      }
+  async delete(id: string, actorId: string): Promise<void> {
+    await this.update(id, { isActive: false }, actorId);
+  }
 
-      // Check if any users are subscribed to this plan
-      const activeSubscriptions = await this.userSubscriptions.count({
-        where: { planId: id },
-      });
-
-      if (activeSubscriptions > 0) {
-        throw new BadRequestException(
-          'Cannot delete a referenced plan. Deactivate it to retain subscription history.',
+  async cancelAssignment(id: string, actorId: string): Promise<void> {
+    await this.adminWrite(
+      actorId,
+      'assignment.cancel',
+      id,
+      ['status'],
+      async (manager) => {
+        const subscription = await manager.findOneBy(UserSubscription, { id });
+        if (!subscription)
+          throw new NotFoundException('Subscription not found');
+        await manager.findOne(User, {
+          where: { id: subscription.userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        await manager.update(
+          UserSubscription,
+          { id },
+          { status: SubscriptionStatus.CANCELLED },
         );
-      }
-
-      await this.plans.remove(plan);
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      this.sanitize(error);
-    }
+      },
+    );
   }
 
   /**
@@ -260,11 +339,18 @@ export class SubscriptionPlansService {
         );
       return await this.userSubscriptions.manager.transaction(
         async (manager) => {
+          const actor = actorContext(assignedBy);
+          await requireAdmin(
+            manager,
+            actor,
+            this.config.get('ADMIN_EMAILS', { infer: true }),
+          );
           const user = await manager.findOne(User, {
             where: { id: userId },
             lock: { mode: 'pessimistic_write' },
           });
-          if (!user) throw new NotFoundException('User not found');
+          if (!user || user.suspendedAt)
+            throw new NotFoundException('Active user not found');
           const plan = await manager.findOne(SubscriptionPlan, {
             where: { id: planId },
             lock: { mode: 'pessimistic_read' },
@@ -276,7 +362,7 @@ export class SubscriptionPlansService {
             { userId, status: SubscriptionStatus.ACTIVE },
             { status: SubscriptionStatus.CANCELLED },
           );
-          return manager.save(
+          const saved = await manager.save(
             UserSubscription,
             manager.create(UserSubscription, {
               userId,
@@ -288,6 +374,15 @@ export class SubscriptionPlansService {
               notes: notes ?? null,
             }),
           );
+          await appendAdminAudit(
+            manager,
+            actor,
+            'subscriptions',
+            saved.id,
+            'assignment.create',
+            ['planId', 'expiresAt'],
+          );
+          return saved;
         },
       );
     } catch (error) {

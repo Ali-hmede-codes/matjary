@@ -14,6 +14,8 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { UserDashboardModule } from './modules/user-dashboard/user-dashboard.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { BoostModule } from './modules/boost/boost.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
 
 // ShowcasesModule already imports StorageModule and QueueModule, but
 // importing StorageModule here keeps the dependency graph explicit for the
@@ -35,6 +37,8 @@ import { BoostModule } from './modules/boost/boost.module';
     UserDashboardModule,
     SeoModule,
     BoostModule,
+    MonitoringModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

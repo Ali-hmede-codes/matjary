@@ -11,7 +11,7 @@ import {
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
-import type { DataSource, EntityManager } from 'typeorm';
+import { FindOperator, type DataSource, type EntityManager } from 'typeorm';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -332,10 +332,27 @@ test('SEO service independently enforces ownership, publication and field allowl
     service.getMetaBySlug('showcase', 'draft'),
     /Post not found/,
   );
-  assert.deepEqual(queries, [
-    { slug: 'draft', status: ProductStatus.ACTIVE },
-    { slug: 'draft', status: ShowcaseStatus.PUBLISHED },
-  ]);
+  for (const query of queries) {
+    const where = query as { adminArchivedAt: FindOperator<unknown> };
+    assert.ok(where.adminArchivedAt instanceof FindOperator);
+    assert.match(
+      where.adminArchivedAt.getSql!('item.adminArchivedAt'),
+      /suspended_at IS NULL/,
+    );
+  }
+  assert.deepEqual(
+    queries.map((query) => {
+      const { adminArchivedAt: _moderation, ...where } = query as Record<
+        string,
+        unknown
+      >;
+      return where;
+    }),
+    [
+      { slug: 'draft', status: ProductStatus.ACTIVE },
+      { slug: 'draft', status: ShowcaseStatus.PUBLISHED },
+    ],
+  );
   assert.equal((await service.getAdminSettings('admin')).id, 'settings');
 });
 

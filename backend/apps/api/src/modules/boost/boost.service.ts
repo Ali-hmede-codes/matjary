@@ -7,6 +7,8 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
+import type { AppEnvironment } from '@app/config';
 import {
   Repository,
   DataSource,
@@ -46,6 +48,13 @@ import {
   User,
   Showcase,
   Store,
+  moderationWhere,
+  assertContentAvailable,
+  requireAdmin,
+  appendAdminAudit,
+  adminContext,
+  actorContext,
+  type AdminActor,
 } from '@app/database';
 
 @Injectable()
@@ -68,7 +77,50 @@ export class BoostService {
     @InjectRepository(Store)
     private readonly storeRepo: Repository<Store>,
     private readonly dataSource: DataSource,
+    private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
+
+  private async auditContext(
+    manager: EntityManager,
+    resource: string,
+    id: string,
+    action: string,
+  ): Promise<void> {
+    const actor = adminContext.getStore();
+    if (!actor) return;
+    await requireAdmin(
+      manager,
+      actor,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
+    await appendAdminAudit(manager, actor, resource, id, action);
+  }
+
+  async asAdministrator<T>(
+    actor: AdminActor,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    await requireAdmin(
+      this.dataSource.manager,
+      actor,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
+    return adminContext.run(actor, action);
+  }
+
+  private async visibleCampaign(
+    manager: EntityManager,
+    campaign: BoostCampaign,
+  ): Promise<void> {
+    const kind =
+      campaign.targetType === BoostTargetType.STORE ? 'store' : 'post';
+    await assertContentAvailable(manager, kind, campaign.targetId);
+    if (kind === 'post') {
+      const post = await manager.findOneBy(Showcase, { id: campaign.targetId });
+      if (post?.status !== 'published')
+        throw new NotFoundException('Campaign target is unavailable');
+    }
+  }
 
   // ============================================
   // Boost Settings (Admin)
@@ -152,20 +204,65 @@ export class BoostService {
     dto: Record<string, unknown>,
     adminUserId: string,
   ): Promise<void> {
-    for (const [key, value] of Object.entries(dto)) {
-      const storedKey = key.replace(
-        /[A-Z]/g,
-        (letter) => `_${letter.toLowerCase()}`,
+    const allowed = [
+      'coinPriceCents',
+      'minPurchaseCoins',
+      'maxPurchaseCoins',
+      'defaultDailyBudgetCoins',
+      'minCampaignBudgetCoins',
+      'maxCampaignDurationDays',
+      'campaignReviewRequired',
+      'autoApproveThresholdCoins',
+      'cpcMinBidCoins',
+      'cpmMinBidCoins',
+      'platformFeePercent',
+    ];
+    const actor = actorContext(adminUserId);
+    await this.dataSource.transaction(async (manager) => {
+      await requireAdmin(
+        manager,
+        actor,
+        this.config.get('ADMIN_EMAILS', { infer: true }),
       );
-      await this.boostSettingRepo.upsert(
-        {
-          key: storedKey,
-          value: value as Record<string, unknown>,
-          updatedBy: adminUserId,
-        } as any,
-        ['key'],
+      for (const [key, value] of Object.entries(dto)) {
+        if (!allowed.includes(key))
+          throw new BadRequestException('Unknown boost setting');
+        if (key === 'campaignReviewRequired') {
+          if (typeof value !== 'boolean')
+            throw new BadRequestException('Invalid boost setting');
+        } else if (
+          typeof value !== 'number' ||
+          !Number.isSafeInteger(value) ||
+          value <
+            (['autoApproveThresholdCoins', 'platformFeePercent'].includes(key)
+              ? 0
+              : 1) ||
+          (key === 'platformFeePercent' && value > 100) ||
+          (key === 'maxCampaignDurationDays' && value > 365)
+        )
+          throw new BadRequestException('Invalid boost setting');
+        const storedKey = key.replace(
+          /[A-Z]/g,
+          (letter) => `_${letter.toLowerCase()}`,
+        );
+        await manager.getRepository(BoostSetting).upsert(
+          {
+            key: storedKey,
+            value: value as number | boolean,
+            updatedBy: adminUserId,
+          },
+          ['key'],
+        );
+      }
+      await appendAdminAudit(
+        manager,
+        actor,
+        'boost-settings',
+        'global',
+        'update',
+        Object.keys(dto),
       );
-    }
+    });
     this.settingsCache.clear(); // Invalidate cache
   }
 
@@ -194,7 +291,8 @@ export class BoostService {
       where: { id: userId },
       lock: { mode: 'pessimistic_write' },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user || user.suspendedAt)
+      throw new NotFoundException('Active user not found');
     let balance = await manager.findOne(BoostCoin, {
       where: { userId },
       lock: { mode: 'pessimistic_write' },
@@ -225,7 +323,14 @@ export class BoostService {
       });
       if (ownerId && campaign.userId !== ownerId)
         throw new ForbiddenException('Not your campaign');
-      return action(campaign, wallet, manager);
+      const result = await action(campaign, wallet, manager);
+      await this.auditContext(
+        manager,
+        'campaigns',
+        campaign.id,
+        'campaign.mutate',
+      );
+      return result;
     });
   }
 
@@ -293,6 +398,7 @@ export class BoostService {
     description: string | null,
     metadata: Record<string, unknown> | null,
     operationId: string,
+    administrator?: AdminActor,
   ): Promise<BoostTransaction> {
     const delta = coinAmount(amount, true);
     if (!delta || !/^[a-zA-Z0-9_-]{1,100}$/.test(operationId))
@@ -300,6 +406,12 @@ export class BoostService {
         'A nonzero amount and operation ID are required',
       );
     return this.dataSource.transaction(async (manager) => {
+      if (administrator)
+        await requireAdmin(
+          manager,
+          administrator,
+          this.config.get('ADMIN_EMAILS', { infer: true }),
+        );
       const balance = await this.lockedBalance(manager, userId);
       const existing = await manager.findOneBy(BoostTransaction, {
         operationId,
@@ -334,7 +446,17 @@ export class BoostService {
       });
       balance.balance = String(after);
       await manager.save(balance);
-      return manager.save(transaction);
+      const saved = await manager.save(transaction);
+      if (administrator)
+        await appendAdminAudit(
+          manager,
+          administrator,
+          'wallets',
+          userId,
+          'balance.adjust',
+          ['balance'],
+        );
+      return saved;
     });
   }
 
@@ -388,6 +510,21 @@ export class BoostService {
     operationId: string,
     metadata: Record<string, unknown> | null = null,
   ): Promise<{ transaction: BoostTransaction; newBalance: string }> {
+    const actor = actorContext(adminUserId);
+    if (
+      typeof description !== 'string' ||
+      description.trim().length < 3 ||
+      description.length > 500
+    )
+      throw new BadRequestException(
+        'A reason between 3 and 500 characters is required',
+      );
+    actor.reason = description.trim();
+    await requireAdmin(
+      this.dataSource.manager,
+      actor,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
     const targetUser = await this.userRepo.findOne({
       where: { id: targetUserId },
     });
@@ -408,6 +545,7 @@ export class BoostService {
       description,
       { ...metadata, adminUserId },
       operationId,
+      actor,
     );
 
     return { transaction, newBalance: transaction.balanceAfter };
@@ -424,7 +562,7 @@ export class BoostService {
   ): Promise<{ name: string; slug: string; imageKey?: string }> {
     if (targetType === BoostTargetType.SHOWCASE) {
       const showcase = await this.showcaseRepo.findOne({
-        where: { id: targetId },
+        where: { id: targetId, ...moderationWhere('post') },
         relations: ['store'],
       });
       if (!showcase) throw new NotFoundException('Showcase not found');
@@ -440,7 +578,9 @@ export class BoostService {
         imageKey: showcase.mediaAssets?.[0]?.originalKey ?? undefined,
       };
     } else {
-      const store = await this.storeRepo.findOne({ where: { id: targetId } });
+      const store = await this.storeRepo.findOne({
+        where: { id: targetId, ...moderationWhere('store') },
+      });
       if (!store) throw new NotFoundException('Store not found');
       if (store.ownerId !== userId)
         throw new ForbiddenException('You can only boost your own stores');
@@ -602,7 +742,9 @@ export class BoostService {
         endAt: dto.endAt || null,
       });
 
-      return manager.save(campaign);
+      const saved = await manager.save(campaign);
+      await this.auditContext(manager, 'campaigns', saved.id, 'create');
+      return saved;
     });
   }
 
@@ -761,6 +903,7 @@ export class BoostService {
         if (campaign.status !== BoostCampaignStatus.PAUSED) {
           throw new BadRequestException('Only paused campaigns can be resumed');
         }
+        await this.visibleCampaign(manager, campaign);
         // Check if campaign has expired
         if (campaign.endAt && campaign.endAt < new Date()) {
           throw new BadRequestException('Campaign has expired');
@@ -840,6 +983,7 @@ export class BoostService {
       undefined,
       async (campaign, _wallet, manager) => {
         this.assertActive(campaign, date);
+        await this.visibleCampaign(manager, campaign);
         await manager.query(
           `INSERT INTO boost_campaign_performance (campaign_id, date, ${metric}) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE ${metric} = ${metric} + 1`,
           [campaignId, date.toISOString().slice(0, 10)],
@@ -878,6 +1022,7 @@ export class BoostService {
           return;
         }
         this.assertActive(campaign, date);
+        await this.visibleCampaign(manager, campaign);
         const dateStr = date.toISOString().slice(0, 10);
         const daily =
           (await manager.findOneBy(BoostCampaignPerformance, {
@@ -1048,6 +1193,7 @@ export class BoostService {
       .where('campaign.status = :status', {
         status: BoostCampaignStatus.ACTIVE,
       })
+      .andWhere('user.suspendedAt IS NULL')
       .andWhere('campaign.startAt <= :now', { now })
       .andWhere('(campaign.endAt IS NULL OR campaign.endAt > :now)', { now })
       .andWhere(
@@ -1122,7 +1268,7 @@ export class BoostService {
 
       if (campaign.targetType === BoostTargetType.SHOWCASE) {
         const showcase = await this.showcaseRepo.findOne({
-          where: { id: campaign.targetId },
+          where: { id: campaign.targetId, ...moderationWhere('post') },
         });
         if (!showcase || showcase.status !== 'published') continue;
         if (showcase) {
@@ -1131,8 +1277,9 @@ export class BoostService {
         }
       } else {
         const store = await this.storeRepo.findOne({
-          where: { id: campaign.targetId },
+          where: { id: campaign.targetId, ...moderationWhere('store') },
         });
+        if (!store) continue;
         if (store) {
           targetName = store.name;
           targetSlug = store.slug;
@@ -1167,6 +1314,12 @@ export class BoostService {
     action: 'approve' | 'reject',
     rejectionReason?: string,
   ): Promise<BoostCampaign> {
+    const actor = actorContext(adminUserId);
+    await requireAdmin(
+      this.dataSource.manager,
+      actor,
+      this.config.get('ADMIN_EMAILS', { infer: true }),
+    );
     if (!['approve', 'reject'].includes(action))
       throw new BadRequestException('Invalid review action');
     return this.mutateCampaign(
@@ -1184,7 +1337,13 @@ export class BoostService {
           throw new BadRequestException('Campaign is not pending review');
         }
 
+        await requireAdmin(
+          manager,
+          actor,
+          this.config.get('ADMIN_EMAILS', { infer: true }),
+        );
         if (action === 'approve') {
+          await this.visibleCampaign(manager, campaign);
           campaign.status = BoostCampaignStatus.ACTIVE;
         } else {
           campaign.status = BoostCampaignStatus.REJECTED;
@@ -1192,7 +1351,16 @@ export class BoostService {
           campaign.rejectionReason = rejectionReason || 'Rejected by admin';
         }
 
-        return manager.save(campaign);
+        const saved = await manager.save(campaign);
+        await appendAdminAudit(
+          manager,
+          actor,
+          'campaigns',
+          campaign.id,
+          `review.${action}`,
+          ['status'],
+        );
+        return saved;
       },
     );
   }
