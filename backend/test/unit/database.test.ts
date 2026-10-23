@@ -17,6 +17,8 @@ import {
   MediaVariant,
   SubscriptionPlan,
   UserSubscription,
+  PostEngagement,
+  BoostTransaction,
 } from '../../libs/database/src/entities';
 
 const options = createDatabaseOptions(
@@ -123,6 +125,25 @@ test('entity metadata has private hashes, unique keys, and restrictive foreign k
   assert.ok(source.hasMetadata('MediaProcessingOutbox'));
   assert.ok(source.hasMetadata('EngagementFlushReceipt'));
   assert.ok(source.hasMetadata('SeoRedirect'));
+  const engagement = source.getMetadata(PostEngagement);
+  assert.deepEqual(
+    engagement.primaryColumns.map((column) => column.databaseName),
+    ['post_id'],
+  );
+  assert.equal(engagement.findColumnWithPropertyName('id'), undefined);
+  assert.equal(engagement.findColumnWithPropertyName('createdAt'), undefined);
+  assert.ok(engagement.findColumnWithPropertyName('updatedAt')?.isUpdateDate);
+  assert.ok(
+    source
+      .getMetadata(BoostTransaction)
+      .indices.some((index) => index.name === 'operation_id' && index.isUnique),
+  );
+  for (const metadata of source.entityMetadatas) {
+    if (!metadata.tableName.startsWith('boost_')) continue;
+    for (const foreignKey of metadata.foreignKeys) {
+      assert.equal(foreignKey.onUpdate, 'RESTRICT', foreignKey.name);
+    }
+  }
   const user = source.getMetadata(User);
   assert.equal(
     user.findColumnWithPropertyName('passwordHash')?.isSelect,

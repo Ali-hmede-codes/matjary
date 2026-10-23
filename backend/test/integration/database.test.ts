@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { DataSource } from 'typeorm';
 import { validateDatabaseEnvironment } from '../../libs/config/src/environment';
 import { createDatabaseOptions } from '../../libs/database/src/database.options';
@@ -18,11 +18,59 @@ import {
   Store,
   Product,
   ProductStatus,
+  PostEngagement,
 } from '../../libs/database/src/entities';
 
 import { moderationWhere } from '../../libs/database/src/visibility-policy';
 import { appendAdminAudit } from '../../libs/database/src/admin-policy';
 import { AdminAuditLog } from '../../libs/database/src/admin.entities';
+
+async function assertNoSchemaDrift(source: DataSource, t: TestContext) {
+  const runner = source.createQueryRunner();
+  const getTables = runner.getTables.bind(runner);
+  const tablesMock = t.mock.method(
+    runner,
+    'getTables',
+    async (names?: string[]) => {
+      const tables = await getTables(names);
+      // TypeORM splits MySQL enum members on every comma, including commas INSIDE
+      // robots directives. Read the quoted members from MySQL itself; never replace
+      // them with expected metadata or filter out schema-change queries.
+      const definitions = (await runner.query(
+        "SELECT TABLE_NAME AS tableName, COLUMN_NAME AS columnName, COLUMN_TYPE AS columnType FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE = 'enum'",
+      )) as { tableName: string; columnName: string; columnType: string }[];
+      for (const definition of definitions) {
+        const column = tables
+          .find((table) => table.name === definition.tableName)
+          ?.findColumnByName(definition.columnName);
+        if (!column) continue;
+        const values = Array.from(
+          definition.columnType.matchAll(/'((?:''|[^'])*)'/g),
+          (match) => (match[1] ?? '').replace(/''/g, "'"),
+        );
+        assert.equal(
+          `enum(${values.map((value) => `'${value.replace(/'/g, "''")}'`).join(',')})`,
+          definition.columnType,
+          'Enum introspection must be lossless',
+        );
+        column.enum = values;
+      }
+      return tables;
+    },
+  );
+  const runnerMock = t.mock.method(source, 'createQueryRunner', () => runner);
+  try {
+    const changes = await source.driver.createSchemaBuilder().log();
+    assert.deepEqual(
+      changes.upQueries.map((query) => query.query),
+      [],
+    );
+  } finally {
+    runnerMock.mock.restore();
+    tablesMock.mock.restore();
+    if (!runner.isReleased) await runner.release();
+  }
+}
 
 // Run only against a dedicated, empty database granted to the configured user.
 // Supply MYSQL_HOST/PORT/DATABASE/USER/PASSWORD explicitly; no .env is loaded.
@@ -82,11 +130,7 @@ test('MySQL migrations and relational persistence', async (t) => {
       async () => {
         assert.deepEqual(await source.runMigrations(), []);
         assert.equal(await source.showMigrations(), false);
-        const changes = await source.driver.createSchemaBuilder().log();
-        assert.deepEqual(
-          changes.upQueries.map((query) => query.query),
-          [],
-        );
+        await assertNoSchemaDrift(source, t);
       },
     );
 
@@ -126,6 +170,14 @@ test('MySQL migrations and relational persistence', async (t) => {
             }),
           );
           assert.equal(showcase.status, ShowcaseStatus.DRAFT);
+          const engagement = runner.manager.getRepository(PostEngagement);
+          await engagement.save(engagement.create({ postId: showcase.id }));
+          const counters = await engagement.findOneByOrFail({
+            postId: showcase.id,
+          });
+          assert.equal(counters.likesCount, 0);
+          assert.equal(counters.viewsCount, 0);
+          assert.ok(counters.updatedAt instanceof Date);
           await assert.rejects(
             showcases.insert({
               ownerId: randomUUID(),
@@ -443,11 +495,7 @@ test('MySQL migrations and relational persistence', async (t) => {
           source.migrations.length,
         );
         assert.equal(await source.showMigrations(), false);
-        const drift = await source.driver.createSchemaBuilder().log();
-        assert.deepEqual(
-          drift.upQueries.map((query) => query.query),
-          [],
-        );
+        await assertNoSchemaDrift(source, t);
       },
     );
   } finally {

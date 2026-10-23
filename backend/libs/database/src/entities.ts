@@ -272,6 +272,10 @@ export class Showcase extends BaseEntity {
 @Index('uq_stores_slug', ['slug'], { unique: true })
 @Index('idx_stores_owner', ['ownerId'])
 @Index('idx_stores_admin_archive', ['adminArchivedAt'])
+@Index('idx_stores_location', ['latitude', 'longitude'])
+@Index('idx_stores_city', ['city'])
+@Index('idx_stores_country', ['country'])
+@Index('idx_stores_verification_badge', ['hasVerificationBadge'])
 export class Store extends BaseEntity {
   // Ordinary and worker saves must never overwrite a concurrent moderation action.
   @Column({
@@ -365,6 +369,7 @@ export class Store extends BaseEntity {
     precision: 10,
     scale: 8,
     nullable: true,
+    comment: 'Latitude coordinate (-90 to 90)',
   })
   latitude!: number | null; // Decimal degrees, e.g., 33.8938
 
@@ -374,13 +379,26 @@ export class Store extends BaseEntity {
     precision: 11,
     scale: 8,
     nullable: true,
+    comment: 'Longitude coordinate (-180 to 180)',
   })
   longitude!: number | null; // Decimal degrees, e.g., 35.5018
 
-  @Column({ name: 'address', type: 'varchar', length: 500, nullable: true })
+  @Column({
+    name: 'address',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    comment: 'Full street address',
+  })
   address!: string | null; // Full street address
 
-  @Column({ name: 'city', type: 'varchar', length: 100, nullable: true })
+  @Column({
+    name: 'city',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+    comment: 'City name',
+  })
   city!: string | null; // City name (e.g., "Beirut")
 
   @Column({
@@ -388,11 +406,17 @@ export class Store extends BaseEntity {
     type: 'varchar',
     length: 100,
     nullable: true,
-    default: 'Lebanon',
+    comment: 'Country name (default: Lebanon)',
   })
   country!: string | null; // Country name (default: Lebanon)
 
-  @Column({ name: 'postal_code', type: 'varchar', length: 20, nullable: true })
+  @Column({
+    name: 'postal_code',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    comment: 'Postal/ZIP code',
+  })
   postalCode!: string | null; // Postal/ZIP code
 
   @Column({
@@ -400,20 +424,43 @@ export class Store extends BaseEntity {
     type: 'varchar',
     length: 200,
     nullable: true,
+    comment: 'Custom location name (e.g., "Beirut Mall")',
   })
   locationName!: string | null; // Custom location name (e.g., "Beirut Mall")
 
-  @Column({ name: 'phone', type: 'varchar', length: 30, nullable: true })
+  @Column({
+    name: 'phone',
+    type: 'varchar',
+    length: 30,
+    nullable: true,
+    comment: 'Store phone number',
+  })
   phone!: string | null; // Store phone number
 
-  @Column({ name: 'website', type: 'varchar', length: 500, nullable: true })
+  @Column({
+    name: 'website',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    comment: 'Store website URL',
+  })
   website!: string | null; // Store website URL
 
-  @Column({ name: 'opening_hours', type: 'json', nullable: true })
+  @Column({
+    name: 'opening_hours',
+    type: 'json',
+    nullable: true,
+    comment: 'Opening hours as JSON (e.g., {"mon": "9:00-18:00"})',
+  })
   openingHours!: Record<string, string> | null; // e.g., {"mon": "9:00-18:00", "tue": "9:00-18:00"}
 
   // Verification Badge fields
-  @Column({ name: 'has_verification_badge', type: 'boolean', default: false })
+  @Column({
+    name: 'has_verification_badge',
+    type: 'boolean',
+    default: false,
+    comment: 'Whether the store has a verification badge',
+  })
   hasVerificationBadge!: boolean;
 
   @Column({
@@ -421,6 +468,7 @@ export class Store extends BaseEntity {
     type: 'datetime',
     precision: 6,
     nullable: true,
+    comment: 'When the badge was granted',
   })
   verificationBadgeGrantedAt!: Date | null;
 
@@ -429,6 +477,7 @@ export class Store extends BaseEntity {
     type: 'varchar',
     length: 36,
     nullable: true,
+    comment: 'Admin user ID who granted the badge',
   })
   verificationBadgeGrantedBy!: string | null; // Admin user ID who granted the badge
 
@@ -437,6 +486,7 @@ export class Store extends BaseEntity {
     type: 'datetime',
     precision: 6,
     nullable: true,
+    comment: 'Optional badge expiration date',
   })
   verificationBadgeExpiresAt!: Date | null; // Optional: badge expiration
 
@@ -783,6 +833,7 @@ export class CartItem extends BaseEntity {
 
 @Entity({ name: 'media_assets', engine: 'InnoDB' })
 @Index('idx_media_assets_showcase_position', ['showcaseId', 'position'])
+@Index('idx_media_assets_showcase_kind', ['showcaseId', 'kind'])
 @Index('idx_media_assets_status_created', ['status', 'createdAt'])
 @Index('uq_media_assets_original_key', ['originalKey'], { unique: true })
 @Index('idx_media_assets_admin_archive', ['adminArchivedAt'])
@@ -908,7 +959,11 @@ export class MediaVariant extends BaseEntity {
 }
 
 @Entity({ name: 'post_engagement', engine: 'InnoDB' })
-export class PostEngagement extends BaseEntity {
+export class PostEngagement {
+  // This table is keyed by post_id and has no generated id or created_at.
+  @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 6 })
+  updatedAt!: Date;
+
   @Column({
     name: 'last_batch_id',
     type: 'varchar',
@@ -917,7 +972,7 @@ export class PostEngagement extends BaseEntity {
   })
   lastBatchId!: string | null;
 
-  @Column({ name: 'post_id', type: 'varchar', length: 36 })
+  @PrimaryColumn({ name: 'post_id', type: 'varchar', length: 36 })
   postId!: string;
 
   @ManyToOne(() => Showcase, { onDelete: 'RESTRICT' })
@@ -1000,19 +1055,34 @@ export enum BoostBidStrategy {
   AUTO = 'auto',
 }
 
-@Entity({ name: 'boost_coins', engine: 'InnoDB' })
+@Entity({
+  name: 'boost_coins',
+  engine: 'InnoDB',
+  comment: 'User boost coin balances',
+})
 export class BoostCoin extends TimestampedEntity {
-  @PrimaryColumn({ name: 'user_id', type: 'varchar', length: 36 })
+  @PrimaryColumn({
+    name: 'user_id',
+    type: 'varchar',
+    length: 36,
+    comment: 'User ID',
+  })
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', onUpdate: 'RESTRICT' })
   @JoinColumn({
     name: 'user_id',
     foreignKeyConstraintName: 'fk_boost_coins_user',
   })
   user!: Relation<User>;
 
-  @Column({ name: 'balance', type: 'bigint', unsigned: true, default: '0' })
+  @Column({
+    name: 'balance',
+    type: 'bigint',
+    unsigned: true,
+    default: '0',
+    comment: 'Current boost coin balance',
+  })
   balance!: string; // BIGINT as string
 }
 
@@ -1025,12 +1095,17 @@ export interface BoostTransactionMetadata {
   [key: string]: unknown;
 }
 
-@Entity({ name: 'boost_transactions', engine: 'InnoDB' })
+@Entity({
+  name: 'boost_transactions',
+  engine: 'InnoDB',
+  comment: 'Boost coin transaction history',
+})
+@Index('operation_id', ['operationId'], { unique: true })
 @Index('idx_boost_transactions_user', ['userId'])
 @Index('idx_boost_transactions_reference', ['referenceId', 'referenceType'])
 @Index('idx_boost_transactions_created', ['createdAt'])
 export class BoostTransaction {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', { comment: 'Transaction UUID' })
   id!: string;
 
   @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
@@ -1041,15 +1116,14 @@ export class BoostTransaction {
     type: 'varchar',
     length: 100,
     nullable: true,
-    unique: true,
     collation: 'utf8mb4_bin',
   })
   operationId!: string | null;
 
-  @Column({ name: 'user_id', type: 'varchar', length: 36 })
+  @Column({ name: 'user_id', type: 'varchar', length: 36, comment: 'User ID' })
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', onUpdate: 'RESTRICT' })
   @JoinColumn({
     name: 'user_id',
     foreignKeyConstraintName: 'fk_boost_transactions_user',
@@ -1060,19 +1134,40 @@ export class BoostTransaction {
     name: 'type',
     type: 'enum',
     enum: BoostTransactionType,
+    comment: 'Transaction type',
   })
   type!: BoostTransactionType;
 
-  @Column({ name: 'amount', type: 'bigint' }) // signed BIGINT
+  @Column({
+    name: 'amount',
+    type: 'bigint',
+    comment: 'Coin amount (positive for credit, negative for debit)',
+  }) // signed BIGINT
   amount!: string; // Can be negative
 
-  @Column({ name: 'balance_before', type: 'bigint', unsigned: true })
+  @Column({
+    name: 'balance_before',
+    type: 'bigint',
+    unsigned: true,
+    comment: 'Balance before transaction',
+  })
   balanceBefore!: string;
 
-  @Column({ name: 'balance_after', type: 'bigint', unsigned: true })
+  @Column({
+    name: 'balance_after',
+    type: 'bigint',
+    unsigned: true,
+    comment: 'Balance after transaction',
+  })
   balanceAfter!: string;
 
-  @Column({ name: 'reference_id', type: 'varchar', length: 36, nullable: true })
+  @Column({
+    name: 'reference_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+    comment: 'Reference ID (campaign ID, payment ID, etc.)',
+  })
   referenceId!: string | null;
 
   @Column({
@@ -1080,13 +1175,25 @@ export class BoostTransaction {
     type: 'enum',
     enum: BoostTransactionReferenceType,
     nullable: true,
+    comment: 'Reference type',
   })
   referenceType!: BoostTransactionReferenceType | null;
 
-  @Column({ name: 'description', type: 'varchar', length: 500, nullable: true })
+  @Column({
+    name: 'description',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    comment: 'Transaction description',
+  })
   description!: string | null;
 
-  @Column({ name: 'metadata', type: 'json', nullable: true })
+  @Column({
+    name: 'metadata',
+    type: 'json',
+    nullable: true,
+    comment: 'Additional metadata (payment details, admin notes, etc.)',
+  })
   metadata!: BoostTransactionMetadata | null;
 }
 
@@ -1131,7 +1238,11 @@ export interface BoostCreative {
   displayUrl?: string; // Custom display URL
 }
 
-@Entity({ name: 'boost_campaigns', engine: 'InnoDB' })
+@Entity({
+  name: 'boost_campaigns',
+  engine: 'InnoDB',
+  comment: 'Boost ad campaigns',
+})
 @Index('idx_boost_campaigns_user', ['userId'])
 @Index('idx_boost_campaigns_target', [
   'targetType',
@@ -1140,24 +1251,38 @@ export interface BoostCreative {
 ])
 @Index('idx_boost_campaigns_status', ['status'])
 @Index('idx_boost_campaigns_schedule', ['startAt', 'endAt'])
-export class BoostCampaign extends BaseEntity {
-  @Column({ name: 'user_id', type: 'varchar', length: 36 })
+export class BoostCampaign extends TimestampedEntity {
+  @PrimaryGeneratedColumn('uuid', { comment: 'Campaign UUID' })
+  id!: string;
+
+  @Column({
+    name: 'user_id',
+    type: 'varchar',
+    length: 36,
+    comment: 'Campaign owner (advertiser)',
+  })
   userId!: string;
 
-  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => User, { onDelete: 'RESTRICT', onUpdate: 'RESTRICT' })
   @JoinColumn({
     name: 'user_id',
     foreignKeyConstraintName: 'fk_boost_campaigns_user',
   })
   user!: Relation<User>;
 
-  @Column({ name: 'name', type: 'varchar', length: 100 })
+  @Column({
+    name: 'name',
+    type: 'varchar',
+    length: 100,
+    comment: 'Campaign name',
+  })
   name!: string;
 
   @Column({
     name: 'target_type',
     type: 'enum',
     enum: BoostTargetType,
+    comment: 'What is being boosted',
   })
   targetType!: BoostTargetType;
 
@@ -1177,14 +1302,14 @@ export class BoostCampaign extends BaseEntity {
   })
   targetShowcaseId!: string | null;
 
-  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT', onUpdate: 'RESTRICT' })
   @JoinColumn({
     name: 'target_store_id',
     foreignKeyConstraintName: 'fk_boost_campaigns_store',
   })
   targetStore!: Relation<Store | null>;
 
-  @ManyToOne(() => Showcase, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => Showcase, { onDelete: 'RESTRICT', onUpdate: 'RESTRICT' })
   @JoinColumn({
     name: 'target_showcase_id',
     foreignKeyConstraintName: 'fk_boost_campaigns_showcase',
@@ -1207,13 +1332,25 @@ export class BoostCampaign extends BaseEntity {
     type: 'enum',
     enum: BoostCampaignStatus,
     default: BoostCampaignStatus.DRAFT,
+    comment: 'Campaign status',
   })
   status!: BoostCampaignStatus;
 
-  @Column({ name: 'budget_coins', type: 'bigint', unsigned: true })
+  @Column({
+    name: 'budget_coins',
+    type: 'bigint',
+    unsigned: true,
+    comment: 'Total budget in boost coins',
+  })
   budgetCoins!: string; // Total budget in coins
 
-  @Column({ name: 'spent_coins', type: 'bigint', unsigned: true, default: '0' })
+  @Column({
+    name: 'spent_coins',
+    type: 'bigint',
+    unsigned: true,
+    default: '0',
+    comment: 'Coins spent so far',
+  })
   spentCoins!: string;
 
   @Column({
@@ -1221,6 +1358,7 @@ export class BoostCampaign extends BaseEntity {
     type: 'bigint',
     unsigned: true,
     nullable: true,
+    comment: 'Optional daily budget cap',
   })
   dailyBudgetCoins!: string | null;
 
@@ -1229,6 +1367,7 @@ export class BoostCampaign extends BaseEntity {
     type: 'enum',
     enum: BoostBidStrategy,
     default: BoostBidStrategy.AUTO,
+    comment: 'Bidding strategy',
   })
   bidStrategy!: BoostBidStrategy;
 
@@ -1237,22 +1376,50 @@ export class BoostCampaign extends BaseEntity {
     type: 'bigint',
     unsigned: true,
     nullable: true,
+    comment: 'Manual bid amount (for cpc/cpm)',
   })
   bidAmountCoins!: string | null; // Manual bid for CPC/CPM
 
-  @Column({ name: 'targeting', type: 'json' })
+  @Column({
+    name: 'targeting',
+    type: 'json',
+    comment: 'Targeting criteria (location, interests, demographics, etc.)',
+  })
   targeting!: BoostTargeting;
 
-  @Column({ name: 'creative', type: 'json', nullable: true })
+  @Column({
+    name: 'creative',
+    type: 'json',
+    nullable: true,
+    comment: 'Ad creative override (headline, description, CTA, media)',
+  })
   creative!: BoostCreative | null;
 
-  @Column({ name: 'start_at', type: 'datetime', precision: 6, nullable: true })
+  @Column({
+    name: 'start_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    comment: 'Campaign start time',
+  })
   startAt!: Date | null;
 
-  @Column({ name: 'end_at', type: 'datetime', precision: 6, nullable: true })
+  @Column({
+    name: 'end_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    comment: 'Campaign end time',
+  })
   endAt!: Date | null;
 
-  @Column({ name: 'paused_at', type: 'datetime', precision: 6, nullable: true })
+  @Column({
+    name: 'paused_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    comment: 'When paused by user',
+  })
   pausedAt!: Date | null;
 
   @Column({
@@ -1260,6 +1427,7 @@ export class BoostCampaign extends BaseEntity {
     type: 'datetime',
     precision: 6,
     nullable: true,
+    comment: 'When rejected by admin',
   })
   rejectedAt!: Date | null;
 
@@ -1268,6 +1436,7 @@ export class BoostCampaign extends BaseEntity {
     type: 'varchar',
     length: 500,
     nullable: true,
+    comment: 'Reason for rejection',
   })
   rejectionReason!: string | null;
 
@@ -1276,6 +1445,7 @@ export class BoostCampaign extends BaseEntity {
     type: 'datetime',
     precision: 6,
     nullable: true,
+    comment: 'When completed (budget exhausted or time ended)',
   })
   completedAt!: Date | null;
 }
@@ -1286,47 +1456,102 @@ export interface BoostCampaignPerformanceData {
   spendCoins: number;
 }
 
-@Entity({ name: 'boost_campaign_performance', engine: 'InnoDB' })
+@Entity({
+  name: 'boost_campaign_performance',
+  engine: 'InnoDB',
+  comment: 'Daily campaign performance metrics',
+})
 @Index('idx_boost_performance_date', ['date'])
 export class BoostCampaignPerformance extends TimestampedEntity {
-  @PrimaryColumn({ name: 'campaign_id', type: 'varchar', length: 36 })
+  @PrimaryColumn({
+    name: 'campaign_id',
+    type: 'varchar',
+    length: 36,
+    comment: 'Campaign ID',
+  })
   campaignId!: string;
 
-  @ManyToOne(() => BoostCampaign, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => BoostCampaign, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'RESTRICT',
+  })
   @JoinColumn({
     name: 'campaign_id',
     foreignKeyConstraintName: 'fk_boost_performance_campaign',
   })
   campaign!: Relation<BoostCampaign>;
 
-  @PrimaryColumn({ type: 'date' })
+  @PrimaryColumn({ type: 'date', comment: 'Stat date (UTC)' })
   date!: string; // UTC date
 
-  @Column({ name: 'impressions', type: 'bigint', unsigned: true, default: '0' })
+  @Column({
+    name: 'impressions',
+    type: 'bigint',
+    unsigned: true,
+    default: '0',
+    comment: 'Ad impressions',
+  })
   impressions!: string;
 
-  @Column({ name: 'clicks', type: 'bigint', unsigned: true, default: '0' })
+  @Column({
+    name: 'clicks',
+    type: 'bigint',
+    unsigned: true,
+    default: '0',
+    comment: 'Ad clicks',
+  })
   clicks!: string;
 
-  @Column({ name: 'spend_coins', type: 'bigint', unsigned: true, default: '0' })
+  @Column({
+    name: 'spend_coins',
+    type: 'bigint',
+    unsigned: true,
+    default: '0',
+    comment: 'Coins spent this day',
+  })
   spendCoins!: string;
 }
 
-@Entity({ name: 'boost_settings', engine: 'InnoDB' })
+@Entity({
+  name: 'boost_settings',
+  engine: 'InnoDB',
+  comment: 'Boost system admin settings',
+})
 export class BoostSetting {
   @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 6 })
   updatedAt!: Date;
 
-  @PrimaryColumn({ name: 'key', type: 'varchar', length: 100 })
+  @PrimaryColumn({
+    name: 'key',
+    type: 'varchar',
+    length: 100,
+    comment: 'Setting key',
+  })
   key!: string;
 
-  @Column({ name: 'value', type: 'json' })
+  @Column({
+    name: 'value',
+    type: 'json',
+    comment: 'Setting value (JSON for flexibility)',
+  })
   value!: number | boolean;
 
-  @Column({ name: 'description', type: 'varchar', length: 500, nullable: true })
+  @Column({
+    name: 'description',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    comment: 'Setting description',
+  })
   description!: string | null;
 
-  @Column({ name: 'updated_by', type: 'varchar', length: 36, nullable: true })
+  @Column({
+    name: 'updated_by',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+    comment: 'Admin user who last updated',
+  })
   updatedBy!: string | null; // Admin user ID
 
   // Note: createdAt/updatedAt from BaseEntity
