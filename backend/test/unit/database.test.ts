@@ -1,9 +1,11 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { DataSource } from 'typeorm';
+import { DataSource, type QueryRunner } from 'typeorm';
 import { validateDatabaseEnvironment } from '../../libs/config/src/environment';
 import { createDatabaseOptions } from '../../libs/database/src/database.options';
+import { AddStoreLocation1793318400000 } from '../../libs/database/src/migrations/1793318400000-AddStoreLocation';
 import {
   User,
   Showcase,
@@ -37,6 +39,74 @@ test('API and CLI database options prohibit automatic schema mutations', () => {
   assert.equal(options.bigNumberStrings, true);
   assert.equal(options.poolSize, 10);
   assert.equal(options.extra.queueLimit, 100);
+});
+
+test('store location migration creates and drops indexes using single statements', async () => {
+  const queries: string[] = [];
+  const runner = {
+    async query(sql: string) {
+      const statement = sql.trim().replace(/;$/, '').replace(/\s+/g, ' ');
+      assert.doesNotMatch(statement, /;\s*\S/, 'One SQL statement per query');
+      queries.push(statement);
+    },
+  } as unknown as QueryRunner;
+  const migration = new AddStoreLocation1793318400000();
+
+  await migration.up(runner);
+  assert.equal(queries.length, 4);
+  assert.match(queries[0] ?? '', /^ALTER TABLE `stores` ADD COLUMN `latitude`/);
+  assert.deepEqual(queries.slice(1), [
+    'CREATE INDEX `idx_stores_location` ON `stores` (`latitude`, `longitude`)',
+    'CREATE INDEX `idx_stores_city` ON `stores` (`city`)',
+    'CREATE INDEX `idx_stores_country` ON `stores` (`country`)',
+  ]);
+
+  queries.length = 0;
+  await migration.down(runner);
+  assert.equal(queries.length, 4);
+  assert.deepEqual(queries.slice(0, 3), [
+    'DROP INDEX `idx_stores_country` ON `stores`',
+    'DROP INDEX `idx_stores_city` ON `stores`',
+    'DROP INDEX `idx_stores_location` ON `stores`',
+  ]);
+  assert.match(
+    queries[3] ?? '',
+    /^ALTER TABLE `stores` DROP COLUMN `opening_hours`/,
+  );
+});
+
+test('database-only user service imports do not initialize application configuration', () => {
+  // Use a fresh process without the unit preload's Redis credentials or module cache.
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test' };
+  delete env.REDIS_PASSWORD;
+  delete env.NODE_OPTIONS;
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--unhandled-rejections=strict',
+      '-r',
+      'ts-node/register',
+      '-r',
+      'tsconfig-paths/register',
+      '-e',
+      `
+        require('reflect-metadata');
+        const assert = require('node:assert/strict');
+        const { UsersService } = require('./apps/api/src/modules/users/users.service');
+        assert.equal(typeof UsersService, 'function');
+        assert.equal(
+          Boolean(require.cache[require.resolve('./libs/config/src/configuration.module')]),
+          false,
+          'Database-only imports must not load .env or require Redis configuration',
+        );
+      `,
+    ],
+    { env, encoding: 'utf8', timeout: 30000, windowsHide: true },
+  );
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stderr, '');
 });
 
 test('entity metadata has private hashes, unique keys, and restrictive foreign keys', async () => {

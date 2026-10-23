@@ -20,11 +20,15 @@ export class AddStoreLocation1793318400000 implements MigrationInterface {
     `);
 
     // Add indexes for location-based queries
-    await queryRunner.query(`
-      CREATE INDEX \`idx_stores_location\` ON \`stores\` (\`latitude\`, \`longitude\`);
-      CREATE INDEX \`idx_stores_city\` ON \`stores\` (\`city\`);
-      CREATE INDEX \`idx_stores_country\` ON \`stores\` (\`country\`);
-    `);
+    await queryRunner.query(
+      'CREATE INDEX `idx_stores_location` ON `stores` (`latitude`, `longitude`)',
+    );
+    await queryRunner.query(
+      'CREATE INDEX `idx_stores_city` ON `stores` (`city`)',
+    );
+    await queryRunner.query(
+      'CREATE INDEX `idx_stores_country` ON `stores` (`country`)',
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

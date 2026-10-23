@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
-import { User } from '@app/database';
+// The database barrel also loads application configuration, including Redis.
+import { User } from '../../../../../libs/database/src/entities';
 
 export interface GoogleProfile {
   subject: string;
