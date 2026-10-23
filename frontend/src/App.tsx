@@ -6,16 +6,14 @@ import {
 } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
-  ArrowDown,
   ArrowRight,
   ArrowUpRight,
   BadgeCheck,
   Bookmark,
-  ChevronRight,
+  Check,
   Compass,
   Film,
   Flame,
-  Leaf,
   LoaderCircle,
   Mail,
   Plus,
@@ -46,8 +44,8 @@ import { PostCard, PostDialog, StoreAvatar } from './components/PostCard';
 const navigation = [
   { id: 'discover', label: 'Discover', icon: Compass },
   { id: 'trending', label: 'Trending', icon: Flame },
-  { id: 'videos', label: 'Short videos', icon: Film },
-  { id: 'saved', label: 'Saved finds', icon: Bookmark },
+  { id: 'videos', label: 'Videos', icon: Film },
+  { id: 'saved', label: 'Saved', icon: Bookmark },
 ] as const;
 type View = (typeof navigation)[number]['id'];
 type Algorithm = 'mixed' | 'recent' | 'trending';
@@ -203,12 +201,16 @@ export default function App() {
       setNotice('Saved for this visit only. Browser storage is unavailable.');
     }
   }
+  const isLoading =
+    settingsQuery.isLoading ||
+    (!demo &&
+      (feed.isLoading || storesQuery.isLoading || categoriesQuery.isLoading));
   const feedTitle =
     store?.name ||
     {
-      discover: 'Your daily dose of discovery',
-      trending: 'Worth a little attention',
-      videos: 'Little moments, in motion',
+      discover: 'Discover something new',
+      trending: 'Trending right now',
+      videos: 'Watch & discover',
       saved: 'Your saved finds',
     }[view];
 
@@ -217,74 +219,50 @@ export default function App() {
       <a className="skip-link" href="#discover-feed">
         Skip to discoveries
       </a>
-      <aside className="sidebar">
-        <a className="brand" href="/" aria-label={`${settings.siteName} home`}>
-          {settings.logoUrl ? (
-            <img
-              className="brand-logo"
-              src={assetUrl(settings.logoUrl)}
-              alt=""
-            />
-          ) : (
-            <span className="brand-mark">
-              m<span />
-            </span>
-          )}
-          <span>
-            {settings.siteName}
-            <span className="brand-dot">.</span>
-          </span>
-        </a>
-        <span className="nav-label">A WORLD TO DISCOVER</span>
-        <nav className="main-nav" aria-label="Main navigation">
-          {navigation.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => navigate(id)}
-              className={view === id ? 'active' : ''}
-              aria-label={label}
-              aria-current={view === id ? 'page' : undefined}
-            >
-              <Icon size={21} />
-              <span>{label}</span>
-              {id === 'discover' && <span className="nav-dot" />}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-invite">
-          <span className="invite-icon">
-            <StoreIcon size={21} />
-          </span>
-          <h3>Your store. Your story.</h3>
-          <p>Give your creations a place to be discovered.</p>
-          <a href={loginUrl}>
-            Join the community <ArrowUpRight size={16} />
+      {isLoading && (
+        <div className="loading-bar" role="status">
+          <span className="sr-only">Loading your discoveries…</span>
+        </div>
+      )}
+      <header className="site-header">
+        <div className="topbar">
+          <a
+            className="brand"
+            href="/"
+            aria-label={`${settings.siteName} home`}
+          >
+            {settings.logoUrl ? (
+              <img
+                className="brand-logo"
+                src={assetUrl(settings.logoUrl)}
+                alt=""
+              />
+            ) : (
+              <span className="brand-mark" aria-hidden="true">
+                m
+              </span>
+            )}
+            <span className="brand-name">{settings.siteName}</span>
           </a>
-        </div>
-        <div className="sidebar-bottom">
-          <button className="text-button preview-toggle" onClick={toggleDemo}>
-            <Sparkles size={16} />
-            {demo ? 'Back to live content' : 'Preview the design'}
-          </button>
-          <span className="tiny">A little inspiration, every day.</span>
-          <p>
-            {settings.footerText ||
-              `© ${new Date().getFullYear()} ${settings.siteName}`}
-          </p>
-        </div>
-      </aside>
-
-      <div className="page-shell">
-        <header className="topbar">
-          <span className="page-label">
-            Discover <span>/</span> <span>Something good</span>
-          </span>
+          <nav className="main-nav" aria-label="Main navigation">
+            {navigation.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => navigate(id)}
+                className={view === id ? 'active' : ''}
+                aria-current={view === id ? 'page' : undefined}
+              >
+                <Icon size={19} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
           <label className="search-box">
             <Search size={18} />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search this feed…"
+              placeholder="Search your feed…"
               aria-label="Search loaded posts and stores"
             />
             {search && (
@@ -300,8 +278,10 @@ export default function App() {
           <a className="sign-in" href={loginUrl}>
             Sign in <ArrowUpRight size={16} />
           </a>
-        </header>
+        </div>
+      </header>
 
+      <div className="page-shell">
         <main className="main-content">
           {demo && (
             <div className="status-banner demo-banner" role="status">
@@ -329,31 +309,40 @@ export default function App() {
           )}
           <section className="hero" aria-labelledby="welcome-title">
             <div className="hero-copy">
-              <span className="eyebrow">
-                <span className="little-line" /> INDEPENDENT STORES. ENDLESS
-                INSPIRATION.
+              <span className="eyebrow hero-label">
+                <Sparkles size={15} /> A fresh way to discover
               </span>
               <h1 id="welcome-title">
                 {settings.tagline || (
                   <>
-                    Find your next
+                    Good finds.
                     <br />
-                    <em>little obsession.</em>
+                    <span>Your kind of vibe.</span>
                   </>
                 )}
               </h1>
               <p>
                 {settings.description ||
-                  'Good things come from real people. Discover beautiful finds, fresh ideas, and the stores behind them.'}
+                  'Explore stores, watch their stories, and save what you love. All in one place.'}
               </p>
-              <button className="primary-button" onClick={goToFeed}>
-                Find your inspiration <ArrowDown size={17} />
-              </button>
-              <span className="hero-footnote">
-                <Leaf size={14} /> Small stores. Big character.
-              </span>
+              <div className="hero-actions">
+                <button className="primary-button" onClick={goToFeed}>
+                  Start exploring <ArrowRight size={17} />
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    navigate('videos');
+                    goToFeed();
+                  }}
+                >
+                  <Film size={17} /> Watch videos
+                </button>
+              </div>
             </div>
-            <div className="hero-visual">
+            <div
+              className={`hero-visual ${settings.bannerUrl ? 'custom-banner' : ''}`}
+            >
               <img
                 src={assetUrl(settings.bannerUrl) || inspirationPhoto}
                 alt={
@@ -364,326 +353,268 @@ export default function App() {
                 fetchPriority="high"
               />
               <div className="photo-caption">
-                <span>THE EVERYDAY, REIMAGINED</span>
-                <strong>
-                  More than a find.
-                  <br />A feeling.
-                </strong>
-              </div>
-              <span className="hero-stamp">
-                <Sparkles size={19} />
-                <span>
-                  GOOD FINDS
-                  <br />
-                  LIVE HERE
+                <span className="caption-icon">
+                  <StoreIcon size={21} />
                 </span>
-              </span>
+                <span>
+                  <strong>Small stores. Big ideas.</strong>
+                  <span>Find your next favorite.</span>
+                </span>
+                <ArrowUpRight size={19} />
+              </div>
             </div>
           </section>
 
-          <div className="content-columns">
-            <div className="feed-column">
-              {stores.length > 0 && (
-                <section className="store-strip" aria-label="Discover stores">
+          <div className="feed-column">
+            {stores.length > 0 && (
+              <section className="store-strip" aria-label="Discover stores">
+                <button
+                  className={`story all-stores ${!store ? 'selected' : ''}`}
+                  aria-pressed={!store}
+                  onClick={() => {
+                    setStore(null);
+                    setCategory('');
+                  }}
+                >
+                  <span className="story-ring">
+                    <Compass size={25} />
+                  </span>
+                  <span>All stores</span>
+                </button>
+                {stores.map((item) => (
                   <button
-                    className={`story all-stores ${!store ? 'selected' : ''}`}
-                    onClick={() => {
-                      setStore(null);
-                      setCategory('');
-                    }}
-                  >
-                    <span className="story-ring">
-                      <Compass size={25} />
-                    </span>
-                    <span>All stores</span>
-                  </button>
-                  {stores.map((item) => (
-                    <button
-                      className={`story ${store?.id === item.id ? 'selected' : ''}`}
-                      key={item.id}
-                      onClick={() => chooseStore(item)}
-                    >
-                      <span className="story-ring">
-                        <StoreAvatar store={item} large />
-                      </span>
-                      <span>{item.name}</span>
-                    </button>
-                  ))}
-                </section>
-              )}
-              <section
-                id="discover-feed"
-                className="discover-feed"
-                aria-labelledby="feed-title"
-              >
-                <div className="section-heading">
-                  <div>
-                    <span className="eyebrow">
-                      {demo
-                        ? 'A LITTLE LOOK AT WHAT’S POSSIBLE'
-                        : 'CURATED BY CURIOSITY'}
-                    </span>
-                    <h2 id="feed-title">{feedTitle}</h2>
-                  </div>
-                  {!store && (
-                    <label className="sort-select">
-                      <span className="sr-only">Sort discoveries</span>
-                      <select
-                        value={algorithm}
-                        disabled={demo}
-                        onChange={(event) => {
-                          const value = event.target.value as Algorithm;
-                          setAlgorithm(value);
-                          if (view === 'trending') setView('discover');
-                        }}
-                      >
-                        <option value="mixed">For you</option>
-                        <option value="recent">Newest first</option>
-                        <option value="trending">Trending</option>
-                      </select>
-                    </label>
-                  )}
-                  {store && (
-                    <button
-                      className="icon-button"
-                      aria-label="Show all stores"
-                      onClick={() => setStore(null)}
-                    >
-                      <X size={19} />
-                    </button>
-                  )}
-                </div>
-                {!store && (
-                  <div className="category-tabs" aria-label="Categories">
-                    <button
-                      className={!category ? 'selected' : ''}
-                      aria-pressed={!category}
-                      onClick={() => setCategory('')}
-                    >
-                      <Sparkles size={15} />
-                      All finds
-                    </button>
-                    {categories.map((item) => (
-                      <button
-                        key={item.category}
-                        className={category === item.category ? 'selected' : ''}
-                        aria-pressed={category === item.category}
-                        onClick={() => setCategory(item.category)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {(view === 'saved' || view === 'videos' || search) && (
-                  <p className="filter-note">
-                    {view === 'saved'
-                      ? 'Saved on this device. Showing saved posts from the loaded feed.'
-                      : view === 'videos'
-                        ? 'Showing videos from the loaded feed.'
-                        : 'Searching titles, descriptions, and stores in the loaded feed.'}{' '}
-                    Load more to discover more matches.
-                  </p>
-                )}
-                {!demo && feed.isPending && (
-                  <div
-                    className="post-grid"
-                    role="status"
-                    aria-label="Loading discoveries"
-                  >
-                    {[0, 1, 2, 3].map((id) => (
-                      <div key={id} className="skeleton-card">
-                        <div />
-                        <div />
-                        <div />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {!demo && feed.isError && (
-                  <div className="empty-state" role="status">
-                    <span className="empty-icon">
-                      <RefreshCw size={25} />
-                    </span>
-                    <h3>Good things are on their way.</h3>
-                    <p>
-                      We couldn’t load the feed. Make sure the backend is
-                      running, then try again.
-                    </p>
-                    <div className="empty-actions">
-                      <button
-                        className="primary-button"
-                        onClick={() => void feed.refetch()}
-                        disabled={feed.isFetching}
-                      >
-                        <RefreshCw size={15} />
-                        Try again
-                      </button>
-                      <button className="secondary-button" onClick={toggleDemo}>
-                        Preview the design
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {posts.length > 0 && (
-                  <div className="post-grid">
-                    {posts.map((post) => (
-                      <PostCard
-                        key={post.id}
-                        post={post}
-                        saved={saved.includes(post.id)}
-                        onSave={() => savePost(post.id)}
-                        onOpen={() => setSelected(post)}
-                        onStore={chooseStore}
-                        demo={demo}
-                      />
-                    ))}
-                  </div>
-                )}
-                {(demo || (!feed.isPending && !feed.isError)) &&
-                  posts.length === 0 && (
-                    <div className="empty-state">
-                      <span className="empty-icon">
-                        {view === 'saved' ? (
-                          <Bookmark size={26} />
-                        ) : (
-                          <Compass size={26} />
-                        )}
-                      </span>
-                      <h3>
-                        {view === 'saved'
-                          ? 'Keep the things that catch your eye.'
-                          : 'A little space for something new.'}
-                      </h3>
-                      <p>
-                        {view === 'saved'
-                          ? 'Tap the bookmark on a discovery to save it here.'
-                          : 'No discoveries here yet. Try another category or come back for fresh inspiration.'}
-                      </p>
-                      <button
-                        className="secondary-button"
-                        onClick={() => navigate('discover')}
-                      >
-                        Explore all finds <ArrowRight size={15} />
-                      </button>
-                      {!demo && !source.length && (
-                        <button className="text-button" onClick={toggleDemo}>
-                          See a sample of the design
-                        </button>
-                      )}
-                    </div>
-                  )}
-                {!demo && feed.hasNextPage && (
-                  <button
-                    className="load-more secondary-button"
-                    disabled={feed.isFetching}
-                    onClick={() => void feed.fetchNextPage()}
-                  >
-                    {feed.isFetchingNextPage ? (
-                      <LoaderCircle className="spin" size={17} />
-                    ) : (
-                      <Plus size={17} />
-                    )}
-                    Load more discoveries
-                  </button>
-                )}
-                {posts.length > 0 && (demo || !feed.hasNextPage) && (
-                  <div className="feed-end">
-                    <Leaf size={17} />
-                    <span>You’re all caught up. Stay curious.</span>
-                  </div>
-                )}
-              </section>
-            </div>
-
-            <aside className="right-rail">
-              <section className="community-card">
-                <span className="eyebrow">BETTER TOGETHER</span>
-                <h2>
-                  A place for
-                  <br />
-                  <em>your kind of finds.</em>
-                </h2>
-                <p>
-                  Meet independent stores and discover the stories behind the
-                  things you love.
-                </p>
-                <a className="primary-button" href={loginUrl}>
-                  Make yourself at home <ArrowUpRight size={16} />
-                </a>
-                <span className="tiny">
-                  A little community. A lot to discover.
-                </span>
-              </section>
-              <section className="stores-panel">
-                <div className="rail-heading">
-                  <h3>Meet the stores</h3>
-                  <StoreIcon size={18} />
-                </div>
-                <p className="muted">Good people. Great things.</p>
-                {stores.slice(0, 4).map((item) => (
-                  <button
-                    className="store-row"
+                    className={`story ${store?.id === item.id ? 'selected' : ''}`}
                     key={item.id}
+                    aria-pressed={store?.id === item.id}
                     onClick={() => chooseStore(item)}
                   >
-                    <StoreAvatar store={item} />
-                    <span>
-                      <strong>
-                        {item.name}
-                        {item.hasVerificationBadge && <BadgeCheck size={14} />}
-                      </strong>
-                      <small>
-                        {item.location?.city ||
-                          (demo ? 'Sample store' : 'Independent store')}
-                      </small>
+                    <span className="story-ring">
+                      <StoreAvatar store={item} large />
                     </span>
-                    <ChevronRight size={16} />
+                    <span>{item.name}</span>
+                    {item.hasVerificationBadge && <BadgeCheck size={15} />}
                   </button>
                 ))}
-                {!stores.length && (
-                  <p className="store-empty">
-                    {storesQuery.isError
-                      ? 'Stores are taking a little longer to load.'
-                      : storesQuery.isPending
-                        ? 'Finding your next favorites…'
-                        : 'New stores will appear here.'}
-                  </p>
+              </section>
+            )}
+            {!demo && storesQuery.isError && (
+              <div className="status-banner" role="status">
+                <span>Stores couldn’t load right now.</span>
+                <button onClick={() => void storesQuery.refetch()}>
+                  Retry stores
+                </button>
+              </div>
+            )}
+            <section
+              id="discover-feed"
+              className="discover-feed"
+              aria-labelledby="feed-title"
+            >
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">
+                    {demo ? 'Sample feed' : 'Your daily scroll, upgraded'}
+                  </span>
+                  <h2 id="feed-title">{feedTitle}</h2>
+                </div>
+                {!store && (
+                  <label className="sort-select">
+                    <span className="sr-only">Sort discoveries</span>
+                    <select
+                      value={algorithm}
+                      disabled={demo}
+                      onChange={(event) => {
+                        const value = event.target.value as Algorithm;
+                        setAlgorithm(value);
+                        if (view === 'trending') setView('discover');
+                      }}
+                    >
+                      <option value="mixed">For you</option>
+                      <option value="recent">Newest first</option>
+                      <option value="trending">Trending</option>
+                    </select>
+                  </label>
                 )}
-                {storesQuery.isError && !demo && (
+                {store && (
                   <button
-                    className="text-button"
-                    onClick={() => void storesQuery.refetch()}
+                    className="icon-button"
+                    aria-label="Show all stores"
+                    onClick={() => setStore(null)}
                   >
-                    Try again
+                    <X size={19} />
                   </button>
                 )}
-              </section>
-              <div className="manifesto">
-                <span className="manifesto-icon">
-                  <Leaf size={27} />
-                </span>
-                <p>
-                  Less scrolling.
-                  <br />
-                  <strong>More discovering.</strong>
-                </p>
-                <span>Find something that feels like you.</span>
               </div>
-              <footer className="site-footer">
-                {settings.contactEmail && (
-                  <a href={`mailto:${settings.contactEmail}`}>
-                    <Mail size={14} />
-                    Get in touch
-                  </a>
-                )}
-                <p>
-                  {settings.footerText ||
-                    `© ${new Date().getFullYear()} ${settings.siteName}. Made for discovery.`}
+              {!store && (
+                <div className="category-tabs" aria-label="Categories">
+                  <button
+                    className={!category ? 'selected' : ''}
+                    aria-pressed={!category}
+                    onClick={() => setCategory('')}
+                  >
+                    <Sparkles size={15} />
+                    All finds
+                  </button>
+                  {categories.map((item) => (
+                    <button
+                      key={item.category}
+                      className={category === item.category ? 'selected' : ''}
+                      aria-pressed={category === item.category}
+                      onClick={() => setCategory(item.category)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(view === 'saved' || view === 'videos' || search) && (
+                <p className="filter-note">
+                  {view === 'saved'
+                    ? 'Saved on this device. Showing saved posts from the loaded feed.'
+                    : view === 'videos'
+                      ? 'Showing videos from the loaded feed.'
+                      : 'Searching titles, descriptions, and stores in the loaded feed.'}{' '}
+                  Load more to discover more matches.
                 </p>
-              </footer>
-            </aside>
+              )}
+              {!demo && feed.isPending && (
+                <div
+                  className="post-grid"
+                  role="status"
+                  aria-label="Loading discoveries"
+                >
+                  <span className="sr-only">Finding your next favorites…</span>
+                  {[0, 1, 2, 3, 4, 5].map((id) => (
+                    <div key={id} className="skeleton-card" aria-hidden="true">
+                      <div />
+                      <div />
+                      <div />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!demo && feed.isError && (
+                <div className="empty-state" role="status">
+                  <span className="empty-icon">
+                    <RefreshCw size={25} />
+                  </span>
+                  <h3>Let’s try that again.</h3>
+                  <p>We couldn’t load your feed. Try again in a moment.</p>
+                  <div className="empty-actions">
+                    <button
+                      className="primary-button"
+                      onClick={() => void feed.refetch()}
+                      disabled={feed.isFetching}
+                    >
+                      <RefreshCw size={15} />
+                      Try again
+                    </button>
+                    <button className="secondary-button" onClick={toggleDemo}>
+                      Preview the design
+                    </button>
+                  </div>
+                </div>
+              )}
+              {posts.length > 0 && (
+                <div className="post-grid">
+                  {posts.map((post, index) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      index={index}
+                      saved={saved.includes(post.id)}
+                      onSave={() => savePost(post.id)}
+                      onOpen={() => setSelected(post)}
+                      onStore={chooseStore}
+                      demo={demo}
+                    />
+                  ))}
+                </div>
+              )}
+              {(demo || (!feed.isPending && !feed.isError)) &&
+                posts.length === 0 && (
+                  <div className="empty-state">
+                    <span className="empty-icon">
+                      {view === 'saved' ? (
+                        <Bookmark size={26} />
+                      ) : (
+                        <Compass size={26} />
+                      )}
+                    </span>
+                    <h3>
+                      {view === 'saved'
+                        ? 'All your favorites, right here.'
+                        : 'Nothing here just yet.'}
+                    </h3>
+                    <p>
+                      {view === 'saved'
+                        ? 'Tap the bookmark on a discovery to save it here.'
+                        : 'Try another category or check back for new posts.'}
+                    </p>
+                    <button
+                      className="secondary-button"
+                      onClick={() => navigate('discover')}
+                    >
+                      Explore all finds <ArrowRight size={15} />
+                    </button>
+                    {!demo && !source.length && (
+                      <button className="text-button" onClick={toggleDemo}>
+                        See a sample of the design
+                      </button>
+                    )}
+                  </div>
+                )}
+              {!demo && feed.hasNextPage && (
+                <button
+                  className="load-more secondary-button"
+                  disabled={feed.isFetching}
+                  onClick={() => void feed.fetchNextPage()}
+                >
+                  {feed.isFetchingNextPage ? (
+                    <LoaderCircle className="spin" size={17} />
+                  ) : (
+                    <Plus size={17} />
+                  )}
+                  Load more discoveries
+                </button>
+              )}
+              {posts.length > 0 && (demo || !feed.hasNextPage) && (
+                <div className="feed-end">
+                  <Check size={17} />
+                  <span>You’re all caught up.</span>
+                </div>
+              )}
+            </section>
           </div>
+          <section className="join-banner" aria-labelledby="join-title">
+            <span className="invite-icon">
+              <StoreIcon size={23} />
+            </span>
+            <div>
+              <h2 id="join-title">Have a store? Get discovered.</h2>
+              <p>Share what you do. Find your people.</p>
+            </div>
+            <a className="secondary-button" href={loginUrl}>
+              Get started <ArrowUpRight size={16} />
+            </a>
+          </section>
+          <footer className="site-footer">
+            <p>
+              {settings.footerText ||
+                `© ${new Date().getFullYear()} ${settings.siteName}. Made for discovery.`}
+            </p>
+            <div className="footer-links">
+              <button className="text-button" onClick={toggleDemo}>
+                <Sparkles size={15} />
+                {demo ? 'Back to live feed' : 'Preview the design'}
+              </button>
+              {settings.contactEmail && (
+                <a href={`mailto:${settings.contactEmail}`}>
+                  <Mail size={14} /> Get in touch
+                </a>
+              )}
+            </div>
+          </footer>
         </main>
       </div>
       {notice && (

@@ -40,6 +40,7 @@ function MediaView({
   playing?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   if (!media || failed)
     return (
       <div className="media-placeholder">
@@ -81,7 +82,7 @@ function MediaView({
       .join(', ');
   const jpeg = media.variants.find((v) => v.mimeType === 'image/jpeg');
   return (
-    <picture>
+    <picture className={`media-preview ${loaded ? 'is-loaded' : 'is-loading'}`}>
       {media.kind === 'image' && (
         <>
           <source
@@ -101,6 +102,10 @@ function MediaView({
         alt={title}
         loading="lazy"
         decoding="async"
+        ref={(image) => {
+          if (image?.complete && image.naturalWidth > 0) setLoaded(true);
+        }}
+        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
     </picture>
@@ -109,6 +114,7 @@ function MediaView({
 
 export function PostCard({
   post,
+  index,
   saved,
   onSave,
   onOpen,
@@ -116,6 +122,7 @@ export function PostCard({
   demo,
 }: {
   post: Post;
+  index: number;
   saved: boolean;
   onSave: () => void;
   onOpen: () => void;
@@ -124,7 +131,10 @@ export function PostCard({
 }) {
   const media = post.media[0];
   return (
-    <article className="post-card">
+    <article
+      className="post-card"
+      style={{ animationDelay: `${Math.min(index, 5) * 55}ms` }}
+    >
       <header className="post-header">
         <button
           className="store-identity"
@@ -137,7 +147,7 @@ export function PostCard({
             <small>
               {demo
                 ? 'Sample showcase'
-                : post.store?.location?.city || 'A little inspiration'}
+                : post.store?.location?.city || 'Independent store'}
             </small>
           </span>
         </button>
