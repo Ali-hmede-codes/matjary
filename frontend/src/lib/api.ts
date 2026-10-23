@@ -1,0 +1,68 @@
+import { mediaUrl } from './website';
+
+export interface Store {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  brandColor: string | null;
+  hasVerificationBadge?: boolean;
+  location?: { city: string | null; country: string | null } | null;
+}
+
+export interface Media {
+  id: string;
+  kind: 'image' | 'video';
+  primaryUrl: string;
+  posterUrl: string | null;
+  variants: {
+    url: string;
+    width: number;
+    height: number;
+    mimeType: string;
+    label: string;
+  }[];
+}
+
+export interface Post {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  publishedAt: string | null;
+  store?: Store;
+  media: Media[];
+  engagement: { likes: number; views: number; viewerLiked: boolean };
+}
+
+export interface Feed {
+  items: Post[];
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+export interface Category {
+  category: string;
+  label: string;
+  count: number;
+}
+
+export const loginUrl = `${__DEV_BACKEND_ORIGIN__ ?? ''}/api/v1/auth/login`;
+export const assetUrl = (value: string | null | undefined) =>
+  mediaUrl(value, __DEV_BACKEND_ORIGIN__);
+
+export async function getJson<T>(
+  path: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(`/api/v1/${path}`, {
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(12_000)])
+      : AbortSignal.timeout(12_000),
+  });
+  // Never display driver errors, response bodies, or credentials in the UI.
+  if (!response.ok) throw new Error('This content is temporarily unavailable.');
+  return response.json() as Promise<T>;
+}
