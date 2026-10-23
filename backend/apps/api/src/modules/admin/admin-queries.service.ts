@@ -19,6 +19,9 @@ import {
   SubscriptionPlan,
   SystemErrorRecord,
   User,
+  UserRole,
+  isAdminUser,
+  isAdminEmail,
   UserSubscription,
   SeoRedirect,
   type AdminActor,
@@ -41,7 +44,7 @@ const fields = (text: string) => text.split(' ');
 export const ADMIN_RESOURCES: Record<string, Resource> = {
   users: {
     target: User,
-    fields: fields('id email displayName suspendedAt createdAt updatedAt'),
+    fields: fields('id email displayName role suspendedAt createdAt updatedAt'),
     search: ['email', 'displayName'],
     archive: 'suspendedAt',
   },
@@ -168,6 +171,16 @@ export const ADMIN_RESOURCES: Record<string, Resource> = {
 export class AdminQueriesService {
   constructor(private readonly access: AdminAccessService) {}
 
+  private withUserRole(item: ObjectLiteral) {
+    return {
+      ...item,
+      role: isAdminUser(item, this.access.allowlist)
+        ? UserRole.ADMIN
+        : UserRole.USER,
+      roleManagedByEnvironment: isAdminEmail(item.email, this.access.allowlist),
+    };
+  }
+
   private resource(name: string): Resource {
     if (!Object.hasOwn(ADMIN_RESOURCES, name))
       throw new NotFoundException('Administrative resource not found');
@@ -232,7 +245,13 @@ export class AdminQueriesService {
       .take(limit)
       .skip(offset)
       .getManyAndCount();
-    return { items, total, limit, offset };
+    return {
+      items:
+        name === 'users' ? items.map((item) => this.withUserRole(item)) : items,
+      total,
+      limit,
+      offset,
+    };
   }
 
   async detail(name: string, id: string, actor: AdminActor) {
@@ -277,7 +296,7 @@ export class AdminQueriesService {
           take: 30,
         });
     }
-    return item;
+    return name === 'users' ? this.withUserRole(item) : item;
   }
 
   async overview(actor: AdminActor) {

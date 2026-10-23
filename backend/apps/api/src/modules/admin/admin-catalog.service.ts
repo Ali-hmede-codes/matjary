@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import {
   User,
+  UserRole,
   Store,
   Product,
   Showcase,
@@ -20,6 +22,7 @@ import {
   MediaProcessingOutbox,
   appendAdminAudit,
   isAdminEmail,
+  isAdminUser,
   effectiveLimits,
   assertQuota,
   assertContentAvailable,
@@ -36,6 +39,7 @@ import {
   AdminMediaUpdateDto,
   AdminUpdateStoreDto,
   AdminUserUpdateDto,
+  AdminUserRoleDto,
 } from './admin.dto';
 import { UpdateProductDto } from '../products/dto/update-product.dto';
 import { UpdateShowcaseDto } from '../showcases/dto/update-showcase.dto';
@@ -145,6 +149,50 @@ export class AdminCatalogService {
         'displayName',
       ]);
       return { id };
+    });
+  }
+
+  async updateUserRole(id: string, dto: AdminUserRoleDto, input: AdminActor) {
+    const actor = this.access.reason(input, dto.reason);
+    return this.access.transaction(actor, async (manager) => {
+      // Serialize against role revocation before granting anyone else access.
+      const administrator = await manager.findOne(User, {
+        where: { id: actor.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (
+        !administrator ||
+        administrator.suspendedAt ||
+        !isAdminUser(administrator, this.access.allowlist)
+      )
+        throw new ForbiddenException('Admin access required');
+      const user = await manager.findOne(User, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('User not found');
+      if (isAdminEmail(user.email, this.access.allowlist))
+        throw new ConflictException(
+          'Configured administrator roles cannot be changed',
+        );
+      if (id === actor.id)
+        throw new ConflictException('You cannot change your own role');
+      if (dto.role === UserRole.ADMIN && user.suspendedAt)
+        throw new ConflictException(
+          'Restore the account before granting admin access',
+        );
+      if (user.role === dto.role) return { id, role: user.role };
+      if (user.sessionVersion >= 4294967295)
+        throw new ConflictException('Session version limit reached');
+      await manager.query(
+        'UPDATE `users` SET `role` = ?, session_version = session_version + 1, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',
+        [dto.role, id],
+      );
+      await appendAdminAudit(manager, actor, 'users', id, 'role.update', [
+        'role',
+        'sessionVersion',
+      ]);
+      return { id, role: dto.role };
     });
   }
 

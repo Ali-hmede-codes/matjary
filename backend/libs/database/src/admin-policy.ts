@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { ForbiddenException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { AdminAuditLog } from './admin.entities';
-import { User } from './entities';
+import { User, UserRole } from './entities';
 
 export function isAdminEmail(
   email: string | undefined,
@@ -16,6 +16,17 @@ export function isAdminEmail(
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean)
       .includes(email.toLowerCase()),
+  );
+}
+
+// Configured administrators remain a protected bootstrap/recovery path.
+export function isAdminUser(
+  user: { email?: string; role?: UserRole } | undefined,
+  allowlist: string,
+): boolean {
+  return Boolean(
+    user &&
+    (user.role === UserRole.ADMIN || isAdminEmail(user.email, allowlist)),
   );
 }
 
@@ -39,7 +50,7 @@ export async function requireAdmin(
   allowlist: string,
 ): Promise<User> {
   const user = await manager.findOneBy(User, { id: actor.id });
-  if (!user || user.suspendedAt || !isAdminEmail(user.email, allowlist)) {
+  if (!user || user.suspendedAt || !isAdminUser(user, allowlist)) {
     throw new ForbiddenException('Admin access required');
   }
   return user;

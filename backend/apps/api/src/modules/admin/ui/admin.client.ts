@@ -5,7 +5,7 @@ export const ADMIN_SCRIPT = String.raw`'use strict';
   if (!schema) { $('content').textContent = 'The dashboard could not load. Refresh to try again.'; return; }
   const views = schema.views;
   let view = 'overview', generation = 0, offset = 0, filters = {}, monitorWindow = '1h';
-  let saving = false, saveAction = null, controls = [], creating = false;
+  let saving = false, saveAction = null, controls = [], creating = false, currentUserId = null;
   const node = (tag, text, cls) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (cls) element.className = cls; return element; };
   const label = (value) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).replace(/Id$/, 'ID');
   const button = (text, action, cls = 'secondary') => { const element = node('button', text, cls); element.type = 'button'; element.addEventListener('click', () => Promise.resolve().then(action).catch(failure)); return element; };
@@ -159,7 +159,9 @@ export const ADMIN_SCRIPT = String.raw`'use strict';
     const action = (title, path, extra = {}, method = 'POST') => actions.append(button(title, () => confirmAction(title, path, extra, method)));
     if (['stores', 'products', 'posts', 'media'].includes(name)) action(item.adminArchivedAt ? 'Restore content' : 'Archive content', name + '/' + id + (item.adminArchivedAt ? '/restore' : '/archive'));
     if (name === 'users') {
-      action(item.suspendedAt ? 'Restore account' : 'Suspend account', 'users/' + id + (item.suspendedAt ? '/restore' : '/suspend'));
+      if (!item.roleManagedByEnvironment && id !== currentUserId) actions.append(button('Change role', () => openEditor('Change role · ' + item.email, [{ name: 'role', type: 'select', required: true, options: ['user', 'admin'] }, { name: 'reason', type: 'textarea', required: true }], { role: item.role }, (data) => api('users/' + id + '/role', 'PATCH', data), 'Admins have full website-management access, including managing other admins. Changing the role signs this account out; they must sign in again.', true)));
+      if (item.roleManagedByEnvironment) actions.append(node('p', 'This administrator is protected by server configuration.'));
+      if (!item.roleManagedByEnvironment) action(item.suspendedAt ? 'Restore account' : 'Suspend account', 'users/' + id + (item.suspendedAt ? '/restore' : '/suspend'));
       action('Revoke all sessions', 'users/' + id + '/revoke-sessions');
       actions.append(button('Stores', () => go('stores', { ownerId: id })), button('Subscriptions', () => go('subscriptions', { ownerId: id })), button('Adjust wallet', () => walletForm(id)));
     }
@@ -292,6 +294,7 @@ export const ADMIN_SCRIPT = String.raw`'use strict';
   setInterval(() => { if (view === 'monitoring' && !document.hidden && !$('editor').open && $('content').getAttribute('aria-busy') !== 'true') load().catch(failure); }, 15000);
   api('/api/v1/auth/me').then((data) => {
     if (!data.isAdmin) { $('content').replaceChildren(empty('Access denied', 'This Google account is not an administrator.')); return; }
+    currentUserId = data.user.id;
     $('account-name').textContent = data.user.displayName; $('account-email').textContent = data.user.email; $('avatar').textContent = data.user.displayName.slice(0, 1).toUpperCase(); route();
   }).catch(failure);
 })();`;

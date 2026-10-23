@@ -36,6 +36,11 @@ abstract class TimestampedEntity {
   updatedAt!: Date;
 }
 
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
 export enum ShowcaseStatus {
   DRAFT = 'draft',
   PUBLISHED = 'published',
@@ -152,6 +157,15 @@ abstract class BaseEntity {
 @Index('uq_users_email', ['email'], { unique: true })
 @Index('uq_users_google_subject', ['googleSubject'], { unique: true })
 export class User extends BaseEntity {
+  // Role changes use the audited admin operation, never a stale profile save.
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.USER,
+    update: false,
+  })
+  role: UserRole = UserRole.USER;
+
   @Column({
     name: 'suspended_at',
     type: 'datetime',

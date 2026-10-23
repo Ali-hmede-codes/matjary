@@ -30,6 +30,7 @@ import {
   AdminReasonDto,
   AdminUpdateStoreDto,
   AdminUserUpdateDto,
+  AdminUserRoleDto,
 } from './admin.dto';
 import { UpdateProductDto } from '../products/dto/update-product.dto';
 import { UpdateShowcaseDto } from '../showcases/dto/update-showcase.dto';
@@ -88,6 +89,15 @@ export class AdminCatalogController {
     @Actor() actor: AdminActor,
   ) {
     return this.catalog.updateUser(id, dto, actor);
+  }
+
+  @Patch('users/:id/role')
+  updateUserRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminUserRoleDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.catalog.updateUserRole(id, dto, actor);
   }
 
   @Post('users/:id/:action')

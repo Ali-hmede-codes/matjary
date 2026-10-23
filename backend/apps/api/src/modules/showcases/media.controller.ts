@@ -28,7 +28,7 @@ import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
-import { isAdminEmail, type AdminActor } from '@app/database';
+import { isAdminUser, type AdminActor, type UserRole } from '@app/database';
 import {
   BinaryOriginGuard,
   OptionalSessionGuard,
@@ -70,12 +70,14 @@ export class MediaController {
   ) {}
 
   private administrator(
-    request: Request & { user?: { id: string; email?: string } },
+    request: Request & {
+      user?: { id: string; email?: string; role?: UserRole };
+    },
   ): AdminActor | undefined {
     if (
       !request.user ||
-      !isAdminEmail(
-        request.user.email,
+      !isAdminUser(
+        request.user,
         this.config.get('ADMIN_EMAILS', { infer: true }),
       )
     )

@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import { randomUUID } from 'node:crypto';
-import { adminContext, isAdminEmail, type AdminActor } from '@app/database';
+import { adminContext, isAdminUser, type AdminActor } from '@app/database';
 import type { AppEnvironment } from '@app/config';
 import type { AuthenticatedRequest } from '../auth/guards/auth.guards';
 
@@ -35,8 +35,8 @@ export class AdminContextInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (
       !request.user ||
-      !isAdminEmail(
-        request.user.email,
+      !isAdminUser(
+        request.user,
         this.config.get('ADMIN_EMAILS', { infer: true }),
       )
     )

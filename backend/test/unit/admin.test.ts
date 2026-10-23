@@ -25,6 +25,7 @@ import {
 import { createDatabaseOptions } from '../../libs/database/src/database.options';
 import {
   User,
+  UserRole,
   Store,
   Product,
   Showcase,
@@ -53,6 +54,8 @@ import {
   visibilitySql,
 } from '../../libs/database/src/visibility-policy';
 import { AdminOperations1793572800000 } from '../../libs/database/src/migrations/1793572800000-AdminOperations';
+import { AddUserRoles1793745600000 } from '../../libs/database/src/migrations/1793745600000-AddUserRoles';
+import { publicUser } from '../../apps/api/src/modules/users/users.service';
 import { AdminAccessService } from '../../apps/api/src/modules/admin/admin-access.service';
 import { AdminCatalogService } from '../../apps/api/src/modules/admin/admin-catalog.service';
 import {
@@ -133,6 +136,14 @@ function fixture() {
       ) ?? null;
     const manager = {
       query: async (sql: string, parameters: unknown[]) => {
+        if (sql.startsWith('UPDATE `users` SET `role`')) {
+          assert.match(sql, /session_version = session_version \+ 1/);
+          const row = await find(User, { id: parameters[1] });
+          assert.ok(row);
+          row.role = parameters[0];
+          row.sessionVersion = Number(row.sessionVersion) + 1;
+          return;
+        }
         assert.match(
           sql,
           /^UPDATE `(stores|products|showcases|media_assets)` SET admin_archived_at = \?/,
@@ -262,6 +273,88 @@ function fixture() {
     removals: () => removals,
   };
 }
+
+test('user roles grant and revoke admin access, protect bootstrap admins and invalidate sessions', async () => {
+  const f = fixture();
+  const helper = { ...actor, id: ownerId };
+  const change = (role: UserRole) => ({ role, reason: 'Manage website team' });
+  const account = () =>
+    f.rows(User).find((row) => row.id === ownerId) as unknown as User;
+  const guard = new AdminGuard(config);
+  const auth = new AuthService({} as never, {} as never, {} as never, config);
+  assert.equal(guard.isAdmin(publicUser(account())), false);
+  await assert.rejects(
+    f.catalog.updateUserRole(ownerId, change(UserRole.ADMIN), helper),
+    ForbiddenException,
+  );
+  await f.catalog.updateUserRole(ownerId, change(UserRole.ADMIN), actor);
+  assert.equal(account().role, UserRole.ADMIN);
+  assert.equal(account().sessionVersion, 1);
+  assert.equal(guard.isAdmin(publicUser(account())), true);
+  assert.equal(auth.isAdmin(publicUser(account())), true);
+  await f.access.check(helper);
+  await assert.rejects(
+    f.catalog.updateUserRole(ownerId, change(UserRole.USER), helper),
+    ConflictException,
+  );
+  await assert.rejects(
+    f.catalog.updateUserRole(adminId, change(UserRole.USER), helper),
+    ConflictException,
+  );
+  await f.catalog.updateUserRole(ownerId, change(UserRole.ADMIN), actor);
+  assert.equal(account().sessionVersion, 1);
+  await f.catalog.updateUserRole(ownerId, change(UserRole.USER), actor);
+  assert.equal(account().sessionVersion, 2);
+  assert.equal(guard.isAdmin(publicUser(account())), false);
+  await assert.rejects(f.access.check(helper), ForbiddenException);
+  assert.deepEqual(
+    f.rows(AdminAuditLog).map((row) => row.action),
+    ['role.update', 'role.update'],
+  );
+  assert.equal(f.rows(AdminAuditLog)[0]?.reason, 'Manage website team');
+  await f.catalog.accountAction(ownerId, 'suspend', 'Account paused', actor);
+  await assert.rejects(
+    f.catalog.updateUserRole(ownerId, change(UserRole.ADMIN), actor),
+    ConflictException,
+  );
+});
+
+test('user role changes roll back when their audit cannot be written', async () => {
+  const f = fixture();
+  f.failAudit();
+  await assert.rejects(
+    f.catalog.updateUserRole(
+      ownerId,
+      { role: UserRole.ADMIN, reason: 'Add helper' },
+      actor,
+    ),
+    ServiceUnavailableException,
+  );
+  const user = f.rows(User).find((row) => row.id === ownerId)!;
+  assert.equal(user.role, UserRole.USER);
+  assert.equal(user.sessionVersion, 0);
+});
+
+test('user roles migration is registered, defaults to user and has a rollback', async () => {
+  const migration = new AddUserRoles1793745600000();
+  const statements: string[] = [];
+  const runner = {
+    query: async (sql: string) => statements.push(sql),
+  } as unknown as QueryRunner;
+  await migration.up(runner);
+  await migration.down(runner);
+  assert.match(
+    statements[0]!,
+    /enum\('user','admin'\) NOT NULL DEFAULT 'user'/,
+  );
+  assert.equal(statements[1], 'ALTER TABLE `users` DROP COLUMN `role`');
+  const options = createDatabaseOptions(
+    validateEnvironment({ MYSQL_PASSWORD: 'test', REDIS_PASSWORD: 'test' }),
+  );
+  assert.ok(
+    (options.migrations as unknown[]).includes(AddUserRoles1793745600000),
+  );
+});
 
 test('catalog create/edit preserves target ownership, exact money and owner quotas', async () => {
   const f = fixture();
@@ -845,6 +938,10 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
       {
         provide: AdminCatalogService,
         useValue: {
+          updateUserRole: async (_id: string, dto: { role: UserRole }) => ({
+            id: ownerId,
+            role: dto.role,
+          }),
           updateUser: async (_id: string, dto: { displayName: string }) => {
             if (dto.displayName === 'explode')
               throw new Error('synthetic-cookie-secret database-password');
@@ -985,6 +1082,33 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
     assert.equal((await patch({ displayName: 'x'.repeat(20000) })).status, 413);
     assert.equal((await patch({ displayName: 'Changed' })).status, 200);
     assert.deepEqual(calls, ['update']);
+    const changeRole = (body: unknown, token = 'admin') =>
+      fetch(base + '/api/v1/admin/users/' + ownerId + '/role', {
+        method: 'PATCH',
+        headers: {
+          Cookie: 'matjary_session=' + token,
+          Origin: 'http://localhost:3000',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    assert.equal(
+      (await changeRole({ role: 'admin', reason: 'Add helper' }, 'owner'))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await changeRole({ role: 'superadmin', reason: 'Add helper' })).status,
+      400,
+    );
+    assert.equal(
+      (await changeRole({ role: null, reason: 'Add helper' })).status,
+      400,
+    );
+    assert.equal((await changeRole({ role: 'admin' })).status, 400);
+    const promoted = await changeRole({ role: 'admin', reason: 'Add helper' });
+    assert.equal(promoted.status, 200);
+    assert.deepEqual(await promoted.json(), { id: ownerId, role: 'admin' });
     const failed = await patch({ displayName: 'explode' });
     assert.equal(failed.status, 500);
     const failureText = await failed.text();

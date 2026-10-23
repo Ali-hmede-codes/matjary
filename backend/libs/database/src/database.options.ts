@@ -1,6 +1,7 @@
 import type { MysqlConnectionOptions } from 'typeorm/driver/mysql/MysqlConnectionOptions';
 import type { DatabaseEnvironment } from '../../config/src/environment';
 import { databaseEntities } from './entities';
+import { AddUserRoles1793745600000 } from './migrations/1793745600000-AddUserRoles';
 import { WebsiteSettings1793659200000 } from './migrations/1793659200000-WebsiteSettings';
 import { AdminOperations1793572800000 } from './migrations/1793572800000-AdminOperations';
 import { InitialSchema1792368000000 } from './migrations/1792368000000-InitialSchema';
@@ -58,6 +59,7 @@ export function createDatabaseOptions(
       AddDurableProcessing1793486400000,
       AdminOperations1793572800000,
       WebsiteSettings1793659200000,
+      AddUserRoles1793745600000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

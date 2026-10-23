@@ -20,7 +20,7 @@ import { CreateStoreDto } from '../stores/dto/create-store.dto';
 import { UpdateStoreDto } from '../stores/dto/update-store.dto';
 import { CreateProductDto } from '../products/dto/create-product.dto';
 import { CreateShowcaseDto } from '../showcases/dto/create-showcase.dto';
-import { SystemErrorState } from '@app/database';
+import { SystemErrorState, UserRole } from '@app/database';
 import { CreateBoostCampaignDto } from '../boost/dto/boost-coin.dto';
 
 export class AdminListDto {
@@ -71,6 +71,11 @@ export class AdminReasonDto {
   @IsString()
   @Length(3, 500)
   reason!: string;
+}
+
+export class AdminUserRoleDto extends AdminReasonDto {
+  @IsEnum(UserRole)
+  role!: UserRole;
 }
 
 export class AdminUserUpdateDto {

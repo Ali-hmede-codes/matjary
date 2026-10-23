@@ -128,8 +128,9 @@ interface View {
 export const ADMIN_VIEWS: Record<string, View> = {
   users: {
     label: 'Users',
-    description: 'Google accounts, access, and session controls.',
-    columns: ['displayName', 'email', 'suspendedAt', 'createdAt'],
+    description:
+      'Google accounts, admin/user roles, and session controls. New helpers must sign in once before you can promote them.',
+    columns: ['displayName', 'email', 'role', 'suspendedAt', 'createdAt'],
     edit: [f('displayName', 'text', true)],
   },
   stores: {

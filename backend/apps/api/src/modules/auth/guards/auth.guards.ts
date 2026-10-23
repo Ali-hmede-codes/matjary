@@ -12,26 +12,19 @@ import type { AppEnvironment } from '@app/config';
 import type { PublicUser } from '../../users/users.service';
 import { AuthService } from '../auth.service';
 import { AuthCookies } from '../auth.cookies';
+import { isAdminUser } from '../../../../../../libs/database/src/admin-policy';
 
 export type AuthenticatedRequest = Request & { user: PublicUser };
 
-// AdminGuard restricts access to admin-only boost endpoints. Since the User
-// entity has no role/isAdmin field, admin status is derived from the
-// ADMIN_EMAILS environment variable (comma-separated list). An empty list
-// means no admin endpoints are accessible.
+// SessionGuard loads the current database role before admin authorization.
 @Injectable()
 export class AdminGuard implements CanActivate {
   constructor(private readonly config: ConfigService<AppEnvironment, true>) {}
 
   isAdmin(user: PublicUser | undefined): boolean {
-    const emails = this.config.get('ADMIN_EMAILS', { infer: true }) ?? '';
-    return Boolean(
-      user &&
-      emails
-        .split(',')
-        .map((email) => email.trim().toLowerCase())
-        .filter(Boolean)
-        .includes(user.email.toLowerCase()),
+    return isAdminUser(
+      user,
+      this.config.get('ADMIN_EMAILS', { infer: true }) ?? '',
     );
   }
 

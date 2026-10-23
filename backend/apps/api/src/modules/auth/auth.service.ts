@@ -11,7 +11,8 @@ import type { AppEnvironment } from '@app/config';
 import { RedisService } from '@app/queue';
 import { UsersService, type PublicUser } from '../users/users.service';
 import { GoogleTokenVerifier } from './google-token-verifier';
-import { isAdminEmail } from '../../../../../libs/database/src/admin-policy';
+import { isAdminUser } from '../../../../../libs/database/src/admin-policy';
+import { UserRole } from '../../../../../libs/database/src/entities';
 
 export const NONCE_TTL_SECONDS = 600;
 export const validToken = (token: unknown): token is string =>
@@ -31,10 +32,14 @@ export class AuthService {
   ) {}
 
   isAdmin(user: PublicUser): boolean {
-    return isAdminEmail(
-      user.email,
-      this.config.get('ADMIN_EMAILS', { infer: true }),
-    );
+    return isAdminUser(user, this.config.get('ADMIN_EMAILS', { infer: true }));
+  }
+
+  private withRole(user: PublicUser): PublicUser {
+    return {
+      ...user,
+      role: this.isAdmin(user) ? UserRole.ADMIN : UserRole.USER,
+    };
   }
 
   private async storage<T>(operation: () => Promise<T>): Promise<T> {
@@ -108,7 +113,7 @@ export class AuthService {
         this.config.get('AUTH_SESSION_TTL_SECONDS', { infer: true }),
       ),
     );
-    return { user, token };
+    return { user: this.withRole(account.user), token };
   }
 
   async currentUser(token?: string): Promise<PublicUser> {
@@ -139,7 +144,7 @@ export class AuthService {
       await this.logout(token);
       throw new UnauthorizedException('Please sign in again');
     }
-    return account.user;
+    return this.withRole(account.user);
   }
 
   async logout(token?: string): Promise<void> {
