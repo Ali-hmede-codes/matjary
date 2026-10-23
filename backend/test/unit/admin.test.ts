@@ -61,6 +61,9 @@ import {
 } from '../../apps/api/src/modules/admin/admin-queries.service';
 import { AdminCatalogController } from '../../apps/api/src/modules/admin/admin-catalog.controller';
 import { AdminPageController } from '../../apps/api/src/modules/admin/admin-page.controller';
+import { UserDashboardPageController } from '../../apps/api/src/modules/user-dashboard/user-dashboard-page.controller';
+import { UserDashboardController } from '../../apps/api/src/modules/user-dashboard/user-dashboard.controller';
+import { UserDashboardService } from '../../apps/api/src/modules/user-dashboard/user-dashboard.service';
 import {
   AdminCreateProductDto,
   AdminListDto,
@@ -816,6 +819,8 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
   @Module({
     controllers: [
       AdminPageController,
+      UserDashboardPageController,
+      UserDashboardController,
       AdminCatalogController,
       MonitoringController,
       MetricsController,
@@ -853,6 +858,12 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
         useValue: { list: async () => ({ items: [], total: 0 }) },
       },
       { provide: MediaService, useValue: {} },
+      {
+        provide: UserDashboardService,
+        useValue: {
+          getDashboard: async (userId: string) => ({ scope: userId }),
+        },
+      },
       AuthCookies,
       SessionGuard,
       AdminGuard,
@@ -890,6 +901,60 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
       302,
     );
     assert.equal((await fetch(base + '/api/v1/admin/data/users')).status, 401);
+    const guestDashboard = await fetch(base + '/api/v1/dashboard/home', {
+      redirect: 'manual',
+    });
+    assert.equal(guestDashboard.status, 302);
+    assert.equal(guestDashboard.headers.get('location'), '/api/v1/auth/login');
+    for (const path of [
+      'dashboard',
+      'dashboard/client.js',
+      'dashboard/style.css',
+    ]) {
+      assert.equal((await fetch(base + '/api/v1/' + path)).status, 401);
+    }
+    const ownerHeaders = { Cookie: 'matjary_session=owner' };
+    const ownerPage = await fetch(base + '/api/v1/dashboard/home', {
+      headers: ownerHeaders,
+    });
+    assert.equal(ownerPage.status, 200);
+    assert.equal(ownerPage.headers.get('cache-control'), 'no-store');
+    assert.equal(ownerPage.headers.get('x-robots-tag'), 'noindex, nofollow');
+    const ownerHtml = await ownerPage.text();
+    assert.match(ownerHtml, /My dashboard · Matjary/);
+    assert.doesNotMatch(ownerHtml, /ADMIN WORKSPACE|\/admin\//);
+    assert.deepEqual(
+      await (
+        await fetch(base + '/api/v1/dashboard?ownerId=' + adminId, {
+          headers: ownerHeaders,
+        })
+      ).json(),
+      { scope: ownerId },
+    );
+    const adminRedirect = await fetch(base + '/api/v1/dashboard/home', {
+      headers: { Cookie: 'matjary_session=admin' },
+      redirect: 'manual',
+    });
+    assert.equal(adminRedirect.status, 302);
+    assert.equal(adminRedirect.headers.get('location'), '/api/v1/admin');
+    for (const asset of ['client.js', 'style.css']) {
+      assert.equal(
+        (
+          await fetch(base + '/api/v1/dashboard/' + asset, {
+            headers: ownerHeaders,
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await fetch(base + '/api/v1/admin/' + asset, {
+            headers: ownerHeaders,
+          })
+        ).status,
+        403,
+      );
+    }
     assert.equal(
       (
         await fetch(base + '/api/v1/admin', {

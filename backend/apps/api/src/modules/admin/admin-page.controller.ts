@@ -36,7 +36,7 @@ export class AdminPageController {
           .status(403)
           .type('html')
           .send(
-            '<!doctype html><html lang="en"><meta charset="utf-8"><title>Admin access required</title><h1>Admin access required</h1><p>This Google account is not an administrator.</p><a href="/api/v1/auth/login">Return to your account to sign out</a></html>',
+            '<!doctype html><html lang="en"><meta charset="utf-8"><title>Admin access required</title><h1>Admin access required</h1><p>This Google account is not an administrator.</p><a href="/api/v1/dashboard/home">Go to your personal dashboard</a></html>',
           );
         return;
       }

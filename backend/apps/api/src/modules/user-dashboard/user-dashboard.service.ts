@@ -105,6 +105,7 @@ export class UserDashboardService {
           'published',
         )
         .where('sc.ownerId = :userId', { userId })
+        .andWhere(visibilitySql('post', 'sc'))
         .groupBy('sc.storeId')
         .getRawMany();
       const postsCountMap = new Map(
@@ -125,6 +126,7 @@ export class UserDashboardService {
           'active',
         )
         .where('store.ownerId = :userId', { userId })
+        .andWhere(visibilitySql('product', 'p'))
         .groupBy('p.storeId')
         .getRawMany();
       const productsCountMap = new Map(
@@ -139,6 +141,7 @@ export class UserDashboardService {
         .createQueryBuilder('sc')
         .select('SUM(sc.mediaCount)', 'totalMedia')
         .where('sc.ownerId = :userId', { userId })
+        .andWhere(visibilitySql('post', 'sc'))
         .getRawOne();
       const totalMedia = totalMediaResult?.totalMedia
         ? parseInt(totalMediaResult.totalMedia, 10)

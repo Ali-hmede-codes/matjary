@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserDashboardService } from './user-dashboard.service';
 import { UserDashboardController } from './user-dashboard.controller';
+import { UserDashboardPageController } from './user-dashboard-page.controller';
 import {
   User,
   Store,
@@ -30,7 +31,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     AuthModule,
     SubscriptionsModule,
   ],
-  controllers: [UserDashboardController],
+  controllers: [UserDashboardController, UserDashboardPageController],
   providers: [UserDashboardService],
   exports: [UserDashboardService],
 })
