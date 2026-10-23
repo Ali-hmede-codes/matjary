@@ -5,6 +5,7 @@ import {
   House,
   Plus,
   Search,
+  Tag,
   UserRound,
   X,
 } from 'lucide-react';
@@ -59,6 +60,10 @@ export function SiteHeader({
               <span>{label}</span>
             </button>
           ))}
+          <a href="/pricing">
+            <Tag size={19} />
+            <span>Pricing</span>
+          </a>
         </nav>
         <label className="search-box" id="feed-search">
           <Search size={18} />

@@ -1,0 +1,329 @@
+.pricing-topbar {
+  max-width: 1200px;
+  min-height: 80px;
+  padding: 16px 32px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.pricing-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.pricing-nav > a:not(.primary-button) {
+  padding-block: 12px;
+  color: var(--muted);
+}
+.pricing-nav > a[aria-current='page'] {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 7px;
+}
+.pricing-main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 0 32px 32px;
+}
+.pricing-hero {
+  padding: 76px 20px 56px;
+  text-align: center;
+  background: radial-gradient(
+    ellipse at center,
+    var(--accent-wash),
+    transparent 68%
+  );
+}
+.pricing-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 1.8px;
+}
+.pricing-hero h1 {
+  margin: 20px 0;
+  font-size: clamp(40px, 5.6vw, 68px);
+  font-weight: 650;
+  letter-spacing: -2.5px;
+  line-height: 1.08;
+}
+.pricing-hero h1 span {
+  color: var(--primary);
+}
+.pricing-hero > p {
+  max-width: 480px;
+  margin: 0 auto 16px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.pricing-plans {
+  scroll-margin-top: 104px;
+}
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.plan-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 28px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+.plan-card-featured {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 1px var(--primary),
+    0 12px 32px var(--accent-wash);
+  background: linear-gradient(var(--accent-wash), var(--surface) 50%);
+}
+.plan-heading {
+  flex: 1;
+}
+.plan-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  background: var(--accent-wash);
+  color: var(--primary);
+}
+.plan-card-featured .plan-icon {
+  color: var(--on-primary);
+  background: var(--primary);
+}
+.plan-heading h2 {
+  font-size: 24px;
+  letter-spacing: -0.7px;
+  margin-bottom: 10px;
+}
+.plan-heading p {
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+  white-space: pre-line;
+}
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 26px;
+}
+.plan-price strong {
+  font-size: 38px;
+  font-weight: 650;
+  letter-spacing: -1.5px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.plan-price > span,
+.plan-currency {
+  font-size: 12px;
+  color: var(--muted);
+}
+.plan-currency {
+  margin: 8px 0 24px;
+}
+.plan-inclusions {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.plan-inclusions h3 {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+.plan-inclusions ul {
+  display: grid;
+  gap: 15px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.plan-inclusions li,
+.plan-feature-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.plan-inclusions li {
+  justify-content: space-between;
+}
+.plan-feature-label svg {
+  color: var(--primary);
+  margin-top: 1px;
+}
+.plan-inclusions strong {
+  font-size: 12px;
+  font-weight: 650;
+  text-align: right;
+}
+.plan-unavailable,
+.plan-unavailable svg {
+  color: var(--muted);
+}
+.pricing-note,
+.pricing-status {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 24px auto;
+  max-width: 550px;
+}
+.plan-skeleton {
+  height: 520px;
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--wash);
+}
+.plan-skeleton span {
+  display: block;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--line);
+  margin-bottom: 24px;
+}
+.plan-skeleton span:last-child {
+  height: 240px;
+}
+.pricing-empty {
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--wash);
+  border-radius: 22px;
+}
+.pricing-empty h2 {
+  margin: 16px 0 12px;
+}
+.pricing-empty p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+.pricing-faq {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 64px;
+  padding: 72px 0;
+}
+.pricing-faq h2,
+.pricing-help h2 {
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.8px;
+  margin: 12px 0;
+}
+.pricing-faq p,
+.pricing-help p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.pricing-questions details {
+  border-bottom: 1px solid var(--line);
+}
+.pricing-questions summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 650;
+}
+.pricing-questions summary::-webkit-details-marker {
+  display: none;
+}
+.pricing-questions summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.pricing-questions details[open] summary svg {
+  transform: rotate(180deg);
+}
+.pricing-questions details p {
+  padding-bottom: 24px;
+}
+.pricing-help {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  background: var(--accent-wash);
+  padding: 28px 36px;
+  border-radius: 20px;
+  margin-bottom: 28px;
+}
+.pricing-help .primary-button {
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .pricing-topbar {
+    min-height: 72px;
+    padding: 14px 20px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .pricing-topbar .brand {
+    max-width: 100%;
+  }
+  .pricing-nav {
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .pricing-nav .primary-button {
+    padding: 10px 14px;
+  }
+  .pricing-main {
+    padding: 0 20px 24px;
+  }
+  .pricing-hero {
+    padding: 48px 0 36px;
+  }
+  .pricing-plans {
+    scroll-margin-top: 160px;
+  }
+  .pricing-hero h1 {
+    letter-spacing: -1.5px;
+  }
+  .pricing-grid {
+    gap: 20px;
+  }
+  .pricing-faq {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 48px 0;
+  }
+  .pricing-help {
+    padding: 24px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pricing-page .site-footer {
+    padding-inline: 0;
+  }
+}

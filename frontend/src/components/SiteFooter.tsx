@@ -3,12 +3,12 @@ import type { WebsiteSettings } from '../lib/website';
 
 export function SiteFooter({
   settings,
-  demo,
+  demo = false,
   onToggleDemo,
 }: {
   settings: WebsiteSettings;
-  demo: boolean;
-  onToggleDemo: () => void;
+  demo?: boolean;
+  onToggleDemo?: () => void;
 }) {
   return (
     <footer className="site-footer">
@@ -17,10 +17,13 @@ export function SiteFooter({
           `© ${new Date().getFullYear()} ${settings.siteName}. Made for discovery.`}
       </p>
       <div className="footer-links">
-        <button className="text-button" onClick={onToggleDemo}>
-          <Sparkles size={15} />
-          {demo ? 'Back to live feed' : 'Preview the design'}
-        </button>
+        <a href="/pricing">Plans & pricing</a>
+        {onToggleDemo && (
+          <button className="text-button" onClick={onToggleDemo}>
+            <Sparkles size={15} />
+            {demo ? 'Back to live feed' : 'Preview the design'}
+          </button>
+        )}
         {settings.contactEmail && (
           <a href={`mailto:${settings.contactEmail}`}>
             <Mail size={14} /> Get in touch

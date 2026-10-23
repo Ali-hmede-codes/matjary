@@ -20,6 +20,7 @@ import {
   User,
   effectiveLimits,
   effectiveSubscription,
+  FREE_LIMITS,
   actorContext,
   appendAdminAudit,
   requireAdmin,
@@ -152,6 +153,20 @@ export class SubscriptionPlansService {
     } catch (error) {
       this.sanitize(error);
     }
+  }
+
+  async findPublic() {
+    const plans = await this.findAll(false);
+    return plans.map((plan) => ({
+      name: plan.name,
+      slug: plan.slug,
+      description: plan.description,
+      priceCents: plan.priceCents,
+      currency: plan.currency,
+      billingCycle: plan.billingCycle,
+      // Match effective entitlements without exposing administrative metadata.
+      limits: { ...FREE_LIMITS, ...plan.limits },
+    }));
   }
 
   async findBySlug(slug: string): Promise<SubscriptionPlanResponseDto> {

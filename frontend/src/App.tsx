@@ -8,11 +8,14 @@ import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
 import { StoreStrip } from './components/StoreStrip';
 import { StorePage } from './components/StorePage';
+import { PricingPage } from './components/PricingPage';
 import { storeSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 
 export default function App() {
   const pathname = window.location.pathname;
+  if (pathname === '/pricing' || pathname === '/pricing/')
+    return <PricingPage />;
   if (pathname !== '/')
     return <StorePage key={pathname} slug={storeSlugFromPath(pathname)} />;
   return <DiscoveryPage />;

@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionPlansService } from './subscription-plans.service';
-import { SubscriptionPlansController } from './subscription-plans.controller';
+import {
+  PublicSubscriptionPlansController,
+  SubscriptionPlansController,
+} from './subscription-plans.controller';
 import { SubscriptionPlan, UserSubscription } from '@app/database';
 import { AuthModule } from '../auth/auth.module';
 
@@ -10,7 +13,7 @@ import { AuthModule } from '../auth/auth.module';
     TypeOrmModule.forFeature([SubscriptionPlan, UserSubscription]),
     AuthModule,
   ],
-  controllers: [SubscriptionPlansController],
+  controllers: [PublicSubscriptionPlansController, SubscriptionPlansController],
   providers: [SubscriptionPlansService],
   exports: [SubscriptionPlansService],
 })

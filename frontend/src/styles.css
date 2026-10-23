@@ -17,6 +17,7 @@
 @import './components/Feedback.css';
 @import './components/PostDialog.css';
 @import './components/StorePage.css';
+@import './components/PricingPage.css';
 @import './styles/animations.css';
 
 /* Keep this after component rules so touch layouts hide horizontal scrollbars too. */

@@ -24,6 +24,16 @@ import {
 } from '../auth/guards/auth.guards';
 import { AssignSubscriptionDto } from './dto/assign-subscription.dto';
 
+@Controller('subscriptions/plans')
+export class PublicSubscriptionPlansController {
+  constructor(private readonly plans: SubscriptionPlansService) {}
+
+  @Get()
+  async findAll() {
+    return this.plans.findPublic();
+  }
+}
+
 @Controller('admin/subscriptions/plans')
 @UseGuards(SessionGuard, AdminGuard, MutationGuard)
 export class SubscriptionPlansController {

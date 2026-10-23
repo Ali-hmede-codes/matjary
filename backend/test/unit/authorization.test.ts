@@ -35,7 +35,10 @@ import {
   StoreSeoDto,
   CreateRedirectDto,
 } from '../../apps/api/src/modules/seo/seo.dto';
-import { SubscriptionPlansController } from '../../apps/api/src/modules/subscriptions/subscription-plans.controller';
+import {
+  PublicSubscriptionPlansController,
+  SubscriptionPlansController,
+} from '../../apps/api/src/modules/subscriptions/subscription-plans.controller';
 import { SubscriptionPlansService } from '../../apps/api/src/modules/subscriptions/subscription-plans.service';
 import { setupApp } from '../../apps/api/src/setup-app';
 import {
@@ -128,13 +131,21 @@ test('HTTP SEO wildcard registration, admin boundaries, DTOs and sitemap categor
     submitAdminIndexNow: async () => ({ success: true }),
   };
   const plans = {
+    findPublic: async (...args: unknown[]) => {
+      assert.deepEqual(args, []);
+      return [{ slug: 'free', priceCents: '0' }];
+    },
     assignSubscription: async (...args: unknown[]) => {
       calls.push(['assign', ...args]);
       return { assigned: true };
     },
   };
   @Module({
-    controllers: [SeoController, SubscriptionPlansController],
+    controllers: [
+      SeoController,
+      PublicSubscriptionPlansController,
+      SubscriptionPlansController,
+    ],
     providers: [
       { provide: ConfigService, useValue: cfg },
       { provide: AuthService, useValue: auth },
@@ -238,6 +249,22 @@ test('HTTP SEO wildcard registration, admin boundaries, DTOs and sitemap categor
       ).status,
       403,
     );
+    const publicPlans = await request(
+      '/subscriptions/plans?includeInactive=true',
+    );
+    assert.equal(publicPlans.status, 200);
+    assert.deepEqual(await publicPlans.json(), [
+      { slug: 'free', priceCents: '0' },
+    ]);
+    assert.equal((await request('/admin/subscriptions/plans')).status, 401);
+    assert.equal(
+      (await request('/admin/subscriptions/plans', 'GET', 'owner')).status,
+      403,
+    );
+    assert.equal(
+      (await request('/subscriptions/plans', 'POST', '', {})).status,
+      404,
+    );
     const assignment = {
       userId: '00000000-0000-4000-8000-000000000001',
       planId: '00000000-0000-4000-8000-000000000002',
@@ -281,6 +308,69 @@ test('HTTP SEO wildcard registration, admin boundaries, DTOs and sitemap categor
   } finally {
     await app.close();
   }
+});
+
+test('public pricing uses active sorted plans, effective defaults and safe fields', async () => {
+  let activeOnly = false;
+  const plan = {
+    id: 'internal-id',
+    name: 'Basic',
+    slug: 'basic',
+    description: 'For shops',
+    priceCents: '999',
+    currency: 'USD',
+    billingCycle: 'monthly',
+    limits: { maxProducts: null, enableCart: false },
+    isActive: true,
+    sortOrder: 1,
+    legacyTier: 'basic',
+  };
+  const query = {
+    orderBy: (field: string, direction: string) => {
+      assert.equal(field, 'plan.sortOrder');
+      assert.equal(direction, 'ASC');
+      return query;
+    },
+    where: (condition: string, params: unknown) => {
+      assert.equal(condition, 'plan.isActive = :active');
+      assert.deepEqual(params, { active: true });
+      activeOnly = true;
+      return query;
+    },
+    getMany: async () => {
+      assert.equal(activeOnly, true);
+      return [plan];
+    },
+  };
+  const repository = { createQueryBuilder: () => query };
+  const service = new SubscriptionPlansService(
+    repository as any,
+    {} as any,
+    config(),
+  );
+  const result = await service.findPublic();
+  assert.deepEqual(result, [
+    {
+      name: 'Basic',
+      slug: 'basic',
+      description: 'For shops',
+      priceCents: '999',
+      currency: 'USD',
+      billingCycle: 'monthly',
+      limits: { ...FREE_LIMITS, maxProducts: null, enableCart: false },
+    },
+  ]);
+  query.getMany = async () => {
+    throw new Error('private database details');
+  };
+  await assert.rejects(service.findPublic(), (error: unknown) => {
+    assert.ok(error instanceof ServiceUnavailableException);
+    assert.doesNotMatch(
+      JSON.stringify(error.getResponse()),
+      /private database details/u,
+    );
+    return true;
+  });
 });
 
 test('SEO service independently enforces ownership, publication and field allowlists', async () => {
