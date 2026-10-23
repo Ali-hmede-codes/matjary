@@ -38,6 +38,8 @@ import {
 import { MediaService } from '../../apps/api/src/modules/showcases/media.service';
 import { UpdateBoostSettingsDto } from '../../apps/api/src/modules/boost/dto/boost-coin.dto';
 import { SeoSettingsDto } from '../../apps/api/src/modules/seo/seo.dto';
+import { UpdateWebsiteSettingsDto } from '../../apps/api/src/modules/admin/website-settings.dto';
+import { WebsiteSettings } from '../../libs/database/src/website-settings.entity';
 import {
   MonitoringController,
   MetricsController,
@@ -362,6 +364,24 @@ class FixtureController {
 @Controller('admin')
 @UseGuards(SessionGuard, AdminGuard, MutationGuard)
 class FixtureSettingsController {
+  private readonly website = new WebsiteSettings();
+
+  @Get('website-settings')
+  websiteSettings() {
+    return this.website;
+  }
+
+  @Patch('website-settings')
+  updateWebsiteSettings(@Body() dto: UpdateWebsiteSettingsDto) {
+    Object.assign(
+      this.website,
+      Object.fromEntries(
+        Object.entries(dto).filter(([, value]) => value !== undefined),
+      ),
+    );
+    return this.website;
+  }
+
   @Get('boost/settings')
   boostSettings() {
     return find('boost-settings', 'global');

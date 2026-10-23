@@ -1,5 +1,6 @@
 type FieldType =
   | 'text'
+  | 'color'
   | 'textarea'
   | 'number'
   | 'boolean'
@@ -272,6 +273,28 @@ export const ADMIN_VIEWS: Record<string, View> = {
     description:
       'Append-only administrative actions, reasons, and request IDs.',
     columns: ['action', 'resource', 'resourceId', 'actorId', 'createdAt'],
+  },
+  'website-settings': {
+    label: 'Website settings',
+    description:
+      'Public website branding. Images use public HTTPS URLs or root-relative paths; private media stays private. SEO settings are managed separately.',
+    settings: true,
+    endpoint: 'website-settings',
+    edit: [
+      f('siteName', 'text', true),
+      text('tagline'),
+      text('description'),
+      ...['primaryColor', 'secondaryColor', 'backgroundColor', 'textColor'].map(
+        (key) => f(key, 'color', true),
+      ),
+      ...[
+        'logoUrl',
+        'faviconUrl',
+        'bannerUrl',
+        'contactEmail',
+        'footerText',
+      ].map(text),
+    ],
   },
   'boost-settings': {
     label: 'Boost settings',

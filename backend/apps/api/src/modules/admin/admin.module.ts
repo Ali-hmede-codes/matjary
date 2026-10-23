@@ -14,6 +14,11 @@ import { AdminCatalogController } from './admin-catalog.controller';
 import { AdminBusinessController } from './admin-business.controller';
 import { AdminPageController } from './admin-page.controller';
 import { AdminContextInterceptor } from './admin-context.interceptor';
+import { WebsiteSettingsService } from './website-settings.service';
+import {
+  AdminWebsiteSettingsController,
+  PublicWebsiteSettingsController,
+} from './website-settings.controller';
 
 @Module({
   imports: [
@@ -26,11 +31,14 @@ import { AdminContextInterceptor } from './admin-context.interceptor';
     QueueModule,
   ],
   controllers: [
+    AdminWebsiteSettingsController,
+    PublicWebsiteSettingsController,
     AdminPageController,
     AdminBusinessController,
     AdminCatalogController,
   ],
   providers: [
+    WebsiteSettingsService,
     AdminAccessService,
     AdminQueriesService,
     AdminCatalogService,

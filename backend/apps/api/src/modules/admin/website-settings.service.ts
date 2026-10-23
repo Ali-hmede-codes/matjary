@@ -1,0 +1,91 @@
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import {
+  appendAdminAudit,
+  WebsiteSettings,
+  WEBSITE_SETTINGS_FIELDS,
+  type WebsiteSettingsValues,
+  type AdminActor,
+} from '@app/database';
+import { AdminAccessService } from './admin-access.service';
+import { UpdateWebsiteSettingsDto } from './website-settings.dto';
+
+@Injectable()
+export class WebsiteSettingsService {
+  constructor(private readonly access: AdminAccessService) {}
+
+  private publicValues(settings: WebsiteSettings): WebsiteSettingsValues {
+    return Object.fromEntries(
+      WEBSITE_SETTINGS_FIELDS.map((key) => [key, settings[key]]),
+    ) as WebsiteSettingsValues;
+  }
+
+  async get(
+    manager = this.access.database.manager,
+  ): Promise<WebsiteSettingsValues> {
+    try {
+      const settings = await manager.findOneBy(WebsiteSettings, { id: 1 });
+      if (!settings) throw new Error('Missing singleton');
+      return this.publicValues(settings);
+    } catch {
+      throw new ServiceUnavailableException(
+        'Website settings are temporarily unavailable',
+      );
+    }
+  }
+
+  getAdmin(actor: AdminActor): Promise<WebsiteSettingsValues> {
+    return this.access.transaction(actor, (manager) => this.get(manager));
+  }
+
+  update(
+    input: UpdateWebsiteSettingsDto,
+    actor: AdminActor,
+  ): Promise<WebsiteSettingsValues> {
+    return this.access.transaction(actor, async (manager) => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw new BadRequestException('Invalid website settings');
+      }
+      const dto = plainToInstance(UpdateWebsiteSettingsDto, input);
+      if (
+        validateSync(dto, { whitelist: true, forbidNonWhitelisted: true })
+          .length
+      ) {
+        throw new BadRequestException('Invalid website settings');
+      }
+      const settings = await manager.findOne(WebsiteSettings, {
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settings)
+        throw new ServiceUnavailableException(
+          'Website settings are temporarily unavailable',
+        );
+      const changed = WEBSITE_SETTINGS_FIELDS.filter(
+        (key) => dto[key] !== undefined && dto[key] !== settings[key],
+      );
+      if (changed.length) {
+        // Lock before merging partial changes so concurrent editors keep unrelated fields.
+        Object.assign(
+          settings,
+          Object.fromEntries(changed.map((key) => [key, dto[key]])),
+        );
+        await manager.save(WebsiteSettings, settings);
+        await appendAdminAudit(
+          manager,
+          actor,
+          'website-settings',
+          '1',
+          'update',
+          changed,
+        );
+      }
+      return this.publicValues(settings);
+    });
+  }
+}

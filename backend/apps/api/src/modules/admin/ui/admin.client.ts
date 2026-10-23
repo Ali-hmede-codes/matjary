@@ -42,7 +42,7 @@ export const ADMIN_SCRIPT = String.raw`'use strict';
   const navigation = [
     ['WORKSPACE', [['overview', 'Overview', '◫'], ['users', 'Users', '○'], ['stores', 'Stores', '▤'], ['products', 'Products', '◇'], ['posts', 'Posts', '▧'], ['media', 'Media library', '▣']]],
     ['BUSINESS', [['plans', 'Plans', '≡'], ['subscriptions', 'Subscriptions', '↗'], ['campaigns', 'Boost campaigns', '↗'], ['wallets', 'Wallets', '▱'], ['transactions', 'Transactions', '↔'], ['carts', 'Carts', '▤'], ['boost-settings', 'Boost settings', '≡']]],
-    ['OPERATIONS', [['monitoring', 'System monitoring', '⌁'], ['errors', 'Error inbox', '!'], ['audit', 'Audit history', '≡'], ['seo', 'SEO settings', '◎'], ['redirects', 'Redirects', '→']]],
+    ['OPERATIONS', [['website-settings', 'Website settings', '◈'], ['monitoring', 'System monitoring', '⌁'], ['errors', 'Error inbox', '!'], ['audit', 'Audit history', '≡'], ['seo', 'SEO settings', '◎'], ['redirects', 'Redirects', '→']]],
   ];
   for (const [heading, links] of navigation) {
     $('navigation').append(node('div', heading, 'nav-heading'));
@@ -125,7 +125,7 @@ export const ADMIN_SCRIPT = String.raw`'use strict';
       if (['boolean', 'select'].includes(field.type)) {
         input = node('select'); const blank = node('option', 'Default / unchanged'); blank.value = ''; input.append(blank);
         for (const optionValue of field.type === 'boolean' ? ['true', 'false'] : field.options) { const option = node('option', field.type === 'boolean' ? optionValue === 'true' ? 'Yes' : 'No' : optionValue); option.value = optionValue; input.append(option); }
-      } else { input = node(multiline ? 'textarea' : 'input'); if (!multiline) input.type = field.type === 'date' ? 'datetime-local' : field.type === 'number' ? 'number' : field.type === 'password' ? 'password' : 'text'; }
+      } else { input = node(multiline ? 'textarea' : 'input'); if (!multiline) input.type = field.type === 'date' ? 'datetime-local' : field.type === 'number' ? 'number' : field.type === 'password' ? 'password' : field.type === 'color' ? 'color' : 'text'; }
       input.id = 'field-' + field.name; input.name = field.name; input.required = Boolean(field.required);
       if (field.type === 'number') { input.step = field.name === 'sitemapPriority' ? '0.1' : '1'; input.max = String(Number.MAX_SAFE_INTEGER); }
       let value = values?.[field.name];
@@ -133,6 +133,7 @@ export const ADMIN_SCRIPT = String.raw`'use strict';
       input.value = value === null || value === undefined ? '' : field.type === 'json' ? JSON.stringify(value, null, 2) : String(value);
       wrap.append(heading, input);
       if (field.type === 'json') wrap.append(node('small', 'Valid JSON. Only supported fields are accepted.'));
+      if (['logoUrl', 'faviconUrl', 'bannerUrl'].includes(field.name)) wrap.append(node('small', 'Public HTTPS image URL or /path. This does not upload files or make private media public. Clear to remove.'));
       if (/Id$/.test(field.name)) wrap.append(node('small', 'Use the ID of an existing record. Find IDs in its detail view.'));
       if (field.name === 'indexNowKey') { input.autocomplete = 'new-password'; wrap.append(node('small', 'Write-only. Leave blank to keep the existing key.')); }
       $('editor-fields').append(wrap); controls.push({ field, input, initial: input.value });

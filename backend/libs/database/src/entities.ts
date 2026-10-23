@@ -13,6 +13,7 @@ import {
 } from 'typeorm';
 
 import { AdminAuditLog, SystemErrorRecord } from './admin.entities';
+import { WebsiteSettings } from './website-settings.entity';
 
 import {
   StoreSeo,
@@ -1559,6 +1560,7 @@ export class BoostSetting {
 }
 
 export const databaseEntities = [
+  WebsiteSettings,
   AdminAuditLog,
   SystemErrorRecord,
   User,

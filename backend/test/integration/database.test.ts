@@ -24,6 +24,10 @@ import {
 import { moderationWhere } from '../../libs/database/src/visibility-policy';
 import { appendAdminAudit } from '../../libs/database/src/admin-policy';
 import { AdminAuditLog } from '../../libs/database/src/admin.entities';
+import {
+  WebsiteSettings,
+  WEBSITE_SETTINGS_FIELDS,
+} from '../../libs/database/src/website-settings.entity';
 
 async function assertNoSchemaDrift(source: DataSource, t: TestContext) {
   const runner = source.createQueryRunner();
@@ -131,6 +135,45 @@ test('MySQL migrations and relational persistence', async (t) => {
         assert.deepEqual(await source.runMigrations(), []);
         assert.equal(await source.showMigrations(), false);
         await assertNoSchemaDrift(source, t);
+      },
+    );
+
+    await t.test(
+      'website settings seed, singleton constraint, locking and persistence',
+      async () => {
+        const runner = source.createQueryRunner();
+        await runner.connect();
+        await runner.startTransaction();
+        try {
+          const repo = runner.manager.getRepository(WebsiteSettings);
+          assert.equal(await repo.count(), 1);
+          const settings = await repo.findOneOrFail({
+            where: { id: 1 },
+            lock: { mode: 'pessimistic_write' },
+          });
+          const defaults = new WebsiteSettings();
+          for (const key of WEBSITE_SETTINGS_FIELDS)
+            assert.equal(settings[key], defaults[key]);
+          assert.ok(settings.updatedAt instanceof Date);
+          settings.siteName = 'متجري · Café 🛍️';
+          settings.primaryColor = '#123abc';
+          settings.logoUrl = '/api/v1/uploads/variants%2Flogo.webp';
+          await repo.save(settings);
+          const loaded = await repo.findOneByOrFail({ id: 1 });
+          assert.equal(loaded.siteName, settings.siteName);
+          assert.equal(loaded.primaryColor, settings.primaryColor);
+          assert.equal(loaded.logoUrl, settings.logoUrl);
+          await repo.update(1, { logoUrl: null });
+          assert.equal((await repo.findOneByOrFail({ id: 1 })).logoUrl, null);
+          await assert.rejects(
+            repo.insert({ id: 2 }),
+            (error: { driverError?: { code?: string } }) =>
+              error.driverError?.code === 'ER_CHECK_CONSTRAINT_VIOLATED',
+          );
+        } finally {
+          await runner.rollbackTransaction();
+          await runner.release();
+        }
       },
     );
 

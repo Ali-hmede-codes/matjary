@@ -8,3 +8,4 @@ export * from './subscription-policy';
 export * from './admin.entities';
 export * from './admin-policy';
 export * from './visibility-policy';
+export * from './website-settings.entity';
