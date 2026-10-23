@@ -1362,6 +1362,44 @@ p {
     padding: 36px 20px;
   }
 }
+.store-strip:focus-visible,
+.category-tabs:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .store-strip,
+  .category-tabs {
+    cursor: grab;
+    user-select: none;
+  }
+  .store-strip a,
+  .store-strip button,
+  .category-tabs button {
+    cursor: inherit;
+  }
+  .store-strip.is-dragging,
+  .category-tabs.is-dragging {
+    cursor: grabbing;
+    scroll-behavior: auto;
+  }
+}
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
+  html,
+  body,
+  .app,
+  .app * {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  .app::-webkit-scrollbar,
+  .app *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

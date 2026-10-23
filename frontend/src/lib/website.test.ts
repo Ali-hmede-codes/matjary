@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   contrastColor,
   defaults,
+  enableMouseScrolling,
   mediaUrl,
   normalizeSettings,
   parseLikeResponse,
@@ -131,6 +132,130 @@ test('local mutation bridge rejects missing, cross-origin, and non-preview origi
     ['http://user:pass@localhost:5173', 'localhost:5173'],
   ])
     assert.equal(isLocalFrontendRequest(origin, host), false);
+});
+
+function scrollingRow() {
+  const classes = new Set<string>();
+  const ownerDocument = Object.assign(new EventTarget(), {
+    defaultView: new EventTarget(),
+  });
+  let captured: number | undefined;
+  const element = Object.assign(new EventTarget(), {
+    ownerDocument,
+    scrollWidth: 400,
+    clientWidth: 100,
+    scrollLeft: 0,
+    classList: {
+      add: (name: string) => classes.add(name),
+      remove: (name: string) => classes.delete(name),
+    },
+    setPointerCapture: (id: number) => {
+      captured = id;
+    },
+    hasPointerCapture: (id: number) => captured === id,
+    releasePointerCapture: () => {
+      captured = undefined;
+    },
+  });
+  const cleanup = enableMouseScrolling(element as unknown as HTMLElement);
+  const emit = (
+    target: EventTarget,
+    type: string,
+    properties: Record<string, unknown> = {},
+  ) => {
+    const event = Object.assign(new Event(type, { cancelable: true }), {
+      deltaX: 0,
+      deltaY: 0,
+      deltaMode: 0,
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 120,
+      detail: 1,
+      ...properties,
+    });
+    target.dispatchEvent(event);
+    return event;
+  };
+  return {
+    element,
+    ownerDocument,
+    classes,
+    cleanup,
+    emit,
+    captured: () => captured,
+  };
+}
+
+test('mouse wheel scrolls horizontal rows and releases the page at edges', () => {
+  const { element, cleanup, emit } = scrollingRow();
+  assert.equal(emit(element, 'wheel', { deltaY: 50 }).defaultPrevented, true);
+  assert.equal(element.scrollLeft, 50);
+  emit(element, 'wheel', { deltaY: 2, deltaMode: 1 });
+  assert.equal(element.scrollLeft, 82);
+  emit(element, 'wheel', { deltaY: 1, deltaMode: 2 });
+  assert.equal(element.scrollLeft, 182);
+  emit(element, 'wheel', { deltaY: 999 });
+  assert.equal(element.scrollLeft, 300);
+  assert.equal(emit(element, 'wheel', { deltaY: 30 }).defaultPrevented, false);
+  emit(element, 'wheel', { deltaY: -999 });
+  assert.equal(element.scrollLeft, 0);
+  assert.equal(emit(element, 'wheel', { deltaY: -30 }).defaultPrevented, false);
+  for (const properties of [
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { deltaX: 100 },
+  ]) {
+    assert.equal(
+      emit(element, 'wheel', { deltaY: 30, ...properties }).defaultPrevented,
+      false,
+    );
+    assert.equal(element.scrollLeft, 0);
+  }
+  element.scrollWidth = 100;
+  assert.equal(emit(element, 'wheel', { deltaY: 30 }).defaultPrevented, false);
+  cleanup?.();
+  element.scrollWidth = 400;
+  assert.equal(emit(element, 'wheel', { deltaY: 30 }).defaultPrevented, false);
+  assert.equal(element.scrollLeft, 0);
+});
+
+test('mouse dragging preserves taps, touch scrolling, keyboard clicks and cleanup', () => {
+  const { element, ownerDocument, classes, captured, cleanup, emit } =
+    scrollingRow();
+  emit(element, 'pointerdown');
+  emit(ownerDocument, 'pointermove', { clientX: 116 });
+  assert.equal(captured(), undefined);
+  emit(ownerDocument, 'pointerup');
+  assert.equal(emit(element, 'click').defaultPrevented, false);
+  emit(element, 'pointerdown');
+  emit(ownerDocument, 'pointermove', { clientX: 50 });
+  assert.equal(element.scrollLeft, 70);
+  assert.equal(captured(), 1);
+  assert.equal(classes.has('is-dragging'), true);
+  emit(ownerDocument, 'pointerup');
+  assert.equal(captured(), undefined);
+  assert.equal(classes.has('is-dragging'), false);
+  assert.equal(emit(element, 'click', { detail: 0 }).defaultPrevented, false);
+  assert.equal(emit(element, 'click').defaultPrevented, true);
+  emit(element, 'pointerdown', { pointerType: 'touch' });
+  assert.equal(
+    emit(ownerDocument, 'pointermove', { pointerType: 'touch', clientX: 0 })
+      .defaultPrevented,
+    false,
+  );
+  assert.equal(element.scrollLeft, 70);
+  assert.equal(emit(element, 'click').defaultPrevented, false);
+  emit(element, 'pointerdown');
+  emit(ownerDocument, 'pointermove', { clientX: 100 });
+  cleanup?.();
+  assert.equal(captured(), undefined);
+  assert.equal(classes.has('is-dragging'), false);
+  emit(ownerDocument, 'pointermove', { clientX: 0 });
+  assert.equal(element.scrollLeft, 90);
+  assert.equal(enableMouseScrolling(null), undefined);
 });
 
 test('buttons choose readable text for light and dark brand colors', () => {

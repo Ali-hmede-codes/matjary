@@ -133,6 +133,109 @@ export function isLocalFrontendRequest(
   }
 }
 
+export function enableMouseScrolling(node: HTMLElement | null) {
+  if (!node) return;
+  const element = node;
+  const document = element.ownerDocument;
+  let drag: { id: number; x: number; left: number; moved: boolean } | undefined;
+  let suppressClick = false;
+  const clamp = (left: number) =>
+    Math.max(0, Math.min(left, element.scrollWidth - element.clientWidth));
+
+  function wheel(event: WheelEvent) {
+    if (
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      !event.cancelable ||
+      Math.abs(event.deltaX) > Math.abs(event.deltaY)
+    )
+      return;
+    const unit =
+      event.deltaMode === 1
+        ? 16
+        : event.deltaMode === 2
+          ? element.clientWidth
+          : 1;
+    const next = clamp(element.scrollLeft + event.deltaY * unit);
+    // Let the page keep scrolling when the row has reached either edge.
+    if (next === element.scrollLeft) return;
+    event.preventDefault();
+    element.scrollLeft = next;
+  }
+  function finish() {
+    const id = drag?.id;
+    drag = undefined;
+    element.classList.remove('is-dragging');
+    if (id !== undefined && element.hasPointerCapture(id))
+      element.releasePointerCapture(id);
+  }
+  function down(event: PointerEvent) {
+    suppressClick = false;
+    if (
+      event.pointerType !== 'mouse' ||
+      event.button !== 0 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      element.scrollWidth <= element.clientWidth
+    )
+      return;
+    drag = {
+      id: event.pointerId,
+      x: event.clientX,
+      left: element.scrollLeft,
+      moved: false,
+    };
+  }
+  function move(event: PointerEvent) {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (!(event.buttons & 1)) return finish();
+    const distance = event.clientX - drag.x;
+    if (!drag.moved && Math.abs(distance) < 6) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      suppressClick = true;
+      element.classList.add('is-dragging');
+      // Capture only after dragging starts, so ordinary store/button clicks still work.
+      element.setPointerCapture(drag.id);
+    }
+    event.preventDefault();
+    element.scrollLeft = clamp(drag.left - distance);
+  }
+  function end(event: PointerEvent) {
+    if (event.pointerId === drag?.id) finish();
+  }
+  function click(event: MouseEvent) {
+    if (!suppressClick || event.detail === 0) return;
+    suppressClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const preventDrag = (event: DragEvent) => event.preventDefault();
+  element.addEventListener('wheel', wheel, { passive: false });
+  element.addEventListener('pointerdown', down);
+  element.addEventListener('lostpointercapture', end);
+  element.addEventListener('dragstart', preventDrag);
+  element.addEventListener('click', click, true);
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  document.defaultView?.addEventListener('blur', finish);
+  return () => {
+    finish();
+    element.removeEventListener('wheel', wheel);
+    element.removeEventListener('pointerdown', down);
+    element.removeEventListener('lostpointercapture', end);
+    element.removeEventListener('dragstart', preventDrag);
+    element.removeEventListener('click', click, true);
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', end);
+    document.removeEventListener('pointercancel', end);
+    document.defaultView?.removeEventListener('blur', finish);
+  };
+}
+
 export function readSavedIds(storage: Pick<Storage, 'getItem'>): string[] {
   try {
     const value: unknown = JSON.parse(

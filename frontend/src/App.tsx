@@ -42,6 +42,7 @@ import {
 import {
   contrastColor,
   defaults,
+  enableMouseScrolling,
   normalizeSettings,
   readSavedIds,
 } from './lib/website';
@@ -377,7 +378,12 @@ export default function App() {
               </div>
             )}
             <h1 className="sr-only">{settings.siteName} social feed</h1>
-            <section className="store-strip" aria-label="Browse store posts">
+            <section
+              className="store-strip"
+              aria-label="Browse store posts"
+              ref={enableMouseScrolling}
+              tabIndex={0}
+            >
               <a className="story your-store" href={loginUrl}>
                 <span className="story-ring">
                   <Plus size={25} />
@@ -517,7 +523,13 @@ export default function App() {
                       <option value="trending">Trending</option>
                     </select>
                   </label>
-                  <div className="category-tabs" aria-label="Categories">
+                  <div
+                    className="category-tabs"
+                    role="group"
+                    aria-label="Categories"
+                    ref={enableMouseScrolling}
+                    tabIndex={0}
+                  >
                     <button
                       className={!category ? 'selected' : ''}
                       aria-pressed={!category}
