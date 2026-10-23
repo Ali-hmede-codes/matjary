@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   BadgeCheck,
+  LoaderCircle,
   MapPin,
   Package,
   Phone,
@@ -37,29 +38,123 @@ function ShopImage({
   value,
   alt,
   eager = false,
+  fallbackName,
+  fallbackLabel,
 }: {
   value?: string | null;
   alt: string;
   eager?: boolean;
+  fallbackName?: string;
+  fallbackLabel?: string;
 }) {
   const src = assetUrl(storeMediaUrl(value));
   const [failedSrc, setFailedSrc] = useState<string>();
-  return src && failedSrc !== src ? (
-    <img
-      src={src}
-      alt={alt}
-      loading={eager ? 'eager' : 'lazy'}
-      decoding="async"
-      onError={() => setFailedSrc(src)}
-    />
-  ) : (
+  const [loadedSrc, setLoadedSrc] = useState<string>();
+  const loading = Boolean(src && src !== failedSrc && src !== loadedSrc);
+  return (
     <span
-      className="shop-image-fallback"
-      role="img"
-      aria-label={alt || 'Store banner'}
+      className={`shop-image ${loading ? 'is-loading' : ''}`}
+      aria-busy={loading}
     >
-      <Package size={32} />
+      {src && failedSrc !== src ? (
+        <img
+          key={src}
+          src={src}
+          alt={alt}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          ref={(image) => {
+            if (image?.complete && image.naturalWidth > 0) setLoadedSrc(src);
+          }}
+          onLoad={() => setLoadedSrc(src)}
+          onError={() => setFailedSrc(src)}
+        />
+      ) : (
+        <span
+          className="shop-image-fallback"
+          role={alt ? 'img' : undefined}
+          aria-label={alt || undefined}
+          aria-hidden={!alt}
+        >
+          {fallbackName ? (
+            <span className="shop-fallback-brand">
+              <span className="shop-fallback-monogram">
+                {fallbackName
+                  .trim()
+                  .split(/\s+/u)
+                  .map((part) => part[0])
+                  .slice(0, 2)
+                  .join('')}
+              </span>
+              <strong>{fallbackName}</strong>
+              <small>{fallbackLabel}</small>
+            </span>
+          ) : (
+            <Package size={32} />
+          )}
+        </span>
+      )}
+      {loading && (
+        <span className="shop-skeleton shop-image-loading" aria-hidden="true" />
+      )}
     </span>
+  );
+}
+
+function ShopCardsLoading({
+  stories = false,
+  label = 'Loading the collection…',
+}: {
+  stories?: boolean;
+  label?: string;
+}) {
+  return (
+    <div role="status">
+      <span className="sr-only">{label}</span>
+      <div
+        className={stories ? 'shop-stories' : 'shop-products'}
+        aria-hidden="true"
+      >
+        {[0, 1, 2].map((index) => (
+          <div className={stories ? 'shop-story' : 'shop-product'} key={index}>
+            <div
+              className={`${stories ? 'shop-story-media' : 'shop-product-image'} shop-skeleton`}
+            />
+            <div className="shop-product-copy">
+              <div className="shop-skeleton shop-skeleton-title" />
+              <div className="shop-skeleton shop-skeleton-line" />
+              <div className="shop-skeleton shop-skeleton-short" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ShopPageLoading() {
+  return (
+    <section className="shop-loading" aria-label="Loading shop">
+      <div className="shop-banner shop-skeleton" aria-hidden="true" />
+      <div className="shop-loading-message" role="status">
+        <LoaderCircle className="spin" size={22} />
+        <span>Opening the shop…</span>
+      </div>
+      <div className="shop-profile" aria-hidden="true">
+        <div className="shop-logo">
+          <span className="store-avatar large shop-skeleton" />
+        </div>
+        <div className="shop-intro">
+          <div className="shop-skeleton shop-skeleton-title" />
+          <div className="shop-skeleton shop-skeleton-line" />
+          <div className="shop-skeleton shop-skeleton-short" />
+        </div>
+        <div className="shop-browse shop-skeleton shop-skeleton-button" />
+      </div>
+      <div className="shop-loading-content">
+        <ShopCardsLoading />
+      </div>
+    </section>
   );
 }
 
@@ -152,6 +247,7 @@ export function StorePage({ slug }: { slug: string | null }) {
   });
   const presentation = storePresentation(store ?? { brandColor: null });
   const missing = notFound || (demo && !store);
+  const loadingShop = !store && !missing && !storeQuery.isError;
   useEffect(() => {
     document.title = `${store?.name ?? (missing ? 'Shop not found' : 'Shop')} — ${settings.siteName}`;
     document
@@ -227,9 +323,11 @@ export function StorePage({ slug }: { slug: string | null }) {
           </a>
         )}
       </header>
-      {!store && !missing && !storeQuery.isError && <LoadingBar />}
-      <main id="shop-main" className="shop-main">
-        {!store ? (
+      {loadingShop && <LoadingBar />}
+      <main id="shop-main" className="shop-main" aria-busy={loadingShop}>
+        {loadingShop ? (
+          <ShopPageLoading />
+        ) : !store ? (
           <section className="shop-state" role="status">
             <Package size={36} />
             <h1>
@@ -281,7 +379,13 @@ export function StorePage({ slug }: { slug: string | null }) {
             )}
             <section className="shop-hero" aria-labelledby="shop-title">
               <div className="shop-banner">
-                <ShopImage value={store.bannerKey} alt="" eager />
+                <ShopImage
+                  value={store.bannerKey}
+                  alt=""
+                  eager
+                  fallbackName={store.name}
+                  fallbackLabel={presentation.label}
+                />
               </div>
               <div className="shop-profile">
                 <div className="shop-logo">
@@ -383,10 +487,13 @@ export function StorePage({ slug }: { slug: string | null }) {
                 </div>
               )}
               {!demo && productsQuery.isPending && (
-                <p className="shop-inline-state" role="status">
-                  Loading{' '}
-                  {presentation.restaurant ? 'the menu' : 'the collection'}…
-                </p>
+                <ShopCardsLoading
+                  label={
+                    presentation.restaurant
+                      ? 'Loading the menu…'
+                      : 'Loading the collection…'
+                  }
+                />
               )}
               {!demo && productsQuery.isError && (
                 <StatusBanner
@@ -465,6 +572,13 @@ export function StorePage({ slug }: { slug: string | null }) {
                     disabled={productsQuery.isFetching}
                     onClick={() => void productsQuery.fetchNextPage()}
                   >
+                    {productsQuery.isFetchingNextPage && (
+                      <LoaderCircle
+                        className="spin"
+                        size={16}
+                        aria-hidden="true"
+                      />
+                    )}
                     {productsQuery.isFetchingNextPage
                       ? 'Loading…'
                       : 'Load more items'}
@@ -484,9 +598,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                 </div>
               </div>
               {!demo && postsQuery.isPending && (
-                <p className="shop-inline-state" role="status">
-                  Loading stories…
-                </p>
+                <ShopCardsLoading stories label="Loading stories…" />
               )}
               {!demo && postsQuery.isError && (
                 <StatusBanner
@@ -543,6 +655,13 @@ export function StorePage({ slug }: { slug: string | null }) {
                   disabled={postsQuery.isFetching}
                   onClick={() => void postsQuery.fetchNextPage()}
                 >
+                  {postsQuery.isFetchingNextPage && (
+                    <LoaderCircle
+                      className="spin"
+                      size={16}
+                      aria-hidden="true"
+                    />
+                  )}
                   {postsQuery.isFetchingNextPage ? 'Loading…' : 'More stories'}
                 </button>
               )}

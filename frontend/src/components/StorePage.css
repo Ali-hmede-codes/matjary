@@ -1,5 +1,7 @@
 .storefront {
   --shop-radius: 18px;
+  --shop-gutter: 24px;
+  --shop-banner-height: clamp(280px, 32vw, 420px);
   overflow-wrap: anywhere;
 }
 .shop-topbar,
@@ -42,42 +44,113 @@
   letter-spacing: 0;
 }
 .shop-main {
-  max-width: 1160px;
-  padding: 32px 24px 0;
-  margin: auto;
+  display: grid;
+  grid-template-columns:
+    minmax(var(--shop-gutter), 1fr) minmax(0, 1112px)
+    minmax(var(--shop-gutter), 1fr);
+}
+.shop-main > * {
+  grid-column: 2;
+  min-width: 0;
+}
+/* The hero spans the page; the catalog keeps a readable content width. */
+.shop-main > .shop-hero,
+.shop-main > .shop-loading {
+  grid-column: 1 / -1;
+}
+.shop-main > .status-banner {
+  margin-top: 20px;
 }
 .shop-banner {
-  height: 310px;
-  border-radius: var(--shop-radius);
+  width: 100%;
+  height: var(--shop-banner-height);
   overflow: hidden;
   background: var(--accent-wash);
 }
-.shop-banner > img {
+.shop-image {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.shop-image > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: opacity 0.35s ease;
+}
+.shop-image.is-loading > img {
+  opacity: 0;
 }
 .shop-banner .shop-image-fallback {
-  background:
-    radial-gradient(
-      ellipse at 20% 10%,
-      transparent 10%,
-      var(--accent-wash) 80%
-    ),
-    linear-gradient(120deg, var(--accent-wash), var(--primary));
-}
-.shop-banner .shop-image-fallback svg {
-  width: 72px;
-  height: 72px;
-  opacity: 0.4;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   color: var(--on-primary);
+  background: linear-gradient(
+    120deg,
+    var(--primary),
+    color-mix(in srgb, var(--primary) 78%, #000)
+  );
+}
+.shop-banner .shop-image-fallback::before,
+.shop-banner .shop-image-fallback::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: clamp(280px, 40vw, 620px);
+  aspect-ratio: 1;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.15;
+  pointer-events: none;
+}
+.shop-banner .shop-image-fallback::before {
+  left: -8%;
+  top: -65%;
+  box-shadow: 0 0 0 55px color-mix(in srgb, var(--on-primary) 12%, transparent);
+}
+.shop-banner .shop-image-fallback::after {
+  right: -10%;
+  bottom: -75%;
+  box-shadow: 0 0 0 80px color-mix(in srgb, var(--on-primary) 12%, transparent);
+}
+.shop-fallback-brand {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 28px;
+  text-align: center;
+}
+.shop-fallback-monogram {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border: 1px solid color-mix(in srgb, var(--on-primary) 30%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--on-primary) 10%, transparent);
+  font-size: 24px;
+  letter-spacing: 2px;
+}
+.shop-fallback-brand strong {
+  font-size: clamp(28px, 4vw, 48px);
+  letter-spacing: -1px;
+  line-height: 1.15;
+}
+.shop-fallback-brand small {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 3px;
 }
 .shop-profile {
+  max-width: 1160px;
+  margin-inline: auto;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: start;
   gap: 26px;
-  padding: 0 32px 34px;
+  padding: 0 var(--shop-gutter) 34px;
 }
 .shop-logo {
   margin-top: -44px;
@@ -239,7 +312,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s;
+  transition:
+    transform 0.3s,
+    opacity 0.35s ease;
 }
 .shop-product:hover .shop-product-image img {
   transform: scale(1.025);
@@ -289,6 +364,76 @@
 .shop-pagination p {
   color: var(--muted);
   font-size: 12px;
+}
+.shop-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--accent-wash);
+  border-radius: 8px;
+}
+.shop-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 65%, transparent),
+    transparent
+  );
+  animation: shimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.shop-image-loading {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  pointer-events: none;
+}
+.shop-loading {
+  position: relative;
+}
+.shop-loading > .shop-banner {
+  border-radius: 0;
+}
+.shop-loading-message {
+  position: absolute;
+  top: calc(var(--shop-banner-height) / 2);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+  padding: 16px 24px;
+  border: 1px solid var(--line);
+  border-radius: 50px;
+  background: var(--surface);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.shop-loading-content {
+  max-width: 1112px;
+  width: calc(100% - var(--shop-gutter) * 2);
+  margin: 24px auto 50px;
+}
+.shop-skeleton-title {
+  width: 65%;
+  height: 28px;
+  margin-bottom: 18px;
+}
+.shop-skeleton-line {
+  width: 100%;
+  height: 14px;
+  margin-bottom: 12px;
+}
+.shop-skeleton-short {
+  width: 45%;
+  height: 14px;
+}
+.shop-skeleton-button {
+  width: 190px;
+  height: 46px;
 }
 .shop-state {
   min-height: 65vh;
@@ -437,14 +582,11 @@
   --shop-radius: 12px;
 }
 .storefront-restaurant .shop-intro h1,
+.storefront-restaurant .shop-fallback-brand strong,
 .storefront-restaurant .shop-section h2,
 .storefront-restaurant .shop-menu-group > h3 {
   font-family: Georgia, 'Times New Roman', serif;
   font-weight: 400;
-}
-.storefront-restaurant .shop-banner {
-  height: 350px;
-  border-radius: 100px 100px 12px 12px;
 }
 .storefront-restaurant .shop-logo,
 .storefront-restaurant .shop-logo .store-avatar.large {
@@ -493,7 +635,6 @@
 @media (max-width: 1000px) {
   .shop-profile {
     grid-template-columns: auto 1fr;
-    padding-inline: 16px;
   }
   .shop-browse {
     grid-column: 2;
@@ -522,18 +663,14 @@
   .shop-platform {
     font-size: 19px;
   }
-  .shop-main {
-    padding: 20px 18px 0;
-  }
-  .shop-banner,
-  .storefront-restaurant .shop-banner {
-    height: 220px;
-    border-radius: 16px;
+  .storefront {
+    --shop-gutter: 18px;
+    --shop-banner-height: 260px;
   }
   .shop-profile {
     grid-template-columns: 1fr;
     gap: 18px;
-    padding: 0 8px 28px;
+    padding: 0 var(--shop-gutter) 28px;
   }
   .shop-logo {
     justify-self: start;
