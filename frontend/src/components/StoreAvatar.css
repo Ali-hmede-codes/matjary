@@ -1,0 +1,24 @@
+.store-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  background: var(--accent-wash);
+  color: var(--primary);
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.store-avatar.large {
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  font-size: 17px;
+}
+.store-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

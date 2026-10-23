@@ -1,0 +1,61 @@
+.post-dialog {
+  width: min(680px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  max-height: calc(100dvh - 40px);
+}
+.post-dialog[open] {
+  animation: reveal-in 220ms ease-out;
+}
+.post-dialog::backdrop {
+  background: #0d201acc;
+  backdrop-filter: blur(5px);
+}
+.dialog-content {
+  position: relative;
+}
+.dialog-close {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 2;
+  background: var(--surface);
+  box-shadow: 0 2px 15px #0002;
+}
+.dialog-media {
+  min-height: 180px;
+  background: var(--wash);
+}
+.dialog-media img,
+.dialog-media video {
+  width: 100%;
+  max-height: 62dvh;
+  object-fit: contain;
+  display: block;
+}
+.dialog-copy {
+  padding: 25px;
+}
+.dialog-copy h2 {
+  margin-block: 8px;
+  font-size: 25px;
+  letter-spacing: -0.8px;
+}
+.dialog-copy p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gallery-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-top: 10px;
+  font-size: 12px;
+}

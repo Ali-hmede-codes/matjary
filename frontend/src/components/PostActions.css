@@ -1,0 +1,27 @@
+.post-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 -6px 8px;
+}
+.likes-count {
+  font-size: 13px;
+  font-weight: 700;
+  margin-right: 12px;
+}
+.like-button.is-liked {
+  color: #e84567;
+}
+.is-liked svg {
+  animation: save-pop 250ms ease-out;
+}
+.save-button {
+  margin-left: auto;
+}
+.is-saved {
+  color: var(--primary);
+  background: var(--wash);
+}
+.is-saved svg {
+  animation: save-pop 250ms ease-out;
+}

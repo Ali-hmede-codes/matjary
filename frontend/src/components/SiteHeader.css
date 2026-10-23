@@ -1,0 +1,220 @@
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.topbar {
+  min-height: 72px;
+  margin: 0 auto;
+  padding: 14px var(--page-padding);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 210px;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.1;
+}
+.brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-logo,
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 12px;
+}
+.brand-logo {
+  object-fit: contain;
+}
+.brand-mark {
+  background: var(--primary);
+  color: var(--on-primary);
+  display: grid;
+  place-items: center;
+  font-size: 31px;
+  font-weight: 750;
+  padding-bottom: 5px;
+}
+.main-nav {
+  position: fixed;
+  top: 100px;
+  left: 24px;
+  width: calc(var(--sidebar-width) - 44px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.main-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 17px;
+  border-radius: 15px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+.main-nav button:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+.main-nav button.active {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.main-nav button.active svg {
+  stroke-width: 2.3;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  width: min(420px, 40vw);
+  min-width: 140px;
+  background: var(--wash);
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--muted);
+  gap: 10px;
+}
+.search-box:focus-within {
+  border-color: var(--primary);
+}
+.search-box input {
+  min-width: 0;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+}
+.search-box input::placeholder {
+  color: var(--muted);
+}
+.search-box .icon-button {
+  width: 32px;
+  height: 36px;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.create-button,
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+.create-button {
+  padding: 0 16px;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.profile-button {
+  width: 42px;
+  border: 1px solid var(--line);
+  background: var(--wash);
+  color: var(--ink);
+  border-radius: 50%;
+}
+.header-actions .search-toggle {
+  display: none;
+}
+@media (max-width: 900px) {
+  .main-nav {
+    inset: auto 0 0;
+    width: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 7px 12px calc(7px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    z-index: 40;
+  }
+  .main-nav button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-height: 48px;
+    padding: 6px;
+    font-size: 10px;
+    border-radius: 13px;
+  }
+}
+@media (max-width: 600px) {
+  .topbar {
+    min-height: 64px;
+    padding: 10px 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    max-width: calc(100% - 148px);
+    font-size: 23px;
+    gap: 8px;
+  }
+  .brand-logo,
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+  .brand-mark {
+    font-size: 27px;
+    border-radius: 10px;
+  }
+  .header-actions {
+    margin-left: auto;
+    gap: 6px;
+  }
+  .header-actions .search-toggle {
+    display: inline-flex;
+  }
+  .create-button {
+    width: 38px;
+    padding: 0;
+  }
+  .create-button span {
+    display: none;
+  }
+  .profile-button {
+    width: 38px;
+    min-height: 38px;
+  }
+  .search-box {
+    display: none;
+  }
+  .search-open .search-box {
+    display: flex;
+    order: 3;
+    width: 100%;
+    margin: 0;
+  }
+  .search-box input {
+    font-size: 16px;
+  }
+}

@@ -1,0 +1,97 @@
+.store-strip {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 4px 3px 18px;
+  scrollbar-width: thin;
+  animation: reveal-in 350ms both;
+}
+.story {
+  position: relative;
+  width: 70px;
+  flex-shrink: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.story > span:nth-child(2) {
+  max-width: 74px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.story-ring {
+  width: 68px;
+  height: 68px;
+  padding: 3px;
+  border: 2px solid var(--line);
+  border-radius: 23px;
+  display: grid;
+  place-items: center;
+  transition:
+    border-color 180ms,
+    transform 180ms;
+}
+.story.selected .story-ring {
+  border-color: var(--primary);
+  background: var(--accent-wash);
+}
+.story:hover .story-ring {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+.story.selected {
+  color: var(--primary);
+}
+.your-store .story-ring {
+  border-style: dashed;
+  background: var(--wash);
+  color: var(--muted);
+}
+.all-stores .story-ring {
+  color: var(--primary);
+}
+.story > svg {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  color: var(--primary);
+  background: var(--surface);
+  border-radius: 50%;
+}
+.story:nth-child(3n) .store-avatar {
+  background: #eeeaff;
+  color: #6650a2;
+}
+.story:nth-child(4n) .store-avatar {
+  background: #e1f3ee;
+  color: #266858;
+}
+@media (max-width: 600px) {
+  .store-strip {
+    padding-inline: 16px;
+    gap: 14px;
+  }
+}
+.store-strip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .store-strip {
+    cursor: grab;
+    user-select: none;
+  }
+  .store-strip a,
+  .store-strip button {
+    cursor: inherit;
+  }
+  .store-strip.is-dragging {
+    cursor: grabbing;
+    scroll-behavior: auto;
+  }
+}

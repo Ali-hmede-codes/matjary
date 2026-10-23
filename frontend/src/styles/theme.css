@@ -1,0 +1,28 @@
+/* Shared design controls. Component-specific and responsive styles live beside their TSX files. */
+:root {
+  --font-family: 'DM Sans Variable', sans-serif;
+  --sidebar-width: 208px;
+  --content-max-width: 1040px;
+  --feed-max-width: 600px;
+  --rail-width: 260px;
+  --content-gap: 40px;
+  --page-padding: 32px;
+  --post-radius: 16px;
+}
+
+/* Brand values come from website settings. For a fixed CSS theme, replace these
+   var() values with colors; set --on-primary to readable button text as well. */
+.app {
+  --primary: var(--brand-primary, #254e40);
+  --secondary: var(--brand-secondary, #d9a441);
+  --surface: var(--brand-surface, #ffffff);
+  --ink: var(--brand-ink, #17231e);
+  --on-primary: var(--brand-on-primary, #ffffff);
+  --muted: color-mix(in srgb, var(--ink) 65%, var(--surface));
+  --line: color-mix(in srgb, var(--ink) 10%, var(--surface));
+  --wash: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  --accent-wash: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--surface);
+}
