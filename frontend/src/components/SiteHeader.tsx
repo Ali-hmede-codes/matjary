@@ -40,17 +40,11 @@ export function SiteHeader({
     <header className="site-header">
       <div className="topbar">
         <a className="brand" href="/" aria-label={`${settings.siteName} home`}>
-          {settings.logoUrl ? (
-            <img
-              className="brand-logo"
-              src={assetUrl(settings.logoUrl)}
-              alt=""
-            />
-          ) : (
-            <span className="brand-mark" aria-hidden="true">
-              m
-            </span>
-          )}
+          <img
+            className="brand-logo"
+            src={assetUrl(settings.logoUrl) || '/logo.png'}
+            alt=""
+          />
           <span className="brand-name">{settings.siteName}</span>
         </a>
         <nav className="main-nav" aria-label="Main navigation">
