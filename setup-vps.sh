@@ -14,6 +14,7 @@ Matjary VPS setup (Ubuntu 24.04, or Linux with Docker already installed)
 Optional: --repo-dir /home/example/matjary
           --web-root /home/example/htdocs/demo.example.com
           --port 3100
+          --update     (pull the current branch's upstream before rebuilding)
           --help
           --self-test  (validation only; no deployment or Docker required)
 
@@ -28,8 +29,11 @@ It prints Nginx location blocks to paste into ONLY this site's HTTPS Vhost.
 It never edits/reloads host Nginx, upgrades the OS, resets databases, or
 removes volumes. Docker installation is separately confirmed if necessary.
 
-Rerun with the SAME domain to update this deployment, preserving credentials
-and data. Back up MySQL and media first: migrations can change the schema.
+For an existing deployment, pull and refresh with:
+  sudo bash update-vps.sh --domain demo.example.com
+This uses saved settings and requires a clean Git checkout with an upstream.
+Local commits, diverged history, and uncommitted files are never overwritten.
+Back up MySQL and media first: migrations can change the schema.
 A failed/interrupted migration blocks automatic retries until investigated.
 HELP
 }
@@ -204,6 +208,74 @@ location / {
 }
 NGINX
 }
+repo_git() {
+  runuser -u "$SITE_USER" -- env GIT_TERMINAL_PROMPT=0 git -C "$REPO_DIR" "$@"
+}
+update_repository() {
+  local branch remote ref previous target status
+  [[ $(repo_git rev-parse --show-toplevel) == "$REPO_DIR" ]] || die 'The saved repository must be the Git checkout root.'
+  status=$(repo_git status --porcelain --untracked-files=normal) || die 'Cannot check the server checkout.'
+  [[ -z "$status" ]] || die 'The server checkout has local changes. Preserve or resolve them manually before updating.'
+  branch=$(repo_git symbolic-ref --quiet --short HEAD) || die 'Detached HEAD cannot be updated automatically. Select the intended tracking branch manually.'
+  remote=$(repo_git config --get "branch.$branch.remote") || die 'The current branch has no upstream remote.'
+  ref=$(repo_git config --get "branch.$branch.merge") || die 'The current branch has no upstream branch.'
+  [[ -n "$remote" && "$remote" != . && "$remote" != -* && "$ref" == refs/heads/* ]] || die 'The upstream must be a branch on a configured remote.'
+  repo_git check-ref-format "$ref" || die 'The upstream branch is invalid.'
+  previous=$(repo_git rev-parse --verify HEAD) || die 'Cannot identify the current revision.'
+  printf '\nFetching updates for branch %s...\n' "$branch"
+  repo_git fetch --no-tags -- "$remote" "$ref" || die "Git fetch failed. Check the remote and the site user's Git access; the running website was not restarted."
+  target=$(repo_git rev-parse --verify 'FETCH_HEAD^{commit}') || die 'Cannot identify the fetched revision.'
+  repo_git merge-base --is-ancestor "$previous" "$target" || die 'The server has local commits or diverged history. Resolve this manually; no reset or forced update was performed.'
+  # Merge exactly the fetched commit, without creating a merge commit or stashing files.
+  repo_git merge --ff-only --no-edit "$target" || die 'Fast-forward failed. Preserve the checkout and resolve Git errors manually.'
+  [[ $(repo_git rev-parse --verify HEAD) == "$target" ]] || die 'The checkout does not match the fetched revision.'
+  status=$(repo_git status --porcelain --untracked-files=normal) || die 'Cannot verify the updated checkout.'
+  [[ -z "$status" ]] || die 'The checkout changed during the update; deployment stopped.'
+  printf '\nRepository ready at %s (previously %s). Rebuilding the website.\n' "$target" "$previous"
+}
+self_test_update() {
+  local scenario output expected
+  for scenario in success current dirty status-failed detached no-upstream local-upstream invalid-ref fetch-failed diverged merge-failed; do
+    expected=1
+    [[ "$scenario" != success && "$scenario" != current ]] || expected=0
+    if output=$(
+      REPO_DIR=/home/demo/matjary
+      merged=0
+      repo_git() {
+        case "$1" in
+          rev-parse)
+            if [[ "$2" == --show-toplevel ]]; then printf '%s\n' "$REPO_DIR"
+            elif [[ "$3" == 'FETCH_HEAD^{commit}' || "$merged" == 1 || "$scenario" == current ]]; then printf 'new-commit\n'
+            else printf 'old-commit\n'; fi ;;
+          status)
+            [[ "$scenario" != status-failed ]] || return 1
+            [[ "$scenario" != dirty ]] || printf ' M frontend/src/App.tsx\n' ;;
+          symbolic-ref) [[ "$scenario" != detached ]] || return 1; printf 'main\n' ;;
+          config)
+            [[ "$scenario" != no-upstream ]] || return 1
+            if [[ "$3" == branch.main.remote ]]; then
+              if [[ "$scenario" == local-upstream ]]; then printf '.\n'; else printf 'origin\n'; fi
+            else printf 'refs/heads/main\n'; fi ;;
+          check-ref-format) [[ "$scenario" != invalid-ref ]] ;;
+          fetch)
+            [[ "$2 $3 $4 $5" == '--no-tags -- origin refs/heads/main' && "$scenario" != fetch-failed ]] ;;
+          merge-base) [[ "$scenario" != diverged ]] ;;
+          merge)
+            [[ "$2 $3 $4" == '--ff-only --no-edit new-commit' && "$scenario" != merge-failed ]] || return 1
+            merged=1
+            printf 'TEST_MERGED\n' ;;
+          *) exit 99 ;;
+        esac
+      }
+      update_repository 2>&1 || exit 1
+    ); then
+      [[ "$expected" == 0 && "$output" == *TEST_MERGED* ]] || die "Unsafe update accepted: $scenario"
+    else
+      [[ "$expected" == 1 && "$output" != *TEST_MERGED* ]] || die "Update regression: $scenario"
+    fi
+  done
+  printf 'Git update safety tests passed. No real checkout or deployment changed.\n'
+}
 self_test() {
   valid_domain demo.example.com || die 'Domain validation failed.'
   valid_domain xn--bcher-kva.example || die 'Punycode validation failed.'
@@ -225,6 +297,7 @@ self_test() {
   [[ "$nginx" == *'proxy_pass http://127.0.0.1:3100;'* ]] || die 'Proxy URI must not be rewritten.'
   [[ "$nginx" == *'X-Forwarded-For $remote_addr;'* && "$overlay" == *'ports: !reset []'* ]] || die 'Isolation checks failed.'
   write_environment --self-test
+  self_test_update
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     local root
     root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -256,10 +329,12 @@ print("Compose merge and private port checks passed.")
 }
 
 DOMAIN='' SITE_USER='' REPO_DIR='' WEB_ROOT='' API_PORT=''
+UPDATE=0 UPDATE_RESUMED=0
 while (( $# )); do
   case "$1" in
     --help|-h) usage; exit 0 ;;
     --self-test) self_test; exit 0 ;;
+    --update) UPDATE=1; shift ;;
     --domain|--site-user|--repo-dir|--web-root|--port)
       (( $# >= 2 )) || die "Missing value for $1"
       case "$1" in
@@ -286,12 +361,22 @@ PROJECT="matjary-$(printf '%s' "$DOMAIN" | sha256sum | cut -c1-12)"
 STATE="/var/lib/matjary-setup/$PROJECT"
 ENV_FILE="$STATE/production.env"
 [[ ! -L /var/lib/matjary-setup && ! -L "$STATE" ]] || die 'Deployment state cannot be a symlink.'
+if (( UPDATE )); then
+  [[ -f "$ENV_FILE" ]] || die 'No saved deployment for this domain. Run setup-vps.sh first, or check the domain spelling.'
+fi
 for directory in /var/lib/matjary-setup "$STATE"; do
   [[ ! -e "$directory" || $(stat -c %u "$directory") == 0 ]] || die 'Existing deployment state must be owned by root.'
 done
 install -d -m 0700 -o root -g root /var/lib/matjary-setup "$STATE"
-exec 9> "$STATE/setup.lock"
-flock -n 9 || die 'Another setup for this domain is already running.'
+if [[ -n "${MATJARY_UPDATE_LOCK:-}" ]]; then
+  # Keep the same open lock across exec so setup cannot race another update.
+  [[ "$MATJARY_UPDATE_LOCK" == "$STATE/setup.lock" && /proc/self/fd/9 -ef "$STATE/setup.lock" ]] || die 'Invalid update lock handoff.'
+  UPDATE_RESUMED=1
+else
+  exec 9> "$STATE/setup.lock"
+fi
+flock -n 9 || die 'Another setup or update for this domain is already running.'
+unset MATJARY_UPDATE_LOCK
 [[ ! -e "$STATE/migration.pending" ]] || die "An earlier migration needs investigation. Inspect the database and $STATE/migration.pending before any retry. After verified recovery, archive that marker manually."
 [[ ! -L "$ENV_FILE" ]] || die 'The private environment file cannot be a symlink.'
 
@@ -344,7 +429,12 @@ printf '\nMySQL and Redis stay inside Docker with NO host ports. One media job r
 printf 'Runtime memory limits total about 4.75 GiB; builds also need headroom. Other apps still share CPU/disk.\n'
 free -h
 printf '\nOnly this website frontend will be replaced. Existing database/media volumes are preserved.\n'
-confirm 'Confirm this is the intended demo website, HTTPS is configured, and you have current VPS/database/media backups. Updates may briefly interrupt Matjary.' "$DOMAIN"
+if (( ! UPDATE_RESUMED )); then
+  if (( UPDATE )); then
+    printf 'This will pull the current branch\x27s upstream and execute its deployment script. Only deploy trusted, reviewed updates.\n'
+  fi
+  confirm 'Confirm this is the intended demo website, HTTPS is configured, and you have current VPS/database/media backups. Updates may briefly interrupt Matjary.' "$DOMAIN"
+fi
 
 # Install only missing prerequisites, never replace an existing Docker distribution.
 packages=()
@@ -390,6 +480,14 @@ if [[ "$owned_ports" != *"127.0.0.1:$API_PORT->3000/tcp"* ]]; then
   if [[ -n $(ss -H -ltn "sport = :$API_PORT") || "$all_ports" == *":$API_PORT->"* ]]; then
     die "Port $API_PORT is already in use. Choose another port with --port for a new deployment."
   fi
+fi
+
+if (( UPDATE )); then
+  update_repository
+  [[ -f "$REPO_DIR/setup-vps.sh" && ! -L "$REPO_DIR/setup-vps.sh" ]] || die 'The updated repository has no regular setup-vps.sh.'
+  export MATJARY_UPDATE_LOCK="$STATE/setup.lock"
+  # Reload the fetched installer, including any updated build/migration behavior.
+  exec bash "$REPO_DIR/setup-vps.sh" --domain "$DOMAIN"
 fi
 
 if [[ ! -d "$REPO_DIR" ]]; then
@@ -502,4 +600,4 @@ printf '\nCredentials remain private in %s; never paste that file or expanded Co
 printf 'Persistent volumes: %s_mysql-data, %s_redis-data, %s_media-data. Back them up.\n' "$PROJECT" "$PROJECT" "$PROJECT"
 printf 'Nginx snippet: %s/cloudpanel.locations.conf\n' "$STATE"
 printf 'Frontend build/previous index retained at %s (and .previous-index.html when present).\n' "$BUILD_DIR"
-printf 'To update later: update this repository deliberately, then rerun this script with the SAME domain.\n'
+printf 'To pull and refresh later: sudo bash %s/update-vps.sh --domain %s\n' "$REPO_DIR" "$DOMAIN"
