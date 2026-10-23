@@ -497,15 +497,15 @@ export class StoresService {
     if (storeIds.length === 0) return {};
     const result = await this.stores.manager
       .createQueryBuilder()
-      .select('storeId', 'storeId')
+      .select('showcase.storeId', 'storeId')
       .addSelect('COUNT(*)', 'count')
       .from('showcases', 'showcase')
-      .where('storeId IN (:...storeIds)', { storeIds })
+      .where('showcase.storeId IN (:...storeIds)', { storeIds })
       .andWhere('showcase.status = :status', {
         status: ShowcaseStatus.PUBLISHED,
       })
       .andWhere(visibilitySql('post', 'showcase'))
-      .groupBy('storeId')
+      .groupBy('showcase.storeId')
       .getRawMany();
 
     const counts: Record<string, number> = {};
@@ -521,12 +521,12 @@ export class StoresService {
     if (storeIds.length === 0) return {};
     const result = await this.products
       .createQueryBuilder('product')
-      .select('storeId', 'storeId')
+      .select('product.storeId', 'storeId')
       .addSelect('COUNT(*)', 'count')
-      .where('storeId IN (:...storeIds)', { storeIds })
-      .andWhere('status = :status', { status: ProductStatus.ACTIVE })
+      .where('product.storeId IN (:...storeIds)', { storeIds })
+      .andWhere('product.status = :status', { status: ProductStatus.ACTIVE })
       .andWhere(visibilitySql('product', 'product'))
-      .groupBy('storeId')
+      .groupBy('product.storeId')
       .getRawMany();
 
     const counts: Record<string, number> = {};

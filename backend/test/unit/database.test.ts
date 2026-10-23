@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { DataSource, type QueryRunner } from 'typeorm';
+import { DataSource, type QueryRunner, type Repository } from 'typeorm';
+import { StoresService } from '../../apps/api/src/modules/stores/stores.service';
 import { validateDatabaseEnvironment } from '../../libs/config/src/environment';
 import { createDatabaseOptions } from '../../libs/database/src/database.options';
 import { AddStoreLocation1793318400000 } from '../../libs/database/src/migrations/1793318400000-AddStoreLocation';
@@ -41,6 +42,50 @@ test('API and CLI database options prohibit automatic schema mutations', () => {
   assert.equal(options.bigNumberStrings, true);
   assert.equal(options.poolSize, 10);
   assert.equal(options.extra.queueLimit, 100);
+});
+
+test('store listing count queries map storeId to the MySQL column', async () => {
+  const source = new MetadataDataSource(options);
+  await source.inspect();
+  const postQuery = source.manager.createQueryBuilder();
+  const productQuery = source
+    .getRepository(Product)
+    .createQueryBuilder('product');
+  for (const query of [postQuery, productQuery]) {
+    Object.assign(query, {
+      getRawMany: async () => [{ storeId: 'store-1', count: '2' }],
+    });
+  }
+  const service = new StoresService(
+    {
+      findAndCount: async () => [[{ id: 'store-1' }], 1],
+      manager: { createQueryBuilder: () => postQuery },
+    } as unknown as Repository<Store>,
+    {
+      createQueryBuilder: () => productQuery,
+    } as unknown as Repository<Product>,
+    source.getRepository(SubscriptionPlan),
+    null!,
+    null!,
+    null!,
+  );
+
+  const result = await service.findAll(undefined, 7, 0);
+  assert.equal(result.total, 1);
+  assert.equal(result.items[0]?.postsCount, 2);
+  assert.equal(result.items[0]?.productsCount, 2);
+  for (const query of [postQuery, productQuery]) {
+    const [sql, parameters] = query.getQueryAndParameters();
+    assert.match(sql, /SELECT `\w+`\.`store_id` AS `storeId`/);
+    assert.match(sql, /WHERE `\w+`\.`store_id` IN \(\?\)/);
+    assert.match(sql, /GROUP BY `\w+`\.`store_id`/);
+    assert.match(sql, /admin_archived_at IS NULL/);
+    assert.match(sql, /suspended_at IS NULL/);
+    assert.deepEqual(parameters, [
+      'store-1',
+      query === postQuery ? 'published' : 'active',
+    ]);
+  }
 });
 
 test('store location migration creates and drops indexes using single statements', async () => {
