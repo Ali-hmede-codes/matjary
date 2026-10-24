@@ -32,6 +32,7 @@ export function PanelShell({
         ['/stores', 'Stores'],
         ['/content', 'Content'],
         ['/subscriptions', 'Subscriptions'],
+        ['/subscriptions/plans', 'Plans'],
         ['/verification', 'Verification'],
       ]
     : [
@@ -91,7 +92,10 @@ export function PanelShell({
             <NavLink
               key={path}
               to={base + path}
-              end={path === ''}
+              // Parent sections also own nested routes (plans, post types).
+              end={
+                path === '' || path === '/content' || path === '/subscriptions'
+              }
               onClick={() => setOpen(false)}
             >
               <span>{label}</span>

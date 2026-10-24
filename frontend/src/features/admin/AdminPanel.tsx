@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   BadgeCheck,
   CreditCard,
+  Plus,
   Search,
   ShieldCheck,
   Store,
@@ -37,6 +38,7 @@ import {
   formatProductPrice,
   isStoreVerified,
 } from '../../lib/storefront';
+import { BILLING_LABELS, PlanEditor, planSummary } from './PlanEditor';
 
 type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
 export default function AdminPanel({ session }: { session: Session }) {
@@ -81,6 +83,10 @@ export default function AdminPanel({ session }: { session: Session }) {
               id={session.user.id}
             />
           }
+        />
+        <Route
+          path="subscriptions/plans"
+          element={<AdminPlans id={session.user.id} />}
         />
         <Route
           path="verification"
@@ -145,7 +151,8 @@ function Overview({ id }: { id: string }) {
           <CreditCard size={28} />
           <h2>The right plan, for every owner.</h2>
           <p>
-            Assign subscriptions and keep track of expiry dates in one place.
+            Create plans, adjust limits, and assign subscriptions with expiry
+            dates in one place.
           </p>
           <Link className="panel-primary" to="/admin/subscriptions">
             Manage subscriptions <ArrowUpRight size={16} />
@@ -169,6 +176,138 @@ function Overview({ id }: { id: string }) {
           workspace is for oversight, subscriptions, and verification.
         </p>
       </div>
+    </>
+  );
+}
+function SubscriptionTabs() {
+  return (
+    <nav className="panel-tabs" aria-label="Subscriptions">
+      <NavLink end to="/admin/subscriptions">
+        Assignments
+      </NavLink>
+      <NavLink to="/admin/subscriptions/plans">Plans</NavLink>
+    </nav>
+  );
+}
+function AdminPlans({ id }: { id: string }) {
+  const [editing, setEditing] = useState<PanelRecord | 'new'>();
+  const [deactivating, setDeactivating] = useState<PanelRecord>();
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ['panel', id, 'plans'],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>('admin/data/plans?limit=100', signal),
+  });
+  const plans = [...(query.data?.items ?? [])].sort(
+    (a, b) =>
+      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+      (a.name ?? '').localeCompare(b.name ?? ''),
+  );
+  async function activate(plan: PanelRecord) {
+    if (busy) return;
+    setBusy(plan.id);
+    setError('');
+    try {
+      await mutate(`admin/plans/${plan.id}`, { isActive: true }, 'PATCH');
+      await client.invalidateQueries({ queryKey: ['panel', id] });
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy('');
+    }
+  }
+  return (
+    <>
+      <PageTitle
+        eyebrow="ADMINISTRATION"
+        title="Plans"
+        description="Add a plan, change limits, or retire an old one. Owners only see active plans."
+        action={
+          <button className="panel-primary" onClick={() => setEditing('new')}>
+            <Plus size={16} /> Add plan
+          </button>
+        }
+      />
+      <SubscriptionTabs />
+      {error && <Notice error>{error}</Notice>}
+      <section className="panel-card panel-list-card">
+        {query.isPending ? (
+          <Loading />
+        ) : query.isError ? (
+          <Retry error={query.error} retry={() => void query.refetch()} />
+        ) : plans.length ? (
+          <div className="panel-record-list">
+            {plans.map((plan) => (
+              <article className="panel-record" key={plan.id}>
+                <div className="panel-record-icon">
+                  <CreditCard size={20} />
+                </div>
+                <div className="panel-record-info">
+                  <h3>{plan.name}</h3>
+                  <p>
+                    {formatProductPrice(
+                      plan.priceCents || '0',
+                      plan.currency || 'USD',
+                    )}
+                    {' · '}
+                    {BILLING_LABELS[plan.billingCycle ?? 'monthly'] ??
+                      plan.billingCycle}
+                  </p>
+                  <small>{planSummary(plan.limits)}</small>
+                </div>
+                <span
+                  className={`panel-pill ${plan.isActive === false ? 'muted' : ''}`}
+                >
+                  {plan.isActive === false ? 'Inactive' : 'Active'}
+                </span>
+                <button onClick={() => setEditing(plan)}>
+                  Edit <ArrowUpRight size={15} />
+                </button>
+                {plan.slug !== 'free' &&
+                  (plan.isActive === false ? (
+                    <button
+                      disabled={busy === plan.id}
+                      onClick={() => void activate(plan)}
+                    >
+                      {busy === plan.id ? 'Activating…' : 'Reactivate'}
+                    </button>
+                  ) : (
+                    <button onClick={() => setDeactivating(plan)}>
+                      Deactivate
+                    </button>
+                  ))}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No plans yet">
+            <p>Create your first plan to start assigning subscriptions.</p>
+          </Empty>
+        )}
+      </section>
+      {editing !== undefined && (
+        <PlanEditor
+          plan={editing === 'new' ? undefined : editing}
+          adminId={id}
+          close={() => setEditing(undefined)}
+        />
+      )}
+      {deactivating && (
+        <ConfirmAction
+          path={`admin/plans/${deactivating.id}/deactivate`}
+          title={`Deactivate ${deactivating.name}`}
+          reasons={[
+            'Replaced by a newer plan',
+            'Pricing changed for new owners',
+            'Plan retired',
+          ]}
+          id={id}
+          close={() => setDeactivating(undefined)}
+          done={() => setDeactivating(undefined)}
+        />
+      )}
     </>
   );
 }
@@ -231,6 +370,7 @@ function AdminList({
           <NavLink to="/admin/content/posts">Posts</NavLink>
         </nav>
       )}
+      {resource === 'subscriptions' && <SubscriptionTabs />}
       <section className="panel-card panel-list-card">
         <form
           className="panel-toolbar"
@@ -329,7 +469,11 @@ function AdminList({
                             ? isStoreVerified(item)
                               ? 'Verified'
                               : 'Not verified'
-                            : item.status || 'Active'}
+                            : resource === 'users'
+                              ? item.role === 'admin'
+                                ? 'Administrator'
+                                : 'User'
+                              : item.status || 'Active'}
                     </span>
                     <button onClick={() => setSelected(item)}>
                       View details <ArrowUpRight size={15} />
@@ -337,6 +481,19 @@ function AdminList({
                     {resource === 'users' && (
                       <button onClick={() => setAssign(item)}>
                         Assign plan
+                      </button>
+                    )}
+                    {resource === 'subscriptions' && item.owner && (
+                      <button
+                        onClick={() =>
+                          setAssign({
+                            id: item.userId ?? item.owner!.id,
+                            displayName: item.owner?.displayName,
+                            email: item.owner?.email,
+                          })
+                        }
+                      >
+                        Reassign
                       </button>
                     )}
                   </article>
@@ -400,6 +557,7 @@ function Detail({
       getJson<PanelRecord>(`admin/data/${resource}/${item.id}`, signal),
   });
   const data = query.data ?? item;
+  const [changingRole, setChangingRole] = useState(false);
   const [action, setAction] = useState<{
     path: string;
     title: string;
@@ -454,6 +612,17 @@ function Detail({
               <dt>Created</dt>
               <dd>{dateLabel(data.createdAt)}</dd>
             </div>
+            {resource === 'users' && (
+              <div>
+                <dt>Role</dt>
+                <dd>
+                  {data.role === 'admin' ? 'Administrator' : 'User'}
+                  {data.roleManagedByEnvironment && (
+                    <small>Managed by server configuration</small>
+                  )}
+                </dd>
+              </div>
+            )}
             {resource === 'stores' && (
               <>
                 <div>
@@ -529,6 +698,13 @@ function Detail({
                 Assign subscription
               </button>
             )}
+            {resource === 'users' &&
+              data.roleManagedByEnvironment !== true &&
+              data.id !== id && (
+                <button onClick={() => setChangingRole(true)}>
+                  Change role
+                </button>
+              )}
             {resource === 'stores' && (
               <>
                 <Link className="panel-secondary" to={`/stores/${data.slug}`}>
@@ -595,6 +771,20 @@ function Detail({
                 Cancel subscription
               </button>
             )}
+            {resource === 'subscriptions' && data.status === 'active' && (
+              <button
+                className="panel-primary"
+                onClick={() =>
+                  assign({
+                    id: data.userId ?? data.owner?.id ?? '',
+                    displayName: data.owner?.displayName,
+                    email: data.owner?.email,
+                  })
+                }
+              >
+                Change plan
+              </button>
+            )}
           </div>
         </>
       )}
@@ -606,6 +796,7 @@ function Detail({
           done={close}
         />
       )}
+      {changingRole && <ChangeRole user={data} adminId={id} close={close} />}
     </Modal>
   );
 }
@@ -666,6 +857,133 @@ function ConfirmAction({
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+function ChangeRole({
+  user,
+  adminId,
+  close,
+}: {
+  user: PanelRecord;
+  adminId: string;
+  close: () => void;
+}) {
+  const current = user.role === 'admin' ? 'admin' : 'user';
+  const [role, setRole] = useState<'user' | 'admin'>(current);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const client = useQueryClient();
+  const label = user.displayName || user.email || 'this account';
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy || role === current || reason.trim().length < 3) return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate(
+        `admin/users/${user.id}/role`,
+        { role, reason: reason.trim() },
+        'PATCH',
+      );
+      await client.invalidateQueries({ queryKey: ['panel', adminId] });
+      setSaved(true);
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Change user role" onClose={close} busy={busy}>
+      {saved ? (
+        <>
+          <Notice>
+            {label} is now{' '}
+            {role === 'admin' ? 'an administrator' : 'a regular user'}. They
+            were signed out and must sign in again.
+          </Notice>
+          <div className="panel-actions">
+            <button className="panel-primary" onClick={close}>
+              Done
+            </button>
+          </div>
+        </>
+      ) : (
+        <form className="panel-form" onSubmit={(e) => void submit(e)}>
+          <div className="panel-note">
+            <Users size={20} />
+            <div>
+              <strong>{user.displayName || 'Account'}</strong>
+              <small>{user.email}</small>
+            </div>
+          </div>
+          <fieldset>
+            <legend>Role</legend>
+            <div className="panel-plan-options">
+              <label
+                className={`panel-choice ${role === 'user' ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value="user"
+                  checked={role === 'user'}
+                  onChange={() => setRole('user')}
+                />
+                <strong>User</strong>
+                <span>Own storefront, products, and posts only.</span>
+              </label>
+              <label
+                className={`panel-choice ${role === 'admin' ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value="admin"
+                  checked={role === 'admin'}
+                  onChange={() => setRole('admin')}
+                />
+                <strong>Administrator</strong>
+                <span>
+                  Full platform oversight, plans, and user management.
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <p className="panel-muted">
+            Changing the role signs {label} out of every session; they regain
+            access after signing in again.
+          </p>
+          <label>
+            Reason
+            <textarea
+              required
+              minLength={3}
+              maxLength={500}
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this role changing?"
+            />
+            <small>Recorded in the administrative activity log.</small>
+          </label>
+          {error && <Notice error>{error}</Notice>}
+          <div className="panel-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              Go back
+            </button>
+            <button
+              className="panel-primary"
+              disabled={busy || role === current || reason.trim().length < 3}
+            >
+              {busy ? 'Saving…' : 'Update role'}
+            </button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

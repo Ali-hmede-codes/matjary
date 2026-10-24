@@ -16,6 +16,27 @@ export interface Person {
   displayName: string;
   email: string;
 }
+// Mirrors SubscriptionLimits in @app/database; null means unlimited.
+export interface PlanLimits {
+  maxVideoDurationSeconds?: number | null;
+  maxVideoSizeBytes?: number | null;
+  maxVideoQuality?: string | null;
+  maxImageCount?: number | null;
+  maxImageSizeBytes?: number | null;
+  maxImageWidth?: number | null;
+  maxImageHeight?: number | null;
+  maxPostsPerMonth?: number | null;
+  maxTotalPosts?: number | null;
+  maxProducts?: number | null;
+  maxStorageBytes?: number | null;
+  enableCart?: boolean;
+  enableWhatsAppCheckout?: boolean;
+  enableAnalytics?: boolean;
+  enableCustomDomain?: boolean;
+  enablePrioritySupport?: boolean;
+  maxVerificationBadges?: number | null;
+  verificationBadgePriceCents?: number | null;
+}
 export interface PanelRecord {
   id: string;
   name?: string;
@@ -46,6 +67,10 @@ export interface PanelRecord {
   createdAt?: string;
   billingCycle?: string;
   isActive?: boolean;
+  sortOrder?: number;
+  limits?: PlanLimits;
+  role?: 'admin' | 'user';
+  roleManagedByEnvironment?: boolean;
   media?: { id: string; kind: string; status: string; key: string | null }[];
 }
 

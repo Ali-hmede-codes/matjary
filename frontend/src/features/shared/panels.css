@@ -640,6 +640,8 @@
   border: 1px solid var(--panel-line);
   border-radius: 20px;
   box-shadow: 0 30px 100px #15291e33;
+  /* Long editors (plans, role changes) scroll inside the dialog. */
+  overflow: auto;
 }
 .panel-dialog::backdrop {
   background: #10201873;
@@ -678,6 +680,27 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+}
+/* Compact quota fields: as many columns as fit, never a cramped input. */
+.panel-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.panel-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px 18px;
+}
+.panel-form fieldset > label,
+.panel-form fieldset > p,
+.panel-form fieldset > .panel-two-fields,
+.panel-form fieldset > .panel-field-grid,
+.panel-form fieldset > .panel-feature-grid,
+.panel-form fieldset > .panel-toggle,
+.panel-form .panel-optional > .panel-field-grid,
+.panel-form .panel-optional > label {
+  margin-top: 16px;
 }
 .panel-actions {
   display: flex;
