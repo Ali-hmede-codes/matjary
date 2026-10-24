@@ -127,6 +127,13 @@ export function PostCard({
             </button>
           </>
         )}
+        {!demo && (
+          <span className="post-views">
+            <Eye size={13} aria-hidden="true" />
+            {post.engagement.views.toLocaleString()}
+            <span className="sr-only"> views</span>
+          </span>
+        )}
       </div>
       <div className="post-body">
         <PostActions
@@ -138,16 +145,15 @@ export function PostCard({
           onSave={onSave}
           onNotice={onNotice}
         />
-        <button className="post-title" onClick={() => onOpen(mediaIndex)}>
-          {post.title}
-        </button>
-        <p>{post.description}</p>
-        {!demo && (
-          <span className="post-meta">
-            <Eye size={13} />
-            {post.engagement.views.toLocaleString()} views
-          </span>
-        )}
+        <p className="post-caption">
+          <a
+            className="post-caption-author"
+            href={post.store ? storePath(post.store.slug, demo) : undefined}
+          >
+            {post.store?.name || 'Independent creator'}
+          </a>{' '}
+          {post.description || post.title}
+        </p>
       </div>
     </article>
   );

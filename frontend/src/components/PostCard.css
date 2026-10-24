@@ -111,37 +111,43 @@
   visibility: hidden;
 }
 .post-body {
-  padding: 9px 16px 20px;
+  padding: 2px 14px 16px;
 }
-.post-meta {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 10px;
-}
-.post-title {
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 1.4;
-  padding: 0;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.post-title:hover {
-  color: var(--primary);
-}
-.post-body > p {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.7;
+.post-caption {
+  margin-top: 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  line-height: 1.65;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+.post-caption-author {
+  font-weight: 650;
+  color: var(--ink);
+  margin-right: 4px;
+}
+.post-caption-author:hover {
+  color: var(--primary);
+}
+.post-views {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 15px;
+  background: #17231eaa;
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 .media-count {
   position: absolute;
@@ -177,8 +183,8 @@
 .compact-grid .inline-player {
   aspect-ratio: 1;
 }
-.compact-grid .post-body > p,
-.compact-grid .post-meta,
+.compact-grid .post-caption,
+.compact-grid .post-views,
 .compact-grid .sample-label,
 .compact-grid .post-expand,
 .compact-grid .store-identity small {
@@ -193,9 +199,6 @@
   height: 28px;
   border-radius: 9px;
   font-size: 10px;
-}
-.compact-grid .post-title {
-  font-size: 13px;
 }
 .compact-grid .post-body {
   padding: 6px 10px 12px;
