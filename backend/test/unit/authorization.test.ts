@@ -517,6 +517,10 @@ test('SEO service independently enforces ownership, publication and field allowl
       return null;
     },
     findOne: async (target: unknown, options: any) => {
+      // ownerWrite locks the actor and store before the SEO row is saved.
+      if (target === User) return { id: options.where.id, suspendedAt: null };
+      if (target === Store)
+        return { id: options.where.id, ownerId: options.where.ownerId };
       queries.push(options.where);
       return null;
     },
@@ -525,6 +529,12 @@ test('SEO service independently enforces ownership, publication and field allowl
       queries.push(options.where);
       return [];
     },
+    save: async (value: unknown) => value,
+  };
+  const dataSource = {
+    manager,
+    transaction: async (work: (m: typeof manager) => Promise<unknown>) =>
+      work(manager),
   };
   const seoConfig = new ConfigService({
     APP_ORIGIN: cfg.get('APP_ORIGIN', { infer: true }),
@@ -536,7 +546,7 @@ test('SEO service independently enforces ownership, publication and field allowl
     repository,
     repository,
     seoConfig,
-    { manager } as unknown as DataSource,
+    dataSource as unknown as DataSource,
     new AdminGuard(cfg),
     {} as StorageService,
   );

@@ -50,6 +50,14 @@ class FakeRepository {
           this.locks.push(options.where.id);
           return { id: options.where.id };
         },
+        // lockOwnerContent takes the account lock, then re-reads the post.
+        findOne: async (target: unknown, options: any) => {
+          assert.equal(options.lock.mode, 'pessimistic_write');
+          if (target === User)
+            return { id: options.where.id, suspendedAt: null };
+          if (target === Showcase) return this.findOneBy(options.where);
+          return null;
+        },
         getRepository: (target: unknown) => {
           if (target === UserSubscription) return { find: async () => [] };
           if (target !== Showcase) return { findOneBy: async () => null };
@@ -64,6 +72,7 @@ class FakeRepository {
           this.findOneBy(where),
         create: (_target: unknown, value: unknown) => this.create(value),
         save: (value: unknown) => this.save(value),
+        remove: (value: unknown) => this.remove(value),
       }),
   };
 
@@ -82,8 +91,16 @@ class FakeRepository {
     });
   }
 
-  async findOneBy(where: Record<string, unknown>): Promise<Showcase | null> {
-    return this.items.find((item) => this.matches(item, where)) ?? null;
+  // Owners read their own drafts, so the service passes an array of scopes.
+  async findOneBy(
+    where: Record<string, unknown> | Record<string, unknown>[],
+  ): Promise<Showcase | null> {
+    const scopes = Array.isArray(where) ? where : [where];
+    return (
+      this.items.find((item) =>
+        scopes.some((scope) => this.matches(item, scope)),
+      ) ?? null
+    );
   }
 
   async findAndCount(options: any): Promise<[Showcase[], number]> {
@@ -111,6 +128,7 @@ class FakeRepository {
 
 function serviceWith(fake: FakeRepository): ShowcasesService {
   const seoService = {
+    autoGenerateOwnedSeo: async () => {},
     autoGenerateShowcaseSeo: async () => {},
     notifyIndexNowOnChange: async () => {},
   } as any;

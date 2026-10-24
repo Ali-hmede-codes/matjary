@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Store } from 'lucide-react';
 import { ApiError } from '../../lib/api';
 import { getJson, mutate, panelError, type Session } from './panel-api';
-import { Empty, Loading, Notice, Retry } from './PanelUI';
+import { Empty, Loading, Notice, PanelBoundary, Retry } from './PanelUI';
 
 interface GoogleIdentity {
   initialize(options: {
@@ -58,6 +58,7 @@ export function ProtectedPanel({
 }) {
   const query = useSession();
   const client = useQueryClient();
+  const { pathname } = useLocation();
   const previous = useRef<string | undefined>(undefined);
   useEffect(() => {
     const old = previous.current;
@@ -96,7 +97,12 @@ export function ProtectedPanel({
         </Empty>
       </div>
     );
-  return <div key={query.data.user.id}>{children(query.data)}</div>;
+  return (
+    <div key={query.data.user.id}>
+      {/* Keyed by route so a failed screen recovers after navigating away. */}
+      <PanelBoundary key={pathname}>{children(query.data)}</PanelBoundary>
+    </div>
+  );
 }
 
 export function LoginPage() {

@@ -61,6 +61,10 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
       getJson<Page<Content>>(`dashboard/${kind}?${params}`, signal),
   });
   const product = kind === 'products';
+  // Never index into a missing envelope: an unexpected payload must degrade to
+  // an empty list instead of taking the whole panel down.
+  const items = query.data?.items ?? [];
+  const total = query.data?.total ?? 0;
   const label = product
     ? store!.storeType === 'restaurant_menu'
       ? 'menu item'
@@ -114,9 +118,9 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
         <Retry error={query.error} retry={() => void query.refetch()} />
       ) : (
         <>
-          {query.data.items.length ? (
+          {items.length ? (
             <div className="panel-content-grid">
-              {query.data.items.map((item) => (
+              {items.map((item) => (
                 <article className="panel-content-card" key={item.id}>
                   <div className="panel-content-image">
                     {item.imageKeys?.[0] ? (
@@ -160,11 +164,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
               </button>
             </Empty>
           )}
-          <Pagination
-            total={query.data.total}
-            offset={offset}
-            onChange={setOffset}
-          />
+          <Pagination total={total} offset={offset} onChange={setOffset} />
         </>
       )}
       {editor !== undefined && (

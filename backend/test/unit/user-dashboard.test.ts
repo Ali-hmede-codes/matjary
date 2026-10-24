@@ -3,6 +3,10 @@ import { test } from 'node:test';
 import { UserDashboardService } from '../../apps/api/src/modules/user-dashboard/user-dashboard.service';
 import {
   chooseContentSlug,
+  Product,
+  ProductStatus,
+  Showcase,
+  ShowcaseStatus,
   Store,
   StoreStatus,
   User,
@@ -396,4 +400,97 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
     assert.match(query.visibility ?? '', /admin_archived_at IS NULL/);
     assert.match(query.visibility ?? '', /suspended_at IS NULL/);
   }
+});
+
+test('owner content lists return the panel { items, total } envelope', async () => {
+  const ownerId = 'owner-1';
+  const createdAt = new Date('2026-02-01T00:00:00Z');
+  const store = { id: 'store-1', slug: 'my-store', name: 'My store' };
+  const product = Object.assign(new Product(), {
+    id: 'product-1',
+    storeId: store.id,
+    slug: 'handmade-mug',
+    name: 'Handmade mug',
+    description: null,
+    priceCents: '1800',
+    currency: 'USD',
+    category: 'other',
+    status: ProductStatus.ACTIVE,
+    stockQuantity: null,
+    imageKeys: null,
+    sortOrder: 0,
+    createdAt,
+    updatedAt: createdAt,
+    store,
+  });
+  const post = Object.assign(new Showcase(), {
+    id: 'post-1',
+    storeId: store.id,
+    ownerId,
+    slug: 'fresh-story',
+    title: 'Fresh story',
+    description: null,
+    status: ShowcaseStatus.PUBLISHED,
+    publishedAt: createdAt,
+    mediaCount: 2,
+    likesCount: 1,
+    viewsCount: 3,
+    createdAt,
+    updatedAt: createdAt,
+    store,
+  });
+  function repository(row: Product | Showcase) {
+    const chain = {
+      select: () => chain,
+      leftJoinAndSelect: () => chain,
+      where: () => chain,
+      andWhere: () => chain,
+      orderBy: () => chain,
+      addOrderBy: () => chain,
+      limit: () => chain,
+      getMany: async () => [row],
+    };
+    return {
+      createQueryBuilder: () => chain,
+      count: async () => 1,
+    };
+  }
+  const service = new UserDashboardService(
+    {} as never,
+    {} as never,
+    repository(post) as never,
+    repository(product) as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  const products = await service.getUserProducts(ownerId, {
+    storeId: store.id,
+  });
+  // The React panel reads data.items; a renamed key blanks the whole page.
+  assert.deepEqual(Object.keys(products).sort(), [
+    'hasMore',
+    'items',
+    'nextCursor',
+    'total',
+  ]);
+  assert.equal(products.items.length, 1);
+  assert.equal(products.items[0]?.slug, 'handmade-mug');
+  assert.equal(products.items[0]?.storeSlug, store.slug);
+  assert.equal(products.total, 1);
+  assert.equal(products.hasMore, false);
+
+  const posts = await service.getUserPosts(ownerId, { storeId: store.id });
+  assert.deepEqual(Object.keys(posts).sort(), [
+    'hasMore',
+    'items',
+    'nextCursor',
+    'total',
+  ]);
+  assert.equal(posts.items.length, 1);
+  assert.equal(posts.items[0]?.slug, 'fresh-story');
+  assert.equal(posts.items[0]?.storeSlug, store.slug);
+  assert.equal(posts.total, 1);
+  assert.equal(posts.hasMore, false);
 });

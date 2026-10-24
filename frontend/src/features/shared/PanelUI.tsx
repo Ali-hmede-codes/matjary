@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  Component,
+  useEffect,
+  useRef,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { ArrowUpRight, Check, LogOut, Menu, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -306,4 +313,39 @@ export function useUnsaved(dirty: boolean) {
       document.removeEventListener('click', click, true);
     };
   }, [dirty]);
+}
+// A render failure must never leave an empty white screen: show a sanitized
+// recovery panel and keep the details in the console for support.
+export class PanelBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Panel render failed', error, info.componentStack);
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="panel-app panel-gate">
+        <div className="panel-card">
+          <Empty title="This page could not be displayed">
+            <p>
+              Something went wrong while drawing your workspace. Nothing was
+              changed — reload to try again.
+            </p>
+            <button
+              className="panel-primary"
+              onClick={() => window.location.reload()}
+            >
+              Reload the page
+            </button>
+          </Empty>
+        </div>
+      </div>
+    );
+  }
 }

@@ -319,9 +319,21 @@ export class UserDashboardService {
       offset?: number;
       cursor?: string; // "createdAt|id" for cursor pagination
     },
-  ): Promise<{ posts: UserPostSummaryDto[]; total: number }> {
+  ): Promise<{
+    items: UserPostSummaryDto[];
+    nextCursor: string | null;
+    hasMore: boolean;
+    total: number;
+  }> {
     const result = await this.getUserPostsOptimized(userId, options);
-    return { posts: result.items, total: result.total ?? 0 };
+    // Owners list these through the same { items, total } envelope as every
+    // other panel endpoint; renaming the key here broke the React list.
+    return {
+      items: result.items,
+      nextCursor: result.nextCursor ?? null,
+      hasMore: result.hasMore,
+      total: result.total ?? 0,
+    };
   }
 
   /**
@@ -477,9 +489,19 @@ export class UserDashboardService {
       offset?: number;
       cursor?: string;
     },
-  ): Promise<{ products: UserProductSummaryDto[]; total: number }> {
+  ): Promise<{
+    items: UserProductSummaryDto[];
+    nextCursor: string | null;
+    hasMore: boolean;
+    total: number;
+  }> {
     const result = await this.getUserProductsOptimized(userId, options);
-    return { products: result.items, total: result.total ?? 0 };
+    return {
+      items: result.items,
+      nextCursor: result.nextCursor ?? null,
+      hasMore: result.hasMore,
+      total: result.total ?? 0,
+    };
   }
 
   /**
