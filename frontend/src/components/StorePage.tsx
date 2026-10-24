@@ -8,7 +8,9 @@ import {
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowUp,
   ArrowUpRight,
+  Check,
   ChevronDown,
   Expand,
   Globe,
@@ -203,18 +205,26 @@ function ProductCard({
     0;
   const unavailable = productCartLimit(product) === 0;
   const atLimit = quantity >= productCartLimit(product);
+  const actionLabel = unavailable
+    ? `${product.name} is unavailable`
+    : atLimit
+      ? `Maximum quantity of ${product.name} in cart`
+      : `Add ${product.name} to cart`;
   return (
-    <article className="shop-product">
+    <article className={`shop-product${unavailable ? ' is-unavailable' : ''}`}>
       <div className="shop-product-image">
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-        {product.stockQuantity !== null && product.stockQuantity <= 0 && (
-          <span className="shop-stock-label">Unavailable</span>
+        <span className="shop-product-category shop-glass">
+          {productCategoryLabel(product.category)}
+        </span>
+        {(unavailable || quantity > 0) && (
+          <span className="shop-stock-label shop-glass">
+            {!unavailable && <Check size={13} aria-hidden="true" />}
+            {unavailable ? 'Unavailable' : `${quantity} in cart`}
+          </span>
         )}
       </div>
       <div className="shop-product-copy">
-        <span className="shop-eyebrow">
-          {productCategoryLabel(product.category)}
-        </span>
         <h3>{product.name}</h3>
         {product.description && <p>{product.description}</p>}
         <div className="shop-product-bottom">
@@ -225,18 +235,18 @@ function ProductCard({
             type="button"
             className="shop-add-to-cart"
             disabled={unavailable || atLimit || cart.busy || cart.loading}
-            aria-label={
-              unavailable
-                ? `${product.name} is unavailable`
-                : atLimit
-                  ? `Maximum quantity of ${product.name} in cart`
-                  : `Add ${product.name} to cart`
-            }
+            aria-label={actionLabel}
+            title={actionLabel}
             aria-haspopup="dialog"
             onClick={() => cart.add(product)}
           >
-            <Plus size={16} aria-hidden="true" />
-            {unavailable ? 'Unavailable' : atLimit ? 'In cart' : 'Add'}
+            {unavailable ? (
+              <Package size={20} aria-hidden="true" />
+            ) : atLimit ? (
+              <Check size={20} aria-hidden="true" />
+            ) : (
+              <Plus size={22} aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>
@@ -312,7 +322,9 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [activeTab, setActiveTab] = useState<'posts' | 'catalog'>('posts');
   const [focusSearch, setFocusSearch] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
-  const contactDetails = useRef<HTMLDetailsElement>(null);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [focusContact, setFocusContact] = useState(false);
+  const contactDetails = useRef<HTMLElement>(null);
   const [notice, setNotice] = useState('');
   const [sharing, setSharing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -402,6 +414,13 @@ export function StorePage({ slug }: { slug: string | null }) {
     setFocusSearch(false);
   }, [activeTab, focusSearch]);
 
+  useEffect(() => {
+    if (!focusContact || !contactOpen) return;
+    contactDetails.current?.scrollIntoView({ block: 'nearest' });
+    contactDetails.current?.focus({ preventScroll: true });
+    setFocusContact(false);
+  }, [contactOpen, focusContact]);
+
   const home = demo ? '/?demo=1' : '/';
   const products = demo
     ? demoProducts.filter((item) => item.storeId === store?.id)
@@ -451,7 +470,8 @@ export function StorePage({ slug }: { slug: string | null }) {
   );
 
   function openContactDetails() {
-    if (contactDetails.current) contactDetails.current.open = true;
+    setContactOpen(true);
+    setFocusContact(true);
   }
 
   async function shareShop() {
@@ -485,9 +505,9 @@ export function StorePage({ slug }: { slug: string | null }) {
       <a className="skip-link" href="#shop-main">
         Skip to shop
       </a>
-      <header className="shop-topbar">
-        <a className="shop-back" href={home}>
-          <ArrowLeft size={17} aria-hidden="true" /> All shops
+      <header id="shop-top" className="shop-topbar">
+        <a className="shop-back shop-glass" href={home}>
+          <ArrowLeft size={17} aria-hidden="true" /> Back to home
         </a>
         {store ? (
           <div
@@ -497,6 +517,7 @@ export function StorePage({ slug }: { slug: string | null }) {
           >
             <button
               type="button"
+              className="shop-glass"
               aria-label="Search this shop"
               title="Search this shop"
               onClick={() => {
@@ -508,6 +529,7 @@ export function StorePage({ slug }: { slug: string | null }) {
             </button>
             <button
               type="button"
+              className="shop-glass"
               aria-label="Share this shop"
               title="Share this shop"
               disabled={sharing}
@@ -517,6 +539,7 @@ export function StorePage({ slug }: { slug: string | null }) {
             </button>
             <button
               type="button"
+              className="shop-glass"
               onClick={() => cart.setOpen(true)}
               aria-label={`Open cart${cart.cart?.itemCount ? `, ${cart.cart.itemCount} items` : ''}`}
               aria-haspopup="dialog"
@@ -605,6 +628,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                           {socials.map(({ network, label, href }) => (
                             <a
                               key={network}
+                              className="shop-glass"
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -619,7 +643,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       {mapPreview ? (
                         <button
                           type="button"
-                          className="shop-location shop-location-toggle"
+                          className="shop-location shop-location-toggle shop-glass"
                           aria-expanded={mapOpen}
                           aria-controls="shop-location-map"
                           onClick={() => setMapOpen(!mapOpen)}
@@ -656,21 +680,81 @@ export function StorePage({ slug }: { slug: string | null }) {
                   )}
                 </div>
                 <div className="shop-actions">
-                  <a
-                    className="secondary-button"
-                    href="#shop-about"
-                    onClick={openContactDetails}
+                  <button
+                    type="button"
+                    className="secondary-button shop-glass"
+                    aria-expanded={contactOpen}
+                    aria-controls="shop-contact-details"
+                    onClick={() => setContactOpen(!contactOpen)}
                   >
                     {presentation.restaurant ? (
-                      <MapPin size={16} />
+                      <MapPin size={16} aria-hidden="true" />
                     ) : (
-                      <Info size={16} />
+                      <Info size={16} aria-hidden="true" />
                     )}
                     {presentation.restaurant
                       ? 'Plan your visit'
                       : 'Contact shop'}
-                  </a>
+                    <ChevronDown size={15} aria-hidden="true" />
+                  </button>
                 </div>
+                <section
+                  id="shop-contact-details"
+                  className="shop-contact-panel"
+                  aria-labelledby="shop-contact-title"
+                  hidden={!contactOpen}
+                  ref={contactDetails}
+                  tabIndex={-1}
+                >
+                  <h2 id="shop-contact-title">Contact & details</h2>
+                  <div className="shop-contact">
+                    {address && (
+                      <p>
+                        <MapPin size={17} aria-hidden="true" />
+                        {address}
+                      </p>
+                    )}
+                    {phone && (
+                      <a href={phone}>
+                        <Phone size={17} aria-hidden="true" />
+                        {location?.phone}
+                      </a>
+                    )}
+                    {website && (
+                      <a
+                        href={website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Visit website
+                        <ArrowUpRight size={16} aria-hidden="true" />
+                      </a>
+                    )}
+                    {map && (
+                      <a href={map} target="_blank" rel="noopener noreferrer">
+                        Get directions
+                        <ArrowUpRight size={16} aria-hidden="true" />
+                      </a>
+                    )}
+                    {hours.length > 0 && (
+                      <dl className="shop-hours">
+                        {hours.map(([day, time]) => (
+                          <div key={day}>
+                            <dt>{day}</dt>
+                            <dd>{time}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                    {!phone &&
+                      !website &&
+                      !map &&
+                      !address &&
+                      !hours.length && (
+                        <p>Contact details haven’t been added yet.</p>
+                      )}
+                  </div>
+                </section>
                 {mapPreview && (
                   <section
                     id="shop-location-map"
@@ -1030,59 +1114,35 @@ export function StorePage({ slug }: { slug: string | null }) {
           </>
         )}
       </main>
-      <footer id="shop-about" className="shop-footer">
-        <div className="shop-footer-brand">
-          <strong>{store?.name || 'Independent shops'}</strong>
-          {store?.description?.trim() && <p>{store.description}</p>}
-        </div>
-        <a href={home}>
-          Powered by {settings.siteName}
-          <ArrowUpRight size={15} aria-hidden="true" />
-        </a>
-        {store && (
-          <details className="shop-footer-details" ref={contactDetails}>
-            <summary>Contact & details</summary>
-            <div className="shop-contact">
-              {address && (
-                <p>
-                  <MapPin size={17} aria-hidden="true" />
-                  {address}
-                </p>
-              )}
-              {phone && (
-                <a href={phone}>
-                  <Phone size={17} aria-hidden="true" />
-                  {location?.phone}
-                </a>
-              )}
-              {website && (
-                <a href={website} target="_blank" rel="noopener noreferrer">
-                  Visit website
-                  <ArrowUpRight size={16} aria-hidden="true" />
-                </a>
-              )}
-              {map && (
-                <a href={map} target="_blank" rel="noopener noreferrer">
-                  Get directions
-                  <ArrowUpRight size={16} aria-hidden="true" />
-                </a>
-              )}
-              {hours.length > 0 && (
-                <dl className="shop-hours">
-                  {hours.map(([day, time]) => (
-                    <div key={day}>
-                      <dt>{day}</dt>
-                      <dd>{time}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              {!phone && !website && !map && !address && !hours.length && (
-                <p>Contact details haven’t been added yet.</p>
-              )}
+      <footer className="shop-footer">
+        <div className="shop-footer-main">
+          <div className="shop-footer-brand">
+            <StoreAvatar store={store} />
+            <div>
+              <strong>{store?.name || 'Independent shops'}</strong>
+              <p>A little discovery. Something special.</p>
             </div>
-          </details>
-        )}
+          </div>
+          <a className="shop-footer-platform shop-glass" href={home}>
+            <ShoppingBag size={20} aria-hidden="true" />
+            <span>
+              <small>Powered by</small>
+              <strong>{settings.siteName}</strong>
+            </span>
+            <ArrowUpRight size={16} aria-hidden="true" />
+          </a>
+        </div>
+        <div className="shop-footer-bottom">
+          <p>
+            © {new Date().getFullYear()} {store?.name || settings.siteName}
+          </p>
+          <a className="shop-footer-top" href="#shop-top">
+            Back to top
+            <span className="shop-glass">
+              <ArrowUp size={16} aria-hidden="true" />
+            </span>
+          </a>
+        </div>
       </footer>
       {cart.open && store && (
         <ShopCart
@@ -1098,7 +1158,6 @@ export function StorePage({ slug }: { slug: string | null }) {
           onContact={() => {
             cart.setOpen(false);
             openContactDetails();
-            document.getElementById('shop-about')?.scrollIntoView();
           }}
         />
       )}

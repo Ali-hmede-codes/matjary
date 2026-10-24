@@ -18,18 +18,27 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--accent-wash);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 650;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 85%, var(--ink));
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 .shop-add-to-cart:hover:not(:disabled) {
-  border-color: var(--ink);
+  background: color-mix(in srgb, var(--primary) 90%, var(--ink));
+  transform: translateY(-2px);
+}
+.shop-add-to-cart:disabled {
+  border-color: var(--line);
+  background: var(--wash);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 1;
 }
 .shop-cart-dialog {
   inset: 0;
