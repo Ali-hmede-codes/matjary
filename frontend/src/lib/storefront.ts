@@ -56,6 +56,7 @@ export function storePresentation(
   return {
     restaurant,
     label: restaurant ? 'Restaurant & café' : 'Independent shop',
+    catalogTabLabel: restaurant ? 'Restaurant' : 'Shop',
     catalogTitle: restaurant ? 'On the menu' : 'The collection',
     catalogAction: restaurant ? 'Explore our menu' : 'Explore the collection',
     theme: {

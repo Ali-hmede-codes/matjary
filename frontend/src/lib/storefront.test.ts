@@ -74,6 +74,7 @@ test('store type selects the layout and safely derives shop colors', () => {
     brandColor: '#fff',
   });
   assert.equal(restaurant.restaurant, true);
+  assert.equal(restaurant.catalogTabLabel, 'Restaurant');
   assert.equal(restaurant.catalogTitle, 'On the menu');
   assert.equal(restaurant.theme['--brand-primary'], '#ffffff');
   assert.equal(restaurant.theme['--brand-on-primary'], '#17231e');
@@ -82,6 +83,8 @@ test('store type selects the layout and safely derives shop colors', () => {
     brandColor: '#123456',
   });
   assert.equal(retail.restaurant, false);
+  assert.equal(retail.catalogTabLabel, 'Shop');
+  assert.equal(storePresentation({ brandColor: null }).catalogTabLabel, 'Shop');
   assert.equal(retail.theme['--brand-primary'], '#123456');
   assert.equal(retail.theme['--brand-on-primary'], '#ffffff');
   assert.notEqual(

@@ -1,8 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
-  ArrowRight,
   ArrowUpRight,
   Images,
   Info,
@@ -11,6 +10,7 @@ import {
   Package,
   Phone,
   Search,
+  Share2,
   ShoppingBag,
   Utensils,
 } from 'lucide-react';
@@ -26,7 +26,6 @@ import {
 import { demoPosts, demoProducts, demoStores } from '../lib/demo';
 import {
   formatProductPrice,
-  isStoreVerified,
   productCategoryLabel,
   storeMediaUrl,
   storePresentation,
@@ -152,10 +151,10 @@ function ShopPageLoading() {
           <div className="shop-skeleton shop-skeleton-line" />
           <div className="shop-skeleton shop-skeleton-short" />
         </div>
-        <div className="shop-browse shop-skeleton shop-skeleton-button" />
+        <div className="shop-actions shop-skeleton shop-skeleton-button" />
       </div>
       <div className="shop-loading-content">
-        <ShopCardsLoading />
+        <ShopCardsLoading stories label="Loading posts…" />
       </div>
     </section>
   );
@@ -166,6 +165,9 @@ function ProductCard({ product }: { product: Product }) {
     <article className="shop-product">
       <div className="shop-product-image">
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
+        {product.stockQuantity !== null && product.stockQuantity <= 0 && (
+          <span className="shop-stock-label">Unavailable</span>
+        )}
       </div>
       <div className="shop-product-copy">
         <span className="shop-eyebrow">
@@ -177,9 +179,6 @@ function ProductCard({ product }: { product: Product }) {
           <strong>
             {formatProductPrice(product.priceCents, product.currency)}
           </strong>
-          {product.stockQuantity !== null && product.stockQuantity <= 0 && (
-            <span>Unavailable</span>
-          )}
         </div>
       </div>
     </article>
@@ -202,7 +201,18 @@ export function StorePage({ slug }: { slug: string | null }) {
   const { settings } = useWebsiteSettings(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
-  const [activeSection, setActiveSection] = useState('shop-catalog');
+  const [activeTab, setActiveTab] = useState<'posts' | 'catalog'>('posts');
+  const [focusSearch, setFocusSearch] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const contactDetails = useRef<HTMLDetailsElement>(null);
+  const [notice, setNotice] = useState('');
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(''), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
   const storeQuery = useQuery({
     queryKey: ['storefront', slug],
     queryFn: ({ signal }) =>
@@ -275,20 +285,11 @@ export function StorePage({ slug }: { slug: string | null }) {
   }, [store, missing, settings, presentation.theme['--brand-primary']]);
 
   useEffect(() => {
-    if (!store) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const section = entries.find((entry) => entry.isIntersecting);
-        if (section) setActiveSection(section.target.id);
-      },
-      { rootMargin: '-10% 0px -55% 0px' },
-    );
-    for (const id of ['shop-catalog', 'shop-stories', 'shop-about']) {
-      const section = document.getElementById(id);
-      if (section) observer.observe(section);
-    }
-    return () => observer.disconnect();
-  }, [store?.id]);
+    if (!focusSearch || activeTab !== 'catalog') return;
+    document.getElementById('shop-catalog')?.scrollIntoView();
+    searchInput.current?.focus({ preventScroll: true });
+    setFocusSearch(false);
+  }, [activeTab, focusSearch]);
 
   const home = demo ? '/?demo=1' : '/';
   const products = demo
@@ -321,26 +322,84 @@ export function StorePage({ slug }: { slug: string | null }) {
     (entry): entry is [string, string] => typeof entry[1] === 'string',
   );
 
+  function openContactDetails() {
+    if (contactDetails.current) contactDetails.current.open = true;
+  }
+
+  async function shareShop() {
+    if (!store || sharing) return;
+    const url = `${window.location.origin}${window.location.pathname}${demo ? '?demo=1' : ''}`;
+    setNotice('');
+    setSharing(true);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: store.name, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setNotice('Shop link copied.');
+      }
+    } catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        setNotice(
+          'Couldn’t share the link. You can copy it from the address bar.',
+        );
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <div
-      className={`app storefront ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}`}
+      className={`app storefront ${store ? 'has-store' : ''} ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}`}
       style={presentation.theme as CSSProperties}
     >
       <a className="skip-link" href="#shop-main">
         Skip to shop
       </a>
       <header className="shop-topbar">
-        <a href={home}>
-          <ArrowLeft size={17} /> Discover
+        <a className="shop-back" href={home}>
+          <ArrowLeft size={17} aria-hidden="true" /> All shops
         </a>
-        <a className="shop-platform" href={home}>
-          <ShoppingBag size={21} aria-hidden="true" />
-          {settings.siteName}
-          <span> / shops</span>
-        </a>
-        {store && (
-          <a href="#shop-about">
-            About this shop <ArrowUpRight size={15} />
+        {store ? (
+          <div
+            className="shop-tools"
+            role="group"
+            aria-label="Shop quick actions"
+          >
+            <button
+              type="button"
+              aria-label="Search this shop"
+              title="Search this shop"
+              onClick={() => {
+                setActiveTab('catalog');
+                setFocusSearch(true);
+              }}
+            >
+              <Search size={21} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="Share this shop"
+              title="Share this shop"
+              disabled={sharing}
+              onClick={() => void shareShop()}
+            >
+              <Share2 size={20} aria-hidden="true" />
+            </button>
+            <a
+              href="#shop-about"
+              onClick={openContactDetails}
+              aria-label="Shop information"
+              title="Shop information"
+            >
+              <Info size={21} aria-hidden="true" />
+            </a>
+          </div>
+        ) : (
+          <a className="shop-platform" href={home}>
+            <ShoppingBag size={18} aria-hidden="true" />
+            {settings.siteName}
           </a>
         )}
       </header>
@@ -380,6 +439,55 @@ export function StorePage({ slug }: { slug: string | null }) {
           </section>
         ) : (
           <>
+            <section className="shop-hero" aria-labelledby="shop-title">
+              <div className="shop-banner">
+                <ShopImage
+                  value={store.bannerKey || store.logoKey}
+                  alt=""
+                  eager
+                  fallbackName={store.name}
+                  fallbackLabel={presentation.label}
+                />
+              </div>
+              <div className="shop-profile">
+                <div className="shop-logo">
+                  <StoreAvatar store={store} large />
+                </div>
+                <div className="shop-intro">
+                  <h1 id="shop-title">
+                    <span>{store.name}</span>
+                    <StoreVerifiedBadge store={store} size={26} />
+                  </h1>
+                  <div className="shop-meta">
+                    <span>{presentation.label}</span>
+                    {(location?.city || location?.country) && (
+                      <span className="shop-location">
+                        <MapPin size={14} aria-hidden="true" />
+                        {[location.city, location.country]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="shop-actions">
+                  <a
+                    className="secondary-button"
+                    href="#shop-about"
+                    onClick={openContactDetails}
+                  >
+                    {presentation.restaurant ? (
+                      <MapPin size={16} />
+                    ) : (
+                      <Info size={16} />
+                    )}
+                    {presentation.restaurant
+                      ? 'Plan your visit'
+                      : 'Contact shop'}
+                  </a>
+                </div>
+              </div>
+            </section>
             {demo && (
               <StatusBanner
                 demo
@@ -398,108 +506,142 @@ export function StorePage({ slug }: { slug: string | null }) {
                 shown.
               </StatusBanner>
             )}
-            <section className="shop-hero" aria-labelledby="shop-title">
-              <div className="shop-banner">
-                <ShopImage
-                  value={store.bannerKey}
-                  alt=""
-                  eager
-                  fallbackName={store.name}
-                  fallbackLabel={presentation.label}
-                />
-              </div>
-              <div className="shop-profile">
-                <div className="shop-logo">
-                  <StoreAvatar store={store} large />
-                </div>
-                <div className="shop-intro">
-                  <span className="shop-eyebrow">
-                    {presentation.restaurant ? (
-                      <Utensils size={14} />
-                    ) : (
-                      <Package size={14} />
-                    )}
-                    {presentation.label}
-                  </span>
-                  <h1 id="shop-title">
-                    <span>{store.name}</span>
-                    <StoreVerifiedBadge store={store} size={32} />
-                  </h1>
-                  {store.description && <p>{store.description}</p>}
-                  <div className="shop-meta">
-                    <span className="shop-handle">@{store.slug}</span>
-                    {(location?.city || location?.country) && (
-                      <span className="shop-location">
-                        <MapPin size={14} aria-hidden="true" />
-                        {[location.city, location.country]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="shop-actions">
-                  <a
-                    className="primary-button shop-browse"
-                    href="#shop-catalog"
-                  >
-                    {presentation.catalogAction}
-                    <ArrowRight size={17} />
-                  </a>
-                  <a className="secondary-button" href="#shop-about">
-                    {presentation.restaurant ? (
-                      <MapPin size={16} />
-                    ) : (
-                      <Info size={16} />
-                    )}
-                    {presentation.restaurant
-                      ? 'Plan your visit'
-                      : 'Contact this shop'}
-                  </a>
-                </div>
-              </div>
-            </section>
-            <nav className="shop-nav" aria-label="Shop sections">
-              {[
-                {
-                  id: 'shop-catalog',
-                  label: presentation.restaurant ? 'Menu' : 'Collection',
-                  Icon: presentation.restaurant ? Utensils : ShoppingBag,
-                },
-                { id: 'shop-stories', label: 'Latest stories', Icon: Images },
-                {
-                  id: 'shop-about',
-                  label: presentation.restaurant
-                    ? 'Visit us'
-                    : 'About & contact',
-                  Icon: Info,
-                },
-              ].map(({ id, label, Icon }) => (
-                <a
+            <div className="shop-nav" role="tablist" aria-label="Shop content">
+              {(
+                [
+                  { id: 'posts', label: 'Posts', Icon: Images },
+                  {
+                    id: 'catalog',
+                    label: presentation.catalogTabLabel,
+                    Icon: presentation.restaurant ? Utensils : ShoppingBag,
+                  },
+                ] as const
+              ).map(({ id, label, Icon }) => (
+                <button
                   key={id}
-                  href={`#${id}`}
-                  aria-current={activeSection === id ? 'location' : undefined}
-                  onClick={() => setActiveSection(id)}
+                  id={`shop-tab-${id}`}
+                  type="button"
+                  role="tab"
+                  aria-controls={`shop-${id}`}
+                  aria-selected={activeTab === id}
+                  tabIndex={activeTab === id ? 0 : -1}
+                  onClick={() => setActiveTab(id)}
+                  onKeyDown={(event) => {
+                    let next: 'posts' | 'catalog';
+                    if (event.key === 'Home') next = 'posts';
+                    else if (event.key === 'End') next = 'catalog';
+                    else if (
+                      event.key === 'ArrowLeft' ||
+                      event.key === 'ArrowRight'
+                    )
+                      next = id === 'posts' ? 'catalog' : 'posts';
+                    else return;
+                    event.preventDefault();
+                    setActiveTab(next);
+                    document.getElementById(`shop-tab-${next}`)?.focus();
+                  }}
                 >
-                  <Icon size={16} aria-hidden="true" />
+                  <Icon size={18} aria-hidden="true" />
                   {label}
-                </a>
+                </button>
               ))}
-            </nav>
+            </div>
+            <section
+              id="shop-posts"
+              className="shop-section shop-tabpanel"
+              role="tabpanel"
+              aria-labelledby="shop-tab-posts"
+              tabIndex={0}
+              hidden={activeTab !== 'posts'}
+            >
+              {activeTab === 'posts' && (
+                <>
+                  <h2 className="sr-only">Posts</h2>
+                  {!demo && postsQuery.isPending && (
+                    <ShopCardsLoading stories label="Loading posts…" />
+                  )}
+                  {!demo && postsQuery.isError && (
+                    <StatusBanner
+                      action="Retry posts"
+                      onAction={() => void postsQuery.refetch()}
+                    >
+                      Posts couldn’t load right now.
+                    </StatusBanner>
+                  )}
+                  <div className="shop-stories">
+                    {[
+                      ...new Map(posts.map((post) => [post.id, post])).values(),
+                    ].map((post) => (
+                      <article className="shop-story" key={post.id}>
+                        <div
+                          className="shop-story-gallery"
+                          tabIndex={0}
+                          aria-label={`${post.title} photos and videos`}
+                        >
+                          {post.media.length ? (
+                            post.media.map((media) => (
+                              <div className="shop-story-media" key={media.id}>
+                                {media.kind === 'video' ? (
+                                  <video
+                                    controls
+                                    playsInline
+                                    preload="none"
+                                    src={assetUrl(media.primaryUrl)}
+                                    poster={assetUrl(media.posterUrl)}
+                                    aria-label={post.title}
+                                  />
+                                ) : (
+                                  <MediaView media={media} title={post.title} />
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <MediaView title={post.title} />
+                          )}
+                        </div>
+                        <h3>{post.title}</h3>
+                        {post.description && <p>{post.description}</p>}
+                      </article>
+                    ))}
+                  </div>
+                  {!posts.length && (demo || postsQuery.isSuccess) && (
+                    <p className="shop-inline-state">
+                      This shop hasn’t shared any posts yet.
+                    </p>
+                  )}
+                  {!demo && postsQuery.hasNextPage && (
+                    <button
+                      className="secondary-button"
+                      disabled={postsQuery.isFetching}
+                      onClick={() => void postsQuery.fetchNextPage()}
+                    >
+                      {postsQuery.isFetchingNextPage && (
+                        <LoaderCircle
+                          className="spin"
+                          size={16}
+                          aria-hidden="true"
+                        />
+                      )}
+                      {postsQuery.isFetchingNextPage
+                        ? 'Loading…'
+                        : 'More posts'}
+                    </button>
+                  )}
+                </>
+              )}
+            </section>
             <section
               id="shop-catalog"
-              className="shop-section"
-              aria-labelledby="catalog-title"
+              className="shop-section shop-tabpanel"
+              role="tabpanel"
+              aria-labelledby="shop-tab-catalog"
+              tabIndex={0}
+              hidden={activeTab !== 'catalog'}
             >
               <div className="shop-section-heading">
-                <div>
-                  <span className="shop-eyebrow">
-                    {presentation.restaurant
-                      ? 'Made to be enjoyed'
-                      : 'Find your next favorite'}
-                  </span>
-                  <h2 id="catalog-title">{presentation.catalogTitle}</h2>
-                </div>
+                <h2 id="catalog-title">
+                  {presentation.restaurant ? 'Our menu' : 'Our products'}
+                </h2>
                 <label className="shop-search">
                   <Search size={18} />
                   <span className="sr-only">
@@ -507,28 +649,41 @@ export function StorePage({ slug }: { slug: string | null }) {
                     {presentation.restaurant ? 'menu items' : 'products'}
                   </span>
                   <input
+                    ref={searchInput}
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder={
                       presentation.restaurant
-                        ? 'Find something delicious…'
-                        : 'Search the collection…'
+                        ? 'Search the menu…'
+                        : 'Search products…'
                     }
                     type="search"
                   />
                 </label>
               </div>
-              {(demo || productsQuery.isSuccess) && (
-                <p className="shop-results" role="status">
-                  {visible.length} {visible.length === 1 ? 'item' : 'items'}
-                  {search || category
-                    ? ' matching your selection'
-                    : ' to explore'}
-                  {!demo && productsQuery.hasNextPage
-                    ? ' in the loaded collection'
-                    : ''}
-                </p>
-              )}
+              <div className="shop-filter-summary">
+                {(demo || productsQuery.isSuccess) && (
+                  <p className="shop-results" role="status">
+                    {visible.length} {visible.length === 1 ? 'item' : 'items'}
+                    {search || category ? ' found' : ''}
+                    {!demo && productsQuery.hasNextPage
+                      ? ' in the loaded collection'
+                      : ''}
+                  </p>
+                )}
+                {(search || category) && (
+                  <button
+                    type="button"
+                    className="shop-clear-filters"
+                    onClick={() => {
+                      setSearch('');
+                      setCategory('');
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
               {categories.length > 1 && (
                 <div
                   className="shop-categories"
@@ -539,7 +694,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                     aria-pressed={!category}
                     onClick={() => setCategory('')}
                   >
-                    All
+                    All items
                   </button>
                   {categories.map((item) => (
                     <button
@@ -652,193 +807,93 @@ export function StorePage({ slug }: { slug: string | null }) {
                 </div>
               )}
             </section>
-            <section
-              id="shop-stories"
-              className="shop-section"
-              aria-labelledby="stories-title"
-            >
-              <div className="shop-section-heading">
-                <div>
-                  <span className="shop-eyebrow">A closer look</span>
-                  <h2 id="stories-title">Latest stories</h2>
-                </div>
-              </div>
-              {!demo && postsQuery.isPending && (
-                <ShopCardsLoading stories label="Loading stories…" />
-              )}
-              {!demo && postsQuery.isError && (
-                <StatusBanner
-                  action="Retry stories"
-                  onAction={() => void postsQuery.refetch()}
-                >
-                  Stories couldn’t load right now.
-                </StatusBanner>
-              )}
-              <div className="shop-stories">
-                {[
-                  ...new Map(posts.map((post) => [post.id, post])).values(),
-                ].map((post) => (
-                  <article className="shop-story" key={post.id}>
-                    <div
-                      className="shop-story-gallery"
-                      tabIndex={0}
-                      aria-label={`${post.title} photos and videos`}
-                    >
-                      {post.media.length ? (
-                        post.media.map((media) => (
-                          <div className="shop-story-media" key={media.id}>
-                            {media.kind === 'video' ? (
-                              <video
-                                controls
-                                playsInline
-                                preload="none"
-                                src={assetUrl(media.primaryUrl)}
-                                poster={assetUrl(media.posterUrl)}
-                                aria-label={post.title}
-                              />
-                            ) : (
-                              <MediaView media={media} title={post.title} />
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <MediaView title={post.title} />
-                      )}
-                    </div>
-                    <h3>{post.title}</h3>
-                    {post.description && <p>{post.description}</p>}
-                  </article>
-                ))}
-              </div>
-              {!posts.length && (demo || postsQuery.isSuccess) && (
-                <p className="shop-inline-state">
-                  This shop hasn’t shared any stories yet.
-                </p>
-              )}
-              {!demo && postsQuery.hasNextPage && (
-                <button
-                  className="secondary-button"
-                  disabled={postsQuery.isFetching}
-                  onClick={() => void postsQuery.fetchNextPage()}
-                >
-                  {postsQuery.isFetchingNextPage && (
-                    <LoaderCircle
-                      className="spin"
-                      size={16}
-                      aria-hidden="true"
-                    />
-                  )}
-                  {postsQuery.isFetchingNextPage ? 'Loading…' : 'More stories'}
-                </button>
-              )}
-            </section>
-            <section
-              id="shop-about"
-              className="shop-about shop-section"
-              aria-labelledby="about-title"
-            >
-              <div>
-                <span className="shop-eyebrow">Get to know us</span>
-                <h2 id="about-title">
-                  {presentation.restaurant
-                    ? 'A place at our table.'
-                    : `Hello from ${store.name}.`}
-                </h2>
-                <p>
-                  {store.description ||
-                    'Discover our latest products and stories, all in one place.'}
-                </p>
-                {isStoreVerified(store) && (
-                  <div className="shop-verification-note">
-                    <StoreVerifiedBadge store={store} size={30} />
-                    <div>
-                      <strong>Verified shop</strong>
-                      <span>
-                        Active verification badge on {settings.siteName}.
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <div className="shop-socials">
-                  {Object.entries(store.socialMediaLinks ?? {}).map(
-                    ([key, value]) =>
-                      Object.hasOwn(socialLabels, key) && safeUrl(value) ? (
-                        <a
-                          key={key}
-                          href={safeUrl(value)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {socialLabels[key]}
-                          <ArrowUpRight size={15} />
-                        </a>
-                      ) : null,
-                  )}
-                </div>
-              </div>
-              <div className="shop-contact">
-                <h3>
-                  {presentation.restaurant
-                    ? 'Plan your visit'
-                    : 'Keep in touch'}
-                </h3>
-                {[location?.address, location?.city, location?.country].some(
-                  Boolean,
-                ) && (
-                  <p>
-                    <MapPin size={17} />
-                    {[location?.address, location?.city, location?.country]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </p>
-                )}
-                {phone && (
-                  <a href={phone}>
-                    <Phone size={17} />
-                    {location?.phone}
-                  </a>
-                )}
-                {website && (
-                  <a href={website} target="_blank" rel="noopener noreferrer">
-                    Visit website
-                    <ArrowUpRight size={16} />
-                  </a>
-                )}
-                {map && (
-                  <a href={map} target="_blank" rel="noopener noreferrer">
-                    Get directions
-                    <ArrowUpRight size={16} />
-                  </a>
-                )}
-                {hours.length > 0 && (
-                  <dl className="shop-hours">
-                    {hours.map(([day, time]) => (
-                      <div key={day}>
-                        <dt>{day}</dt>
-                        <dd>{time}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                {!phone &&
-                  !website &&
-                  !map &&
-                  !location?.address &&
-                  !hours.length && (
-                    <p>Contact details haven’t been added yet.</p>
-                  )}
-              </div>
-            </section>
           </>
         )}
       </main>
-      <footer className="shop-footer">
-        <span>{store?.name || 'Independent shops'}</span>
+      <footer id="shop-about" className="shop-footer">
+        <div className="shop-footer-brand">
+          <strong>{store?.name || 'Independent shops'}</strong>
+          {store?.description?.trim() && <p>{store.description}</p>}
+        </div>
         <a href={home}>
-          Discover more on {settings.siteName}
-          <ArrowUpRight size={15} />
+          Powered by {settings.siteName}
+          <ArrowUpRight size={15} aria-hidden="true" />
         </a>
+        {store && (
+          <details className="shop-footer-details" ref={contactDetails}>
+            <summary>Contact & details</summary>
+            <div className="shop-contact">
+              {[location?.address, location?.city, location?.country].some(
+                Boolean,
+              ) && (
+                <p>
+                  <MapPin size={17} aria-hidden="true" />
+                  {[location?.address, location?.city, location?.country]
+                    .filter(Boolean)
+                    .join(', ')}
+                </p>
+              )}
+              {phone && (
+                <a href={phone}>
+                  <Phone size={17} aria-hidden="true" />
+                  {location?.phone}
+                </a>
+              )}
+              {website && (
+                <a href={website} target="_blank" rel="noopener noreferrer">
+                  Visit website
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </a>
+              )}
+              {map && (
+                <a href={map} target="_blank" rel="noopener noreferrer">
+                  Get directions
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </a>
+              )}
+              {hours.length > 0 && (
+                <dl className="shop-hours">
+                  {hours.map(([day, time]) => (
+                    <div key={day}>
+                      <dt>{day}</dt>
+                      <dd>{time}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              {!phone &&
+                !website &&
+                !map &&
+                !location?.address &&
+                !location?.city &&
+                !location?.country &&
+                !hours.length && <p>Contact details haven’t been added yet.</p>}
+              <div className="shop-socials">
+                {Object.entries(store.socialMediaLinks ?? {}).map(
+                  ([key, value]) =>
+                    Object.hasOwn(socialLabels, key) && safeUrl(value) ? (
+                      <a
+                        key={key}
+                        href={safeUrl(value)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {socialLabels[key]}
+                        <ArrowUpRight size={15} aria-hidden="true" />
+                      </a>
+                    ) : null,
+                )}
+              </div>
+            </div>
+          </details>
+        )}
       </footer>
+      {notice && (
+        <div className="toast shop-notice" role="status">
+          <Share2 size={16} aria-hidden="true" />
+          {notice}
+        </div>
+      )}
     </div>
   );
 }
