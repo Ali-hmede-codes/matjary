@@ -1,5 +1,6 @@
 import {
   Store,
+  StoreStatus,
   Showcase,
   Product,
   SubscriptionPlan,
@@ -8,6 +9,8 @@ import {
 } from '@app/database';
 
 export class UserStoreSummaryDto {
+  status!: StoreStatus;
+  trashedAt!: Date | null;
   id!: string;
   name!: string;
   slug!: string;
@@ -32,6 +35,8 @@ export class UserStoreSummaryDto {
   ): UserStoreSummaryDto {
     const dto = new UserStoreSummaryDto();
     dto.id = store.id;
+    dto.status = store.status;
+    dto.trashedAt = store.trashedAt;
     dto.name = store.name;
     dto.slug = store.slug;
     dto.brandColor = store.brandColor;

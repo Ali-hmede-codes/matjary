@@ -10,6 +10,94 @@
   font-size: 14px;
   line-height: 1.55;
 }
+.store-manager-tabs,
+.store-lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.store-manager-tabs {
+  margin-bottom: 24px;
+}
+.panel-app .store-manager-tabs button[aria-pressed='true'] {
+  background: var(--panel-green);
+  border-color: var(--panel-green);
+  color: white;
+}
+.store-manager-tabs span {
+  opacity: 0.75;
+}
+.store-manager-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+  gap: 20px;
+}
+.store-manager-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--panel-line);
+  border-radius: 18px;
+  background: white;
+}
+.store-manager-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.store-manager-heading > div {
+  min-width: 0;
+}
+.store-manager-heading h2 {
+  margin: 0;
+  font-size: 21px;
+  overflow-wrap: anywhere;
+}
+.store-manager-heading p {
+  margin: 3px 0 0;
+  color: var(--panel-muted);
+}
+.store-manager-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #edf2ec;
+  color: var(--panel-green);
+}
+.store-lifecycle {
+  width: 100%;
+}
+.store-lifecycle .panel-notice {
+  margin-top: 14px;
+}
+.store-lifecycle-panel {
+  margin-bottom: 24px;
+}
+.store-lifecycle-panel > .store-lifecycle-actions {
+  margin-bottom: 14px;
+}
+.panel-app .store-trash-action {
+  color: #9a3333;
+}
+.panel-app .store-trash-confirm.panel-primary {
+  background: #9a3333;
+  border-color: #9a3333;
+}
+.panel-app fieldset.store-editor-fields {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .panel-app :where(button, input, select, textarea),
 .panel-dialog :where(button, input, select, textarea) {
   font: inherit;

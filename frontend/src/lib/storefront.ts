@@ -1,6 +1,50 @@
 import type { Store } from './api';
 import { contrastColor, safeUrl } from './website.ts';
 
+export type StoreLifecycleStatus =
+  'active' | 'offline' | 'archived' | 'trashed';
+export type StoreLifecycleAction =
+  'active' | 'offline' | 'archived' | 'trashed' | 'restore';
+export const storeStatusLabel: Record<StoreLifecycleStatus, string> = {
+  active: 'Online',
+  offline: 'Off',
+  archived: 'Archived',
+  trashed: 'In Trash',
+};
+export function isCurrentStore(store: { status: StoreLifecycleStatus }) {
+  return store.status === 'active' || store.status === 'offline';
+}
+export function selectOwnerStore<
+  T extends { id: string; status: StoreLifecycleStatus; restricted?: boolean },
+>(stores: T[], requestedId?: string | null): T | undefined {
+  // An invalid explicit address must never silently open a different store's editor.
+  return requestedId
+    ? stores.find(
+        (store) =>
+          store.id === requestedId &&
+          store.status !== 'trashed' &&
+          !store.restricted,
+      )
+    : stores.find((store) => isCurrentStore(store) && !store.restricted);
+}
+export function storeLifecycleActions(store: {
+  status: StoreLifecycleStatus;
+  restricted?: boolean;
+}): StoreLifecycleAction[] {
+  if (store.status === 'trashed') return ['restore'];
+  if (store.status === 'archived') return ['restore', 'trashed'];
+  if (!isCurrentStore(store)) return [];
+  return [
+    ...(store.status === 'active'
+      ? ['offline' as const]
+      : store.restricted
+        ? []
+        : ['active' as const]),
+    'archived',
+    'trashed',
+  ];
+}
+
 export function isStoreVerified(
   store?: Pick<Store, 'hasVerificationBadge' | 'verificationBadgeExpiresAt'>,
   now = Date.now(),

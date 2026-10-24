@@ -18,6 +18,7 @@ import {
 import { StoresService } from './stores.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
+import { MyStoresQueryDto, StoreStatusDto } from './dto/store-lifecycle.dto';
 import {
   StoreResponseDto,
   StoreListResponseDto,
@@ -59,8 +60,29 @@ export class StoresController {
   @UseGuards(SessionGuard)
   async getMyStores(
     @Req() request: AuthenticatedRequest,
+    @Query() query: MyStoresQueryDto,
   ): Promise<StoreResponseDto[]> {
-    return this.stores.getUserStores(request.user.id);
+    return this.stores.getUserStores(
+      request.user.id,
+      query.includeTrashed === 'true',
+    );
+  }
+
+  @Patch(':slug/status')
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  status(
+    @Param('slug') slug: string,
+    @Body() dto: StoreStatusDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.stores.setStatus(slug, dto.status, request.user.id);
+  }
+
+  @Post(':slug/restore')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  restore(@Param('slug') slug: string, @Req() request: AuthenticatedRequest) {
+    return this.stores.restore(slug, request.user.id);
   }
 
   @Get(':slug')

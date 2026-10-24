@@ -1,6 +1,13 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -11,7 +18,14 @@ import {
   Store as StoreIcon,
 } from 'lucide-react';
 import type { Store } from '../../lib/api';
-import { storeMediaUrl, isStoreVerified } from '../../lib/storefront';
+import {
+  storeMediaUrl,
+  isStoreVerified,
+  isCurrentStore,
+  selectOwnerStore,
+  storeStatusLabel,
+  type StoreLifecycleStatus,
+} from '../../lib/storefront';
 import { getJson, dateLabel, type Session } from '../shared/panel-api';
 import {
   Empty,
@@ -22,8 +36,12 @@ import {
 } from '../shared/PanelUI';
 import { StoreEditor } from './StoreEditor.tsx';
 import { OwnerContent } from './OwnerContent.tsx';
+import { StoreManager } from './StoreManager';
 
 export interface OwnerStore extends Store {
+  status: StoreLifecycleStatus;
+  trashedAt: string | null;
+  restricted?: boolean;
   enableCart: boolean;
   enableWhatsAppCheckout: boolean;
 }
@@ -41,7 +59,7 @@ interface OwnerState {
   stores: OwnerStore[];
   store?: OwnerStore;
   summary: OwnerSummary;
-  savedStore: (store: OwnerStore) => Promise<void>;
+  savedStore: (store: OwnerStore, lifecycle?: boolean) => Promise<void>;
 }
 const OwnerContext = createContext<OwnerState | null>(null);
 export function useOwner() {
@@ -51,26 +69,54 @@ export function useOwner() {
 }
 export default function OwnerPanel({ session }: { session: Session }) {
   const [selected, setSelected] = useState('');
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const client = useQueryClient();
   const stores = useQuery({
     queryKey: ['panel', session.user.id, 'my-stores'],
-    queryFn: ({ signal }) => getJson<OwnerStore[]>('stores/my', signal),
+    queryFn: ({ signal }) =>
+      getJson<OwnerStore[]>('stores/my?includeTrashed=true', signal),
   });
   const summary = useQuery({
     queryKey: ['panel', session.user.id, 'summary'],
     queryFn: ({ signal }) => getJson<OwnerSummary>('dashboard', signal),
   });
-  const store = stores.data?.find((s) => s.id === selected) ?? stores.data?.[0];
-  async function savedStore(updated: OwnerStore) {
-    client.setQueryData<OwnerStore[]>(
-      ['panel', session.user.id, 'my-stores'],
-      (old) => [...(old ?? []).filter((s) => s.id !== updated.id), updated],
+  const requested = params.get('store');
+  useEffect(() => {
+    if (requested) setSelected(requested);
+  }, [requested]);
+  const store = selectOwnerStore(stores.data ?? [], requested || selected);
+  const selectable = (stores.data ?? []).filter(
+    (s) => !s.restricted && (isCurrentStore(s) || s.id === store?.id),
+  );
+  async function savedStore(updated: OwnerStore, lifecycle = false) {
+    const key = ['panel', session.user.id, 'my-stores'];
+    await client.cancelQueries({ queryKey: key });
+    client.setQueryData<OwnerStore[]>(key, (old) =>
+      old?.some((s) => s.id === updated.id)
+        ? old.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
+        : [...(old ?? []), updated],
     );
-    setSelected(updated.id);
-    await client.invalidateQueries({
-      queryKey: ['panel', session.user.id, 'summary'],
-    });
-    await client.invalidateQueries({ queryKey: ['stores'] });
+    if (!lifecycle) setSelected(updated.id);
+    else if (store?.id === updated.id && !isCurrentStore(updated)) {
+      setSelected('');
+      navigate(
+        `/dashboard/stores?tab=${updated.status === 'trashed' ? 'trashed' : 'archived'}`,
+        { replace: true },
+      );
+    }
+    await Promise.all(
+      [
+        'panel',
+        'stores',
+        'storefront',
+        'storefront-products',
+        'storefront-posts',
+        'explore',
+        'categories',
+        'shop-cart',
+      ].map((prefix) => client.invalidateQueries({ queryKey: [prefix] })),
+    );
   }
   return (
     <PanelShell session={session}>
@@ -94,19 +140,27 @@ export default function OwnerPanel({ session }: { session: Session }) {
             savedStore,
           }}
         >
-          {stores.data.length > 1 && (
+          {selectable.length > 1 && (
             <label className="panel-store-switch">
               Your store
               <select
                 value={store?.id}
                 onChange={(e) => {
-                  if (window.confirm('Switch stores? Save any changes first.'))
+                  if (
+                    window.confirm('Switch stores? Save any changes first.')
+                  ) {
                     setSelected(e.target.value);
+                    setParams((old) => {
+                      const next = new URLSearchParams(old);
+                      next.set('store', e.target.value);
+                      return next;
+                    });
+                  }
                 }}
               >
-                {stores.data.map((s) => (
+                {selectable.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.name} · {storeStatusLabel[s.status]}
                   </option>
                 ))}
               </select>
@@ -114,6 +168,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
           )}
           <Routes>
             <Route index element={<OwnerHome />} />
+            <Route path="stores" element={<StoreManager />} />
             <Route path="store/new" element={<StoreEditor key="new" />} />
             <Route
               path="store"
@@ -162,6 +217,9 @@ function NoStore() {
       />
       <Empty title="A home for your business">
         <p>A shop, a menu, or your next big idea. You're in control.</p>
+        <Link className="panel-secondary" to="/dashboard/stores">
+          Manage stores, Archived, and Trash
+        </Link>
         <Link className="panel-primary" to="/dashboard/store/new">
           <Plus size={18} /> Create my store
         </Link>
@@ -179,14 +237,22 @@ function OwnerHome() {
         title={`Welcome back, ${session.user.displayName.split(' ')[0] || 'there'}.`}
         description="A little update can make a big difference."
         action={
-          <Link className="panel-secondary" to={`/stores/${store.slug}`}>
-            View my store <ArrowUpRight size={16} />
-          </Link>
+          store.status === 'active' ? (
+            <Link className="panel-secondary" to={`/stores/${store.slug}`}>
+              View my store <ArrowUpRight size={16} />
+            </Link>
+          ) : (
+            <Link className="panel-secondary" to="/dashboard/stores">
+              Manage store status
+            </Link>
+          )
         }
       />
       <section className="panel-store-hero">
         <div>
-          <span className="panel-pill">YOUR STORE</span>
+          <span className="panel-pill">
+            YOUR STORE · {storeStatusLabel[store.status]}
+          </span>
           <h2>
             {store.name} {isStoreVerified(store) && <BadgeCheck size={25} />}
           </h2>

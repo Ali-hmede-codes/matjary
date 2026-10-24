@@ -8,7 +8,7 @@ import {
   Store,
   Showcase,
 } from './entities';
-import { moderationWhere } from './visibility-policy';
+import { ownerWhere } from './visibility-policy';
 
 export async function mediaParent(
   manager: EntityManager,
@@ -18,20 +18,28 @@ export async function mediaParent(
   if (asset.showcaseId) {
     const post = await manager.findOneBy(Showcase, {
       id: asset.showcaseId,
-      ...(moderated ? moderationWhere('post') : {}),
+      ...(moderated ? ownerWhere('post') : {}),
     });
     if (!post) throw new NotFoundException('Media parent not found');
-    return { ownerId: post.ownerId, post, store: null, product: null };
+    const store = post.storeId
+      ? await manager.findOneBy(Store, {
+          id: post.storeId,
+          ...(moderated ? ownerWhere('store') : {}),
+        })
+      : null;
+    if (post.storeId && !store)
+      throw new NotFoundException('Media parent not found');
+    return { ownerId: post.ownerId, post, store, product: null };
   }
   if (asset.productId) {
     const product = await manager.findOneBy(Product, {
       id: asset.productId,
-      ...(moderated ? moderationWhere('product') : {}),
+      ...(moderated ? ownerWhere('product') : {}),
     });
     if (!product) throw new NotFoundException('Media parent not found');
     const store = await manager.findOneBy(Store, {
       id: product.storeId,
-      ...(moderated ? moderationWhere('store') : {}),
+      ...(moderated ? ownerWhere('store') : {}),
     });
     if (!store) throw new NotFoundException('Media parent not found');
     return { ownerId: store.ownerId, post: null, store, product };
@@ -39,7 +47,7 @@ export async function mediaParent(
   if (asset.storeId) {
     const store = await manager.findOneBy(Store, {
       id: asset.storeId,
-      ...(moderated ? moderationWhere('store') : {}),
+      ...(moderated ? ownerWhere('store') : {}),
     });
     if (store)
       return { ownerId: store.ownerId, post: null, store, product: null };
@@ -58,7 +66,7 @@ export async function assertMediaAttachment(
   for (const key of keys) {
     if (!key) continue;
     const variant = await manager.findOne(MediaVariant, {
-      where: { storageKey: key, asset: moderationWhere('media') },
+      where: { storageKey: key, asset: ownerWhere('media') },
       relations: ['asset'],
     });
     if (

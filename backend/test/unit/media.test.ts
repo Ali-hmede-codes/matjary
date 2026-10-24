@@ -22,6 +22,7 @@ import {
   MediaVariant,
   Showcase,
   Store,
+  StoreStatus,
   MediaKind,
   MediaStatus,
   ShowcaseStatus,
@@ -63,6 +64,12 @@ test('store and product images require the correct owner, target, readiness and 
     ownerId: 'owner',
     logoKey: null,
   });
+  const post = Object.assign(new Showcase(), {
+    id: 'post',
+    ownerId: 'owner',
+    storeId: store.id,
+    status: ShowcaseStatus.PUBLISHED,
+  });
   const product = Object.assign(new Product(), {
     id: 'product',
     storeId: store.id,
@@ -97,7 +104,9 @@ test('store and product images require the correct owner, target, readiness and 
           ? store
           : target === Product
             ? product
-            : null,
+            : target === Showcase
+              ? post
+              : null,
     getRepository: () => ({ findOne: async () => variant }),
   } as unknown as EntityManager;
   const media = new MediaService(
@@ -151,6 +160,24 @@ test('store and product images require the correct owner, target, readiness and 
   await assert.rejects(media.authorizeDownload('image-key'), NotFoundException);
   product.status = ProductStatus.ACTIVE;
   assert.equal((await media.authorizeDownload('image-key')).public, true);
+  for (const target of ['store', 'product', 'post'] as const) {
+    asset.storeId = target === 'store' ? store.id : null;
+    asset.productId = target === 'product' ? product.id : null;
+    asset.showcaseId = target === 'post' ? post.id : null;
+    for (const status of [StoreStatus.OFFLINE, StoreStatus.ARCHIVED]) {
+      store.status = status;
+      await assert.rejects(
+        media.authorizeDownload('image-key'),
+        NotFoundException,
+      );
+      assert.equal(
+        (await media.authorizeDownload('image-key', 'owner')).public,
+        false,
+      );
+    }
+    store.status = StoreStatus.ACTIVE;
+    assert.equal((await media.authorizeDownload('image-key')).public, true);
+  }
   hidden = true;
   await assert.rejects(
     media.authorizeDownload('image-key', 'owner'),

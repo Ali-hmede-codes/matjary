@@ -48,7 +48,7 @@ import {
   User,
   Showcase,
   Store,
-  moderationWhere,
+  publicWhere,
   assertContentAvailable,
   requireAdmin,
   appendAdminAudit,
@@ -114,7 +114,7 @@ export class BoostService {
   ): Promise<void> {
     const kind =
       campaign.targetType === BoostTargetType.STORE ? 'store' : 'post';
-    await assertContentAvailable(manager, kind, campaign.targetId);
+    await assertContentAvailable(manager, kind, campaign.targetId, 'public');
     if (kind === 'post') {
       const post = await manager.findOneBy(Showcase, { id: campaign.targetId });
       if (post?.status !== 'published')
@@ -562,7 +562,7 @@ export class BoostService {
   ): Promise<{ name: string; slug: string; imageKey?: string }> {
     if (targetType === BoostTargetType.SHOWCASE) {
       const showcase = await this.showcaseRepo.findOne({
-        where: { id: targetId, ...moderationWhere('post') },
+        where: { id: targetId, ...publicWhere('post') },
         relations: ['store'],
       });
       if (!showcase) throw new NotFoundException('Showcase not found');
@@ -579,7 +579,7 @@ export class BoostService {
       };
     } else {
       const store = await this.storeRepo.findOne({
-        where: { id: targetId, ...moderationWhere('store') },
+        where: { id: targetId, ...publicWhere('store') },
       });
       if (!store) throw new NotFoundException('Store not found');
       if (store.ownerId !== userId)
@@ -1268,7 +1268,7 @@ export class BoostService {
 
       if (campaign.targetType === BoostTargetType.SHOWCASE) {
         const showcase = await this.showcaseRepo.findOne({
-          where: { id: campaign.targetId, ...moderationWhere('post') },
+          where: { id: campaign.targetId, ...publicWhere('post') },
         });
         if (!showcase || showcase.status !== 'published') continue;
         if (showcase) {
@@ -1277,7 +1277,7 @@ export class BoostService {
         }
       } else {
         const store = await this.storeRepo.findOne({
-          where: { id: campaign.targetId, ...moderationWhere('store') },
+          where: { id: campaign.targetId, ...publicWhere('store') },
         });
         if (!store) continue;
         if (store) {

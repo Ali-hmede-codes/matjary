@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatProductPrice,
+  selectOwnerStore,
+  storeLifecycleActions,
+  isCurrentStore,
+  type StoreLifecycleStatus,
   priceInput,
   decimalPrice,
   isStoreVerified,
@@ -12,6 +16,50 @@ import {
   storeSlugFromPath,
   storeSocialLinks,
 } from './storefront.ts';
+
+test('owner selection never defaults to archived, trashed, or restricted stores', () => {
+  const stores: {
+    id: string;
+    status: StoreLifecycleStatus;
+    restricted?: boolean;
+  }[] = [
+    { id: 'archived', status: 'archived' },
+    { id: 'trash', status: 'trashed' },
+    { id: 'restricted', status: 'active', restricted: true },
+    { id: 'off', status: 'offline' },
+  ];
+  assert.equal(selectOwnerStore(stores)?.id, 'off');
+  assert.equal(selectOwnerStore(stores, 'archived')?.id, 'archived');
+  for (const id of ['trash', 'restricted', 'another-owner'])
+    assert.equal(selectOwnerStore(stores, id), undefined);
+  assert.equal(selectOwnerStore(stores.slice(0, 3)), undefined);
+  assert.deepEqual(
+    stores.filter(isCurrentStore).map((s) => s.id),
+    ['restricted', 'off'],
+  );
+});
+
+test('owner lifecycle controls only offer valid actions and Trash is restore-only', () => {
+  assert.deepEqual(storeLifecycleActions({ status: 'active' }), [
+    'offline',
+    'archived',
+    'trashed',
+  ]);
+  assert.deepEqual(storeLifecycleActions({ status: 'offline' }), [
+    'active',
+    'archived',
+    'trashed',
+  ]);
+  assert.deepEqual(storeLifecycleActions({ status: 'archived' }), [
+    'restore',
+    'trashed',
+  ]);
+  assert.deepEqual(storeLifecycleActions({ status: 'trashed' }), ['restore']);
+  assert.deepEqual(
+    storeLifecycleActions({ status: 'offline', restricted: true }),
+    ['archived', 'trashed'],
+  );
+});
 
 test('owner price entry is exact and rejects invalid or unsafe amounts', () => {
   assert.equal(priceInput('12.50'), 1250);

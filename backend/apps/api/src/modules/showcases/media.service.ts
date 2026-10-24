@@ -23,7 +23,8 @@ import {
   effectiveLimits,
   boundedLimit,
   assertQuota,
-  moderationWhere,
+  ownerWhere,
+  StoreStatus,
   requireAdmin,
   mediaParent,
   MEDIA_OWNER_JOINS,
@@ -52,7 +53,7 @@ export class MediaService {
   async presignedUrl(dto: PresignedUrlDto, slug: string, ownerId: string) {
     const post = await this.showcases.findOneBy({
       slug,
-      ...moderationWhere('post'),
+      ...ownerWhere('post'),
     });
     if (!post) throw new NotFoundException('Post not found');
     if (dto.storeId && dto.storeId !== post.storeId)
@@ -216,7 +217,7 @@ export class MediaService {
   ): Promise<void> {
     const post = await this.showcases.findOneBy({
       slug,
-      ...moderationWhere('post'),
+      ...ownerWhere('post'),
     });
     if (!post) throw new NotFoundException('Post not found');
     const asset = await this.ownedAsset(dto.mediaId, ownerId);
@@ -228,7 +229,7 @@ export class MediaService {
   private async ownedAsset(id: string, ownerId: string): Promise<MediaAsset> {
     const asset = await this.mediaAssets.findOneBy({
       id,
-      ...moderationWhere('media'),
+      ...ownerWhere('media'),
     });
     if (
       !asset ||
@@ -253,6 +254,10 @@ export class MediaService {
       )
         throw new BadRequestException('Uploaded media size is invalid');
       await this.mediaAssets.manager.transaction(async (manager) => {
+        await manager.findOneOrFail(User, {
+          where: { id: ownerId },
+          lock: { mode: 'pessimistic_write' },
+        });
         const current = await manager.findOneOrFail(MediaAsset, {
           where: { id },
           lock: { mode: 'pessimistic_write' },
@@ -277,10 +282,23 @@ export class MediaService {
     const asset = await this.ownedAsset(id, ownerId);
     if (asset.status !== MediaStatus.PENDING)
       throw new ConflictException('Upload cannot be abandoned');
-    await this.mediaAssets.update(
-      { id, status: MediaStatus.PENDING },
-      { status: MediaStatus.FAILED },
-    );
+    try {
+      await this.mediaAssets.manager.transaction(async (manager) => {
+        await manager.findOneOrFail(User, {
+          where: { id: ownerId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if ((await mediaParent(manager, asset)).ownerId !== ownerId)
+          throw new NotFoundException('Media asset not found');
+        await manager.update(
+          MediaAsset,
+          { id, status: MediaStatus.PENDING },
+          { status: MediaStatus.FAILED },
+        );
+      });
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
   async status(id: string, ownerId: string) {
@@ -317,7 +335,7 @@ export class MediaService {
   async authorizeUpload(key: string, ownerId: string): Promise<MediaAsset> {
     this.requireLocal();
     const asset = await this.mediaAssets.findOne({
-      where: { originalKey: key, ...moderationWhere('media') },
+      where: { originalKey: key, ...ownerWhere('media') },
     });
     if (
       !asset ||
@@ -345,7 +363,7 @@ export class MediaService {
       .findOne({
         where: {
           storageKey: key,
-          ...(administrator ? {} : { asset: moderationWhere('media') }),
+          ...(administrator ? {} : { asset: ownerWhere('media') }),
         },
         relations: ['asset'],
       });
@@ -365,14 +383,17 @@ export class MediaService {
           : Boolean(
               store && (store.logoKey === key || store.bannerKey === key),
             );
-      const visible = variant.asset.status === MediaStatus.READY && attached;
+      const visible =
+        variant.asset.status === MediaStatus.READY &&
+        attached &&
+        (!store || store.status === StoreStatus.ACTIVE);
       if (visible || actualOwner === ownerId)
         return { mimeType: variant.mimeType, public: visible };
     }
     const original = await this.mediaAssets.findOne({
       where: {
         originalKey: key,
-        ...(administrator ? {} : moderationWhere('media')),
+        ...(administrator ? {} : ownerWhere('media')),
       },
     });
     if (

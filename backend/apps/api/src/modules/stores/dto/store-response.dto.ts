@@ -1,5 +1,6 @@
 import {
   Store,
+  StoreStatus,
   StoreSubscriptionTier,
   StoreType,
   SocialMediaLinks,
@@ -23,6 +24,9 @@ export class StoreLocationResponseDto {
 }
 
 export class StoreResponseDto {
+  status!: StoreStatus;
+  trashedAt!: Date | null;
+  restricted?: boolean;
   id!: string;
   name!: string;
   slug!: string;
@@ -84,6 +88,9 @@ export function toStoreResponseDto(
 
   return {
     id: store.id,
+    status: store.status,
+    trashedAt: store.trashedAt,
+    ...(includeOwnerId ? { restricted: Boolean(store.adminArchivedAt) } : {}),
     name: store.name,
     slug: store.slug,
     brandColor: store.brandColor,

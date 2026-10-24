@@ -32,10 +32,46 @@ export function moderationWhere(kind: ContentKind) {
   };
 }
 
+// Owner management is separate from public publication. Off/archived content stays editable.
+function lifecycleSql(
+  kind: ContentKind,
+  alias: string,
+  publicOnly: boolean,
+): string {
+  const state = (store: string) =>
+    `${store}.status ${publicOnly ? "= 'active'" : "!= 'trashed'"}`;
+  if (kind === 'store') return state(alias);
+  if (kind === 'product')
+    return `EXISTS (SELECT 1 FROM stores life_product_store WHERE life_product_store.id = ${alias}.store_id AND ${state('life_product_store')})`;
+  if (kind === 'post')
+    return `(${alias}.store_id IS NULL OR EXISTS (SELECT 1 FROM stores life_post_store WHERE life_post_store.id = ${alias}.store_id AND ${state('life_post_store')}))`;
+  return `(EXISTS (SELECT 1 FROM showcases life_post WHERE life_post.id = ${alias}.showcase_id AND ${lifecycleSql('post', 'life_post', publicOnly)}) OR EXISTS (SELECT 1 FROM stores life_store WHERE life_store.id = ${alias}.store_id AND ${state('life_store')}) OR EXISTS (SELECT 1 FROM products life_product WHERE life_product.id = ${alias}.product_id AND ${lifecycleSql('product', 'life_product', publicOnly)}))`;
+}
+
+export function publicVisibilitySql(kind: ContentKind, alias: string): string {
+  return `(${visibilitySql(kind, alias)}) AND (${lifecycleSql(kind, alias, true)})`;
+}
+
+export function ownerVisibilitySql(kind: ContentKind, alias: string): string {
+  return `(${visibilitySql(kind, alias)}) AND (${lifecycleSql(kind, alias, false)})`;
+}
+
+function scopedWhere(kind: ContentKind, publicOnly: boolean) {
+  return {
+    adminArchivedAt: Raw((column) => {
+      const alias = column.slice(0, column.lastIndexOf('.'));
+      return `(${publicOnly ? publicVisibilitySql(kind, alias) : ownerVisibilitySql(kind, alias)})`;
+    }),
+  };
+}
+export const publicWhere = (kind: ContentKind) => scopedWhere(kind, true);
+export const ownerWhere = (kind: ContentKind) => scopedWhere(kind, false);
+
 export async function assertContentAvailable(
   manager: EntityManager,
   kind: ContentKind,
   id: string,
+  scope: 'moderation' | 'public' | 'owner' = 'moderation',
 ): Promise<void> {
   const target = {
     store: Store,
@@ -47,7 +83,13 @@ export async function assertContentAvailable(
     .getRepository(target)
     .createQueryBuilder('visible')
     .where('visible.id = :visibilityId', { visibilityId: id })
-    .andWhere(visibilitySql(kind, 'visible'))
+    .andWhere(
+      scope === 'public'
+        ? publicVisibilitySql(kind, 'visible')
+        : scope === 'owner'
+          ? ownerVisibilitySql(kind, 'visible')
+          : visibilitySql(kind, 'visible'),
+    )
     .getExists();
   if (!exists) throw new NotFoundException('Content not found');
 }

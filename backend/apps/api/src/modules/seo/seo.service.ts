@@ -44,8 +44,10 @@ import {
   MediaStatus,
   ProductStatus,
   User,
-  moderationWhere,
-  visibilitySql,
+  publicWhere,
+  ownerWhere,
+  lockOwnerContent,
+  publicVisibilitySql,
   appendAdminAudit,
   adminContext,
   type AdminActor,
@@ -336,7 +338,7 @@ export class SeoService {
       const store = await manager.findOneBy(Store, {
         id,
         ownerId: actorId,
-        ...moderationWhere('store'),
+        ...ownerWhere('store'),
       });
       if (!store) throw new NotFoundException('Store not found');
       return { store, product: null, showcase: null };
@@ -346,7 +348,7 @@ export class SeoService {
         where: {
           id,
           store: { ownerId: actorId },
-          ...moderationWhere('product'),
+          ...ownerWhere('product'),
         },
         relations: ['store'],
       });
@@ -354,7 +356,7 @@ export class SeoService {
       return { store: product.store, product, showcase: null };
     }
     const showcase = await manager.findOne(Showcase, {
-      where: { id, ownerId: actorId, ...moderationWhere('post') },
+      where: { id, ownerId: actorId, ...ownerWhere('post') },
       relations: ['store'],
     });
     if (!showcase) throw new NotFoundException('Post not found');
@@ -368,15 +370,36 @@ export class SeoService {
     return this.getShowcaseSeo(id);
   }
 
+  private ownerWrite<T>(
+    kind: SeoKind,
+    id: string,
+    actorId: string,
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return this.dataSource.transaction(async (manager) => {
+      await lockOwnerContent(
+        manager,
+        kind === 'showcase' ? 'post' : kind,
+        id,
+        actorId,
+      );
+      return work(manager);
+    });
+  }
+
   async autoGenerateOwnedSeo(kind: SeoKind, id: string, actorId: string) {
-    const { store, product, showcase } = await this.ownedEntity(
-      kind,
-      id,
-      actorId,
-    );
-    if (showcase) return this.autoGenerateShowcaseSeo(showcase, store);
-    if (product && store) return this.autoGenerateProductSeo(product, store);
-    return this.autoGenerateStoreSeo(store!);
+    return this.ownerWrite(kind, id, actorId, async (manager) => {
+      const { store, product, showcase } = await this.ownedEntity(
+        kind,
+        id,
+        actorId,
+      );
+      const scoped = this.scoped(manager);
+      if (showcase) return scoped.autoGenerateShowcaseSeo(showcase, store);
+      if (product && store)
+        return scoped.autoGenerateProductSeo(product, store);
+      return scoped.autoGenerateStoreSeo(store!);
+    });
   }
 
   async getMetaBySlug(
@@ -388,7 +411,7 @@ export class SeoService {
     if (kind === 'store') {
       const store = await manager.findOneBy(Store, {
         slug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) throw new NotFoundException('Store not found');
       return this.generateStoreMetaTags(store);
@@ -398,7 +421,7 @@ export class SeoService {
       const products = await manager.find(Product, {
         where: {
           slug,
-          ...moderationWhere('product'),
+          ...publicWhere('product'),
           status: ProductStatus.ACTIVE,
           ...(storeSlug ? { store: { slug: storeSlug } } : {}),
         },
@@ -414,7 +437,7 @@ export class SeoService {
       where: {
         slug,
         status: ShowcaseStatus.PUBLISHED,
-        ...moderationWhere('post'),
+        ...publicWhere('post'),
       },
       relations: ['store'],
     });
@@ -449,7 +472,7 @@ export class SeoService {
           asset: {
             showcase: { ownerId: actorId },
             status: MediaStatus.READY,
-            ...moderationWhere('media'),
+            ...ownerWhere('media'),
           },
         },
       });
@@ -528,12 +551,16 @@ export class SeoService {
     } else {
       Object.assign(seo, data);
     }
-    return this.storeSeoRepo.save(seo);
+    return this.ownerWrite('store', storeId, actorId, (manager) =>
+      manager.save(seo),
+    );
   }
 
   async deleteStoreSeo(storeId: string, actorId: string): Promise<void> {
     await this.ownedEntity('store', storeId, actorId);
-    await this.storeSeoRepo.delete({ storeId });
+    await this.ownerWrite('store', storeId, actorId, (manager) =>
+      manager.delete(StoreSeo, { storeId }),
+    );
   }
 
   // ============================================
@@ -559,12 +586,16 @@ export class SeoService {
     } else {
       Object.assign(seo, data);
     }
-    return this.productSeoRepo.save(seo);
+    return this.ownerWrite('product', productId, actorId, (manager) =>
+      manager.save(seo),
+    );
   }
 
   async deleteProductSeo(productId: string, actorId: string): Promise<void> {
     await this.ownedEntity('product', productId, actorId);
-    await this.productSeoRepo.delete({ productId });
+    await this.ownerWrite('product', productId, actorId, (manager) =>
+      manager.delete(ProductSeo, { productId }),
+    );
   }
 
   // ============================================
@@ -596,12 +627,16 @@ export class SeoService {
     } else {
       Object.assign(seo, data);
     }
-    return this.showcaseSeoRepo.save(seo);
+    return this.ownerWrite('showcase', showcaseId, actorId, (manager) =>
+      manager.save(seo),
+    );
   }
 
   async deleteShowcaseSeo(showcaseId: string, actorId: string): Promise<void> {
     await this.ownedEntity('showcase', showcaseId, actorId);
-    await this.showcaseSeoRepo.delete({ showcaseId });
+    await this.ownerWrite('showcase', showcaseId, actorId, (manager) =>
+      manager.delete(ShowcaseSeo, { showcaseId }),
+    );
   }
 
   // ============================================
@@ -1527,7 +1562,7 @@ export class SeoService {
     const stores = await this.storeSeoRepo
       .createQueryBuilder('ss')
       .leftJoinAndSelect('ss.store', 'store')
-      .andWhere(visibilitySql('store', 'store'))
+      .andWhere(publicVisibilitySql('store', 'store'))
       .getMany();
 
     for (const seo of stores) {
@@ -1567,7 +1602,7 @@ export class SeoService {
         where: {
           id: seo.productId,
           status: ProductStatus.ACTIVE,
-          ...moderationWhere('product'),
+          ...publicWhere('product'),
         },
         relations: ['store'],
       });
@@ -1594,7 +1629,7 @@ export class SeoService {
         .select(['s.id', 's.slug', 's.title', 's.description', 's.status'])
         .where('s.id = :id', { id: seo.showcaseId })
         .andWhere('s.status = :status', { status: ShowcaseStatus.PUBLISHED })
-        .andWhere(visibilitySql('post', 's'))
+        .andWhere(publicVisibilitySql('post', 's'))
         .getRawOne();
       if (showcase) {
         entries.push({
@@ -1801,6 +1836,14 @@ export class SeoService {
     const settings = await this.getSettings();
     if (!settings.indexNowEnabled) return;
 
+    const kind = entityType === 'showcase' ? 'post' : entityType;
+    const target = { store: Store, product: Product, post: Showcase }[kind];
+    if (
+      !(await this.dataSource.manager
+        .getRepository(target)
+        .findOneBy({ id: entity.id, ...publicWhere(kind) }))
+    )
+      return;
     let url: string;
     if (entityType === 'store') {
       url = this.baseUrl + '/shop/' + (entity as Store).slug;
@@ -1839,7 +1882,7 @@ export class SeoService {
       });
     if (!kind || kind === 'store') {
       for (const store of await manager.find(Store, {
-        where: moderationWhere('store'),
+        where: publicWhere('store'),
       })) {
         const seo = await this.getStoreSeo(store.id);
         if (!indexable(seo)) continue;
@@ -1853,7 +1896,7 @@ export class SeoService {
     }
     if (!kind || kind === 'product') {
       for (const product of await manager.find(Product, {
-        where: { status: ProductStatus.ACTIVE, ...moderationWhere('product') },
+        where: { status: ProductStatus.ACTIVE, ...publicWhere('product') },
         relations: ['store'],
       })) {
         const seo = await this.getProductSeo(product.id);
@@ -1876,7 +1919,7 @@ export class SeoService {
     }
     if (!kind || kind === 'showcase') {
       for (const showcase of await manager.find(Showcase, {
-        where: { status: ShowcaseStatus.PUBLISHED, ...moderationWhere('post') },
+        where: { status: ShowcaseStatus.PUBLISHED, ...publicWhere('post') },
       })) {
         const seo = await this.getShowcaseSeo(showcase.id);
         if (!indexable(seo)) continue;
@@ -2034,7 +2077,7 @@ export class SeoService {
       where: {
         storageKey: key,
         asset: {
-          ...moderationWhere('media'),
+          ...publicWhere('media'),
           status: MediaStatus.READY,
           showcase: { status: ShowcaseStatus.PUBLISHED },
         },

@@ -1,11 +1,16 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Check, Coffee, Store as StoreIcon } from 'lucide-react';
-import { storeMediaUrl, storePresentation } from '../../lib/storefront';
+import {
+  storeMediaUrl,
+  storePresentation,
+  storeStatusLabel,
+} from '../../lib/storefront';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
 import { useOwner, type OwnerStore } from './OwnerPanel';
+import { StoreLifecycleControls } from './StoreManager';
 
 const presets = [
   ['Forest', '#254e40'],
@@ -39,6 +44,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     ),
   );
   const [busy, setBusy] = useState(false);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +72,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
   });
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (busy || uploading || processing) return;
+    if (busy || lifecycleBusy || uploading || processing) return;
     if (!name.trim()) {
       setError('Please enter a store name.');
       return;
@@ -136,15 +142,40 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
             : 'Just a name and a store type. You can add everything else later.'
         }
         action={
-          store && (
+          store &&
+          store.status === 'active' && (
             <Link className="panel-secondary" to={`/stores/${store.slug}`}>
               View store <ArrowUpRight size={16} />
             </Link>
           )
         }
       />
+      {store && (
+        <section className="panel-card store-lifecycle-panel">
+          <div className="store-lifecycle-actions">
+            <strong>Store status</strong>
+            <span className="panel-pill">{storeStatusLabel[store.status]}</span>
+            <Link to="/dashboard/stores">All my stores</Link>
+          </div>
+          {store.status !== 'active' && (
+            <p className="panel-muted">
+              Hidden from visitors. Your edits stay private until you turn this
+              store on.
+            </p>
+          )}
+          <StoreLifecycleControls
+            store={store}
+            disabled={busy || uploading || processing}
+            dirty={dirty}
+            onBusyChange={setLifecycleBusy}
+          />
+        </section>
+      )}
       <form onSubmit={(e) => void save(e)} className="panel-editor-layout">
-        <div className="panel-form">
+        <fieldset
+          className="panel-form store-editor-fields"
+          disabled={busy || lifecycleBusy}
+        >
           <section className="panel-card">
             <h2>The essentials</h2>
             <label>
@@ -241,7 +272,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                   onChange={(keys) => setLogo(keys[0] || '')}
                   onBusy={setUploading}
                   onPending={setProcessing}
-                  disabled={busy || uploading || processing}
+                  disabled={busy || lifecycleBusy || uploading || processing}
                   maxImageBytes={
                     typeof summary.limits.maxImageSizeBytes === 'number'
                       ? summary.limits.maxImageSizeBytes
@@ -256,7 +287,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                   onChange={(keys) => setBanner(keys[0] || '')}
                   onBusy={setUploading}
                   onPending={setProcessing}
-                  disabled={busy || uploading || processing}
+                  disabled={busy || lifecycleBusy || uploading || processing}
                   maxImageBytes={
                     typeof summary.limits.maxImageSizeBytes === 'number'
                       ? summary.limits.maxImageSizeBytes
@@ -378,7 +409,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               {busy ? 'Saving…' : store ? 'Save changes' : 'Create my store'}
             </button>
           </div>
-        </div>
+        </fieldset>
         <aside className="panel-live-preview">
           <p className="panel-eyebrow">LIVE PREVIEW</p>
           <div

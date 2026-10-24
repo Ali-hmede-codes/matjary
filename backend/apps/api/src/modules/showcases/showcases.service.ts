@@ -15,7 +15,9 @@ import {
   User,
   effectiveLimits,
   assertQuota,
-  moderationWhere,
+  ownerWhere,
+  publicWhere,
+  lockOwnerContent,
   chooseContentSlug,
 } from '@app/database';
 import { CreateShowcaseDto } from './dto/create-showcase.dto';
@@ -47,7 +49,9 @@ export class ShowcasesService {
     offset: number,
   ): Promise<{ items: ShowcaseResponseDto[]; total: number }> {
     try {
-      const where: Record<string, unknown> = { ...moderationWhere('post') };
+      const where: Record<string, unknown> = {
+        ...(ownerId ? ownerWhere('post') : publicWhere('post')),
+      };
       if (ownerId) {
         where.ownerId = ownerId;
       } else {
@@ -86,10 +90,16 @@ export class ShowcasesService {
     userId: string | undefined,
   ): Promise<ShowcaseResponseDto> {
     try {
-      const showcase = await this.showcases.findOneBy({
+      const publicItem = {
         slug,
-        ...moderationWhere('post'),
-      });
+        status: ShowcaseStatus.PUBLISHED,
+        ...publicWhere('post'),
+      };
+      const showcase = await this.showcases.findOneBy(
+        userId
+          ? [publicItem, { slug, ownerId: userId, ...ownerWhere('post') }]
+          : publicItem,
+      );
       if (!showcase) {
         throw new NotFoundException('Post not found');
       }
@@ -158,7 +168,7 @@ export class ShowcasesService {
           if (dto.storeId) {
             store = await manager.findOneBy(Store, {
               id: dto.storeId,
-              ...moderationWhere('store'),
+              ...ownerWhere('store'),
             });
             if (!store) {
               throw new NotFoundException('Store not found');
@@ -186,7 +196,11 @@ export class ShowcasesService {
 
       // Auto-generate SEO for the new showcase
       try {
-        await this.seoService.autoGenerateShowcaseSeo(saved, store);
+        await this.seoService.autoGenerateOwnedSeo(
+          'showcase',
+          saved.id,
+          saved.ownerId,
+        );
       } catch (error) {
         // SEO generation failure shouldn't break showcase creation
         this.logger.warn('Failed to auto-generate showcase SEO:', error);
@@ -219,7 +233,7 @@ export class ShowcasesService {
     try {
       const showcase = await this.showcases.findOneBy({
         slug,
-        ...moderationWhere('post'),
+        ...ownerWhere('post'),
       });
       if (!showcase) {
         throw new NotFoundException('Post not found');
@@ -243,7 +257,12 @@ export class ShowcasesService {
           : null;
       }
 
-      const saved = await this.showcases.save(showcase);
+      const saved = await this.showcases.manager.transaction(
+        async (manager) => {
+          await lockOwnerContent(manager, 'post', showcase.id, userId);
+          return manager.save(showcase);
+        },
+      );
 
       // Get store for SEO if not already loaded
       let store: Store | null = null;
@@ -253,7 +272,11 @@ export class ShowcasesService {
 
       // Auto-regenerate SEO if content changed and notify IndexNow
       try {
-        await this.seoService.autoGenerateShowcaseSeo(saved, store);
+        await this.seoService.autoGenerateOwnedSeo(
+          'showcase',
+          saved.id,
+          saved.ownerId,
+        );
         await this.seoService.notifyIndexNowOnChange('showcase', saved);
       } catch (error) {
         // SEO generation failure shouldn't break showcase update
@@ -283,7 +306,7 @@ export class ShowcasesService {
     try {
       const showcase = await this.showcases.findOneBy({
         slug,
-        ...moderationWhere('post'),
+        ...ownerWhere('post'),
       });
       if (!showcase) {
         throw new NotFoundException('Post not found');
@@ -293,7 +316,10 @@ export class ShowcasesService {
         throw new ForbiddenException('You do not own this post');
       }
 
-      await this.showcases.remove(showcase);
+      await this.showcases.manager.transaction(async (manager) => {
+        await lockOwnerContent(manager, 'post', showcase.id, userId);
+        await manager.remove(showcase);
+      });
     } catch (error) {
       if (
         error instanceof NotFoundException ||

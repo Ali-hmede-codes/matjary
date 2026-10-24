@@ -283,15 +283,41 @@ export class Showcase extends BaseEntity {
   mediaAssets!: Relation<MediaAsset[]>;
 }
 
+export enum StoreStatus {
+  ACTIVE = 'active',
+  OFFLINE = 'offline',
+  ARCHIVED = 'archived',
+  TRASHED = 'trashed',
+}
+
 @Entity({ name: 'stores', engine: 'InnoDB' })
 @Index('uq_stores_slug', ['slug'], { unique: true })
 @Index('idx_stores_owner', ['ownerId'])
+@Index('idx_stores_owner_status', ['ownerId', 'status'])
 @Index('idx_stores_admin_archive', ['adminArchivedAt'])
 @Index('idx_stores_location', ['latitude', 'longitude'])
 @Index('idx_stores_city', ['city'])
 @Index('idx_stores_country', ['country'])
 @Index('idx_stores_verification_badge', ['hasVerificationBadge'])
 export class Store extends BaseEntity {
+  // Only the locked lifecycle operation writes these; stale form saves cannot republish.
+  @Column({
+    type: 'enum',
+    enum: StoreStatus,
+    default: StoreStatus.ACTIVE,
+    update: false,
+  })
+  status: StoreStatus = StoreStatus.ACTIVE;
+
+  @Column({
+    name: 'trashed_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+    update: false,
+  })
+  trashedAt: Date | null = null;
+
   // Ordinary and worker saves must never overwrite a concurrent moderation action.
   @Column({
     name: 'admin_archived_at',

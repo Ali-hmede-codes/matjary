@@ -454,6 +454,28 @@ function Detail({
               <dt>Created</dt>
               <dd>{dateLabel(data.createdAt)}</dd>
             </div>
+            {resource === 'stores' && (
+              <>
+                <div>
+                  <dt>Owner status</dt>
+                  <dd>
+                    {data.status === 'active'
+                      ? 'Online'
+                      : data.status === 'offline'
+                        ? 'Off'
+                        : data.status === 'trashed'
+                          ? 'In Trash'
+                          : 'Archived'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Administrator restriction</dt>
+                  <dd>
+                    {data.adminArchivedAt ? 'Hidden by administrator' : 'None'}
+                  </dd>
+                </div>
+              </>
+            )}
             {resource === 'subscriptions' && (
               <>
                 <div>

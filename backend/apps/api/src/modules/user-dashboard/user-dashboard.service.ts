@@ -18,8 +18,8 @@ import {
   ShowcaseStatus,
   ProductStatus,
   StoreType,
-  moderationWhere,
-  visibilitySql,
+  ownerWhere,
+  ownerVisibilitySql,
   MEDIA_OWNER_ID,
   MEDIA_OWNER_JOINS,
 } from '@app/database';
@@ -75,13 +75,15 @@ export class UserDashboardService {
     try {
       // 1. Get user's stores (single query)
       const userStores = await this.stores.find({
-        where: { ownerId: userId, ...moderationWhere('store') },
+        where: { ownerId: userId, ...ownerWhere('store') },
         order: { createdAt: 'DESC' },
         select: {
           id: true,
           name: true,
           slug: true,
           brandColor: true,
+          status: true,
+          trashedAt: true,
           description: true,
           logoKey: true,
           bannerKey: true,
@@ -107,7 +109,7 @@ export class UserDashboardService {
           'published',
         )
         .where('sc.ownerId = :userId', { userId })
-        .andWhere(visibilitySql('post', 'sc'))
+        .andWhere(ownerVisibilitySql('post', 'sc'))
         .groupBy('sc.storeId')
         .getRawMany();
       const postsCountMap = new Map(
@@ -128,7 +130,7 @@ export class UserDashboardService {
           'active',
         )
         .where('store.ownerId = :userId', { userId })
-        .andWhere(visibilitySql('product', 'p'))
+        .andWhere(ownerVisibilitySql('product', 'p'))
         .groupBy('p.storeId')
         .getRawMany();
       const productsCountMap = new Map(
@@ -140,7 +142,7 @@ export class UserDashboardService {
 
       // Count all owned media targets without double-counting product/store joins.
       const [totalMediaResult] = await this.mediaAssets.manager.query(
-        `SELECT COUNT(*) AS totalMedia FROM media_assets a ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ? AND a.status = 'ready' AND ${visibilitySql('media', 'a')}`,
+        `SELECT COUNT(*) AS totalMedia FROM media_assets a ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ? AND a.status = 'ready' AND ${ownerVisibilitySql('media', 'a')}`,
         [userId],
       );
       const totalMedia = totalMediaResult?.totalMedia
@@ -220,13 +222,15 @@ export class UserDashboardService {
   async getUserStores(userId: string): Promise<UserStoreSummaryDto[]> {
     try {
       const userStores = await this.stores.find({
-        where: { ownerId: userId, ...moderationWhere('store') },
+        where: { ownerId: userId, ...ownerWhere('store') },
         order: { createdAt: 'DESC' },
         select: {
           id: true,
           name: true,
           slug: true,
           brandColor: true,
+          status: true,
+          trashedAt: true,
           description: true,
           logoKey: true,
           bannerKey: true,
@@ -250,7 +254,7 @@ export class UserDashboardService {
         .select('sc.storeId', 'storeId')
         .addSelect('COUNT(*)', 'total')
         .where('sc.storeId IN (:...ids)', { ids: storeIds })
-        .andWhere(visibilitySql('post', 'sc'))
+        .andWhere(ownerVisibilitySql('post', 'sc'))
         .groupBy('sc.storeId')
         .getRawMany();
       const postsCountMap = new Map(
@@ -263,7 +267,7 @@ export class UserDashboardService {
         .select('p.storeId', 'storeId')
         .addSelect('COUNT(*)', 'total')
         .where('p.storeId IN (:...ids)', { ids: storeIds })
-        .andWhere(visibilitySql('product', 'p'))
+        .andWhere(ownerVisibilitySql('product', 'p'))
         .groupBy('p.storeId')
         .getRawMany();
       const productsCountMap = new Map(
@@ -288,7 +292,7 @@ export class UserDashboardService {
   async getUserStore(userId: string, storeId: string): Promise<Store> {
     try {
       const store = await this.stores.findOne({
-        where: { id: storeId, ownerId: userId, ...moderationWhere('store') },
+        where: { id: storeId, ownerId: userId, ...ownerWhere('store') },
         relations: ['owner'],
       });
 
@@ -358,7 +362,7 @@ export class UserDashboardService {
         .createQueryBuilder('sc')
         .leftJoinAndSelect('sc.store', 'store')
         .where('sc.ownerId = :userId', { userId })
-        .andWhere(visibilitySql('post', 'sc'))
+        .andWhere(ownerVisibilitySql('post', 'sc'))
         .orderBy('sc.createdAt', 'DESC')
         .addOrderBy('sc.id', 'DESC')
         .limit(limit + 1); // fetch one extra to detect hasMore
@@ -410,7 +414,7 @@ export class UserDashboardService {
         const total = cursor
           ? undefined
           : await this.showcases.count({
-              where: { ownerId: userId, ...moderationWhere('post') },
+              where: { ownerId: userId, ...ownerWhere('post') },
             });
         return { items: [], nextCursor: null, hasMore: false, total };
       }
@@ -444,7 +448,7 @@ export class UserDashboardService {
         : await this.showcases.count({
             where: {
               ownerId: userId,
-              ...moderationWhere('post'),
+              ...ownerWhere('post'),
               ...(options?.status ? { status: options.status } : {}),
               ...(options?.storeId ? { storeId: options.storeId } : {}),
             },
@@ -502,7 +506,7 @@ export class UserDashboardService {
         .createQueryBuilder('p')
         .leftJoinAndSelect('p.store', 'store')
         .where('store.ownerId = :userId', { userId })
-        .andWhere(visibilitySql('product', 'p'))
+        .andWhere(ownerVisibilitySql('product', 'p'))
         .orderBy('p.createdAt', 'DESC')
         .addOrderBy('p.id', 'DESC')
         .limit(limit + 1);
@@ -567,7 +571,7 @@ export class UserDashboardService {
         : await this.products.count({
             where: {
               store: { ownerId: userId },
-              ...moderationWhere('product'),
+              ...ownerWhere('product'),
               ...(options?.status ? { status: options.status } : {}),
               ...(options?.storeId ? { storeId: options.storeId } : {}),
             },
@@ -593,7 +597,7 @@ export class UserDashboardService {
   ): Promise<MediaAsset[]> {
     try {
       const showcase = await this.showcases.findOne({
-        where: { id: showcaseId, ownerId: userId, ...moderationWhere('post') },
+        where: { id: showcaseId, ownerId: userId, ...ownerWhere('post') },
       });
 
       if (!showcase) {
@@ -601,7 +605,7 @@ export class UserDashboardService {
       }
 
       return this.mediaAssets.find({
-        where: { showcaseId, ...moderationWhere('media') },
+        where: { showcaseId, ...ownerWhere('media') },
         order: { position: 'ASC' },
         take: 100,
         relations: ['variants'],
@@ -634,7 +638,7 @@ export class UserDashboardService {
     const store = await this.stores.findOneBy({
       id: storeId,
       ownerId: userId,
-      ...moderationWhere('store'),
+      ...ownerWhere('store'),
     });
     if (!store) {
       throw new ForbiddenException('You do not own this store');
@@ -652,7 +656,7 @@ export class UserDashboardService {
     const showcase = await this.showcases.findOneBy({
       id: showcaseId,
       ownerId: userId,
-      ...moderationWhere('post'),
+      ...ownerWhere('post'),
     });
     if (!showcase) {
       throw new ForbiddenException('You do not own this showcase');
@@ -671,7 +675,7 @@ export class UserDashboardService {
       where: {
         id: productId,
         store: { ownerId: userId },
-        ...moderationWhere('product'),
+        ...ownerWhere('product'),
       },
       relations: ['store'],
     });

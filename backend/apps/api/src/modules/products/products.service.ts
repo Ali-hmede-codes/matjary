@@ -16,7 +16,9 @@ import {
   User,
   effectiveLimits,
   assertQuota,
-  moderationWhere,
+  ownerWhere,
+  publicWhere,
+  lockOwnerContent,
   chooseContentSlug,
   assertMediaAttachment,
 } from '@app/database';
@@ -55,7 +57,7 @@ export class ProductsService {
     category?: ProductCategory,
   ): Promise<ProductListResponseDto> {
     try {
-      const where: Record<string, unknown> = { ...moderationWhere('product') };
+      const where: Record<string, unknown> = { ...publicWhere('product') };
       if (storeId) where.storeId = storeId;
       if (status) where.status = status;
       if (category) where.category = category;
@@ -86,7 +88,7 @@ export class ProductsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -106,10 +108,19 @@ export class ProductsService {
     userId: string | undefined,
   ): Promise<ProductResponseDto> {
     try {
-      const product = await this.products.findOneBy({
+      const publicItem = {
         slug,
-        ...moderationWhere('product'),
-      });
+        status: ProductStatus.ACTIVE,
+        ...publicWhere('product'),
+      };
+      const product = await this.products.findOneBy(
+        userId
+          ? [
+              publicItem,
+              { slug, store: { ownerId: userId }, ...ownerWhere('product') },
+            ]
+          : publicItem,
+      );
       if (!product) {
         throw new NotFoundException('Product not found');
       }
@@ -118,7 +129,7 @@ export class ProductsService {
       if (product.status !== ProductStatus.ACTIVE) {
         const store = await this.stores.findOneBy({
           id: product.storeId,
-          ...moderationWhere('store'),
+          ...ownerWhere('store'),
         });
         if (!store || store.ownerId !== userId) {
           throw new NotFoundException('Product not found');
@@ -153,7 +164,7 @@ export class ProductsService {
           assertQuota(count, limits.maxProducts, 'Product');
           const store = await manager.findOneBy(Store, {
             id: storeId,
-            ...moderationWhere('store'),
+            ...ownerWhere('store'),
           });
           if (!store) {
             throw new NotFoundException('Store not found');
@@ -201,7 +212,7 @@ export class ProductsService {
 
       // Auto-generate SEO for the new product
       try {
-        await this.seoService.autoGenerateProductSeo(saved, store);
+        await this.seoService.autoGenerateOwnedSeo('product', saved.id, userId);
       } catch (error) {
         // SEO generation failure shouldn't break product creation
         this.logger.warn('Failed to auto-generate product SEO:', error);
@@ -234,7 +245,7 @@ export class ProductsService {
     try {
       const product = await this.products.findOneBy({
         slug,
-        ...moderationWhere('product'),
+        ...ownerWhere('product'),
       });
       if (!product) {
         throw new NotFoundException('Product not found');
@@ -243,7 +254,7 @@ export class ProductsService {
       // Verify user owns the store
       const store = await this.stores.findOneBy({
         id: product.storeId,
-        ...moderationWhere('store'),
+        ...ownerWhere('store'),
       });
       if (!store || store.ownerId !== userId) {
         throw new ForbiddenException('You do not own this product');
@@ -274,11 +285,14 @@ export class ProductsService {
       if (dto.requiresShipping !== undefined)
         product.requiresShipping = dto.requiresShipping;
 
-      const saved = await this.products.save(product);
+      const saved = await this.products.manager.transaction(async (manager) => {
+        await lockOwnerContent(manager, 'product', product.id, userId);
+        return manager.save(product);
+      });
 
       // Auto-regenerate SEO if content changed and notify IndexNow
       try {
-        await this.seoService.autoGenerateProductSeo(saved, store);
+        await this.seoService.autoGenerateOwnedSeo('product', saved.id, userId);
         await this.seoService.notifyIndexNowOnChange('product', saved);
       } catch (error) {
         // SEO generation failure shouldn't break product update
@@ -308,7 +322,7 @@ export class ProductsService {
     try {
       const product = await this.products.findOneBy({
         slug,
-        ...moderationWhere('product'),
+        ...ownerWhere('product'),
       });
       if (!product) {
         throw new NotFoundException('Product not found');
@@ -317,13 +331,16 @@ export class ProductsService {
       // Verify user owns the store
       const store = await this.stores.findOneBy({
         id: product.storeId,
-        ...moderationWhere('store'),
+        ...ownerWhere('store'),
       });
       if (!store || store.ownerId !== userId) {
         throw new ForbiddenException('You do not own this product');
       }
 
-      await this.products.remove(product);
+      await this.products.manager.transaction(async (manager) => {
+        await lockOwnerContent(manager, 'product', product.id, userId);
+        await manager.remove(product);
+      });
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -342,7 +359,7 @@ export class ProductsService {
     try {
       const store = await this.stores.findOneBy({
         id: storeId,
-        ...moderationWhere('store'),
+        ...ownerWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -352,7 +369,7 @@ export class ProductsService {
       }
 
       const products = await this.products.find({
-        where: { storeId, ...moderationWhere('product') },
+        where: { storeId, ...ownerWhere('product') },
         order: { sortOrder: 'ASC', createdAt: 'DESC' },
       });
 

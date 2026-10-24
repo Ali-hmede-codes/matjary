@@ -36,7 +36,8 @@ export function PanelShell({
       ]
     : [
         ['', 'Home'],
-        ['/store', 'My store'],
+        ['/stores', 'My stores'],
+        ['/store', 'Store editor'],
         ['/products', 'Products / menu'],
         ['/posts', 'Posts'],
         ['/plan', 'My plan'],

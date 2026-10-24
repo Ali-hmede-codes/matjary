@@ -17,7 +17,7 @@ import {
   CartItem,
   CartStatus,
   effectiveLimits,
-  moderationWhere,
+  publicWhere,
 } from '@app/database';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -151,7 +151,7 @@ export class CartsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -192,7 +192,7 @@ export class CartsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -202,7 +202,7 @@ export class CartsService {
 
       const product = await this.products.findOneBy({
         id: dto.productId,
-        ...moderationWhere('product'),
+        ...publicWhere('product'),
       });
       if (!product) {
         throw new NotFoundException('Product not found');
@@ -283,7 +283,7 @@ export class CartsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -303,7 +303,7 @@ export class CartsService {
 
       const product = await this.products.findOneBy({
         id: cartItem.productId,
-        ...moderationWhere('product'),
+        ...publicWhere('product'),
         storeId: store.id,
         status: ProductStatus.ACTIVE,
       });
@@ -348,7 +348,7 @@ export class CartsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -388,7 +388,7 @@ export class CartsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -418,7 +418,7 @@ export class CartsService {
     try {
       const store = await this.stores.findOneBy({
         slug: storeSlug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -440,7 +440,7 @@ export class CartsService {
       for (const item of items) {
         const product = await this.products.findOneBy({
           id: item.productId,
-          ...moderationWhere('product'),
+          ...publicWhere('product'),
         });
         if (!product || product.storeId !== store.id) {
           throw new BadRequestException(

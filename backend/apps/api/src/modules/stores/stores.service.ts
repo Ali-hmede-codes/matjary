@@ -9,7 +9,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError } from 'typeorm';
+import { Repository, QueryFailedError, Not } from 'typeorm';
 import {
   Store,
   StoreSubscriptionTier,
@@ -22,9 +22,14 @@ import {
   effectiveSubscription,
   assertQuota,
   moderationWhere,
+  ownerWhere,
+  publicWhere,
+  StoreStatus,
+  lockOwnerContent,
   chooseContentSlug,
   assertMediaAttachment,
   visibilitySql,
+  publicVisibilitySql,
   ShowcaseStatus,
   actorContext,
   appendAdminAudit,
@@ -69,7 +74,7 @@ export class StoresService {
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
     try {
       const where: Record<string, unknown> = {
-        ...moderationWhere('store'),
+        ...(ownerId ? ownerWhere('store') : publicWhere('store')),
         ...(ownerId ? { ownerId } : {}),
       };
 
@@ -110,7 +115,7 @@ export class StoresService {
     try {
       const store = await this.stores.findOneBy({
         slug,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -138,7 +143,7 @@ export class StoresService {
     try {
       const store = await this.stores.findOneBy({
         id,
-        ...moderationWhere('store'),
+        ...publicWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -161,7 +166,7 @@ export class StoresService {
 
   async findStoreEntityBySlug(slug: string): Promise<Store | null> {
     try {
-      return await this.stores.findOneBy({ slug, ...moderationWhere('store') });
+      return await this.stores.findOneBy({ slug, ...ownerWhere('store') });
     } catch (error) {
       this.sanitize(error);
     }
@@ -236,7 +241,11 @@ export class StoresService {
 
       // Auto-generate SEO for the new store
       try {
-        await this.seoService.autoGenerateStoreSeo(saved);
+        await this.seoService.autoGenerateOwnedSeo(
+          'store',
+          saved.id,
+          saved.ownerId,
+        );
       } catch (error) {
         // SEO generation failure shouldn't break store creation
         this.logger.warn('Failed to auto-generate store SEO:', error);
@@ -269,7 +278,7 @@ export class StoresService {
     try {
       const store = await this.stores.findOneBy({
         slug,
-        ...moderationWhere('store'),
+        ...ownerWhere('store'),
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -360,11 +369,25 @@ export class StoresService {
         }
       }
 
-      const saved = await this.stores.save(store);
+      const saved = await this.stores.manager.transaction(async (manager) => {
+        const current = await lockOwnerContent(
+          manager,
+          'store',
+          store.id,
+          userId,
+        );
+        store.status = current.status;
+        store.trashedAt = current.trashedAt;
+        return manager.save(store);
+      });
 
       // Auto-regenerate SEO if content changed
       try {
-        await this.seoService.autoGenerateStoreSeo(saved);
+        await this.seoService.autoGenerateOwnedSeo(
+          'store',
+          saved.id,
+          saved.ownerId,
+        );
         await this.seoService.notifyIndexNowOnChange('store', saved);
       } catch (error) {
         // SEO generation failure shouldn't break store update
@@ -444,50 +467,89 @@ export class StoresService {
     return result;
   }
 
+  async setStatus(
+    slug: string,
+    status: StoreStatus,
+    userId: string,
+  ): Promise<StoreResponseDto> {
+    if (
+      ![StoreStatus.ACTIVE, StoreStatus.OFFLINE, StoreStatus.ARCHIVED].includes(
+        status,
+      )
+    )
+      throw new BadRequestException('Invalid store status');
+    return this.transition(slug, status, userId);
+  }
+
   async remove(slug: string, userId: string): Promise<void> {
+    await this.transition(slug, StoreStatus.TRASHED, userId);
+  }
+
+  async restore(slug: string, userId: string): Promise<StoreResponseDto> {
+    return this.transition(slug, 'restore', userId);
+  }
+
+  private async transition(
+    slug: string,
+    action: StoreStatus | 'restore',
+    userId: string,
+  ): Promise<StoreResponseDto> {
     try {
-      const store = await this.stores.findOneBy({
-        slug,
-        ...moderationWhere('store'),
-      });
-      if (!store) {
-        throw new NotFoundException('Store not found');
-      }
-
-      if (store.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this store');
-      }
-
-      // Check if store has posts or products
-      const [postsCount, productsCount] = await Promise.all([
-        this.getPostsCount(store.id),
-        this.getProductsCount(store.id),
-      ]);
-
-      if (postsCount > 0 || productsCount > 0) {
-        throw new ConflictException(
-          'Cannot delete store with existing posts or products. Delete them first.',
+      return await this.stores.manager.transaction(async (manager) => {
+        const user = await manager.findOne(User, {
+          where: { id: userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!user || user.suspendedAt)
+          throw new ForbiddenException('Account unavailable');
+        const store = await manager.findOne(Store, {
+          where: { slug, ownerId: userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!store) throw new NotFoundException('Store not found');
+        let next: StoreStatus;
+        if (action === 'restore') {
+          if (
+            ![StoreStatus.ARCHIVED, StoreStatus.TRASHED].includes(store.status)
+          )
+            return toStoreResponseDto(store, true);
+          next = StoreStatus.OFFLINE;
+        } else {
+          if (
+            store.status === StoreStatus.TRASHED &&
+            action !== StoreStatus.TRASHED
+          )
+            throw new ConflictException('Restore the store from Trash first');
+          next = action;
+        }
+        if (store.status === next) return toStoreResponseDto(store, true);
+        if (next === StoreStatus.ACTIVE && store.adminArchivedAt)
+          throw new ForbiddenException(
+            'This store is restricted by an administrator',
+          );
+        const trashedAt = next === StoreStatus.TRASHED ? new Date() : null;
+        // No child rows, bytes, subscription usage or moderation flags are changed.
+        await manager.query(
+          'UPDATE stores SET status = ?, trashed_at = ?, updated_at = UTC_TIMESTAMP(6) WHERE id = ? AND owner_id = ?',
+          [next, trashedAt, store.id, userId],
         );
-      }
-
-      await this.stores.remove(store);
+        store.status = next;
+        store.trashedAt = trashedAt;
+        return toStoreResponseDto(store, true);
+      });
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof ConflictException
-      ) {
-        throw error;
-      }
       this.sanitize(error);
     }
   }
 
-  async getUserStores(userId: string): Promise<StoreResponseDto[]> {
+  async getUserStores(
+    userId: string,
+    includeTrashed = false,
+  ): Promise<StoreResponseDto[]> {
     try {
       const stores = await this.stores.findBy({
         ownerId: userId,
-        ...moderationWhere('store'),
+        ...(includeTrashed ? {} : { status: Not(StoreStatus.TRASHED) }),
       });
       const storeIds = stores.map((s) => s.id);
       const [postsCounts, productsCounts] = await Promise.all([
@@ -599,7 +661,7 @@ export class StoresService {
       const stores = await this.stores
         .createQueryBuilder('store')
         .where('store.latitude IS NOT NULL')
-        .andWhere(visibilitySql('store', 'store'))
+        .andWhere(publicVisibilitySql('store', 'store'))
         .andWhere('store.longitude IS NOT NULL')
         .andWhere('store.latitude BETWEEN :minLat AND :maxLat', {
           minLat: bounds.minLat,
@@ -661,7 +723,7 @@ export class StoresService {
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
     try {
       const [items, total] = await this.stores.findAndCount({
-        where: { city, ...moderationWhere('store') },
+        where: { city, ...publicWhere('store') },
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
@@ -699,7 +761,7 @@ export class StoresService {
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
     try {
       const [items, total] = await this.stores.findAndCount({
-        where: { country, ...moderationWhere('store') },
+        where: { country, ...publicWhere('store') },
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
