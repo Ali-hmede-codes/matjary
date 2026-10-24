@@ -20,23 +20,21 @@ const navigation = [
   { id: 'saved', label: 'Saved', icon: Bookmark },
 ] as const;
 
-export function SiteHeader({
-  settings,
-  view,
-  search,
-  searchOpen,
-  onNavigate,
-  onSearchChange,
-  onToggleSearch,
-}: {
-  settings: WebsiteSettings;
-  view: View;
-  search: string;
-  searchOpen: boolean;
-  onNavigate: (view: View) => void;
-  onSearchChange: (search: string) => void;
-  onToggleSearch: () => void;
-}) {
+type SiteHeaderProps = { settings: WebsiteSettings } & (
+  | { view: 'pricing' }
+  | {
+      view: View;
+      search: string;
+      searchOpen: boolean;
+      onNavigate: (view: View) => void;
+      onSearchChange: (search: string) => void;
+      onToggleSearch: () => void;
+    }
+);
+
+export function SiteHeader(props: SiteHeaderProps) {
+  const { settings, view } = props;
+  const feed = props.view === 'pricing' ? null : props;
   return (
     <header className="site-header">
       <div className="topbar">
@@ -49,50 +47,65 @@ export function SiteHeader({
           <span className="brand-name">{settings.siteName}</span>
         </a>
         <nav className="main-nav" aria-label="Main navigation">
-          {navigation.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => onNavigate(id)}
-              className={view === id ? 'active' : ''}
-              aria-current={view === id ? 'page' : undefined}
-            >
-              <Icon size={19} />
-              <span>{label}</span>
-            </button>
-          ))}
-          <a href="/pricing">
-            <Tag size={19} />
+          {navigation.map(({ id, label, icon: Icon }) =>
+            feed ? (
+              <button
+                key={id}
+                onClick={() => feed.onNavigate(id)}
+                className={view === id ? 'active' : ''}
+                aria-current={view === id ? 'page' : undefined}
+              >
+                <Icon size={19} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ) : (
+              <a key={id} href={id === 'discover' ? '/' : `/?view=${id}`}>
+                <Icon size={19} aria-hidden="true" />
+                <span>{label}</span>
+              </a>
+            ),
+          )}
+          <a
+            href="/pricing"
+            className={view === 'pricing' ? 'active' : ''}
+            aria-current={view === 'pricing' ? 'page' : undefined}
+          >
+            <Tag size={19} aria-hidden="true" />
             <span>Pricing</span>
           </a>
         </nav>
-        <label className="search-box" id="feed-search">
-          <Search size={18} />
-          <input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search posts and stores"
-            aria-label="Search loaded posts and stores"
-          />
-          {search && (
+        {feed && (
+          <label className="search-box" id="feed-search">
+            <Search size={18} />
+            <input
+              value={feed.search}
+              onChange={(event) => feed.onSearchChange(event.target.value)}
+              placeholder="Search posts and stores"
+              aria-label="Search loaded posts and stores"
+            />
+            {feed.search && (
+              <button
+                className="icon-button"
+                aria-label="Clear search"
+                onClick={() => feed.onSearchChange('')}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </label>
+        )}
+        <div className="header-actions">
+          {feed && (
             <button
-              className="icon-button"
-              aria-label="Clear search"
-              onClick={() => onSearchChange('')}
+              className="icon-button search-toggle"
+              aria-label="Search posts and stores"
+              aria-controls="feed-search"
+              aria-expanded={feed.searchOpen}
+              onClick={() => feed.onToggleSearch()}
             >
-              <X size={16} />
+              {feed.searchOpen ? <X size={22} /> : <Search size={22} />}
             </button>
           )}
-        </label>
-        <div className="header-actions">
-          <button
-            className="icon-button search-toggle"
-            aria-label="Search posts and stores"
-            aria-controls="feed-search"
-            aria-expanded={searchOpen}
-            onClick={() => onToggleSearch()}
-          >
-            {searchOpen ? <X size={22} /> : <Search size={22} />}
-          </button>
           <a
             className="create-button"
             href={loginUrl}

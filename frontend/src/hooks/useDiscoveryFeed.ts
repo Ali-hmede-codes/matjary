@@ -20,8 +20,17 @@ const sampleCategories = [
 ];
 
 export function useDiscoveryFeed() {
-  const [view, setView] = useState<View>('discover');
-  const [algorithm, setAlgorithm] = useState<Algorithm>('mixed');
+  const [view, setView] = useState<View>(() => {
+    const requested = new URLSearchParams(window.location.search).get('view');
+    return requested === 'trending' ||
+      requested === 'videos' ||
+      requested === 'saved'
+      ? requested
+      : 'discover';
+  });
+  const [algorithm, setAlgorithm] = useState<Algorithm>(
+    view === 'trending' ? 'trending' : 'mixed',
+  );
   const [category, setCategory] = useState('');
   const [store, setStore] = useState<Store | null>(null);
   const [search, setSearch] = useState('');

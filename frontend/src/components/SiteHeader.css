@@ -73,11 +73,11 @@
   background: var(--wash);
   color: var(--ink);
 }
-.main-nav button.active {
+.main-nav :is(button, a).active {
   background: var(--primary);
   color: var(--on-primary);
 }
-.main-nav button.active svg {
+.main-nav :is(button, a).active svg {
   stroke-width: 2.3;
 }
 .search-box {
