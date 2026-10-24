@@ -447,7 +447,11 @@ test('public pricing uses active sorted plans, effective defaults and safe field
     priceCents: '999',
     currency: 'USD',
     billingCycle: 'monthly',
-    limits: { maxProducts: null, enableCart: false },
+    limits: {
+      maxProducts: null,
+      enableCart: false,
+      maxStorageBytes: 1073741824,
+    },
     isActive: true,
     sortOrder: 1,
     legacyTier: 'basic',
@@ -799,13 +803,15 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
       expiresAt: null,
       plan: {
         slug: 'basic',
-        limits: { maxProducts: null, maxImageCount: 0 },
+        limits: { maxProducts: null, maxImageCount: 0, maxStorageBytes: 999 },
       },
     },
   ];
   const limits = await effectiveLimits(manager, 'owner', now);
   assert.equal(limits.maxProducts, null);
   assert.equal(limits.maxImageCount, 0);
+  // Storage never becomes a plan cap, even when an older row carries one.
+  assert.equal(limits.maxStorageBytes, null);
   assert.equal((await subscriptionState(manager, 'owner', now)).state, 'paid');
   assert.equal(boundedLimit(90, null), 90);
   assert.equal(boundedLimit(90, 200), 90);

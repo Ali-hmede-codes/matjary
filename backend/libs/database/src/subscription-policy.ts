@@ -18,7 +18,9 @@ export const FREE_LIMITS: SubscriptionLimits = {
   maxPostsPerMonth: 5,
   maxTotalPosts: 20,
   maxProducts: 10,
-  maxStorageBytes: 1073741824,
+  // Storage is a platform resource, not a plan entitlement. Every plan is
+  // unlimited; only global per-file/duration ceilings still apply.
+  maxStorageBytes: null,
   enableCart: true,
   enableWhatsAppCheckout: false,
   enableAnalytics: false,
@@ -122,7 +124,12 @@ export async function effectiveLimits(
   const subscription = await effectiveSubscription(manager, userId, now);
   if (!subscription || !subscription.plan) return EXPIRED_LIMITS;
   // Omitted settings use safe defaults; explicit null remains unlimited.
-  return { ...FREE_LIMITS, ...subscription.plan.limits };
+  return {
+    ...FREE_LIMITS,
+    ...subscription.plan.limits,
+    // Storage is always unlimited so older plan rows cannot reintroduce a cap.
+    maxStorageBytes: null,
+  };
 }
 
 export async function assertSubscriptionActive(

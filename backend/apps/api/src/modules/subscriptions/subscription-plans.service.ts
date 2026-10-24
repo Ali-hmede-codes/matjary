@@ -115,7 +115,11 @@ export class SubscriptionPlansService {
         priceCents: (dto.priceCents ?? 0).toString(),
         currency: dto.currency ?? 'USD',
         billingCycle: dto.billingCycle ?? BillingCycle.MONTHLY,
-        limits: dto.limits as SubscriptionLimits,
+        limits: {
+          ...(dto.limits as SubscriptionLimits),
+          // Storage is a platform resource, never a plan entitlement.
+          maxStorageBytes: null,
+        },
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
         legacyTier: (dto.legacyTier as any) ?? null,
@@ -169,8 +173,8 @@ export class SubscriptionPlansService {
       billingCycle: plan.billingCycle,
       // The free plan is a trial; paid plans have no trial label.
       trialDays: plan.slug === 'free' ? trialDays : null,
-      // Match effective entitlements without exposing administrative metadata.
-      limits: { ...FREE_LIMITS, ...plan.limits },
+      // Storage is unlimited for every plan; enforce it even for older rows.
+      limits: { ...FREE_LIMITS, ...plan.limits, maxStorageBytes: null },
     }));
   }
 
@@ -262,6 +266,8 @@ export class SubscriptionPlansService {
             plan.billingCycle = dto.billingCycle;
           if (dto.limits !== undefined)
             plan.limits = dto.limits as SubscriptionLimits;
+          // Keep storage unlimited even when an older client sends a value.
+          plan.limits = { ...plan.limits, maxStorageBytes: null };
           if (dto.isActive !== undefined) plan.isActive = dto.isActive;
           if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
           if (dto.legacyTier !== undefined)

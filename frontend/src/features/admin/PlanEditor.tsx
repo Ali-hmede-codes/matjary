@@ -24,7 +24,8 @@ const PLATFORM_DEFAULTS: PlanLimits = {
   maxPostsPerMonth: 5,
   maxTotalPosts: 20,
   maxProducts: 10,
-  maxStorageBytes: 1024 * 1024 * 1024,
+  // Storage is unlimited for every plan; only file/duration ceilings apply.
+  maxStorageBytes: null,
   enableCart: true,
   enableWhatsAppCheckout: false,
   enableAnalytics: false,
@@ -43,15 +44,10 @@ export const BILLING_LABELS: Record<string, string> = {
 const BILLING_CYCLES = ['monthly', 'yearly', 'lifetime'] as const;
 const QUALITIES = ['480p', '720p', '1080p', '4k', '8k'] as const;
 const MEGABYTE = 1024 * 1024;
-const GIGABYTE = 1024 * MEGABYTE;
 
 const megabytes = (bytes?: number | null) =>
   typeof bytes === 'number' && bytes > 0
     ? String(Number((bytes / MEGABYTE).toFixed(2)))
-    : '';
-const gigabytes = (bytes?: number | null) =>
-  typeof bytes === 'number' && bytes > 0
-    ? String(Number((bytes / GIGABYTE).toFixed(2)))
     : '';
 const counted = (value?: number | null) =>
   typeof value === 'number' ? String(value) : '';
@@ -62,7 +58,6 @@ function limitFields(plan?: PanelRecord) {
     maxProducts: counted(limits.maxProducts),
     maxPostsPerMonth: counted(limits.maxPostsPerMonth),
     maxTotalPosts: counted(limits.maxTotalPosts),
-    maxStorage: gigabytes(limits.maxStorageBytes),
     maxImageCount: counted(limits.maxImageCount),
     maxImageSize: megabytes(limits.maxImageSizeBytes),
     maxImageWidth: counted(limits.maxImageWidth),
@@ -154,13 +149,10 @@ export function planSummary(limits?: PlanLimits) {
     value == null
       ? `Unlimited ${noun}`
       : `${value.toLocaleString('en-US')} ${noun}`;
-  const storage = gigabytes(merged.maxStorageBytes);
   return [
     quotaText(merged.maxProducts, 'products'),
     quotaText(merged.maxPostsPerMonth, 'posts / month'),
-    storage
-      ? `${Number(storage).toLocaleString('en-US')} GB storage`
-      : 'Unlimited storage',
+    'Unlimited storage',
   ].join(' · ');
 }
 
@@ -217,7 +209,8 @@ export function PlanEditor({
       maxProducts: quota(form.maxProducts, 'Products', errors),
       maxPostsPerMonth: quota(form.maxPostsPerMonth, 'Posts per month', errors),
       maxTotalPosts: quota(form.maxTotalPosts, 'Total posts', errors),
-      maxStorageBytes: quotaBytes(form.maxStorage, GIGABYTE, 'Storage', errors),
+      // Storage is unlimited for every plan and is normalized server-side.
+      maxStorageBytes: null,
       maxImageCount: quota(form.maxImageCount, 'Images per post', errors),
       maxImageSizeBytes: quotaBytes(
         form.maxImageSize,
@@ -394,7 +387,8 @@ export function PlanEditor({
           <legend>Quotas</legend>
           <p className="panel-muted">
             Leave a field empty for unlimited. Numbers apply to stores on this
-            plan.
+            plan. Media storage is unlimited for every plan; only the global
+            file-size and duration ceilings still apply.
           </p>
           <div className="panel-field-grid">
             <label>
@@ -419,14 +413,6 @@ export function PlanEditor({
                 inputMode="numeric"
                 value={form.maxTotalPosts}
                 onChange={(e) => update({ maxTotalPosts: e.target.value })}
-              />
-            </label>
-            <label>
-              Storage (GB)
-              <input
-                inputMode="decimal"
-                value={form.maxStorage}
-                onChange={(e) => update({ maxStorage: e.target.value })}
               />
             </label>
             <label>
