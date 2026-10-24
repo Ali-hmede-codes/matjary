@@ -36,6 +36,8 @@ interface Content {
   category?: string;
   stockQuantity?: number | null;
   imageKeys?: string[] | null;
+  // Posts carry their first ready media variant here; products use imageKeys.
+  thumbnailKey?: string | null;
 }
 interface PostMedia {
   id: string;
@@ -123,10 +125,12 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
               {items.map((item) => (
                 <article className="panel-content-card" key={item.id}>
                   <div className="panel-content-image">
-                    {item.imageKeys?.[0] ? (
+                    {item.imageKeys?.[0] || item.thumbnailKey ? (
                       <img
-                        src={storeMediaUrl(item.imageKeys[0])}
-                        alt={item.name || ''}
+                        src={storeMediaUrl(
+                          item.imageKeys?.[0] || item.thumbnailKey,
+                        )}
+                        alt={item.name || item.title || ''}
                       />
                     ) : product ? (
                       <Package size={36} />

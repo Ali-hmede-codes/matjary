@@ -18,6 +18,7 @@ import {
   ShowcaseStatus,
   ProductStatus,
   StoreType,
+  MediaStatus,
   ownerWhere,
   ownerVisibilitySql,
   MEDIA_OWNER_ID,
@@ -43,6 +44,16 @@ interface PaginatedResult<T> {
 export class UserDashboardService {
   private static readonly DEFAULT_LIMIT = 20;
   private static readonly MAX_LIMIT = 100;
+  // Smallest ready variant first; video posters stand in for the video itself.
+  private static readonly THUMBNAIL_LABELS = [
+    'webp-480',
+    'poster-jpeg',
+    'jpeg-480',
+    'avif-480',
+    'webp-1080',
+    'jpeg-1080',
+    'avif-1080',
+  ] as const;
 
   constructor(
     @InjectRepository(User)
@@ -440,6 +451,12 @@ export class UserDashboardService {
         return { items: [], nextCursor: null, hasMore: false, total };
       }
 
+      // One batched lookup keeps the panel list readable without a media
+      // request per card; failures only cost the thumbnail, not the list.
+      const thumbnails = await this.postThumbnails(
+        posts.map((post) => post.id),
+      );
+
       // Build DTOs using denormalized counters - zero additional queries needed
       const postDtos: UserPostSummaryDto[] = posts.map((post) => {
         // Use denormalized counters from the entity
@@ -454,6 +471,7 @@ export class UserDashboardService {
           likesCount,
           viewsCount,
           false,
+          thumbnails.get(post.id) ?? null,
         );
       });
 
@@ -484,6 +502,70 @@ export class UserDashboardService {
     } catch (error) {
       this.sanitize(error);
     }
+  }
+
+  /**
+   * First ready media asset per post, as one storage key per showcase.
+   * Decorates the panel list without a media request per card.
+   */
+  private async postThumbnails(
+    showcaseIds: string[],
+  ): Promise<Map<string, string>> {
+    const thumbnails = new Map<string, string>();
+    if (showcaseIds.length === 0) return thumbnails;
+    const ranks = new Map<string, number>(
+      UserDashboardService.THUMBNAIL_LABELS.map(
+        (label, index) => [label, index] as const,
+      ),
+    );
+    try {
+      const rows = await this.mediaAssets
+        .createQueryBuilder('asset')
+        .innerJoin('asset.variants', 'variant')
+        .select('asset.showcaseId', 'showcaseId')
+        .addSelect('asset.id', 'assetId')
+        .addSelect('variant.label', 'label')
+        .addSelect('variant.storageKey', 'storageKey')
+        .where('asset.showcaseId IN (:...showcaseIds)', { showcaseIds })
+        .andWhere('asset.status = :ready', { ready: MediaStatus.READY })
+        .andWhere('variant.label IN (:...labels)', {
+          labels: [...ranks.keys()],
+        })
+        .andWhere(ownerVisibilitySql('media', 'asset'))
+        .orderBy('asset.position', 'ASC')
+        // Uploads share the default position today, so the first photo a
+        // member added becomes the cover instead of a random UUID order.
+        .addOrderBy('asset.createdAt', 'ASC')
+        .addOrderBy('asset.id', 'ASC')
+        .getRawMany<{
+          showcaseId: string;
+          assetId: string;
+          label: string;
+          storageKey: string;
+        }>();
+
+      // The earliest-positioned asset is the cover; within it take the
+      // highest-ranked label that exists.
+      const covers = new Map<string, string>();
+      for (const row of rows) {
+        if (!covers.has(row.showcaseId))
+          covers.set(row.showcaseId, row.assetId);
+      }
+      const best = new Map<string, { rank: number; key: string }>();
+      for (const row of rows) {
+        if (covers.get(row.showcaseId) !== row.assetId) continue;
+        const rank = ranks.get(row.label);
+        if (rank === undefined) continue;
+        const current = best.get(row.showcaseId);
+        if (!current || rank < current.rank)
+          best.set(row.showcaseId, { rank, key: row.storageKey });
+      }
+      for (const [showcaseId, choice] of best)
+        thumbnails.set(showcaseId, choice.key);
+    } catch {
+      // Thumbnails are decoration: a lookup failure must not blank the panel.
+    }
+    return thumbnails;
   }
 
   /**

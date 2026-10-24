@@ -484,12 +484,48 @@ test('owner content lists return the panel { items, total } envelope', async () 
       count: async () => 1,
     };
   }
+  // Cover rows arrive ordered by asset position; the smallest label wins
+  // within the earliest-positioned asset.
+  const mediaAssets = {
+    createQueryBuilder: () => {
+      const chain = {
+        innerJoin: () => chain,
+        select: () => chain,
+        addSelect: () => chain,
+        where: () => chain,
+        andWhere: () => chain,
+        orderBy: () => chain,
+        addOrderBy: () => chain,
+        getRawMany: async () => [
+          {
+            showcaseId: post.id,
+            assetId: 'asset-1',
+            label: 'webp-1080',
+            storageKey: 'variants/cover-large.webp',
+          },
+          {
+            showcaseId: post.id,
+            assetId: 'asset-1',
+            label: 'webp-480',
+            storageKey: 'variants/cover.webp',
+          },
+          {
+            showcaseId: post.id,
+            assetId: 'asset-2',
+            label: 'webp-480',
+            storageKey: 'variants/second-asset.webp',
+          },
+        ],
+      };
+      return chain;
+    },
+  };
   const service = new UserDashboardService(
     {} as never,
     {} as never,
     repository(post) as never,
     repository(product) as never,
-    {} as never,
+    mediaAssets as never,
     {} as never,
     {} as never,
     {} as never,
@@ -520,6 +556,9 @@ test('owner content lists return the panel { items, total } envelope', async () 
   assert.equal(posts.items.length, 1);
   assert.equal(posts.items[0]?.slug, 'fresh-story');
   assert.equal(posts.items[0]?.storeSlug, store.slug);
+  // The first positioned asset's smallest variant is the cover, even when a
+  // later asset has an equally small one.
+  assert.equal(posts.items[0]?.thumbnailKey, 'variants/cover.webp');
   assert.equal(posts.total, 1);
   assert.equal(posts.hasMore, false);
 });

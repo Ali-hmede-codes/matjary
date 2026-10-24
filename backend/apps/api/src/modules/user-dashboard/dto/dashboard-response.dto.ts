@@ -69,6 +69,9 @@ export class UserPostSummaryDto {
   likesCount!: number;
   viewsCount!: number;
   viewerLiked!: boolean;
+  // First ready media thumbnail so the panel list can render posts without
+  // fetching each showcase's media separately.
+  thumbnailKey!: string | null;
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -80,6 +83,7 @@ export class UserPostSummaryDto {
     likesCount: number,
     viewsCount: number,
     viewerLiked: boolean,
+    thumbnailKey: string | null = null,
   ): UserPostSummaryDto {
     const dto = new UserPostSummaryDto();
     dto.id = post.id;
@@ -95,6 +99,7 @@ export class UserPostSummaryDto {
     dto.likesCount = likesCount;
     dto.viewsCount = viewsCount;
     dto.viewerLiked = viewerLiked;
+    dto.thumbnailKey = thumbnailKey;
     dto.createdAt = post.createdAt;
     dto.updatedAt = post.updatedAt;
     return dto;
