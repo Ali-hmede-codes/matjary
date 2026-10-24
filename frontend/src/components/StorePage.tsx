@@ -1,21 +1,33 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   ArrowUpRight,
+  ChevronDown,
   Expand,
+  Globe,
   Images,
   Info,
   Layers,
   LoaderCircle,
   MapPin,
+  MessageCircle,
+  Music2,
   Package,
   Phone,
   Play,
   Search,
+  Send,
   Share2,
   ShoppingBag,
   Utensils,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   ApiError,
@@ -31,8 +43,10 @@ import { demoPosts, demoProducts, demoStores } from '../lib/demo';
 import {
   formatProductPrice,
   productCategoryLabel,
+  storeMap,
   storeMediaUrl,
   storePresentation,
+  storeSocialLinks,
 } from '../lib/storefront';
 import { safeUrl } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
@@ -197,16 +211,65 @@ function ProductCard({ product }: { product: Product }) {
   );
 }
 
-const socialLabels: Record<string, string> = {
-  instagram: 'Instagram',
-  facebook: 'Facebook',
-  twitter: 'X',
-  tiktok: 'TikTok',
-  youtube: 'YouTube',
-  whatsapp: 'WhatsApp',
-  telegram: 'Telegram',
-  website: 'Website',
+const socialIcons: Record<string, LucideIcon> = {
+  tiktok: Music2,
+  whatsapp: MessageCircle,
+  telegram: Send,
+  website: Globe,
 };
+
+// Brand marks stay local because the shared icon set has no brand icons.
+const socialMarks: Record<string, ReactNode> = {
+  instagram: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  facebook: (
+    <path
+      d="M14 22v-9h3l.5-4H14V7c0-1.2.4-2 2-2h2V1.4c-.7-.1-1.7-.2-3-.2C11.6 1.2 9 3.3 9 7v2H6v4h3v9Z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
+  twitter: (
+    <path
+      d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3L12 14.6 5.5 22H2.3l7.3-8.4L1.6 2H8l4.5 6.8L18.9 2ZM17.8 20h1.7L7.1 4H5.3L17.8 20Z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
+  youtube: (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="4" />
+      <path d="m10 9 6 3-6 3Z" fill="currentColor" stroke="none" />
+    </>
+  ),
+};
+
+function ShopSocialIcon({ network }: { network: string }) {
+  const mark = socialMarks[network];
+  if (mark)
+    return (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {mark}
+      </svg>
+    );
+  const Icon = socialIcons[network] ?? Globe;
+  return <Icon size={20} aria-hidden="true" />;
+}
 
 export function StorePage({ slug }: { slug: string | null }) {
   const demo = new URLSearchParams(window.location.search).get('demo') === '1';
@@ -220,6 +283,7 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [notice, setNotice] = useState('');
   const [sharing, setSharing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
 
   useEffect(() => {
     if (!notice) return;
@@ -330,7 +394,24 @@ export function StorePage({ slug }: { slug: string | null }) {
   const website = safeUrl(
     location?.website || store?.socialMediaLinks?.website,
   );
-  const map = safeUrl(location?.mapUrl);
+  const mapPreview = storeMap(location);
+  const map = mapPreview?.externalUrl || safeUrl(location?.mapUrl);
+  const socials = storeSocialLinks(store);
+  const address = [
+    location?.locationName,
+    location?.address,
+    location?.city,
+    location?.country,
+  ]
+    .filter((value) => value?.trim())
+    .join(', ');
+  const locationLabel =
+    [location?.city, location?.country]
+      .filter((value) => value?.trim())
+      .join(', ') ||
+    location?.locationName ||
+    location?.address ||
+    'Shop location';
   const hours = Object.entries(location?.openingHours ?? {}).filter(
     (entry): entry is [string, string] => typeof entry[1] === 'string',
   );
@@ -459,7 +540,6 @@ export function StorePage({ slug }: { slug: string | null }) {
                   alt=""
                   eager
                   fallbackName={store.name}
-                  fallbackLabel={presentation.label}
                 />
               </div>
               <div className="shop-profile">
@@ -471,17 +551,68 @@ export function StorePage({ slug }: { slug: string | null }) {
                     <span>{store.name}</span>
                     <StoreVerifiedBadge store={store} size={26} />
                   </h1>
-                  <div className="shop-meta">
-                    <span>{presentation.label}</span>
-                    {(location?.city || location?.country) && (
-                      <span className="shop-location">
-                        <MapPin size={14} aria-hidden="true" />
-                        {[location.city, location.country]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </span>
-                    )}
-                  </div>
+                  {store.description?.trim() && (
+                    <p className="shop-description">{store.description}</p>
+                  )}
+                  {(socials.length > 0 || address || map) && (
+                    <div className="shop-meta">
+                      {socials.length > 0 && (
+                        <nav
+                          className="shop-socials"
+                          aria-label="Shop social links"
+                        >
+                          {socials.map(({ network, label, href }) => (
+                            <a
+                              key={network}
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`${store.name} on ${label} (opens in a new tab)`}
+                              title={label}
+                            >
+                              <ShopSocialIcon network={network} />
+                            </a>
+                          ))}
+                        </nav>
+                      )}
+                      {mapPreview ? (
+                        <button
+                          type="button"
+                          className="shop-location shop-location-toggle"
+                          aria-expanded={mapOpen}
+                          aria-controls="shop-location-map"
+                          onClick={() => setMapOpen(!mapOpen)}
+                        >
+                          <MapPin size={16} aria-hidden="true" />
+                          <span>{locationLabel}</span>
+                          <span className="shop-map-label">
+                            {mapOpen ? 'Hide map' : 'View map'}
+                          </span>
+                          <ChevronDown
+                            className="shop-map-chevron"
+                            size={15}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      ) : map ? (
+                        <a
+                          className="shop-location"
+                          href={map}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <MapPin size={16} aria-hidden="true" />
+                          {locationLabel}
+                          <ArrowUpRight size={15} aria-hidden="true" />
+                        </a>
+                      ) : address ? (
+                        <span className="shop-location">
+                          <MapPin size={16} aria-hidden="true" />
+                          {address}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 <div className="shop-actions">
                   <a
@@ -499,6 +630,39 @@ export function StorePage({ slug }: { slug: string | null }) {
                       : 'Contact shop'}
                   </a>
                 </div>
+                {mapPreview && (
+                  <section
+                    id="shop-location-map"
+                    className="shop-map-panel"
+                    aria-labelledby="shop-map-title"
+                    hidden={!mapOpen}
+                  >
+                    <div className="shop-map-heading">
+                      <h2 id="shop-map-title">Find us</h2>
+                      {address && <p>{address}</p>}
+                    </div>
+                    {mapOpen && (
+                      <iframe
+                        src={mapPreview.embedUrl}
+                        title={`${store.name} location on OpenStreetMap`}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        sandbox="allow-scripts allow-same-origin allow-popups"
+                      />
+                    )}
+                    <div className="shop-map-footer">
+                      <span>Map by OpenStreetMap</span>
+                      <a
+                        href={mapPreview.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open larger map{' '}
+                        <ArrowUpRight size={15} aria-hidden="true" />
+                      </a>
+                    </div>
+                  </section>
+                )}
               </div>
             </section>
             {demo && (
@@ -833,14 +997,10 @@ export function StorePage({ slug }: { slug: string | null }) {
           <details className="shop-footer-details" ref={contactDetails}>
             <summary>Contact & details</summary>
             <div className="shop-contact">
-              {[location?.address, location?.city, location?.country].some(
-                Boolean,
-              ) && (
+              {address && (
                 <p>
                   <MapPin size={17} aria-hidden="true" />
-                  {[location?.address, location?.city, location?.country]
-                    .filter(Boolean)
-                    .join(', ')}
+                  {address}
                 </p>
               )}
               {phone && (
@@ -871,29 +1031,9 @@ export function StorePage({ slug }: { slug: string | null }) {
                   ))}
                 </dl>
               )}
-              {!phone &&
-                !website &&
-                !map &&
-                !location?.address &&
-                !location?.city &&
-                !location?.country &&
-                !hours.length && <p>Contact details haven’t been added yet.</p>}
-              <div className="shop-socials">
-                {Object.entries(store.socialMediaLinks ?? {}).map(
-                  ([key, value]) =>
-                    Object.hasOwn(socialLabels, key) && safeUrl(value) ? (
-                      <a
-                        key={key}
-                        href={safeUrl(value)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {socialLabels[key]}
-                        <ArrowUpRight size={15} aria-hidden="true" />
-                      </a>
-                    ) : null,
-                )}
-              </div>
+              {!phone && !website && !map && !address && !hours.length && (
+                <p>Contact details haven’t been added yet.</p>
+              )}
             </div>
           </details>
         )}

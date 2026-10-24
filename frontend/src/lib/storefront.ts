@@ -42,6 +42,63 @@ export function storeMediaUrl(value: string | null | undefined) {
   return `/api/v1/uploads/${encodeURIComponent(value)}`;
 }
 
+const socialLabels = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  twitter: 'X',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  whatsapp: 'WhatsApp',
+  telegram: 'Telegram',
+  website: 'Website',
+};
+
+export function storeSocialLinks(store?: Pick<Store, 'socialMediaLinks'>) {
+  return Object.entries(socialLabels).flatMap(([network, label]) => {
+    const value = store?.socialMediaLinks?.[network];
+    const href = typeof value === 'string' ? safeUrl(value.trim()) : undefined;
+    return href ? [{ network, label, href }] : [];
+  });
+}
+
+export function storeMap(location: Store['location']) {
+  function coordinate(value: number | string | null | undefined) {
+    // MySQL DECIMAL coordinates may arrive as strings; empty values are not zero.
+    if (typeof value === 'string' && /^[+-]?\d+(?:\.\d+)?$/u.test(value.trim()))
+      value = Number(value);
+    return typeof value === 'number' && Number.isFinite(value)
+      ? value
+      : undefined;
+  }
+
+  const latitude = coordinate(location?.latitude);
+  const longitude = coordinate(location?.longitude);
+  const latitudeLimit = 85.05112878;
+  if (
+    latitude === undefined ||
+    longitude === undefined ||
+    Math.abs(latitude) > latitudeLimit ||
+    Math.abs(longitude) > 180
+  )
+    return undefined;
+
+  // Only generate our fixed map provider URL; never frame a shop-supplied URL.
+  const params = new URLSearchParams({
+    bbox: [
+      Math.max(-180, longitude - 0.008),
+      Math.max(-latitudeLimit, latitude - 0.005),
+      Math.min(180, longitude + 0.008),
+      Math.min(latitudeLimit, latitude + 0.005),
+    ].join(','),
+    layer: 'mapnik',
+    marker: `${latitude},${longitude}`,
+  });
+  return {
+    embedUrl: `https://www.openstreetmap.org/export/embed.html?${params}`,
+    externalUrl: `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`,
+  };
+}
+
 export function storePresentation(
   store: Pick<Store, 'storeType' | 'brandColor'>,
 ) {

@@ -13,6 +13,9 @@ export interface Store {
   bannerKey?: string | null;
   socialMediaLinks?: Record<string, string> | null;
   location?: {
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+    locationName?: string | null;
     city: string | null;
     country: string | null;
     address?: string | null;
