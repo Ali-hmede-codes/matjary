@@ -22,10 +22,12 @@ import {
   Package,
   Phone,
   Play,
+  Plus,
   Search,
   Send,
   Share2,
   ShoppingBag,
+  ShoppingCart,
   Utensils,
   type LucideIcon,
 } from 'lucide-react';
@@ -50,6 +52,9 @@ import {
 } from '../lib/storefront';
 import { safeUrl } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
+import { useShopCart, type ShopCartController } from '../hooks/useShopCart';
+import { productCartLimit } from '../lib/cart';
+import { ShopCart } from './ShopCart';
 import { LoadingBar, StatusBanner } from './Feedback';
 import { MediaView } from './MediaView';
 import { PostDialog } from './PostDialog';
@@ -186,7 +191,18 @@ function ShopPageLoading() {
   );
 }
 
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({
+  product,
+  cart,
+}: {
+  product: Product;
+  cart: ShopCartController;
+}) {
+  const quantity =
+    cart.cart?.items.find((item) => item.productId === product.id)?.quantity ??
+    0;
+  const unavailable = productCartLimit(product) === 0;
+  const atLimit = quantity >= productCartLimit(product);
   return (
     <article className="shop-product">
       <div className="shop-product-image">
@@ -205,6 +221,23 @@ function ProductCard({ product }: { product: Product }) {
           <strong>
             {formatProductPrice(product.priceCents, product.currency)}
           </strong>
+          <button
+            type="button"
+            className="shop-add-to-cart"
+            disabled={unavailable || atLimit || cart.busy || cart.loading}
+            aria-label={
+              unavailable
+                ? `${product.name} is unavailable`
+                : atLimit
+                  ? `Maximum quantity of ${product.name} in cart`
+                  : `Add ${product.name} to cart`
+            }
+            aria-haspopup="dialog"
+            onClick={() => cart.add(product)}
+          >
+            <Plus size={16} aria-hidden="true" />
+            {unavailable ? 'Unavailable' : atLimit ? 'In cart' : 'Add'}
+          </button>
         </div>
       </div>
     </article>
@@ -308,6 +341,7 @@ export function StorePage({ slug }: { slug: string | null }) {
     : demo
       ? demoStores.find((item) => item.slug === slug)
       : storeQuery.data;
+  const cart = useShopCart(store, demo);
   const productsQuery = useInfiniteQuery({
     queryKey: ['storefront-products', slug],
     initialPageParam: 0,
@@ -481,14 +515,21 @@ export function StorePage({ slug }: { slug: string | null }) {
             >
               <Share2 size={20} aria-hidden="true" />
             </button>
-            <a
-              href="#shop-about"
-              onClick={openContactDetails}
-              aria-label="Shop information"
-              title="Shop information"
+            <button
+              type="button"
+              onClick={() => cart.setOpen(true)}
+              aria-label={`Open cart${cart.cart?.itemCount ? `, ${cart.cart.itemCount} items` : ''}`}
+              aria-haspopup="dialog"
+              aria-expanded={cart.open}
+              title="Shopping cart"
             >
-              <Info size={21} aria-hidden="true" />
-            </a>
+              <ShoppingCart size={21} aria-hidden="true" />
+              {cart.cart && cart.cart.itemCount > 0 && (
+                <span className="shop-cart-count" aria-hidden="true">
+                  {cart.cart.itemCount > 99 ? '99+' : cart.cart.itemCount}
+                </span>
+              )}
+            </button>
           </div>
         ) : (
           <a className="shop-platform" href={home}>
@@ -916,6 +957,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                                 <ProductCard
                                   key={product.id}
                                   product={product}
+                                  cart={cart}
                                 />
                               ))}
                           </div>
@@ -925,7 +967,11 @@ export function StorePage({ slug }: { slug: string | null }) {
                 ) : (
                   <div className="shop-products">
                     {visible.map((product) => (
-                      <ProductCard key={product.id} product={product} />
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        cart={cart}
+                      />
                     ))}
                   </div>
                 ))}
@@ -1038,6 +1084,24 @@ export function StorePage({ slug }: { slug: string | null }) {
           </details>
         )}
       </footer>
+      {cart.open && store && (
+        <ShopCart
+          store={store}
+          products={uniqueProducts}
+          controller={cart}
+          demo={demo}
+          onBrowse={() => {
+            cart.setOpen(false);
+            setActiveTab('catalog');
+            setFocusSearch(true);
+          }}
+          onContact={() => {
+            cart.setOpen(false);
+            openContactDetails();
+            document.getElementById('shop-about')?.scrollIntoView();
+          }}
+        />
+      )}
       {selectedPost && store && activeTab === 'posts' && (
         <PostDialog
           key={selectedPost.id}

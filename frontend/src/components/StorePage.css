@@ -566,7 +566,8 @@
 }
 .shop-product-bottom {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-top: auto;
