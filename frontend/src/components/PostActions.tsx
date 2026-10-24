@@ -19,7 +19,8 @@ export function PostActions({
   onLike,
   onSave,
   onNotice,
-}: PostActionProps & { media?: Media }) {
+  showCount = true,
+}: PostActionProps & { media?: Media; showCount?: boolean }) {
   const [sharing, setSharing] = useState(false);
   const shareUrl = assetUrl(media?.primaryUrl);
   async function shareMedia() {
@@ -55,7 +56,7 @@ export function PostActions({
           fill={post.engagement.viewerLiked ? 'currentColor' : 'none'}
         />
       </button>
-      <span className="likes-count">
+      <span className="likes-count" hidden={!showCount}>
         {post.engagement.likes.toLocaleString()}
         <span className="sr-only"> likes</span>
       </span>

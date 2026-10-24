@@ -114,6 +114,20 @@ export function parseLikeResponse(input: unknown): {
   throw new Error('Could not update this like.');
 }
 
+export function parseViewResponse(input: unknown): { views: number } {
+  if (input && typeof input === 'object') {
+    const views: unknown = Reflect.get(input, 'views');
+    if (
+      typeof views === 'number' &&
+      Number.isSafeInteger(views) &&
+      views >= 0
+    ) {
+      return { views };
+    }
+  }
+  throw new Error('Could not record this view.');
+}
+
 export function isLocalFrontendRequest(
   origin: string | undefined,
   host: string | undefined,

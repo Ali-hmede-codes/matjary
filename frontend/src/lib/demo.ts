@@ -112,6 +112,11 @@ export const demoPosts: (Post & { category: string })[] = examples.map(
         variants: [],
       },
     ],
-    engagement: { likes: 0, views: 0, viewerLiked: false },
+    // Sample counters keep the design preview representative of live posts.
+    engagement: {
+      likes: [128, 64, 342, 211, 87, 156][index] ?? 0,
+      views: [2400, 980, 6100, 3700, 1420, 2900][index] ?? 0,
+      viewerLiked: false,
+    },
   }),
 );

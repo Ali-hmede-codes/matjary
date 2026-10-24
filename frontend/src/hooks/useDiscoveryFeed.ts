@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   getJson,
+  registerPostView,
   togglePostLike,
   type Category,
   type Feed,
@@ -47,6 +48,8 @@ export function useDiscoveryFeed() {
   const [likes, setLikes] = useState<
     Record<string, Pick<Post['engagement'], 'likes' | 'viewerLiked'>>
   >({});
+  const [views, setViews] = useState<Record<string, number>>({});
+  const viewed = useRef(new Set<string>());
   const [liking, setLiking] = useState(false);
   const likeLock = useRef(false);
   const [saved, setSaved] = useState<string[]>(() => {
@@ -172,7 +175,11 @@ export function useDiscoveryFeed() {
   }
   const withLikes = (post: Post): Post => ({
     ...post,
-    engagement: { ...post.engagement, ...likes[post.id] },
+    engagement: {
+      ...post.engagement,
+      ...likes[post.id],
+      views: views[post.id] ?? post.engagement.views,
+    },
   });
   const isLoading =
     settingsQuery.isLoading ||
@@ -186,9 +193,22 @@ export function useDiscoveryFeed() {
       videos: 'Videos',
       saved: 'Saved',
     }[view];
+  async function registerView(post: Post) {
+    // Opening a post is the view. One request per post and visit keeps the
+    // server's dedupe window from being hit by repeated dialog opens.
+    if (demo || viewed.current.has(post.id)) return;
+    viewed.current.add(post.id);
+    try {
+      const result = await registerPostView(post.id);
+      setViews((current) => ({ ...current, [post.id]: result.views }));
+    } catch {
+      // A view failure must never interrupt someone opening a post.
+    }
+  }
   function openPost(post: Post, index: number) {
     setSelected(post);
     setSelectedIndex(index);
+    void registerView(post);
   }
   return {
     view,

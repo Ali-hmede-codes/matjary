@@ -184,7 +184,6 @@
   aspect-ratio: 1;
 }
 .compact-grid .post-caption,
-.compact-grid .post-views,
 .compact-grid .sample-label,
 .compact-grid .post-expand,
 .compact-grid .store-identity small {
@@ -209,6 +208,12 @@
 .compact-grid .post-actions .icon-button {
   width: 36px;
 }
+.compact-grid .post-views {
+  left: 8px;
+  bottom: 8px;
+  padding: 5px 8px;
+  font-size: 9.5px;
+}
 .compact-grid .post-actions svg {
   width: 21px;
   height: 21px;
@@ -230,7 +235,8 @@
     border-radius: 12px;
   }
   .compact-grid .likes-count {
-    display: none;
+    font-size: 11px;
+    margin-right: 2px;
   }
   .compact-grid .post-actions .icon-button {
     width: 36px;

@@ -7,6 +7,7 @@ import {
   mediaUrl,
   normalizeSettings,
   parseLikeResponse,
+  parseViewResponse,
   isLocalFrontendRequest,
   readSavedIds,
   safeUrl,
@@ -109,6 +110,24 @@ test('like responses accept only bounded counts and explicit viewer state', () =
   ]) {
     assert.throws(() => parseLikeResponse(value), {
       message: 'Could not update this like.',
+    });
+  }
+});
+
+test('view responses accept only bounded counters', () => {
+  assert.deepEqual(parseViewResponse({ views: 12, likes: 3 }), { views: 12 });
+  assert.deepEqual(parseViewResponse({ views: 0 }), { views: 0 });
+  for (const value of [
+    null,
+    {},
+    { views: -1 },
+    { views: 1.5 },
+    { views: '3' },
+    { views: Infinity },
+    { views: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    assert.throws(() => parseViewResponse(value), {
+      message: 'Could not record this view.',
     });
   }
 });

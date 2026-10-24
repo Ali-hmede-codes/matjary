@@ -1,4 +1,4 @@
-import { mediaUrl, parseLikeResponse } from './website';
+import { mediaUrl, parseLikeResponse, parseViewResponse } from './website';
 
 export interface Store {
   id: string;
@@ -104,6 +104,26 @@ export async function togglePostLike(postId: string) {
   );
   if (!response.ok) throw new Error('Could not update this like.');
   return parseLikeResponse(await response.json());
+}
+
+export async function registerPostView(postId: string) {
+  // Best-effort telemetry: callers ignore failures so opening a post never
+  // depends on the view counter being writable.
+  const response = await fetch(
+    `/api/v1/posts/${encodeURIComponent(postId)}/view`,
+    {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(12_000),
+    },
+  );
+  if (!response.ok) throw new Error('Could not record this view.');
+  return parseViewResponse(await response.json());
 }
 
 export class ApiError extends Error {

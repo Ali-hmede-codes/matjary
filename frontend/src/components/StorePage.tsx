@@ -37,6 +37,7 @@ import {
   ApiError,
   assetUrl,
   getJson,
+  registerPostView,
   type Feed,
   type Post,
   type Product,
@@ -328,6 +329,7 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [notice, setNotice] = useState('');
   const [sharing, setSharing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const viewedPosts = useRef(new Set<string>());
   const [mapOpen, setMapOpen] = useState(false);
 
   useEffect(() => {
@@ -472,6 +474,27 @@ export function StorePage({ slug }: { slug: string | null }) {
   function openContactDetails() {
     setContactOpen(true);
     setFocusContact(true);
+  }
+
+  function openStorePost(post: Post) {
+    setSelectedPost(post);
+    if (demo || viewedPosts.current.has(post.id)) return;
+    // Opening a post is the view; refresh the dialog counter in place.
+    viewedPosts.current.add(post.id);
+    void registerPostView(post.id)
+      .then(({ views }) =>
+        setSelectedPost((current) =>
+          current?.id === post.id
+            ? {
+                ...current,
+                engagement: { ...current.engagement, views },
+              }
+            : current,
+        ),
+      )
+      .catch(() => {
+        /* Views never block opening a post. */
+      });
   }
 
   async function shareShop() {
@@ -880,7 +903,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                         type="button"
                         aria-label={`Open post: ${post.title}`}
                         aria-haspopup="dialog"
-                        onClick={() => setSelectedPost(post)}
+                        onClick={() => openStorePost(post)}
                       >
                         <span
                           className="shop-post-thumbnail"

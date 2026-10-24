@@ -127,13 +127,11 @@ export function PostCard({
             </button>
           </>
         )}
-        {!demo && (
-          <span className="post-views">
-            <Eye size={13} aria-hidden="true" />
-            {post.engagement.views.toLocaleString()}
-            <span className="sr-only"> views</span>
-          </span>
-        )}
+        <span className="post-views">
+          <Eye size={13} aria-hidden="true" />
+          {post.engagement.views.toLocaleString()}
+          <span className="sr-only"> views</span>
+        </span>
       </div>
       <div className="post-body">
         <PostActions
