@@ -9,6 +9,7 @@ import { createDatabaseOptions } from '../../libs/database/src/database.options'
 import { AddStoreLocation1793318400000 } from '../../libs/database/src/migrations/1793318400000-AddStoreLocation';
 import { FreeTrialSubscriptions1794004800000 } from '../../libs/database/src/migrations/1794004800000-FreeTrialSubscriptions';
 import { UnlimitedPlanStorage1794091200000 } from '../../libs/database/src/migrations/1794091200000-UnlimitedPlanStorage';
+import { MaxPostsOnly1794177600000 } from '../../libs/database/src/migrations/1794177600000-MaxPostsOnly';
 import {
   User,
   Showcase,
@@ -176,6 +177,30 @@ test('unlimited plan storage migration normalizes plans and restores seeded quot
   assert.equal(queries.length, 1);
   assert.match(queries[0] ?? '', /free.*basic.*premium/s);
   assert.match(queries[0] ?? '', /1073741824/);
+});
+
+test('max-posts-only migration clears monthly quotas and restores seeded values', async () => {
+  const queries: string[] = [];
+  const runner = {
+    async query(sql: string) {
+      const statement = sql.trim().replace(/;$/, '').replace(/\s+/g, ' ');
+      assert.doesNotMatch(statement, /;\s*\S/, 'One SQL statement per query');
+      queries.push(statement);
+    },
+  } as unknown as QueryRunner;
+  const migration = new MaxPostsOnly1794177600000();
+
+  await migration.up(runner);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0] ?? '', /^UPDATE `subscription_plans`/);
+  assert.match(queries[0] ?? '', /JSON_SET/);
+  assert.match(queries[0] ?? '', /maxPostsPerMonth/);
+
+  queries.length = 0;
+  await migration.down(runner);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0] ?? '', /free.*basic.*premium/s);
+  assert.match(queries[0] ?? '', /WHEN 'free' THEN 5/);
 });
 
 test('database-only user service imports do not initialize application configuration', () => {

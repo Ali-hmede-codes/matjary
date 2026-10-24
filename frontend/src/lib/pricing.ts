@@ -61,9 +61,8 @@ function storageQuota(bytes: number | null | undefined): string {
 export function planFeatures(plan: SubscriptionPlan) {
   const limits = plan.limits;
   return [
-    { label: 'Posts per month', value: quota(limits.maxPostsPerMonth) },
-    { label: 'Total posts', value: quota(limits.maxTotalPosts) },
-    { label: 'Products', value: quota(limits.maxProducts) },
+    { label: 'Max posts', value: quota(limits.maxTotalPosts) },
+    { label: 'Max products', value: quota(limits.maxProducts) },
     { label: 'Media storage', value: storageQuota(limits.maxStorageBytes) },
     { label: 'Shopping cart', value: limits.enableCart === true },
     {

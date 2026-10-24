@@ -117,8 +117,9 @@ export class SubscriptionPlansService {
         billingCycle: dto.billingCycle ?? BillingCycle.MONTHLY,
         limits: {
           ...(dto.limits as SubscriptionLimits),
-          // Storage is a platform resource, never a plan entitlement.
+          // Storage is unlimited and posts have one total maximum per plan.
           maxStorageBytes: null,
+          maxPostsPerMonth: null,
         },
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
@@ -173,8 +174,13 @@ export class SubscriptionPlansService {
       billingCycle: plan.billingCycle,
       // The free plan is a trial; paid plans have no trial label.
       trialDays: plan.slug === 'free' ? trialDays : null,
-      // Storage is unlimited for every plan; enforce it even for older rows.
-      limits: { ...FREE_LIMITS, ...plan.limits, maxStorageBytes: null },
+      // Storage is unlimited for every plan; posts use one total maximum.
+      limits: {
+        ...FREE_LIMITS,
+        ...plan.limits,
+        maxStorageBytes: null,
+        maxPostsPerMonth: null,
+      },
     }));
   }
 
@@ -266,8 +272,12 @@ export class SubscriptionPlansService {
             plan.billingCycle = dto.billingCycle;
           if (dto.limits !== undefined)
             plan.limits = dto.limits as SubscriptionLimits;
-          // Keep storage unlimited even when an older client sends a value.
-          plan.limits = { ...plan.limits, maxStorageBytes: null };
+          // Keep the platform invariants even when an older client sends values.
+          plan.limits = {
+            ...plan.limits,
+            maxStorageBytes: null,
+            maxPostsPerMonth: null,
+          };
           if (dto.isActive !== undefined) plan.isActive = dto.isActive;
           if (dto.sortOrder !== undefined) plan.sortOrder = dto.sortOrder;
           if (dto.legacyTier !== undefined)

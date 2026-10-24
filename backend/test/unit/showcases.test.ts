@@ -38,7 +38,6 @@ function makeShowcase(overrides: Partial<Showcase> = {}): Showcase {
 
 class FakeRepository {
   items: Showcase[] = [];
-  monthlyCount = 0;
   totalCount = 0;
   locks: string[] = [];
   subscription: any = {
@@ -66,12 +65,7 @@ class FakeRepository {
         getRepository: (target: unknown) => {
           if (target === UserSubscription)
             return { find: async () => [this.subscription] };
-          if (target !== Showcase) return { findOneBy: async () => null };
-          return {
-            createQueryBuilder: () => ({
-              where: () => ({ getCount: async () => this.monthlyCount }),
-            }),
-          };
+          return { findOneBy: async () => null };
         },
         countBy: async () => this.totalCount,
         findOneBy: (_target: unknown, where: Record<string, unknown>) =>

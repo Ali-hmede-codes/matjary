@@ -56,12 +56,14 @@ export class CreateSubscriptionLimitsDto implements Partial<SubscriptionLimits> 
   @Min(0)
   maxImageHeight?: number | null;
 
+  // Legacy monthly quota; accepted for compatibility and normalized to null.
   @IsOptional()
   @IsInt()
   @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   maxPostsPerMonth?: number | null;
 
+  // Maximum posts across the account.
   @IsOptional()
   @IsInt()
   @Max(Number.MAX_SAFE_INTEGER)

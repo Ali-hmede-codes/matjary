@@ -15,7 +15,9 @@ export const FREE_LIMITS: SubscriptionLimits = {
   maxImageSizeBytes: 10485760,
   maxImageWidth: 1920,
   maxImageHeight: 1080,
-  maxPostsPerMonth: 5,
+  // Posts have one account-wide maximum. The legacy monthly quota is ignored
+  // and PlanEditor no longer exposes it.
+  maxPostsPerMonth: null,
   maxTotalPosts: 20,
   maxProducts: 10,
   // Storage is a platform resource, not a plan entitlement. Every plan is
@@ -127,8 +129,9 @@ export async function effectiveLimits(
   return {
     ...FREE_LIMITS,
     ...subscription.plan.limits,
-    // Storage is always unlimited so older plan rows cannot reintroduce a cap.
+    // Platform invariants: storage is unlimited and posts use one total max.
     maxStorageBytes: null,
+    maxPostsPerMonth: null,
   };
 }
 

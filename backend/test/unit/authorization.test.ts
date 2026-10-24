@@ -451,6 +451,7 @@ test('public pricing uses active sorted plans, effective defaults and safe field
       maxProducts: null,
       enableCart: false,
       maxStorageBytes: 1073741824,
+      maxPostsPerMonth: 2,
     },
     isActive: true,
     sortOrder: 1,
@@ -803,7 +804,12 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
       expiresAt: null,
       plan: {
         slug: 'basic',
-        limits: { maxProducts: null, maxImageCount: 0, maxStorageBytes: 999 },
+        limits: {
+          maxProducts: null,
+          maxImageCount: 0,
+          maxStorageBytes: 999,
+          maxPostsPerMonth: 3,
+        },
       },
     },
   ];
@@ -812,6 +818,8 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
   assert.equal(limits.maxImageCount, 0);
   // Storage never becomes a plan cap, even when an older row carries one.
   assert.equal(limits.maxStorageBytes, null);
+  // Posts use one total maximum; the legacy monthly quota is neutralized.
+  assert.equal(limits.maxPostsPerMonth, null);
   assert.equal((await subscriptionState(manager, 'owner', now)).state, 'paid');
   assert.equal(boundedLimit(90, null), 90);
   assert.equal(boundedLimit(90, 200), 90);

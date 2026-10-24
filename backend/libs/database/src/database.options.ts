@@ -4,6 +4,7 @@ import { databaseEntities } from './entities';
 import { StoreLifecycle1793918400000 } from './migrations/1793918400000-StoreLifecycle';
 import { FreeTrialSubscriptions1794004800000 } from './migrations/1794004800000-FreeTrialSubscriptions';
 import { UnlimitedPlanStorage1794091200000 } from './migrations/1794091200000-UnlimitedPlanStorage';
+import { MaxPostsOnly1794177600000 } from './migrations/1794177600000-MaxPostsOnly';
 import { OwnerMediaTargets1793832000000 } from './migrations/1793832000000-OwnerMediaTargets';
 import { AddUserRoles1793745600000 } from './migrations/1793745600000-AddUserRoles';
 import { WebsiteSettings1793659200000 } from './migrations/1793659200000-WebsiteSettings';
@@ -68,6 +69,7 @@ export function createDatabaseOptions(
       StoreLifecycle1793918400000,
       FreeTrialSubscriptions1794004800000,
       UnlimitedPlanStorage1794091200000,
+      MaxPostsOnly1794177600000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

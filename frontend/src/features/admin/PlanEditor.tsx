@@ -21,7 +21,7 @@ const PLATFORM_DEFAULTS: PlanLimits = {
   maxImageSizeBytes: 10 * 1024 * 1024,
   maxImageWidth: 1920,
   maxImageHeight: 1080,
-  maxPostsPerMonth: 5,
+  maxPostsPerMonth: null,
   maxTotalPosts: 20,
   maxProducts: 10,
   // Storage is unlimited for every plan; only file/duration ceilings apply.
@@ -56,7 +56,6 @@ function limitFields(plan?: PanelRecord) {
   const limits: PlanLimits = { ...PLATFORM_DEFAULTS, ...plan?.limits };
   return {
     maxProducts: counted(limits.maxProducts),
-    maxPostsPerMonth: counted(limits.maxPostsPerMonth),
     maxTotalPosts: counted(limits.maxTotalPosts),
     maxImageCount: counted(limits.maxImageCount),
     maxImageSize: megabytes(limits.maxImageSizeBytes),
@@ -151,7 +150,7 @@ export function planSummary(limits?: PlanLimits) {
       : `${value.toLocaleString('en-US')} ${noun}`;
   return [
     quotaText(merged.maxProducts, 'products'),
-    quotaText(merged.maxPostsPerMonth, 'posts / month'),
+    quotaText(merged.maxTotalPosts, 'posts'),
     'Unlimited storage',
   ].join(' · ');
 }
@@ -206,12 +205,13 @@ export function PlanEditor({
     if (form.badgePrice.trim() && badgePrice === null)
       errors.push('Badge price');
     const limits: PlanLimits = {
-      maxProducts: quota(form.maxProducts, 'Products', errors),
-      maxPostsPerMonth: quota(form.maxPostsPerMonth, 'Posts per month', errors),
-      maxTotalPosts: quota(form.maxTotalPosts, 'Total posts', errors),
+      maxProducts: quota(form.maxProducts, 'Max products', errors),
+      // The legacy monthly quota is disabled; one total maximum is used.
+      maxPostsPerMonth: null,
+      maxTotalPosts: quota(form.maxTotalPosts, 'Max posts', errors),
       // Storage is unlimited for every plan and is normalized server-side.
       maxStorageBytes: null,
-      maxImageCount: quota(form.maxImageCount, 'Images per post', errors),
+      maxImageCount: quota(form.maxImageCount, 'Max images per post', errors),
       maxImageSizeBytes: quotaBytes(
         form.maxImageSize,
         MEGABYTE,
@@ -386,13 +386,13 @@ export function PlanEditor({
         <fieldset>
           <legend>Quotas</legend>
           <p className="panel-muted">
-            Leave a field empty for unlimited. Numbers apply to stores on this
-            plan. Media storage is unlimited for every plan; only the global
+            Leave a field empty for unlimited. Numbers apply to the owner's
+            account. Media storage is unlimited for every plan; only the global
             file-size and duration ceilings still apply.
           </p>
           <div className="panel-field-grid">
             <label>
-              Products
+              Max products
               <input
                 inputMode="numeric"
                 value={form.maxProducts}
@@ -400,28 +400,25 @@ export function PlanEditor({
               />
             </label>
             <label>
-              Posts per month
-              <input
-                inputMode="numeric"
-                value={form.maxPostsPerMonth}
-                onChange={(e) => update({ maxPostsPerMonth: e.target.value })}
-              />
-            </label>
-            <label>
-              Total posts
+              Max posts
               <input
                 inputMode="numeric"
                 value={form.maxTotalPosts}
                 onChange={(e) => update({ maxTotalPosts: e.target.value })}
               />
+              <small>Total posts allowed across the owner's account.</small>
             </label>
             <label>
-              Images per post
+              Max images per post
               <input
                 inputMode="numeric"
                 value={form.maxImageCount}
                 onChange={(e) => update({ maxImageCount: e.target.value })}
               />
+              <small>
+                How many images one post can include. Product images use the
+                same cap, up to 20.
+              </small>
             </label>
             <label>
               Max image size (MB)

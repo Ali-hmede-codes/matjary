@@ -138,24 +138,8 @@ export class ShowcasesService {
           });
           await assertSubscriptionActive(manager, ownerId);
           const limits = await effectiveLimits(manager, ownerId);
-          const now = new Date();
-          const start = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-          );
-          const end = new Date(
-            Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-          );
           const total = await manager.countBy(Showcase, { ownerId });
-          const monthly = await manager
-            .getRepository(Showcase)
-            .createQueryBuilder('post')
-            .where(
-              'post.ownerId = :ownerId AND post.createdAt >= :start AND post.createdAt < :end',
-              { ownerId, start, end },
-            )
-            .getCount();
-          assertQuota(total, limits.maxTotalPosts, 'Total post');
-          assertQuota(monthly, limits.maxPostsPerMonth, 'Monthly post');
+          assertQuota(total, limits.maxTotalPosts, 'Post');
           const slug = await chooseContentSlug(dto.title, dto.slug, (value) =>
             manager.getRepository(Showcase).findOneBy({ slug: value }),
           );

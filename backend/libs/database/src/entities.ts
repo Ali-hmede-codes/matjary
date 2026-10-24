@@ -91,8 +91,8 @@ export interface SubscriptionLimits {
   maxImageHeight?: number | null; // null = unlimited
 
   // Post limits
-  maxPostsPerMonth?: number | null; // null = unlimited
-  maxTotalPosts?: number | null; // null = unlimited
+  maxPostsPerMonth?: number | null; // legacy monthly quota; not enforced
+  maxTotalPosts?: number | null; // max posts across the account; null = unlimited
 
   // Product limits (for ecommerce)
   maxProducts?: number | null; // null = unlimited (for ecommerce shops)
