@@ -56,10 +56,12 @@ export function PostActions({
           fill={post.engagement.viewerLiked ? 'currentColor' : 'none'}
         />
       </button>
-      <span className="likes-count" hidden={!showCount}>
-        {post.engagement.likes.toLocaleString()}
-        <span className="sr-only"> likes</span>
-      </span>
+      {showCount && (
+        <span className="likes-count">
+          {post.engagement.likes.toLocaleString()}
+          <span className="sr-only"> likes</span>
+        </span>
+      )}
       <button
         className="icon-button"
         aria-label={`Share ${media?.kind === 'video' ? 'video' : 'photo'} from ${post.title}`}

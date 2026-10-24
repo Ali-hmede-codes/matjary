@@ -132,23 +132,6 @@
 .post-caption-author:hover {
   color: var(--primary);
 }
-.post-views {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
-  border-radius: 15px;
-  background: #17231eaa;
-  backdrop-filter: blur(4px);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
 .media-count {
   position: absolute;
   top: 12px;
@@ -208,12 +191,6 @@
 .compact-grid .post-actions .icon-button {
   width: 36px;
 }
-.compact-grid .post-views {
-  left: 8px;
-  bottom: 8px;
-  padding: 5px 8px;
-  font-size: 9.5px;
-}
 .compact-grid .post-actions svg {
   width: 21px;
   height: 21px;
@@ -233,10 +210,6 @@
   .compact-grid .post-card {
     border: 1px solid var(--line);
     border-radius: 12px;
-  }
-  .compact-grid .likes-count {
-    font-size: 11px;
-    margin-right: 2px;
   }
   .compact-grid .post-actions .icon-button {
     width: 36px;

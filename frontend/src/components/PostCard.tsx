@@ -1,12 +1,5 @@
 import { useState } from 'react';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  Expand,
-  Layers,
-  Play,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Expand, Layers, Play } from 'lucide-react';
 import { storePath } from '../lib/storefront';
 import { MediaView } from './MediaView';
 import { PostActions, type PostActionProps } from './PostActions';
@@ -127,11 +120,6 @@ export function PostCard({
             </button>
           </>
         )}
-        <span className="post-views">
-          <Eye size={13} aria-hidden="true" />
-          {post.engagement.views.toLocaleString()}
-          <span className="sr-only"> views</span>
-        </span>
       </div>
       <div className="post-body">
         <PostActions
@@ -142,6 +130,7 @@ export function PostCard({
           onLike={onLike}
           onSave={onSave}
           onNotice={onNotice}
+          showCount={false}
         />
         <p className="post-caption">
           <a
