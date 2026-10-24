@@ -3,12 +3,15 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   ArrowUpRight,
+  Expand,
   Images,
   Info,
+  Layers,
   LoaderCircle,
   MapPin,
   Package,
   Phone,
+  Play,
   Search,
   Share2,
   ShoppingBag,
@@ -19,6 +22,7 @@ import {
   assetUrl,
   getJson,
   type Feed,
+  type Post,
   type Product,
   type ProductList,
   type Store,
@@ -34,6 +38,7 @@ import { safeUrl } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { LoadingBar, StatusBanner } from './Feedback';
 import { MediaView } from './MediaView';
+import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
 function ShopImage({
@@ -104,29 +109,36 @@ function ShopImage({
 }
 
 function ShopCardsLoading({
-  stories = false,
+  posts = false,
   label = 'Loading the collection…',
 }: {
-  stories?: boolean;
+  posts?: boolean;
   label?: string;
 }) {
   return (
     <div role="status">
       <span className="sr-only">{label}</span>
       <div
-        className={stories ? 'shop-stories' : 'shop-products'}
+        className={posts ? 'shop-post-grid' : 'shop-products'}
         aria-hidden="true"
       >
-        {[0, 1, 2].map((index) => (
-          <div className={stories ? 'shop-story' : 'shop-product'} key={index}>
-            <div
-              className={`${stories ? 'shop-story-media' : 'shop-product-image'} shop-skeleton`}
-            />
-            <div className="shop-product-copy">
-              <div className="shop-skeleton shop-skeleton-title" />
-              <div className="shop-skeleton shop-skeleton-line" />
-              <div className="shop-skeleton shop-skeleton-short" />
-            </div>
+        {(posts ? [0, 1, 2, 3, 4, 5] : [0, 1, 2]).map((index) => (
+          <div
+            className={
+              posts ? 'shop-post-skeleton shop-skeleton' : 'shop-product'
+            }
+            key={index}
+          >
+            {!posts && (
+              <>
+                <div className="shop-product-image shop-skeleton" />
+                <div className="shop-product-copy">
+                  <div className="shop-skeleton shop-skeleton-title" />
+                  <div className="shop-skeleton shop-skeleton-line" />
+                  <div className="shop-skeleton shop-skeleton-short" />
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -154,7 +166,7 @@ function ShopPageLoading() {
         <div className="shop-actions shop-skeleton shop-skeleton-button" />
       </div>
       <div className="shop-loading-content">
-        <ShopCardsLoading stories label="Loading posts…" />
+        <ShopCardsLoading posts label="Loading posts…" />
       </div>
     </section>
   );
@@ -207,6 +219,7 @@ export function StorePage({ slug }: { slug: string | null }) {
   const contactDetails = useRef<HTMLDetailsElement>(null);
   const [notice, setNotice] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   useEffect(() => {
     if (!notice) return;
@@ -548,7 +561,7 @@ export function StorePage({ slug }: { slug: string | null }) {
             </div>
             <section
               id="shop-posts"
-              className="shop-section shop-tabpanel"
+              className="shop-section shop-tabpanel shop-posts-panel"
               role="tabpanel"
               aria-labelledby="shop-tab-posts"
               tabIndex={0}
@@ -558,7 +571,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                 <>
                   <h2 className="sr-only">Posts</h2>
                   {!demo && postsQuery.isPending && (
-                    <ShopCardsLoading stories label="Loading posts…" />
+                    <ShopCardsLoading posts label="Loading posts…" />
                   )}
                   {!demo && postsQuery.isError && (
                     <StatusBanner
@@ -568,40 +581,37 @@ export function StorePage({ slug }: { slug: string | null }) {
                       Posts couldn’t load right now.
                     </StatusBanner>
                   )}
-                  <div className="shop-stories">
+                  <div className="shop-post-grid">
                     {[
                       ...new Map(posts.map((post) => [post.id, post])).values(),
                     ].map((post) => (
-                      <article className="shop-story" key={post.id}>
-                        <div
-                          className="shop-story-gallery"
-                          tabIndex={0}
-                          aria-label={`${post.title} photos and videos`}
+                      <button
+                        className="shop-post-tile"
+                        key={post.id}
+                        type="button"
+                        aria-label={`Open post: ${post.title}`}
+                        aria-haspopup="dialog"
+                        onClick={() => setSelectedPost(post)}
+                      >
+                        <span
+                          className="shop-post-thumbnail"
+                          aria-hidden="true"
                         >
-                          {post.media.length ? (
-                            post.media.map((media) => (
-                              <div className="shop-story-media" key={media.id}>
-                                {media.kind === 'video' ? (
-                                  <video
-                                    controls
-                                    playsInline
-                                    preload="none"
-                                    src={assetUrl(media.primaryUrl)}
-                                    poster={assetUrl(media.posterUrl)}
-                                    aria-label={post.title}
-                                  />
-                                ) : (
-                                  <MediaView media={media} title={post.title} />
-                                )}
-                              </div>
-                            ))
-                          ) : (
-                            <MediaView title={post.title} />
-                          )}
-                        </div>
-                        <h3>{post.title}</h3>
-                        {post.description && <p>{post.description}</p>}
-                      </article>
+                          <MediaView media={post.media[0]} title={post.title} />
+                        </span>
+                        <span
+                          className="shop-post-indicators"
+                          aria-hidden="true"
+                        >
+                          {post.media.some(
+                            (media) => media.kind === 'video',
+                          ) && <Play size={19} fill="currentColor" />}
+                          {post.media.length > 1 && <Layers size={19} />}
+                        </span>
+                        <span className="shop-post-open" aria-hidden="true">
+                          <Expand size={25} />
+                        </span>
+                      </button>
                     ))}
                   </div>
                   {!posts.length && (demo || postsQuery.isSuccess) && (
@@ -888,6 +898,16 @@ export function StorePage({ slug }: { slug: string | null }) {
           </details>
         )}
       </footer>
+      {selectedPost && store && activeTab === 'posts' && (
+        <PostDialog
+          key={selectedPost.id}
+          post={{ ...selectedPost, store: selectedPost.store ?? store }}
+          initialIndex={0}
+          viewOnly
+          demo={demo}
+          onClose={() => setSelectedPost(null)}
+        />
+      )}
       {notice && (
         <div className="toast shop-notice" role="status">
           <Share2 size={16} aria-hidden="true" />

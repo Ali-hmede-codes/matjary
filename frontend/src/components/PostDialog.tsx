@@ -2,35 +2,31 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { MediaView } from './MediaView';
 import { storePath } from '../lib/storefront';
+import type { Post } from '../lib/api';
 import { PostActions, type PostActionProps } from './PostActions';
 
-export function PostDialog({
-  post,
-  initialIndex,
-  notice,
-  saved,
-  liking,
-  onLike,
-  onSave,
-  onNotice,
-  demo,
-  onClose,
-}: PostActionProps & {
+type PostDialogProps = {
   initialIndex: number;
-  notice: string;
+  notice?: string;
   demo: boolean;
   onClose: () => void;
-}) {
+} & ((PostActionProps & { viewOnly?: false }) | { post: Post; viewOnly: true });
+
+export function PostDialog(props: PostDialogProps) {
+  const { post, initialIndex, notice, demo, onClose } = props;
   const dialog = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState(initialIndex);
   useEffect(() => {
     const element = dialog.current;
+    const trigger = document.activeElement;
     const previousOverflow = document.body.style.overflow;
     element?.showModal();
     document.body.style.overflow = 'hidden';
     return () => {
       element?.close();
       document.body.style.overflow = previousOverflow;
+      if (trigger instanceof HTMLElement && trigger.isConnected)
+        trigger.focus({ preventScroll: true });
     };
   }, []);
   const media = post.media[index];
@@ -66,7 +62,7 @@ export function PostDialog({
             >
               <ChevronLeft />
             </button>
-            <span>
+            <span role="status">
               {index + 1} / {post.media.length}
             </span>
             <button
@@ -80,15 +76,7 @@ export function PostDialog({
           </div>
         )}
         <div className="dialog-copy">
-          <PostActions
-            post={post}
-            media={media}
-            saved={saved}
-            liking={liking}
-            onLike={onLike}
-            onSave={onSave}
-            onNotice={onNotice}
-          />
+          {!props.viewOnly && <PostActions {...props} media={media} />}
           {notice && (
             <p className="dialog-notice" role="status">
               {notice}
