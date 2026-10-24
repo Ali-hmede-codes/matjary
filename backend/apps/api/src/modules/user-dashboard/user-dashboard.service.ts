@@ -177,8 +177,8 @@ export class UserDashboardService {
       const products = recentProductsResult.items;
 
       // 8. Get subscription & limits
-      const subscription =
-        await this.plansService.getUserActiveSubscription(userId);
+      const subscriptionState =
+        await this.plansService.getSubscriptionState(userId);
       const effectiveLimits =
         await this.plansService.getEffectiveLimits(userId);
 
@@ -186,9 +186,18 @@ export class UserDashboardService {
         stores: storesWithCounts,
         posts,
         products,
-        subscription: subscription
-          ? UserSubscriptionInfoDto.fromSubscription(subscription)
+        subscription: subscriptionState.subscription
+          ? UserSubscriptionInfoDto.fromSubscription(
+              subscriptionState.subscription,
+            )
           : null,
+        subscriptionState: {
+          state: subscriptionState.state,
+          planName: subscriptionState.planName,
+          planSlug: subscriptionState.planSlug,
+          expiresAt: subscriptionState.expiresAt,
+          daysRemaining: subscriptionState.daysRemaining,
+        },
         limits: effectiveLimits,
         stats: {
           totalStores: userStores.length,

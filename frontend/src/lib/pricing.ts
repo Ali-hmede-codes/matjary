@@ -7,6 +7,8 @@ export interface SubscriptionPlan {
   priceCents: string;
   currency: string;
   billingCycle: 'monthly' | 'yearly' | 'lifetime';
+  // Present on the free plan; the API derives it from FREE_TRIAL_DAYS.
+  trialDays?: number | null;
   limits: {
     maxPostsPerMonth?: number | null;
     maxTotalPosts?: number | null;
@@ -29,6 +31,12 @@ export function billingLabel(cycle: SubscriptionPlan['billingCycle']) {
     { monthly: '/ month', yearly: '/ year', lifetime: 'one-time' }[cycle] ??
     'See plan terms'
   );
+}
+
+export function planBadge(plan: SubscriptionPlan) {
+  if (plan.slug === 'free' && plan.trialDays)
+    return `${plan.trialDays}-day free trial`;
+  return /^0+$/u.test(plan.priceCents) ? 'Free plan' : 'Paid plan';
 }
 
 function quota(value: number | null | undefined): string {

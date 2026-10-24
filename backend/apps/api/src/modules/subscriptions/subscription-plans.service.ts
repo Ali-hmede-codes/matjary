@@ -20,7 +20,9 @@ import {
   User,
   effectiveLimits,
   effectiveSubscription,
+  subscriptionState,
   FREE_LIMITS,
+  FREE_TRIAL_CAP_CODE,
   actorContext,
   appendAdminAudit,
   requireAdmin,
@@ -157,6 +159,7 @@ export class SubscriptionPlansService {
 
   async findPublic() {
     const plans = await this.findAll(false);
+    const trialDays = this.config.get('FREE_TRIAL_DAYS', { infer: true });
     return plans.map((plan) => ({
       name: plan.name,
       slug: plan.slug,
@@ -164,6 +167,8 @@ export class SubscriptionPlansService {
       priceCents: plan.priceCents,
       currency: plan.currency,
       billingCycle: plan.billingCycle,
+      // The free plan is a trial; paid plans have no trial label.
+      trialDays: plan.slug === 'free' ? trialDays : null,
       // Match effective entitlements without exposing administrative metadata.
       limits: { ...FREE_LIMITS, ...plan.limits },
     }));
@@ -328,10 +333,18 @@ export class SubscriptionPlansService {
   }
 
   /**
-   * Get effective limits for a user (from their active subscription or default free plan)
+   * Get effective limits for a user (from their active subscription or the
+   * expired read-only state).
    */
   async getEffectiveLimits(userId: string): Promise<SubscriptionLimits> {
     return effectiveLimits(this.plans.manager, userId);
+  }
+
+  /**
+   * Trial, paid or expired state for dashboards and upgrade prompts.
+   */
+  async getSubscriptionState(userId: string) {
+    return subscriptionState(this.plans.manager, userId);
   }
 
   /**
@@ -345,9 +358,10 @@ export class SubscriptionPlansService {
     notes?: string,
   ): Promise<UserSubscription> {
     try {
+      const now = new Date();
       if (
         expiresAt &&
-        (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())
+        (!Number.isFinite(expiresAt.getTime()) || expiresAt <= now)
       )
         throw new BadRequestException(
           'Subscription expiry must be in the future',
@@ -372,6 +386,17 @@ export class SubscriptionPlansService {
           });
           if (!plan || !plan.isActive)
             throw new NotFoundException('Active subscription plan not found');
+          // The free plan is a one-time trial. Administrators can grant a
+          // shorter window, never a longer one; paid plans carry longer access.
+          if (plan.slug === 'free') {
+            const trialDays = this.config.get('FREE_TRIAL_DAYS', {
+              infer: true,
+            });
+            const ceiling = new Date(now.getTime() + trialDays * 86_400_000);
+            if (expiresAt && expiresAt > ceiling)
+              throw new BadRequestException({ code: FREE_TRIAL_CAP_CODE });
+            expiresAt = expiresAt ?? ceiling;
+          }
           await manager.update(
             UserSubscription,
             { userId, status: SubscriptionStatus.ACTIVE },
@@ -383,7 +408,7 @@ export class SubscriptionPlansService {
               userId,
               planId,
               status: SubscriptionStatus.ACTIVE,
-              startsAt: new Date(),
+              startsAt: now,
               expiresAt: expiresAt ?? null,
               assignedBy,
               notes: notes ?? null,
@@ -401,7 +426,10 @@ export class SubscriptionPlansService {
         },
       );
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
       this.sanitize(error);

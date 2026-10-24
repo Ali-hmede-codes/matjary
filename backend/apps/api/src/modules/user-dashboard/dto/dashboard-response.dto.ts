@@ -3,7 +3,6 @@ import {
   StoreStatus,
   Showcase,
   Product,
-  SubscriptionPlan,
   UserSubscription,
   SubscriptionLimits,
 } from '@app/database';
@@ -167,11 +166,20 @@ export class UserSubscriptionInfoDto {
   }
 }
 
+export class SubscriptionStateDto {
+  state!: 'trial' | 'paid' | 'expired';
+  planName!: string | null;
+  planSlug!: string | null;
+  expiresAt!: Date | null;
+  daysRemaining!: number | null;
+}
+
 export class DashboardSummaryDto {
   stores!: UserStoreSummaryDto[];
   posts!: UserPostSummaryDto[];
   products!: UserProductSummaryDto[];
   subscription!: UserSubscriptionInfoDto | null;
+  subscriptionState!: SubscriptionStateDto;
   limits!: SubscriptionLimits;
   stats!: {
     totalStores: number;

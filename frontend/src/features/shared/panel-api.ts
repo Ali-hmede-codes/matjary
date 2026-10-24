@@ -1,4 +1,4 @@
-import { ApiError, getJson } from '../../lib/api';
+import { ApiError, getJson, toApiError } from '../../lib/api';
 
 export { getJson };
 export interface Session {
@@ -86,7 +86,7 @@ export async function mutate<T = void>(
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20_000),
   });
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) throw await toApiError(response);
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -94,6 +94,10 @@ export async function mutate<T = void>(
 
 export function panelError(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === 'TRIAL_EXPIRED')
+      return 'Your free trial has ended. Choose a paid plan to keep creating. Your published content stays online.';
+    if (error.code === 'FREE_TRIAL_CAP')
+      return 'Free-plan assignments are limited to the trial length. Assign a paid plan for longer access.';
     if (error.status === 401)
       return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'Your account cannot perform this action.';

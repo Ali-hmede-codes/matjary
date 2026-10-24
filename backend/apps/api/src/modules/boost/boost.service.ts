@@ -50,6 +50,7 @@ import {
   Store,
   publicWhere,
   assertContentAvailable,
+  assertSubscriptionActive,
   requireAdmin,
   appendAdminAudit,
   adminContext,
@@ -713,6 +714,8 @@ export class BoostService {
     if (dto.bidAmountCoins) coinAmount(dto.bidAmountCoins);
     return this.dataSource.transaction(async (manager) => {
       const wallet = await this.lockedBalance(manager, userId);
+      // Starting a new promotion requires an active trial or paid plan.
+      await assertSubscriptionActive(manager, userId);
       if (
         coinAmount(wallet.balance) -
           (await this.getPendingSpend(userId, manager)) <
@@ -795,6 +798,7 @@ export class BoostService {
       campaignId,
       userId,
       async (campaign, wallet, manager) => {
+        await assertSubscriptionActive(manager, userId);
         // Only allow updates for draft or pending_review campaigns
         if (
           ![
@@ -904,6 +908,7 @@ export class BoostService {
           throw new BadRequestException('Only paused campaigns can be resumed');
         }
         await this.visibleCampaign(manager, campaign);
+        await assertSubscriptionActive(manager, userId);
         // Check if campaign has expired
         if (campaign.endAt && campaign.endAt < new Date()) {
           throw new BadRequestException('Campaign has expired');

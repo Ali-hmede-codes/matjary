@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { DataSource } from 'typeorm';
 import type { Request } from 'express';
 import {
@@ -28,6 +32,7 @@ import {
   METRIC_QUERIES,
 } from '../../apps/api/src/modules/monitoring/prometheus.service';
 import { MonitoringService } from '../../apps/api/src/modules/monitoring/monitoring.service';
+import { MonitoringExceptionFilter } from '../../apps/api/src/modules/monitoring/monitoring.filter';
 import { MonitoringWindowDto } from '../../apps/api/src/modules/monitoring/monitoring.controller';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
@@ -54,6 +59,55 @@ const clearErrors = () => {
   while (errorTracker.pending) errorTracker.drain();
   errorTracker.dropped = 0;
 };
+
+test('only allowlisted subscription codes pass through sanitized errors', () => {
+  const filter = new MonitoringExceptionFilter();
+  const run = (error: unknown) => {
+    const captured: { status?: number; body?: Record<string, unknown> } = {};
+    const response = {
+      locals: { requestId: 'request-1' },
+      headersSent: false,
+      status(code: number) {
+        captured.status = code;
+        return this;
+      },
+      json(value: Record<string, unknown>) {
+        captured.body = value;
+        return this;
+      },
+    };
+    const host = {
+      switchToHttp: () => ({
+        getRequest: () => ({ method: 'POST', path: '/api/v1/posts' }),
+        getResponse: () => response,
+      }),
+    };
+    filter.catch(error, host as never);
+    return captured;
+  };
+
+  const trial = run(
+    new ForbiddenException({
+      code: 'TRIAL_EXPIRED',
+      message: 'private driver detail',
+    }),
+  );
+  assert.equal(trial.status, 403);
+  assert.deepEqual(trial.body, {
+    statusCode: 403,
+    message: 'Access is not allowed',
+    code: 'TRIAL_EXPIRED',
+    requestId: 'request-1',
+  });
+
+  const arbitrary = run(
+    new BadRequestException({ code: 'LEAK', message: 'private detail' }),
+  );
+  assert.equal(arbitrary.status, 400);
+  assert.equal('code' in (arbitrary.body ?? {}), false);
+  assert.equal(arbitrary.body?.message, 'Invalid request');
+  assert.doesNotMatch(JSON.stringify(arbitrary.body), /private detail|LEAK/);
+});
 
 test('error events are bounded, grouped and contain no raw synthetic secrets', (context) => {
   const output: string[] = [];

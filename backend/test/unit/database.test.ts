@@ -7,6 +7,7 @@ import { StoresService } from '../../apps/api/src/modules/stores/stores.service'
 import { validateDatabaseEnvironment } from '../../libs/config/src/environment';
 import { createDatabaseOptions } from '../../libs/database/src/database.options';
 import { AddStoreLocation1793318400000 } from '../../libs/database/src/migrations/1793318400000-AddStoreLocation';
+import { FreeTrialSubscriptions1794004800000 } from '../../libs/database/src/migrations/1794004800000-FreeTrialSubscriptions';
 import {
   User,
   Showcase,
@@ -120,6 +121,36 @@ test('store location migration creates and drops indexes using single statements
     queries[3] ?? '',
     /^ALTER TABLE `stores` DROP COLUMN `opening_hours`/,
   );
+});
+
+test('free trial migration backfills bounded trials and is reversible', async () => {
+  const queries: string[] = [];
+  const runner = {
+    async query(sql: string) {
+      const statement = sql.trim().replace(/;$/, '').replace(/\s+/g, ' ');
+      assert.doesNotMatch(statement, /;\s*\S/, 'One SQL statement per query');
+      queries.push(statement);
+    },
+  } as unknown as QueryRunner;
+  const migration = new FreeTrialSubscriptions1794004800000();
+
+  await migration.up(runner);
+  assert.equal(queries.length, 3);
+  assert.match(queries[0] ?? '', /INTERVAL 7 DAY/);
+  assert.match(queries[0] ?? '', /free-trial-rollout/);
+  assert.match(queries[1] ?? '', /^INSERT INTO `user_subscriptions`/);
+  assert.match(queries[1] ?? '', /NOT EXISTS/);
+  assert.match(queries[2] ?? '', /7-day free trial with basic features/);
+
+  queries.length = 0;
+  await migration.down(runner);
+  assert.equal(queries.length, 3);
+  assert.match(
+    queries[0] ?? '',
+    /^DELETE FROM `user_subscriptions` WHERE `notes` = 'Free trial \(rollout\)'/,
+  );
+  assert.match(queries[1] ?? '', /free-trial-rollout/);
+  assert.match(queries[2] ?? '', /Free tier with basic features/);
 });
 
 test('database-only user service imports do not initialize application configuration', () => {

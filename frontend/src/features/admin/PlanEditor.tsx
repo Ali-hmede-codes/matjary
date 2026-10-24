@@ -384,8 +384,9 @@ export function PlanEditor({
           </label>
           {free && (
             <p className="panel-muted">
-              The free fallback must stay active, free, and on the “free”
-              address.
+              The free plan is the platform trial. It must stay active, free,
+              and on the “free” address; its length is controlled by
+              FREE_TRIAL_DAYS on the server.
             </p>
           )}
         </fieldset>

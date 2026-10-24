@@ -49,6 +49,7 @@ import {
   lockOwnerContent,
   publicVisibilitySql,
   appendAdminAudit,
+  assertSubscriptionActive,
   adminContext,
   type AdminActor,
 } from '@app/database';
@@ -383,6 +384,8 @@ export class SeoService {
         id,
         actorId,
       );
+      // Tenant SEO is owner-authored content and is read-only after expiry.
+      await assertSubscriptionActive(manager, actorId);
       return work(manager);
     });
   }

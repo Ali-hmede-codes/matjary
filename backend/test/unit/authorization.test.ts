@@ -45,9 +45,12 @@ import { setupApp } from '../../apps/api/src/setup-app';
 import {
   effectiveLimits,
   effectiveSubscription,
+  subscriptionState,
+  assertSubscriptionActive,
   boundedLimit,
   assertQuota,
   FREE_LIMITS,
+  EXPIRED_LIMITS,
 } from '../../libs/database/src/subscription-policy';
 import {
   User,
@@ -481,6 +484,7 @@ test('public pricing uses active sorted plans, effective defaults and safe field
       priceCents: '999',
       currency: 'USD',
       billingCycle: 'monthly',
+      trialDays: null,
       limits: { ...FREE_LIMITS, maxProducts: null, enableCart: false },
     },
   ]);
@@ -529,6 +533,18 @@ test('SEO service independently enforces ownership, publication and field allowl
       queries.push(options.where);
       return [];
     },
+    getRepository: (target: unknown) =>
+      target === UserSubscription
+        ? {
+            find: async () => [
+              {
+                startsAt: new Date(0),
+                expiresAt: new Date('2999-01-01T00:00:00Z'),
+                plan: { slug: 'free', limits: {} },
+              },
+            ],
+          }
+        : { findOneBy: async () => null },
     save: async (value: unknown) => value,
   };
   const dataSource = {
@@ -699,7 +715,7 @@ test('optional sessions propagate outages instead of becoming anonymous', async 
   await assert.rejects(guard.canActivate(context), ServiceUnavailableException);
 });
 
-test('effective subscriptions honor dates, free fallback, null limits and hard media bounds', async () => {
+test('effective subscriptions honor dates, trials, null limits and hard media bounds', async () => {
   const now = new Date('2026-06-15T00:00:00Z');
   let rows: any[] = [
     {
@@ -726,17 +742,71 @@ test('effective subscriptions honor dates, free fallback, null limits and hard m
   } as unknown as EntityManager;
   assert.equal(await effectiveSubscription(manager, 'owner', now), null);
   rows = [];
-  assert.deepEqual(await effectiveLimits(manager, 'owner'), FREE_LIMITS);
+  assert.deepEqual(
+    await effectiveLimits(manager, 'owner', now),
+    EXPIRED_LIMITS,
+  );
+  assert.equal(
+    (await subscriptionState(manager, 'owner', now)).state,
+    'expired',
+  );
+  // An unbounded free row is stale state and never grants permanent access.
   rows = [
     {
       startsAt: new Date(0),
       expiresAt: null,
-      plan: { limits: { maxProducts: null, maxImageCount: 0 } },
+      plan: { slug: 'free', limits: { maxProducts: 50 } },
     },
   ];
-  const limits = await effectiveLimits(manager, 'owner');
+  assert.equal(await effectiveSubscription(manager, 'owner', now), null);
+  assert.deepEqual(
+    await effectiveLimits(manager, 'owner', now),
+    EXPIRED_LIMITS,
+  );
+  // A bounded free subscription is the trial window.
+  rows = [
+    {
+      startsAt: new Date(0),
+      expiresAt: new Date('2026-06-20T00:00:00Z'),
+      plan: { slug: 'free', limits: { maxProducts: 7 } },
+    },
+  ];
+  const trial = await subscriptionState(manager, 'owner', now);
+  assert.equal(trial.state, 'trial');
+  assert.equal(trial.daysRemaining, 5);
+  assert.equal((await effectiveLimits(manager, 'owner', now)).maxProducts, 7);
+  await assert.doesNotReject(assertSubscriptionActive(manager, 'owner', now));
+  // An expired trial falls back to the read-only limits.
+  rows = [
+    {
+      startsAt: new Date(0),
+      expiresAt: new Date('2026-06-01T00:00:00Z'),
+      plan: { slug: 'free', limits: { maxProducts: 7 } },
+    },
+  ];
+  assert.equal(
+    (await subscriptionState(manager, 'owner', now)).state,
+    'expired',
+  );
+  await assert.rejects(
+    assertSubscriptionActive(manager, 'owner', now),
+    (error: any) => error.getResponse().code === 'TRIAL_EXPIRED',
+  );
+  // Paid lifetime plans keep explicit null limits.
+  rows = [
+    {
+      startsAt: new Date(0),
+      expiresAt: null,
+      plan: {
+        slug: 'basic',
+        limits: { maxProducts: null, maxImageCount: 0 },
+      },
+    },
+  ];
+  const limits = await effectiveLimits(manager, 'owner', now);
   assert.equal(limits.maxProducts, null);
   assert.equal(limits.maxImageCount, 0);
+  assert.equal((await subscriptionState(manager, 'owner', now)).state, 'paid');
   assert.equal(boundedLimit(90, null), 90);
   assert.equal(boundedLimit(90, 200), 90);
   assert.throws(() => assertQuota(0, 0, 'Image'));

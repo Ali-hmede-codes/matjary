@@ -108,12 +108,31 @@ export async function togglePostLike(postId: string) {
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code?: string;
 
-  constructor(status: number) {
+  constructor(status: number, code?: string) {
     super('This content is temporarily unavailable.');
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
+}
+
+// Only uppercase business codes are read from the body. Messages and other
+// response details stay hidden, matching the API's sanitized error contract.
+export async function toApiError(response: Response): Promise<ApiError> {
+  let code: string | undefined;
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === 'object') {
+      const value = (body as { code?: unknown }).code;
+      if (typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,39}$/u.test(value))
+        code = value;
+    }
+  } catch {
+    /* Non-JSON failures keep the generic message. */
+  }
+  return new ApiError(response.status, code);
 }
 
 export async function getJson<T>(
@@ -128,6 +147,6 @@ export async function getJson<T>(
       : AbortSignal.timeout(12_000),
   });
   // Never display driver errors, response bodies, or credentials in the UI.
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) throw await toApiError(response);
   return response.json() as Promise<T>;
 }

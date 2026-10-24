@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   billingLabel,
+  planBadge,
   planFeatures,
   planPrice,
   type SubscriptionPlan,
@@ -16,6 +17,18 @@ const plan: SubscriptionPlan = {
   billingCycle: 'monthly',
   limits: {},
 };
+
+test('pricing labels the free plan as a configured trial', () => {
+  assert.equal(
+    planBadge({ ...plan, slug: 'free', priceCents: '0', trialDays: 7 }),
+    '7-day free trial',
+  );
+  assert.equal(
+    planBadge({ ...plan, slug: 'free', priceCents: '0', trialDays: null }),
+    'Free plan',
+  );
+  assert.equal(planBadge(plan), 'Paid plan');
+});
 
 test('pricing preserves currency, exact cents and each supported billing period', () => {
   assert.equal(planPrice(plan), '$9.99');

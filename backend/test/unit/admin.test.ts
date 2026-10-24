@@ -280,7 +280,9 @@ test('user roles grant and revoke admin access, protect bootstrap admins and inv
   const account = () =>
     f.rows(User).find((row) => row.id === ownerId) as unknown as User;
   const guard = new AdminGuard(config);
-  const auth = new AuthService({} as never, {} as never, {} as never, config);
+  const auth = new AuthService({} as never, {} as never, {} as never, config, {
+    startIfNew: async () => {},
+  } as never);
   assert.equal(guard.isAdmin(publicUser(account())), false);
   await assert.rejects(
     f.catalog.updateUserRole(ownerId, change(UserRole.ADMIN), helper),
@@ -426,10 +428,25 @@ test('subscription management preserves free fallback and historical assignments
     SubscriptionStatus.CANCELLED,
   );
   assert.equal(f.rows(UserSubscription).length, 2);
-  const active = f
+  const freeAssignment = f
     .rows(UserSubscription)
     .find((row) => row.status === SubscriptionStatus.ACTIVE)!;
-  await plans.cancelAssignment(active.id as string, adminId);
+  const trialMs =
+    new Date(freeAssignment.expiresAt as Date).getTime() -
+    new Date(freeAssignment.startsAt as Date).getTime();
+  assert.equal(trialMs, 7 * 24 * 60 * 60 * 1000);
+  await assert.rejects(
+    plans.assignSubscription(
+      ownerId,
+      free.id,
+      adminId,
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    ),
+    (error: any) =>
+      error instanceof BadRequestException &&
+      (error.getResponse() as { code?: string }).code === 'FREE_TRIAL_CAP',
+  );
+  await plans.cancelAssignment(freeAssignment.id as string, adminId);
   assert.ok(
     f
       .rows(UserSubscription)
@@ -517,6 +534,13 @@ test('campaign review, pause, resume and cancel preserve spending and enforce ta
   const f = fixture();
   f.add(BoostCoin, { userId: ownerId, balance: '1000' });
   f.add(Store, { id: resourceId, ownerId, adminArchivedAt: null });
+  f.add(UserSubscription, {
+    userId: ownerId,
+    status: SubscriptionStatus.ACTIVE,
+    startsAt: new Date(0),
+    expiresAt: new Date('2999-01-01T00:00:00Z'),
+    plan: { slug: 'free', limits: {} },
+  });
   const campaignId = randomUUID();
   f.add(BoostCampaign, {
     id: campaignId,

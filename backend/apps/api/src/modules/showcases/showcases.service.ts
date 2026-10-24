@@ -14,6 +14,7 @@ import {
   Store,
   User,
   effectiveLimits,
+  assertSubscriptionActive,
   assertQuota,
   ownerWhere,
   publicWhere,
@@ -135,6 +136,7 @@ export class ShowcasesService {
             where: { id: ownerId },
             lock: { mode: 'pessimistic_write' },
           });
+          await assertSubscriptionActive(manager, ownerId);
           const limits = await effectiveLimits(manager, ownerId);
           const now = new Date();
           const start = new Date(
@@ -260,6 +262,7 @@ export class ShowcasesService {
       const saved = await this.showcases.manager.transaction(
         async (manager) => {
           await lockOwnerContent(manager, 'post', showcase.id, userId);
+          await assertSubscriptionActive(manager, userId);
           return manager.save(showcase);
         },
       );

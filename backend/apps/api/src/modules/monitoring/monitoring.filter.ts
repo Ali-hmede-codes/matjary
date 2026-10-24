@@ -8,6 +8,7 @@ import {
 import type { ValidationError } from 'class-validator';
 import type { Request, Response } from 'express';
 import { errorTracker, requestMethod, routeTemplate } from '@app/observability';
+import { SAFE_SUBSCRIPTION_CODES } from '../../../../../libs/database/src/subscription-errors';
 
 export class SafeValidationException extends BadRequestException {
   constructor(errors: ValidationError[]) {
@@ -45,6 +46,18 @@ const MESSAGES: Record<number, string> = {
   429: 'Too many requests; try again shortly',
 };
 
+// Only known subscription codes may reach the client. Everything else keeps
+// the generic status message so driver details and internal text never leak.
+function safeBusinessCode(error: unknown, status: number): string | undefined {
+  if (status >= 500 || !(error instanceof HttpException)) return undefined;
+  const body = error.getResponse();
+  if (!body || typeof body !== 'object') return undefined;
+  const code = (body as { code?: unknown }).code;
+  return typeof code === 'string' && SAFE_SUBSCRIPTION_CODES.has(code)
+    ? code
+    : undefined;
+}
+
 @Catch()
 export class MonitoringExceptionFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
@@ -68,6 +81,7 @@ export class MonitoringExceptionFilter implements ExceptionFilter {
       typeof response.locals.requestId === 'string'
         ? response.locals.requestId
         : undefined;
+    const code = safeBusinessCode(error, status);
     if (status >= 500)
       errorTracker.capture(
         'api',
@@ -110,6 +124,7 @@ export class MonitoringExceptionFilter implements ExceptionFilter {
         status >= 500
           ? 'Service temporarily unavailable'
           : (MESSAGES[status] ?? 'Unable to complete this request'),
+      ...(code ? { code } : {}),
       requestId,
     });
   }

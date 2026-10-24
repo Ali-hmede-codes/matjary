@@ -20,6 +20,7 @@ import {
   User,
   effectiveLimits,
   effectiveSubscription,
+  assertSubscriptionActive,
   assertQuota,
   moderationWhere,
   ownerWhere,
@@ -177,6 +178,8 @@ export class StoresService {
     ownerId: string,
   ): Promise<StoreResponseDto> {
     try {
+      // Trial-expired owners keep read-only access to published stores.
+      await assertSubscriptionActive(this.stores.manager, ownerId);
       const slug = await chooseContentSlug(dto.name, dto.slug, (value) =>
         this.stores.findOneBy({ slug: value }),
       );
@@ -287,6 +290,8 @@ export class StoresService {
       if (store.ownerId !== userId) {
         throw new ForbiddenException('You do not own this store');
       }
+
+      await assertSubscriptionActive(this.stores.manager, userId);
 
       if (
         dto.enableCart !== undefined ||

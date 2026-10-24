@@ -1030,6 +1030,8 @@ function AssignSubscription({
       ),
     enabled: Boolean(selected),
   });
+  const freePlan =
+    plans.data?.items.find((plan) => plan.id === planId)?.slug === 'free';
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!selected || !planId || busy) return;
@@ -1153,7 +1155,12 @@ function AssignSubscription({
                         name="plan"
                         value={p.id}
                         checked={planId === p.id}
-                        onChange={() => setPlanId(p.id)}
+                        onChange={() => {
+                          setPlanId(p.id);
+                          // Free assignments are always trials; a custom end
+                          // date beyond the trial cap is rejected by the API.
+                          if (p.slug === 'free') setCustom(false);
+                        }}
                       />
                       <strong>{p.name}</strong>
                       <span>
@@ -1174,13 +1181,24 @@ function AssignSubscription({
           <label>
             Duration
             <select
-              value={custom ? 'custom' : 'default'}
+              value={freePlan ? 'default' : custom ? 'custom' : 'default'}
+              disabled={freePlan}
               onChange={(e) => setCustom(e.target.value === 'custom')}
             >
-              <option value="default">Use the plan's normal duration</option>
+              <option value="default">
+                {freePlan
+                  ? 'Use the configured trial length'
+                  : "Use the plan's normal duration"}
+              </option>
               <option value="custom">Choose an expiry date</option>
             </select>
           </label>
+          {freePlan && (
+            <p className="panel-muted">
+              Free-plan assignments are a trial and are capped to the configured
+              trial length. Assign a paid plan for longer access.
+            </p>
+          )}
           {custom && (
             <label>
               Expires on

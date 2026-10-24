@@ -16,6 +16,7 @@ import {
 import { getJson, loginUrl } from '../lib/api';
 import {
   billingLabel,
+  planBadge,
   planFeatures,
   planPrice,
   type SubscriptionPlan,
@@ -33,6 +34,7 @@ function PlanCard({
   contactEmail: string | null;
 }) {
   const free = /^0+$/u.test(plan.priceCents);
+  const trialDays = plan.slug === 'free' ? (plan.trialDays ?? null) : null;
   const featured = plan.slug === 'basic';
   const PlanIcon = free ? Store : featured ? Layers : Building2;
   const contact = !free && Boolean(contactEmail);
@@ -48,9 +50,7 @@ function PlanCard({
           </span>
           <div>
             <h2>{plan.name}</h2>
-            <span className="plan-kind">
-              {free ? 'Free plan' : 'Paid plan'}
-            </span>
+            <span className="plan-kind">{planBadge(plan)}</span>
           </div>
         </div>
         <p>
@@ -59,7 +59,13 @@ function PlanCard({
       </div>
       <div className="plan-price">
         <strong>{planPrice(plan)}</strong>
-        <span>{free ? 'free' : billingLabel(plan.billingCycle)}</span>
+        <span>
+          {trialDays
+            ? `for ${trialDays} days`
+            : free
+              ? 'free'
+              : billingLabel(plan.billingCycle)}
+        </span>
       </div>
       <p className="plan-currency">Prices in {plan.currency}</p>
       <a
@@ -68,14 +74,18 @@ function PlanCard({
         aria-label={
           contact
             ? `Contact us about the ${plan.name} plan`
-            : `Sign in to get started with ${plan.name}`
+            : trialDays
+              ? `Start your ${trialDays}-day free trial with ${plan.name}`
+              : `Sign in to get started with ${plan.name}`
         }
       >
-        {free
-          ? 'Get started free'
-          : contact
-            ? 'Ask about this plan'
-            : 'Sign in to get started'}
+        {trialDays
+          ? 'Start free trial'
+          : free
+            ? 'Get started free'
+            : contact
+              ? 'Ask about this plan'
+              : 'Sign in to get started'}
         <ArrowRight size={17} aria-hidden="true" />
       </a>
       <div className="plan-inclusions">
@@ -119,6 +129,8 @@ export function PricingPage() {
       getJson<SubscriptionPlan[]>('subscriptions/plans', signal),
   });
   const plans = plansQuery.data ?? [];
+  const freeTrialDays =
+    plans.find((plan) => plan.slug === 'free')?.trialDays ?? null;
 
   useEffect(() => {
     document.title = `Plans & pricing — ${settings.siteName}`;
@@ -214,8 +226,9 @@ export function PricingPage() {
                   ))}
                 </div>
                 <p className="pricing-note">
-                  Paid plans are arranged with our team. Signing in does not
-                  purchase or activate a paid subscription.
+                  Every account starts with a free trial. Paid plans are
+                  arranged with our team; signing in does not purchase or
+                  activate a paid subscription.
                 </p>
               </>
             )}
@@ -237,9 +250,12 @@ export function PricingPage() {
                   <ChevronDown size={18} aria-hidden="true" />
                 </summary>
                 <p>
-                  Sign in to create your account. The free plan applies when you
-                  don’t have an active paid subscription. Check the plan cards
-                  above for the current allowances.
+                  Sign in to create your account.{' '}
+                  {freeTrialDays
+                    ? `Every account starts with a ${freeTrialDays}-day free trial.`
+                    : 'Every account starts with a free trial.'}{' '}
+                  After the trial, choose a paid plan to keep creating. Your
+                  published stores and posts stay online.
                 </p>
               </details>
               <details>

@@ -31,6 +31,7 @@ import {
   SessionGuard,
 } from '../../apps/api/src/modules/auth/guards/auth.guards';
 import { UsersService } from '../../apps/api/src/modules/users/users.service';
+import { FreeTrialService } from '../../apps/api/src/modules/users/free-trial.service';
 import { setupApp } from '../../apps/api/src/setup-app';
 import type { Request, Response } from 'express';
 
@@ -102,15 +103,23 @@ function fixture() {
       return profile;
     },
   } as unknown as GoogleTokenVerifier;
+  const trialStarts: string[] = [];
+  const trials = {
+    startIfNew: async (id: string) => {
+      trialStarts.push(id);
+    },
+  } as unknown as FreeTrialService;
   const auth = new AuthService(
     google,
     users,
     redis as unknown as RedisService,
     config,
+    trials,
   );
   return {
     auth,
     redis,
+    trialStarts,
     revokeSessions: () => {
       version++;
     },
@@ -181,11 +190,12 @@ test('Google verifier delegates signature validation and pins audience, issuer, 
 });
 
 test('session tokens are opaque, hashed in Redis, rotated and revoked on logout', async () => {
-  const { auth, redis } = fixture();
+  const { auth, redis, trialStarts } = fixture();
   const first = await auth.begin();
   assert.equal(first.nonce, hashToken(first.token));
   const signedIn = await auth.signIn('valid.token.signature', first.token);
   assert.match(signedIn.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.deepEqual(trialStarts, [user.id]);
   assert.deepEqual(await auth.currentUser(signedIn.token), user);
   assert.equal(
     JSON.stringify([...redis.values]).includes(signedIn.token),

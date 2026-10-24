@@ -17,6 +17,8 @@ export interface AppEnvironment extends DatabaseEnvironment {
   APP_ORIGIN: string;
   GOOGLE_CLIENT_ID: string;
   AUTH_SESSION_TTL_SECONDS: number;
+  // The free plan is a one-time trial; expired owners become read-only.
+  FREE_TRIAL_DAYS: number;
   REDIS_HOST: string;
   REDIS_PORT: number;
   REDIS_PASSWORD: string;
@@ -276,6 +278,7 @@ export function validateEnvironment(
       300,
       2592000,
     ),
+    FREE_TRIAL_DAYS: integer(env, 'FREE_TRIAL_DAYS', 7, 1, 90),
     REDIS_HOST: text(env, 'REDIS_HOST', '127.0.0.1'),
     REDIS_PORT: integer(env, 'REDIS_PORT', 6379, 1, 65535),
     REDIS_PASSWORD: text(env, 'REDIS_PASSWORD'),

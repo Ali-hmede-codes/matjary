@@ -10,6 +10,7 @@ import {
   Store,
   StoreStatus,
   User,
+  UserSubscription,
   lockOwnerContent,
   publicVisibilitySql,
   ownerVisibilitySql,
@@ -115,6 +116,19 @@ function lifecycleFixture() {
     },
     async count() {
       return 0;
+    },
+    getRepository(target: unknown) {
+      if (target === UserSubscription)
+        return {
+          find: async () => [
+            {
+              startsAt: new Date(0),
+              expiresAt: new Date('2999-01-01T00:00:00Z'),
+              plan: { slug: 'free', limits: {} },
+            },
+          ],
+        };
+      return { findOneBy: async () => null };
     },
     createQueryBuilder: () => builder,
   };
@@ -379,9 +393,16 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
     {} as never,
     {} as never,
     {
-      getUserActiveSubscription: async (id: string) => {
+      getSubscriptionState: async (id: string) => {
         assert.equal(id, ownerId);
-        return null;
+        return {
+          state: 'expired',
+          subscription: null,
+          planName: null,
+          planSlug: null,
+          expiresAt: null,
+          daysRemaining: null,
+        };
       },
       getEffectiveLimits: async (id: string) => {
         assert.equal(id, ownerId);
@@ -394,6 +415,14 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
   assert.equal(result.stats.totalPosts, 0);
   assert.deepEqual(result.posts, []);
   assert.deepEqual(result.products, []);
+  assert.equal(result.subscription, null);
+  assert.deepEqual(result.subscriptionState, {
+    state: 'expired',
+    planName: null,
+    planSlug: null,
+    expiresAt: null,
+    daysRemaining: null,
+  });
   assert.equal(queries.length, 4);
   for (const query of queries) {
     assert.equal(query.owner, ownerId);

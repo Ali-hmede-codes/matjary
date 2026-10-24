@@ -41,6 +41,11 @@ class FakeRepository {
   monthlyCount = 0;
   totalCount = 0;
   locks: string[] = [];
+  subscription: any = {
+    startsAt: new Date(0),
+    expiresAt: new Date('2999-01-01T00:00:00Z'),
+    plan: { slug: 'free', limits: {} },
+  };
   manager = {
     transaction: async (work: (manager: any) => Promise<any>) =>
       work({
@@ -59,7 +64,8 @@ class FakeRepository {
           return null;
         },
         getRepository: (target: unknown) => {
-          if (target === UserSubscription) return { find: async () => [] };
+          if (target === UserSubscription)
+            return { find: async () => [this.subscription] };
           if (target !== Showcase) return { findOneBy: async () => null };
           return {
             createQueryBuilder: () => ({
@@ -175,6 +181,22 @@ test('service.create sets ownerId and defaults status to draft', async () => {
   assert.equal(result.slug, 'hello-world');
   assert.equal(result.title, 'Hello World');
   assert.equal(fake.items.length, 0); // create() doesn't push to fake.items
+});
+
+test('service.create rejects an expired trial before reserving quota', async () => {
+  const fake = new FakeRepository();
+  fake.subscription = {
+    startsAt: new Date(0),
+    expiresAt: new Date('2000-01-01T00:00:00Z'),
+    plan: { slug: 'free', limits: {} },
+  };
+  const svc = serviceWith(fake);
+  await assert.rejects(
+    svc.create({ slug: 'blocked-post', title: 'Blocked' }, 'user-1'),
+    (error: any) =>
+      error instanceof ForbiddenException &&
+      (error.getResponse() as { code?: string }).code === 'TRIAL_EXPIRED',
+  );
 });
 
 test('service.create rejects duplicate slug with sanitized ConflictException', async () => {

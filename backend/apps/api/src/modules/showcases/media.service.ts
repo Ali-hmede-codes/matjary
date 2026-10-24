@@ -21,6 +21,7 @@ import {
   MediaProcessingOutbox,
   User,
   effectiveLimits,
+  assertSubscriptionActive,
   boundedLimit,
   assertQuota,
   ownerWhere,
@@ -87,6 +88,9 @@ export class MediaService {
         const parent = await mediaParent(manager, target);
         if (parent.ownerId !== ownerId)
           throw new ForbiddenException('You do not own this content');
+        // Trial-expired owners cannot start new uploads. Completions of
+        // uploads negotiated during the trial still succeed.
+        await assertSubscriptionActive(manager, ownerId);
         if (dto.purpose !== 'post' && dto.kind !== MediaKind.IMAGE)
           throw new BadRequestException('Choose an image');
         if (!dto.fileType.startsWith(`${dto.kind}/`))

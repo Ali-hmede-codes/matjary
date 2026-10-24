@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
 import { RedisService } from '@app/queue';
 import { UsersService, type PublicUser } from '../users/users.service';
+import { FreeTrialService } from '../users/free-trial.service';
 import { GoogleTokenVerifier } from './google-token-verifier';
 import { isAdminUser } from '../../../../../libs/database/src/admin-policy';
 import { UserRole } from '../../../../../libs/database/src/entities';
@@ -29,6 +30,7 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly redis: RedisService,
     private readonly config: ConfigService<AppEnvironment, true>,
+    private readonly trials: FreeTrialService,
   ) {}
 
   isAdmin(user: PublicUser): boolean {
@@ -100,6 +102,8 @@ export class AuthService {
       );
     }
     const user = await this.users.findOrCreateGoogleUser(profile);
+    // A new account starts its one-time free trial before the session exists.
+    await this.trials.startIfNew(user.id);
     const account = await this.users.findSessionAccount(user.id);
     if (!account)
       throw new UnauthorizedException('Account access is unavailable');

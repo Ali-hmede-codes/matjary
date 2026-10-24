@@ -15,6 +15,7 @@ import {
   ProductCategory,
   User,
   effectiveLimits,
+  assertSubscriptionActive,
   assertQuota,
   ownerWhere,
   publicWhere,
@@ -157,6 +158,7 @@ export class ProductsService {
             where: { id: userId },
             lock: { mode: 'pessimistic_write' },
           });
+          await assertSubscriptionActive(manager, userId);
           const limits = await effectiveLimits(manager, userId);
           const count = await manager.count(Product, {
             where: { store: { ownerId: userId } },
@@ -287,6 +289,7 @@ export class ProductsService {
 
       const saved = await this.products.manager.transaction(async (manager) => {
         await lockOwnerContent(manager, 'product', product.id, userId);
+        await assertSubscriptionActive(manager, userId);
         return manager.save(product);
       });
 

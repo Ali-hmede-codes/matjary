@@ -1,11 +1,11 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import {
-  SubscriptionPlan,
   SubscriptionStatus,
   UserSubscription,
   type SubscriptionLimits,
 } from './entities';
+import { TRIAL_EXPIRED_CODE } from './subscription-errors';
 
 export const FREE_LIMITS: SubscriptionLimits = {
   maxVideoDurationSeconds: 60,
@@ -27,6 +27,41 @@ export const FREE_LIMITS: SubscriptionLimits = {
   maxVerificationBadges: 0,
 };
 
+// No effective subscription means every quota and feature fails closed. This is
+// the trial-expired state: content stays public, but the owner cannot add or
+// change anything until an administrator assigns a plan.
+export const EXPIRED_LIMITS: SubscriptionLimits = {
+  maxVideoDurationSeconds: 0,
+  maxVideoSizeBytes: 0,
+  maxVideoQuality: null,
+  maxImageCount: 0,
+  maxImageSizeBytes: 0,
+  maxImageWidth: 0,
+  maxImageHeight: 0,
+  maxPostsPerMonth: 0,
+  maxTotalPosts: 0,
+  maxProducts: 0,
+  maxStorageBytes: 0,
+  enableCart: false,
+  enableWhatsAppCheckout: false,
+  enableAnalytics: false,
+  enableCustomDomain: false,
+  enablePrioritySupport: false,
+  maxVerificationBadges: 0,
+  verificationBadgePriceCents: null,
+};
+
+const DAY_MS = 86_400_000;
+
+export interface SubscriptionState {
+  state: 'trial' | 'paid' | 'expired';
+  subscription: UserSubscription | null;
+  planName: string | null;
+  planSlug: string | null;
+  expiresAt: Date | null;
+  daysRemaining: number | null;
+}
+
 export async function effectiveSubscription(
   manager: EntityManager,
   userId: string,
@@ -42,21 +77,62 @@ export async function effectiveSubscription(
       (subscription) =>
         subscription.startsAt <= now &&
         (!subscription.expiresAt || subscription.expiresAt > now) &&
-        subscription.plan,
+        subscription.plan &&
+        // The free plan is the trial plan; an unbounded free row is stale state
+        // and must not grant permanent access.
+        (subscription.plan.slug !== 'free' || subscription.expiresAt != null),
     ) ?? null
   );
+}
+
+export async function subscriptionState(
+  manager: EntityManager,
+  userId: string,
+  now = new Date(),
+): Promise<SubscriptionState> {
+  const subscription = await effectiveSubscription(manager, userId, now);
+  if (!subscription || !subscription.plan)
+    return {
+      state: 'expired',
+      subscription: null,
+      planName: null,
+      planSlug: null,
+      expiresAt: null,
+      daysRemaining: null,
+    };
+  const trial = subscription.plan.slug === 'free';
+  const expiresAt = subscription.expiresAt ?? null;
+  return {
+    state: trial ? 'trial' : 'paid',
+    subscription,
+    planName: subscription.plan.name,
+    planSlug: subscription.plan.slug,
+    expiresAt,
+    daysRemaining: expiresAt
+      ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / DAY_MS))
+      : null,
+  };
 }
 
 export async function effectiveLimits(
   manager: EntityManager,
   userId: string,
+  now = new Date(),
 ): Promise<SubscriptionLimits> {
-  const subscription = await effectiveSubscription(manager, userId);
-  const plan =
-    subscription?.plan ??
-    (await manager.getRepository(SubscriptionPlan).findOneBy({ slug: 'free' }));
+  const subscription = await effectiveSubscription(manager, userId, now);
+  if (!subscription || !subscription.plan) return EXPIRED_LIMITS;
   // Omitted settings use safe defaults; explicit null remains unlimited.
-  return { ...FREE_LIMITS, ...plan?.limits };
+  return { ...FREE_LIMITS, ...subscription.plan.limits };
+}
+
+export async function assertSubscriptionActive(
+  manager: EntityManager,
+  userId: string,
+  now = new Date(),
+): Promise<UserSubscription> {
+  const subscription = await effectiveSubscription(manager, userId, now);
+  if (!subscription) throw new ForbiddenException({ code: TRIAL_EXPIRED_CODE });
+  return subscription;
 }
 
 export function assertQuota(

@@ -53,6 +53,13 @@ export interface OwnerSummary {
     expiresAt: string | null;
     status: string;
   } | null;
+  subscriptionState?: {
+    state: 'trial' | 'paid' | 'expired';
+    planName: string | null;
+    planSlug: string | null;
+    expiresAt: string | null;
+    daysRemaining: number | null;
+  };
 }
 interface OwnerState {
   session: Session;
@@ -166,6 +173,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
               </select>
             </label>
           )}
+          <PlanBanner />
           <Routes>
             <Route index element={<OwnerHome />} />
             <Route path="stores" element={<StoreManager />} />
@@ -206,6 +214,37 @@ export default function OwnerPanel({ session }: { session: Session }) {
         </OwnerContext.Provider>
       )}
     </PanelShell>
+  );
+}
+function PlanBanner() {
+  const { summary } = useOwner();
+  const state = summary.subscriptionState;
+  if (!state) return null;
+  const expired = state.state === 'expired';
+  const endingSoon =
+    state.state === 'trial' &&
+    state.daysRemaining != null &&
+    state.daysRemaining <= 2;
+  if (!expired && !endingSoon) return null;
+  const days = state.daysRemaining ?? 0;
+  return (
+    <section className={`panel-plan-banner ${expired ? 'is-expired' : ''}`}>
+      <div>
+        <strong>
+          {expired
+            ? 'Your free trial has ended.'
+            : `Your free trial ends in ${days} day${days === 1 ? '' : 's'}.`}
+        </strong>
+        <span>
+          {expired
+            ? 'Your published content is still online. Choose a plan to keep creating.'
+            : 'Choose a paid plan to keep creating without interruption.'}
+        </span>
+      </div>
+      <Link className="panel-primary" to="/pricing">
+        Choose a plan <ArrowUpRight size={16} />
+      </Link>
+    </section>
   );
 }
 function NoStore() {
@@ -327,6 +366,23 @@ function OwnerHome() {
 }
 function OwnerPlan() {
   const { summary, store } = useOwner();
+  const state = summary.subscriptionState;
+  const expired = state?.state === 'expired';
+  const trial = state?.state === 'trial';
+  const planName = expired
+    ? 'Trial ended'
+    : state?.planName || summary.subscription?.planName || 'Free';
+  const planDetail = expired
+    ? 'Published content stays online. Choose a paid plan to start creating again.'
+    : trial && state?.daysRemaining != null
+      ? `${state.daysRemaining} day${state.daysRemaining === 1 ? '' : 's'} left · ends ${dateLabel(state.expiresAt)}`
+      : state?.expiresAt
+        ? `Expires ${dateLabel(state.expiresAt)}`
+        : state?.state === 'paid'
+          ? 'No expiry'
+          : summary.subscription
+            ? `Expires ${dateLabel(summary.subscription.expiresAt)}`
+            : 'A great place to start your business.';
   const limits = [
     ['Products', 'maxProducts', 'totalProducts'],
     ['Total posts', 'maxTotalPosts', 'totalPosts'],
@@ -339,13 +395,11 @@ function OwnerPlan() {
       />
       <div className="panel-two-columns">
         <section className="panel-card panel-feature">
-          <span className="panel-pill">CURRENT PLAN</span>
-          <h2>{summary.subscription?.planName || 'Free'}</h2>
-          <p>
-            {summary.subscription
-              ? `Expires ${dateLabel(summary.subscription.expiresAt)}`
-              : 'A great place to start your business.'}
-          </p>
+          <span className="panel-pill">
+            {trial ? 'FREE TRIAL' : expired ? 'TRIAL ENDED' : 'CURRENT PLAN'}
+          </span>
+          <h2>{planName}</h2>
+          <p>{planDetail}</p>
           {limits.map(([label, limit, used]) => (
             <div className="panel-usage" key={limit}>
               <span>{label}</span>
@@ -358,11 +412,13 @@ function OwnerPlan() {
             </div>
           ))}
           <Link className="panel-primary" to="/pricing">
-            Explore plans <ArrowUpRight size={16} />
+            {expired ? 'Choose a paid plan' : 'Explore plans'}{' '}
+            <ArrowUpRight size={16} />
           </Link>
           <small>
-            Subscriptions are assigned by an administrator. There is no
-            automatic payment or checkout.
+            {expired
+              ? 'An administrator assigns paid plans. Your published content remains online.'
+              : 'Subscriptions are assigned by an administrator. There is no automatic payment or checkout.'}
           </small>
         </section>
         <section className="panel-card panel-feature">
