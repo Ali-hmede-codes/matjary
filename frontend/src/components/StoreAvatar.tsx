@@ -1,6 +1,31 @@
 import { useState, type CSSProperties } from 'react';
+import { BadgeCheck } from 'lucide-react';
 import { assetUrl, type Media, type Store } from '../lib/api';
-import { storeMediaUrl, storePresentation } from '../lib/storefront';
+import {
+  isStoreVerified,
+  storeMediaUrl,
+  storePresentation,
+} from '../lib/storefront';
+
+export function StoreVerifiedBadge({
+  store,
+  size = 20,
+}: {
+  store?: Store;
+  size?: number;
+}) {
+  if (!isStoreVerified(store)) return null;
+  return (
+    <span
+      className="store-verified-badge"
+      role="img"
+      aria-label="Verified shop"
+      title="This shop has an active verification badge."
+    >
+      <BadgeCheck size={size} aria-hidden="true" />
+    </span>
+  );
+}
 
 export function StoreAvatar({
   store,

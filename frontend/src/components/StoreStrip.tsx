@@ -1,8 +1,8 @@
-import { BadgeCheck, Compass, Plus } from 'lucide-react';
+import { Compass, Plus } from 'lucide-react';
 import { loginUrl, type Post, type Store } from '../lib/api';
 import { enableMouseScrolling } from '../lib/website';
 import { storePath } from '../lib/storefront';
-import { StoreAvatar } from './StoreAvatar';
+import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
 export function StoreStrip({
   stores,
@@ -56,7 +56,7 @@ export function StoreStrip({
             />
           </span>
           <span>{item.name}</span>
-          {item.hasVerificationBadge && <BadgeCheck size={15} />}
+          <StoreVerifiedBadge store={item} size={22} />
         </a>
       ))}
     </section>

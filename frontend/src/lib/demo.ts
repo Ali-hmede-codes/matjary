@@ -53,6 +53,8 @@ export const demoStores: Store[] = examples.map(
     id: `demo-store-${index}`,
     slug: `demo-store-${index}`,
     name,
+    hasVerificationBadge: index === 0 || index === 1 || index === 3,
+    verificationBadgeExpiresAt: index === 3 ? '2020-01-01T00:00:00Z' : null,
     brandColor:
       ['#75604b', '#88452c', '#384e60', '#637348', '#426751', '#91614c'][
         index

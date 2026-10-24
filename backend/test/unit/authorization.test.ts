@@ -5,6 +5,7 @@ import {
   Module,
   UnauthorizedException,
   ForbiddenException,
+  ConflictException,
   ServiceUnavailableException,
   type ExecutionContext,
 } from '@nestjs/common';
@@ -60,6 +61,142 @@ import {
 } from '../../libs/database/src/entities';
 import { StorageService } from '../../libs/storage/src/storage.service';
 import { toStoreResponseDto } from '../../apps/api/src/modules/stores/dto/store-response.dto';
+import { StoresService } from '../../apps/api/src/modules/stores/stores.service';
+
+test('public shop badges disappear after expiration or revocation', (t) => {
+  const now = new Date('2026-10-24T12:00:00Z');
+  t.mock.timers.enable({ apis: ['Date'], now });
+  const store = Object.assign(new Store(), { hasVerificationBadge: true });
+  for (const expires of [null, new Date(now.getTime() + 1000)]) {
+    store.verificationBadgeExpiresAt = expires;
+    assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
+  }
+  for (const expires of [now, new Date(now.getTime() - 1000)]) {
+    store.verificationBadgeExpiresAt = expires;
+    assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
+  }
+  store.hasVerificationBadge = false;
+  store.verificationBadgeExpiresAt = null;
+  assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
+});
+
+test('shop badge grants enforce ownership, quotas, payment gating and admin revocation', async () => {
+  const store = Object.assign(new Store(), {
+    id: 'shop',
+    ownerId: 'owner',
+    hasVerificationBadge: false,
+    verificationBadgeExpiresAt: null,
+  });
+  const limits = { maxVerificationBadges: 1, verificationBadgePriceCents: 0 };
+  const subscription = {
+    startsAt: new Date(0),
+    expiresAt: new Date(Date.now() + 86_400_000),
+    plan: { limits },
+  };
+  let saves = 0;
+  const audits: unknown[] = [];
+  const manager = {
+    findOneBy: async (_target: unknown, where: { id: string }) => ({
+      id: where.id,
+      email: `${where.id}@example.test`,
+      suspendedAt: null,
+    }),
+    findOneOrFail: async (
+      target: unknown,
+      options: { lock: { mode: string } },
+    ) => {
+      assert.equal(options.lock.mode, 'pessimistic_write');
+      return target === Store ? store : { id: 'owner' };
+    },
+    getRepository: (target: unknown) => {
+      const query = {
+        where: (sql: string) => {
+          assert.match(sql, /verificationBadgeExpiresAt > :now/);
+          return query;
+        },
+        getCount: async () =>
+          Number(toStoreResponseDto(store).hasVerificationBadge),
+      };
+      return {
+        find: async () => (target === UserSubscription ? [subscription] : []),
+        findOneBy: async () => null,
+        createQueryBuilder: () => query,
+      };
+    },
+    save: async () => {
+      saves++;
+      return store;
+    },
+    insert: async (_target: unknown, row: unknown) => {
+      audits.push(row);
+    },
+    transaction: async (work: (value: unknown) => Promise<unknown>) =>
+      work(manager),
+  };
+  const service = new StoresService(
+    { manager, findOneBy: async () => store } as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    new AdminGuard(config()),
+  );
+  await assert.rejects(
+    service.checkBadgeEligibility('shop', 'other'),
+    ForbiddenException,
+  );
+  await assert.rejects(
+    service.grantVerificationBadge('shop', 'other'),
+    ForbiddenException,
+  );
+  assert.equal(saves, 0);
+  assert.equal(
+    (await service.checkBadgeEligibility('shop', 'owner')).eligible,
+    true,
+  );
+  assert.deepEqual(await service.grantVerificationBadge('shop', 'owner'), {
+    success: true,
+  });
+  assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
+  assert.equal(store.verificationBadgeExpiresAt, subscription.expiresAt);
+  assert.equal(store.verificationBadgeGrantedBy, 'owner');
+  assert.ok(store.verificationBadgeGrantedAt instanceof Date);
+  await service.grantVerificationBadge('shop', 'owner');
+  assert.equal(saves, 1, 'active grants are idempotent');
+  await assert.rejects(
+    service.revokeVerificationBadge('shop', 'owner'),
+    ForbiddenException,
+  );
+  await service.revokeVerificationBadge('shop', 'admin');
+  assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
+  assert.equal(store.verificationBadgeGrantedBy, null);
+  assert.equal(store.verificationBadgeGrantedAt, null);
+  assert.equal(store.verificationBadgeExpiresAt, null);
+
+  limits.maxVerificationBadges = 0;
+  assert.equal(
+    (await service.checkBadgeEligibility('shop', 'owner')).eligible,
+    false,
+  );
+  await assert.rejects(
+    service.grantVerificationBadge('shop', 'owner'),
+    ConflictException,
+  );
+  limits.maxVerificationBadges = 1;
+  limits.verificationBadgePriceCents = 500;
+  const paid = await service.grantVerificationBadge('shop', 'owner');
+  assert.equal(paid.success, false);
+  assert.equal(paid.requiresPayment, true);
+  assert.equal(paid.priceCents, 500);
+  assert.equal(store.hasVerificationBadge, false);
+  assert.equal(saves, 2);
+
+  await service.grantVerificationBadge('shop', 'admin');
+  assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
+  assert.equal(store.verificationBadgeExpiresAt, null);
+  assert.equal(store.verificationBadgeGrantedBy, 'admin');
+  assert.equal(audits.length, 2);
+});
 
 test('storefront contact details do not require map coordinates', () => {
   const store = Object.assign(new Store(), {

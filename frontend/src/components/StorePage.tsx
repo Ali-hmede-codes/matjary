@@ -4,12 +4,14 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
-  BadgeCheck,
+  Images,
+  Info,
   LoaderCircle,
   MapPin,
   Package,
   Phone,
   Search,
+  ShoppingBag,
   Utensils,
 } from 'lucide-react';
 import {
@@ -24,6 +26,7 @@ import {
 import { demoPosts, demoProducts, demoStores } from '../lib/demo';
 import {
   formatProductPrice,
+  isStoreVerified,
   productCategoryLabel,
   storeMediaUrl,
   storePresentation,
@@ -32,7 +35,7 @@ import { safeUrl } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { LoadingBar, StatusBanner } from './Feedback';
 import { MediaView } from './MediaView';
-import { StoreAvatar } from './StoreAvatar';
+import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
 function ShopImage({
   value,
@@ -199,6 +202,7 @@ export function StorePage({ slug }: { slug: string | null }) {
   const { settings } = useWebsiteSettings(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
+  const [activeSection, setActiveSection] = useState('shop-catalog');
   const storeQuery = useQuery({
     queryKey: ['storefront', slug],
     queryFn: ({ signal }) =>
@@ -270,6 +274,22 @@ export function StorePage({ slug }: { slug: string | null }) {
       );
   }, [store, missing, settings, presentation.theme['--brand-primary']]);
 
+  useEffect(() => {
+    if (!store) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const section = entries.find((entry) => entry.isIntersecting);
+        if (section) setActiveSection(section.target.id);
+      },
+      { rootMargin: '-10% 0px -55% 0px' },
+    );
+    for (const id of ['shop-catalog', 'shop-stories', 'shop-about']) {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    }
+    return () => observer.disconnect();
+  }, [store?.id]);
+
   const home = demo ? '/?demo=1' : '/';
   const products = demo
     ? demoProducts.filter((item) => item.storeId === store?.id)
@@ -314,6 +334,7 @@ export function StorePage({ slug }: { slug: string | null }) {
           <ArrowLeft size={17} /> Discover
         </a>
         <a className="shop-platform" href={home}>
+          <ShoppingBag size={21} aria-hidden="true" />
           {settings.siteName}
           <span> / shops</span>
         </a>
@@ -401,35 +422,69 @@ export function StorePage({ slug }: { slug: string | null }) {
                     {presentation.label}
                   </span>
                   <h1 id="shop-title">
-                    {store.name}
-                    {store.hasVerificationBadge && (
-                      <BadgeCheck size={27} aria-label="Verified shop" />
-                    )}
+                    <span>{store.name}</span>
+                    <StoreVerifiedBadge store={store} size={32} />
                   </h1>
                   {store.description && <p>{store.description}</p>}
-                  {(location?.city || location?.country) && (
-                    <span className="shop-location">
-                      <MapPin size={15} />
-                      {[location.city, location.country]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </span>
-                  )}
+                  <div className="shop-meta">
+                    <span className="shop-handle">@{store.slug}</span>
+                    {(location?.city || location?.country) && (
+                      <span className="shop-location">
+                        <MapPin size={14} aria-hidden="true" />
+                        {[location.city, location.country]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <a className="primary-button shop-browse" href="#shop-catalog">
-                  {presentation.catalogAction}
-                  <ArrowRight size={17} />
-                </a>
+                <div className="shop-actions">
+                  <a
+                    className="primary-button shop-browse"
+                    href="#shop-catalog"
+                  >
+                    {presentation.catalogAction}
+                    <ArrowRight size={17} />
+                  </a>
+                  <a className="secondary-button" href="#shop-about">
+                    {presentation.restaurant ? (
+                      <MapPin size={16} />
+                    ) : (
+                      <Info size={16} />
+                    )}
+                    {presentation.restaurant
+                      ? 'Plan your visit'
+                      : 'Contact this shop'}
+                  </a>
+                </div>
               </div>
             </section>
             <nav className="shop-nav" aria-label="Shop sections">
-              <a href="#shop-catalog">
-                {presentation.restaurant ? 'Menu' : 'Collection'}
-              </a>
-              <a href="#shop-stories">Latest stories</a>
-              <a href="#shop-about">
-                {presentation.restaurant ? 'Visit us' : 'About & contact'}
-              </a>
+              {[
+                {
+                  id: 'shop-catalog',
+                  label: presentation.restaurant ? 'Menu' : 'Collection',
+                  Icon: presentation.restaurant ? Utensils : ShoppingBag,
+                },
+                { id: 'shop-stories', label: 'Latest stories', Icon: Images },
+                {
+                  id: 'shop-about',
+                  label: presentation.restaurant
+                    ? 'Visit us'
+                    : 'About & contact',
+                  Icon: Info,
+                },
+              ].map(({ id, label, Icon }) => (
+                <a
+                  key={id}
+                  href={`#${id}`}
+                  aria-current={activeSection === id ? 'location' : undefined}
+                  onClick={() => setActiveSection(id)}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  {label}
+                </a>
+              ))}
             </nav>
             <section
               id="shop-catalog"
@@ -463,6 +518,17 @@ export function StorePage({ slug }: { slug: string | null }) {
                   />
                 </label>
               </div>
+              {(demo || productsQuery.isSuccess) && (
+                <p className="shop-results" role="status">
+                  {visible.length} {visible.length === 1 ? 'item' : 'items'}
+                  {search || category
+                    ? ' matching your selection'
+                    : ' to explore'}
+                  {!demo && productsQuery.hasNextPage
+                    ? ' in the loaded collection'
+                    : ''}
+                </p>
+              )}
               {categories.length > 1 && (
                 <div
                   className="shop-categories"
@@ -682,6 +748,17 @@ export function StorePage({ slug }: { slug: string | null }) {
                   {store.description ||
                     'Discover our latest products and stories, all in one place.'}
                 </p>
+                {isStoreVerified(store) && (
+                  <div className="shop-verification-note">
+                    <StoreVerifiedBadge store={store} size={30} />
+                    <div>
+                      <strong>Verified shop</strong>
+                      <span>
+                        Active verification badge on {settings.siteName}.
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="shop-socials">
                   {Object.entries(store.socialMediaLinks ?? {}).map(
                     ([key, value]) =>

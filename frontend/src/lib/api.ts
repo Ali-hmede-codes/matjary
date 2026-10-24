@@ -7,6 +7,7 @@ export interface Store {
   description?: string | null;
   brandColor: string | null;
   hasVerificationBadge?: boolean;
+  verificationBadgeExpiresAt?: string | null;
   storeType?: 'ecommerce' | 'restaurant_menu';
   logoKey?: string | null;
   bannerKey?: string | null;

@@ -1,6 +1,18 @@
 import type { Store } from './api';
 import { contrastColor, safeUrl } from './website.ts';
 
+export function isStoreVerified(
+  store?: Pick<Store, 'hasVerificationBadge' | 'verificationBadgeExpiresAt'>,
+  now = Date.now(),
+): boolean {
+  // The API decides eligibility; an expired or invalid timestamp cannot add trust.
+  return (
+    store?.hasVerificationBadge === true &&
+    (store.verificationBadgeExpiresAt == null ||
+      Date.parse(store.verificationBadgeExpiresAt) > now)
+  );
+}
+
 export function storePath(slug: string, demo = false): string {
   return `/stores/${encodeURIComponent(slug)}${demo ? '?demo=1' : ''}`;
 }

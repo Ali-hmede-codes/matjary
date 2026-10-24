@@ -22,3 +22,16 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* Verification stays blue independently of the shop's editable brand colors. */
+.store-verified-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  vertical-align: middle;
+}
+.store-verified-badge svg {
+  fill: #1683ff;
+  stroke: #ffffff;
+  stroke-width: 2.3;
+}

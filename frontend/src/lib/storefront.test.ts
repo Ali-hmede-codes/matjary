@@ -2,11 +2,49 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatProductPrice,
+  isStoreVerified,
   storeMediaUrl,
   storePath,
   storePresentation,
   storeSlugFromPath,
 } from './storefront.ts';
+
+test('verification requires an active API badge and rejects expired timestamps', () => {
+  const now = Date.parse('2026-10-24T12:00:00Z');
+  assert.equal(isStoreVerified(undefined, now), false);
+  assert.equal(isStoreVerified({}, now), false);
+  assert.equal(isStoreVerified({ hasVerificationBadge: true }, now), true);
+  for (const expires of [null, '2026-10-25T12:00:00Z']) {
+    assert.equal(
+      isStoreVerified(
+        { hasVerificationBadge: true, verificationBadgeExpiresAt: expires },
+        now,
+      ),
+      true,
+    );
+    assert.equal(
+      isStoreVerified(
+        { hasVerificationBadge: false, verificationBadgeExpiresAt: expires },
+        now,
+      ),
+      false,
+    );
+  }
+  for (const expires of [
+    '2026-10-23T12:00:00Z',
+    '2026-10-24T12:00:00Z',
+    'invalid',
+    '',
+  ]) {
+    assert.equal(
+      isStoreVerified(
+        { hasVerificationBadge: true, verificationBadgeExpiresAt: expires },
+        now,
+      ),
+      false,
+    );
+  }
+});
 
 test('shop URLs support deep links and keep preview mode explicit', () => {
   assert.equal(storePath('olive-kitchen'), '/stores/olive-kitchen');

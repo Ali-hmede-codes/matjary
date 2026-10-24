@@ -55,11 +55,10 @@
 .all-stores .story-ring {
   color: var(--primary);
 }
-.story > svg {
+.story > .store-verified-badge {
   position: absolute;
-  top: 50px;
+  top: 48px;
   right: 0;
-  color: var(--primary);
   background: var(--surface);
   border-radius: 50%;
 }
