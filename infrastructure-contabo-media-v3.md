@@ -34,7 +34,7 @@ A nominal 1 Gbit/s port is at most 125 MB/s before protocol overhead and content
 ## 🖼️ Image Pipeline
 1. Owner negotiates an asset, then streams its bytes to the encoded `/api/v1/uploads/:key` URL with the owner session. Only pending, unexpired, owned originals can be written, with exclusive promotion, byte limits, deadline and disconnect cleanup. Ordinary JSON remains limited to 16 KB.
 2. Completion checks actual stored size and transactionally creates a unique outbox record. Worker dispatch/reconciliation retries missing jobs with deterministic IDs.
-3. Worker validates signatures, decoded dimensions and pixel count; auto-orients and strips EXIF/GPS. AVIF50/WebP75/JPEG80 variants target widths 480/1080/1600 without upscaling. Persist actual output dimensions/bytes.
+3. Worker validates signatures, decoded dimensions and pixel count; auto-orients and strips EXIF/GPS. AVIF55/WebP80/JPEG84 variants target widths 480/1080/1600 without upscaling. Persist actual output dimensions/bytes.
 4. Commit READY variants before removing the original; storage deletion failures remain retryable. Expired/failed uploads are cleaned after the default 24-hour retention, excluding active processing.
 5. Public downloads serve only READY variants on published, unmoderated posts with active owners/parents. Owner access remains restricted to unmoderated content; allowlisted administrators can privately preview registered bytes. Private responses use `private, no-store`; public bytes require revalidation (`max-age=0, must-revalidate`) so moderation is checked on subsequent requests. Trusted MIME types, `nosniff`, and single-byte ranges are enforced. Do not bypass these checks with an unguarded static directory.
 
@@ -60,7 +60,7 @@ This snippet illustrates encoding choices, not the full validation/timeout pipel
 
 ## Video pipeline and configuration
 - Hard ceilings: images 10 MiB; video 200 MiB, 90 seconds, 1080p-equivalent input. Subscription limits can be stricter. Null/unlimited subscription settings never bypass global safety limits.
-- Validate container, streams, finite duration and dimensions before expensive encoding. Generate one aspect-preserving, no-upscale H.264 MP4 up to 720p plus a JPEG poster. Strip metadata/chapters, constrain input protocols, threads, output size and subprocess lifetime. HLS and AV1 are outside current scope.
+- Validate container, streams, finite duration and dimensions before expensive encoding. Generate one aspect-preserving, no-upscale H.264 MP4 up to 720p (CRF 20, 4 Mbit/s ceiling, 160 kbit/s AAC) plus a near-lossless JPEG poster. Strip metadata/chapters, constrain input protocols, threads, output size and subprocess lifetime. HLS and AV1 are outside current scope.
 - `MEDIA_JOB_TIMEOUT_MS` and `MEDIA_UPLOAD_TIMEOUT_MS` default 300000, maximum 900000. `MEDIA_TEMP_DIR` defaults `.tmp/media`; use bounded fast local temporary storage. `FFMPEG_PATH`/`FFPROBE_PATH` default to binaries on PATH and exist only in the worker image. Always smoke-test the installed version.
 - `MEDIA_MAX_IMAGE_PIXELS` defaults 40000000. `.env.example` and `libs/config/src/environment.ts` define current names and validated bounds; old `VIDEO_*`/`IMAGE_*` placeholder variables are not used.
 - BullMQ retries transient processing failures; permanent validation or exhausted attempts marks FAILED. Idempotent variants/outbox recovery prevent lost completion requests from leaving assets stranded.

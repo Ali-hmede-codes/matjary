@@ -11,6 +11,11 @@ sharp.cache({ files: 0 });
 sharp.concurrency(2);
 const execute = promisify(execFile);
 export class InvalidMediaError extends Error {}
+// Originals are removed after processing, so these variants are the only copy
+// owners and visitors ever see. Keep the tiers and widths unchanged (bounded
+// storage/CPU) but encode them at a slightly higher quality than the earlier
+// AVIF50/WebP75/JPEG80 baseline.
+const IMAGE_QUALITY = { avif: 55, webp: 80, jpeg: 84 } as const;
 export interface EncodedVariant {
   label: string;
   file: string;
@@ -123,9 +128,7 @@ export async function encodeImage(
           seconds: Math.max(1, Math.ceil(remaining(options) / 1000)),
         });
       const info = await image
-        .toFormat(format, {
-          quality: format === 'avif' ? 50 : format === 'webp' ? 75 : 80,
-        })
+        .toFormat(format, { quality: IMAGE_QUALITY[format] })
         .toFile(file);
       remaining(options);
       variants.push({
@@ -264,18 +267,21 @@ export async function encodeVideo(
       'libx264',
       '-preset',
       'medium',
+      // Higher detail within the unchanged 720p frame: a lower CRF plus a
+      // roomier rate ceiling. 4 Mbit/s still keeps a 90 s clip well under the
+      // 200 MiB output guard and the small-host CPU budget.
       '-crf',
-      '23',
+      '20',
       '-maxrate',
-      '3M',
+      '4M',
       '-bufsize',
-      '6M',
+      '8M',
       '-pix_fmt',
       'yuv420p',
       '-c:a',
       'aac',
       '-b:a',
-      '128k',
+      '160k',
       '-t',
       String(limits.maxDurationSeconds),
       '-fs',
@@ -315,6 +321,10 @@ export async function encodeVideo(
       '0:v:0',
       '-frames:v',
       '1',
+      // The poster is the feed preview for videos, so keep it near-lossless
+      // instead of ffmpeg's lower default MJPEG quality.
+      '-q:v',
+      '2',
       '-map_metadata',
       '-1',
       '-map_chapters',
