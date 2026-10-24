@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { EntityTarget, ObjectLiteral } from 'typeorm';
+import { In, type EntityTarget, type ObjectLiteral } from 'typeorm';
 import {
   AdminAuditLog,
   BoostCampaign,
@@ -81,7 +81,7 @@ export const ADMIN_RESOURCES: Record<string, Resource> = {
   media: {
     target: MediaAsset,
     fields: fields(
-      'id showcaseId kind status mimeType sizeBytes width height durationMs altText position adminArchivedAt createdAt updatedAt',
+      'id showcaseId storeId productId purpose kind status mimeType sizeBytes width height durationMs altText position adminArchivedAt createdAt updatedAt',
     ),
     search: ['id', 'altText'],
     parent: 'showcaseId',
@@ -194,10 +194,20 @@ export class AdminQueriesService {
       .getRepository(resource.target)
       .createQueryBuilder('item')
       .select(resource.fields.map((field) => `item.${field}`));
+    if (name === 'subscriptions')
+      query
+        .leftJoin(User, 'searchOwner', 'searchOwner.id = item.userId')
+        .leftJoin(
+          SubscriptionPlan,
+          'searchPlan',
+          'searchPlan.id = item.planId',
+        );
     if (dto.search) {
       const search = `%${dto.search.replace(/[\\%_]/g, '\\$&')}%`;
       query.andWhere(
-        `(${resource.search.map((field) => `item.${field} LIKE :search`).join(' OR ')})`,
+        name === 'subscriptions'
+          ? '(searchOwner.displayName LIKE :search OR searchOwner.email LIKE :search OR searchPlan.name LIKE :search)'
+          : `(${resource.search.map((field) => `item.${field} LIKE :search`).join(' OR ')})`,
         { search },
       );
     }
@@ -208,8 +218,21 @@ export class AdminQueriesService {
           .andWhere('parent.ownerId = :ownerId', { ownerId: dto.ownerId });
       } else if (name === 'media') {
         query
-          .innerJoin(Showcase, 'parent', 'parent.id = item.showcaseId')
-          .andWhere('parent.ownerId = :ownerId', { ownerId: dto.ownerId });
+          .leftJoin(Showcase, 'parentPost', 'parentPost.id = item.showcaseId')
+          .leftJoin(
+            Product,
+            'parentProduct',
+            'parentProduct.id = item.productId',
+          )
+          .leftJoin(
+            Store,
+            'parentStore',
+            'parentStore.id = COALESCE(item.storeId, parentProduct.storeId)',
+          )
+          .andWhere(
+            'COALESCE(parentPost.ownerId, parentStore.ownerId) = :ownerId',
+            { ownerId: dto.ownerId },
+          );
       } else if (resource.owner)
         query.andWhere(`item.${resource.owner} = :ownerId`, {
           ownerId: dto.ownerId,
@@ -246,8 +269,10 @@ export class AdminQueriesService {
       .skip(offset)
       .getManyAndCount();
     return {
-      items:
+      items: await this.summaries(
+        name,
         name === 'users' ? items.map((item) => this.withUserRole(item)) : items,
+      ),
       total,
       limit,
       offset,
@@ -296,7 +321,86 @@ export class AdminQueriesService {
           take: 30,
         });
     }
-    return name === 'users' ? this.withUserRole(item) : item;
+    if (name === 'posts') {
+      const media = await this.access.database.manager.find(MediaAsset, {
+        where: { showcaseId: id },
+        relations: ['variants'],
+        take: 30,
+        order: { position: 'ASC' },
+      });
+      item.media = media.map((asset) => ({
+        id: asset.id,
+        kind: asset.kind,
+        status: asset.status,
+        key:
+          asset.variants.find(
+            (v) =>
+              v.mimeType ===
+              (asset.kind === 'video' ? 'video/mp4' : 'image/webp'),
+          )?.storageKey ?? null,
+      }));
+    }
+    return (
+      await this.summaries(name, [
+        name === 'users' ? this.withUserRole(item) : item,
+      ])
+    )[0];
+  }
+
+  private async summaries(name: string, items: ObjectLiteral[]) {
+    if (
+      !items.length ||
+      !['stores', 'products', 'posts', 'subscriptions'].includes(name)
+    )
+      return items;
+    const manager = this.access.database.manager;
+    const storeIds = [
+      ...new Set(items.map((item) => item.storeId).filter(Boolean)),
+    ] as string[];
+    const stores = storeIds.length
+      ? await manager.find(Store, {
+          where: { id: In(storeIds) },
+          select: ['id', 'name', 'slug', 'ownerId'],
+        })
+      : [];
+    const storeMap = new Map(stores.map((store) => [store.id, store]));
+    const ownerIds = [
+      ...new Set(
+        items
+          .map(
+            (item) =>
+              item.ownerId ||
+              item.userId ||
+              storeMap.get(item.storeId)?.ownerId,
+          )
+          .filter(Boolean),
+      ),
+    ] as string[];
+    const users = ownerIds.length
+      ? await manager.find(User, {
+          where: { id: In(ownerIds) },
+          select: ['id', 'displayName', 'email'],
+        })
+      : [];
+    const ownerMap = new Map(users.map((user) => [user.id, user]));
+    const planIds = [
+      ...new Set(items.map((item) => item.planId).filter(Boolean)),
+    ] as string[];
+    const plans = planIds.length
+      ? await manager.find(SubscriptionPlan, {
+          where: { id: In(planIds) },
+          select: ['id', 'name'],
+        })
+      : [];
+    const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+    return items.map((item) => ({
+      ...item,
+      store: storeMap.get(item.storeId),
+      owner: ownerMap.get(
+        item.ownerId || item.userId || storeMap.get(item.storeId)?.ownerId,
+      ),
+      plan: planMap.get(item.planId),
+    }));
   }
 
   async overview(actor: AdminActor) {

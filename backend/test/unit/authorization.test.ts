@@ -80,7 +80,7 @@ test('public shop badges disappear after expiration or revocation', (t) => {
   assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
 });
 
-test('shop badge grants enforce ownership, quotas, payment gating and admin revocation', async () => {
+test('shop verification requires administrators even with an eligible subscription', async () => {
   const store = Object.assign(new Store(), {
     id: 'shop',
     ownerId: 'owner',
@@ -154,14 +154,14 @@ test('shop badge grants enforce ownership, quotas, payment gating and admin revo
     (await service.checkBadgeEligibility('shop', 'owner')).eligible,
     true,
   );
-  assert.deepEqual(await service.grantVerificationBadge('shop', 'owner'), {
-    success: true,
-  });
+  await assert.rejects(
+    service.grantVerificationBadge('shop', 'owner'),
+    ForbiddenException,
+  );
+  assert.equal(saves, 0);
+  await service.grantVerificationBadge('shop', 'admin');
   assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
-  assert.equal(store.verificationBadgeExpiresAt, subscription.expiresAt);
-  assert.equal(store.verificationBadgeGrantedBy, 'owner');
-  assert.ok(store.verificationBadgeGrantedAt instanceof Date);
-  await service.grantVerificationBadge('shop', 'owner');
+  await service.grantVerificationBadge('shop', 'admin');
   assert.equal(saves, 1, 'active grants are idempotent');
   await assert.rejects(
     service.revokeVerificationBadge('shop', 'owner'),
@@ -174,28 +174,15 @@ test('shop badge grants enforce ownership, quotas, payment gating and admin revo
   assert.equal(store.verificationBadgeExpiresAt, null);
 
   limits.maxVerificationBadges = 0;
-  assert.equal(
-    (await service.checkBadgeEligibility('shop', 'owner')).eligible,
-    false,
-  );
   await assert.rejects(
     service.grantVerificationBadge('shop', 'owner'),
-    ConflictException,
+    ForbiddenException,
   );
-  limits.maxVerificationBadges = 1;
-  limits.verificationBadgePriceCents = 500;
-  const paid = await service.grantVerificationBadge('shop', 'owner');
-  assert.equal(paid.success, false);
-  assert.equal(paid.requiresPayment, true);
-  assert.equal(paid.priceCents, 500);
-  assert.equal(store.hasVerificationBadge, false);
-  assert.equal(saves, 2);
-
   await service.grantVerificationBadge('shop', 'admin');
   assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
   assert.equal(store.verificationBadgeExpiresAt, null);
   assert.equal(store.verificationBadgeGrantedBy, 'admin');
-  assert.equal(audits.length, 2);
+  assert.equal(audits.length, 3);
 });
 
 test('storefront contact details do not require map coordinates', () => {

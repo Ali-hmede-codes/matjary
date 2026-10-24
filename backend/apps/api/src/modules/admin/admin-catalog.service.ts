@@ -32,68 +32,11 @@ import { StorageService } from '@app/storage';
 import { QueueService } from '@app/queue';
 import { AdminAccessService } from './admin-access.service';
 import {
-  AdminCreatePostDto,
-  AdminCreateProductDto,
-  AdminCreateStoreDto,
   AdminErrorStateDto,
-  AdminMediaUpdateDto,
-  AdminUpdateStoreDto,
   AdminUserUpdateDto,
   AdminUserRoleDto,
 } from './admin.dto';
-import { UpdateProductDto } from '../products/dto/update-product.dto';
-import { UpdateShowcaseDto } from '../showcases/dto/update-showcase.dto';
 import { SeoService } from '../seo/seo.service';
-
-const STORE_FIELDS = [
-  'name',
-  'description',
-  'brandColor',
-  'storeType',
-  'socialMediaLinks',
-  'logoKey',
-  'bannerKey',
-  'enableCart',
-  'enableWhatsAppCheckout',
-  'designSettings',
-] as const;
-const LOCATION_FIELDS = [
-  'latitude',
-  'longitude',
-  'address',
-  'city',
-  'country',
-  'postalCode',
-  'locationName',
-  'phone',
-  'website',
-  'openingHours',
-] as const;
-const PRODUCT_FIELDS = [
-  'name',
-  'description',
-  'currency',
-  'category',
-  'status',
-  'sku',
-  'stockQuantity',
-  'weightGrams',
-  'imageKeys',
-  'tags',
-  'sortOrder',
-  'requiresShipping',
-] as const;
-
-function copyFields(
-  target: object,
-  source: object,
-  fields: readonly string[],
-): void {
-  const input = source as Record<string, unknown>;
-  for (const field of fields)
-    if (input[field] !== undefined)
-      Object.assign(target, { [field]: input[field] });
-}
 
 @Injectable()
 export class AdminCatalogService {
@@ -103,38 +46,6 @@ export class AdminCatalogService {
     private readonly seo: SeoService,
     private readonly queue: QueueService,
   ) {}
-
-  private async owner(manager: EntityManager, id: string) {
-    const owner = await manager.findOne(User, {
-      where: { id },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!owner || owner.suspendedAt)
-      throw new NotFoundException('Active owner not found');
-    return owner;
-  }
-
-  private async mediaReferences(
-    manager: EntityManager,
-    ownerId: string,
-    keys: Array<string | null | undefined>,
-  ) {
-    for (const key of keys.filter((key): key is string => Boolean(key))) {
-      const variant = await manager.findOne(MediaVariant, {
-        where: { storageKey: key },
-        relations: ['asset', 'asset.showcase'],
-      });
-      if (
-        !variant ||
-        variant.asset.status !== MediaStatus.READY ||
-        variant.asset.showcase.ownerId !== ownerId
-      )
-        throw new BadRequestException(
-          'Choose registered media belonging to the selected owner',
-        );
-      await assertContentAvailable(manager, 'media', variant.assetId);
-    }
-  }
 
   async updateUser(id: string, dto: AdminUserUpdateDto, actor: AdminActor) {
     return this.access.transaction(actor, async (manager) => {
@@ -230,206 +141,6 @@ export class AdminCatalogService {
     });
   }
 
-  async createStore(dto: AdminCreateStoreDto, actor: AdminActor) {
-    const id = await this.access.transaction(actor, async (manager) => {
-      await this.owner(manager, dto.ownerId);
-      const store = manager.create(Store, {
-        slug: dto.slug,
-        ownerId: dto.ownerId,
-      });
-      copyFields(store, dto, STORE_FIELDS);
-      if (dto.location) copyFields(store, dto.location, LOCATION_FIELDS);
-      await manager.save(store);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'stores',
-        store.id,
-        'create',
-        Object.keys(dto),
-      );
-      return store.id;
-    });
-    await this.regenerate('store', id, actor);
-    return { id };
-  }
-
-  async updateStore(id: string, dto: AdminUpdateStoreDto, actor: AdminActor) {
-    await this.access.transaction(actor, async (manager) => {
-      const store = await manager.findOne(Store, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!store) throw new NotFoundException('Store not found');
-      await this.mediaReferences(manager, store.ownerId, [
-        dto.logoKey,
-        dto.bannerKey,
-      ]);
-      copyFields(store, dto, STORE_FIELDS);
-      if (dto.location) copyFields(store, dto.location, LOCATION_FIELDS);
-      await manager.save(store);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'stores',
-        id,
-        'update',
-        Object.keys(dto),
-      );
-    });
-    await this.regenerate('store', id, actor);
-    return { id };
-  }
-
-  async createProduct(dto: AdminCreateProductDto, actor: AdminActor) {
-    const id = await this.access.transaction(actor, async (manager) => {
-      const store = await manager.findOneBy(Store, { id: dto.storeId });
-      if (!store) throw new NotFoundException('Store not found');
-      await this.owner(manager, store.ownerId);
-      await assertContentAvailable(manager, 'store', store.id);
-      const limits = await effectiveLimits(manager, store.ownerId);
-      assertQuota(
-        await manager.count(Product, {
-          where: { store: { ownerId: store.ownerId } },
-        }),
-        limits.maxProducts,
-        'Product',
-      );
-      await this.mediaReferences(manager, store.ownerId, dto.imageKeys ?? []);
-      const product = manager.create(Product, {
-        slug: dto.slug,
-        storeId: store.id,
-        priceCents: String(dto.priceCents),
-      });
-      copyFields(product, dto, PRODUCT_FIELDS);
-      await manager.save(product);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'products',
-        product.id,
-        'create',
-        Object.keys(dto),
-      );
-      return product.id;
-    });
-    await this.regenerate('product', id, actor);
-    return { id };
-  }
-
-  async updateProduct(id: string, dto: UpdateProductDto, actor: AdminActor) {
-    await this.access.transaction(actor, async (manager) => {
-      const product = await manager.findOne(Product, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!product) throw new NotFoundException('Product not found');
-      const store = await manager.findOneBy(Store, { id: product.storeId });
-      if (!store) throw new NotFoundException('Store not found');
-      await this.mediaReferences(manager, store.ownerId, dto.imageKeys ?? []);
-      copyFields(product, dto, PRODUCT_FIELDS);
-      if (dto.priceCents !== undefined)
-        product.priceCents = String(dto.priceCents);
-      await manager.save(product);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'products',
-        id,
-        'update',
-        Object.keys(dto),
-      );
-    });
-    await this.regenerate('product', id, actor);
-    return { id };
-  }
-
-  async createPost(dto: AdminCreatePostDto, actor: AdminActor) {
-    const id = await this.access.transaction(actor, async (manager) => {
-      await this.owner(manager, dto.ownerId);
-      const limits = await effectiveLimits(manager, dto.ownerId);
-      assertQuota(
-        await manager.countBy(Showcase, { ownerId: dto.ownerId }),
-        limits.maxTotalPosts,
-        'Total post',
-      );
-      const now = new Date();
-      const start = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-      );
-      const end = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-      );
-      const monthly = await manager
-        .getRepository(Showcase)
-        .createQueryBuilder('post')
-        .where(
-          'post.ownerId = :ownerId AND post.createdAt >= :start AND post.createdAt < :end',
-          { ownerId: dto.ownerId, start, end },
-        )
-        .getCount();
-      assertQuota(monthly, limits.maxPostsPerMonth, 'Monthly post');
-      if (dto.storeId) {
-        const store = await manager.findOneBy(Store, {
-          id: dto.storeId,
-          ownerId: dto.ownerId,
-        });
-        if (!store)
-          throw new BadRequestException(
-            'Store must belong to the selected owner',
-          );
-        await assertContentAvailable(manager, 'store', store.id);
-      }
-      const post = manager.create(Showcase, {
-        ownerId: dto.ownerId,
-        storeId: dto.storeId ?? null,
-        slug: dto.slug,
-        title: dto.title,
-        description: dto.description ?? null,
-        status: dto.status ?? ShowcaseStatus.DRAFT,
-        publishedAt: dto.status === ShowcaseStatus.PUBLISHED ? now : null,
-      });
-      await manager.save(post);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'posts',
-        post.id,
-        'create',
-        Object.keys(dto),
-      );
-      return post.id;
-    });
-    await this.regenerate('showcase', id, actor);
-    return { id };
-  }
-
-  async updatePost(id: string, dto: UpdateShowcaseDto, actor: AdminActor) {
-    await this.access.transaction(actor, async (manager) => {
-      const post = await manager.findOne(Showcase, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!post) throw new NotFoundException('Post not found');
-      copyFields(post, dto, ['title', 'description', 'status']);
-      if (dto.publishedAt !== undefined)
-        post.publishedAt = dto.publishedAt ? new Date(dto.publishedAt) : null;
-      if (post.status === ShowcaseStatus.PUBLISHED && !post.publishedAt)
-        post.publishedAt = new Date();
-      await manager.save(post);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'posts',
-        id,
-        'update',
-        Object.keys(dto),
-      );
-    });
-    await this.regenerate('showcase', id, actor);
-    return { id };
-  }
-
   async archive(
     resource: 'stores' | 'products' | 'posts' | 'media',
     id: string,
@@ -471,27 +182,6 @@ export class AdminCatalogService {
         ['adminArchivedAt'],
       );
       return { id, adminArchivedAt: item.adminArchivedAt };
-    });
-  }
-
-  async updateMedia(id: string, dto: AdminMediaUpdateDto, actor: AdminActor) {
-    return this.access.transaction(actor, async (manager) => {
-      const asset = await manager.findOne(MediaAsset, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!asset) throw new NotFoundException('Media not found');
-      copyFields(asset, dto, ['altText', 'position']);
-      await manager.save(asset);
-      await appendAdminAudit(
-        manager,
-        actor,
-        'media',
-        id,
-        'update',
-        Object.keys(dto),
-      );
-      return { id };
     });
   }
 
@@ -634,18 +324,5 @@ export class AdminCatalogService {
       ]);
       return { id, state: record.state };
     });
-  }
-
-  private async regenerate(
-    kind: 'store' | 'product' | 'showcase',
-    id: string,
-    actor: AdminActor,
-  ): Promise<void> {
-    // Content is already durable. A secondary SEO failure must not cause duplicate creation on retry.
-    try {
-      await this.seo.autoGenerateAdminSeo(kind, id, actor);
-    } catch {
-      /* Captured by the SEO operation's observability boundary. */
-    }
   }
 }

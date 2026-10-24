@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { MediaService } from './media.service';
-import { PresignedUrlDto } from './dto/presigned-url.dto';
+import { PresignedUrlDto, OwnerUploadDto } from './dto/presigned-url.dto';
 import { MediaCompleteDto } from './dto/media-complete.dto';
 import { StorageService } from '@app/storage';
 import {
@@ -112,6 +112,32 @@ export class MediaController {
     return this.media.mediaComplete(dto, slug, request.user.id);
   }
 
+  @Post('media/uploads')
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  negotiate(@Body() dto: OwnerUploadDto, @Req() request: AuthenticatedRequest) {
+    return this.media.negotiate(dto, request.user.id);
+  }
+
+  @Post('media/:id/complete')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  complete(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    return this.media.complete(id, request.user.id);
+  }
+
+  @Post('media/:id/abandon')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  abandon(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    return this.media.abandon(id, request.user.id);
+  }
+
+  @Get('media/:id')
+  @UseGuards(SessionGuard)
+  status(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    return this.media.status(id, request.user.id);
+  }
+
   @Get('uploads/:key')
   @UseGuards(OptionalSessionGuard)
   async serveLocalUpload(
@@ -169,12 +195,7 @@ export class MediaController {
     @Param('key') key: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<{ key: string }> {
-    const administrator = this.administrator(request);
-    const asset = await this.media.authorizeUpload(
-      key,
-      request.user.id,
-      administrator,
-    );
+    const asset = await this.media.authorizeUpload(key, request.user.id);
     const size = Number(asset.sizeBytes);
     if (
       request.headers['content-encoding'] ||
@@ -195,22 +216,10 @@ export class MediaController {
     );
     timer.unref();
     try {
-      if (administrator)
-        await this.media.recordAdminUpload(
-          asset.id,
-          administrator,
-          'upload.bytes.started',
-        );
       await this.storage.putStream(key, request, asset.mimeType, size, {
         exclusive: true,
         signal: abort.signal,
       });
-      if (administrator)
-        await this.media.recordAdminUpload(
-          asset.id,
-          administrator,
-          'upload.bytes.completed',
-        );
       return { key };
     } catch (error) {
       if (abort.signal.aborted)

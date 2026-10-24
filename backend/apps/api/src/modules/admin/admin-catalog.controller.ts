@@ -21,22 +21,12 @@ import { AdminCatalogService } from './admin-catalog.service';
 import { AdminQueriesService } from './admin-queries.service';
 import {
   AdminBadgeDto,
-  AdminCreatePostDto,
-  AdminCreateProductDto,
-  AdminCreateStoreDto,
   AdminErrorStateDto,
   AdminListDto,
-  AdminMediaUpdateDto,
   AdminReasonDto,
-  AdminUpdateStoreDto,
   AdminUserUpdateDto,
   AdminUserRoleDto,
 } from './admin.dto';
-import { UpdateProductDto } from '../products/dto/update-product.dto';
-import { UpdateShowcaseDto } from '../showcases/dto/update-showcase.dto';
-import { MediaService } from '../showcases/media.service';
-import { PresignedUrlDto } from '../showcases/dto/presigned-url.dto';
-import { MediaCompleteDto } from '../showcases/dto/media-complete.dto';
 
 const ARCHIVABLE = {
   stores: 'stores',
@@ -56,7 +46,6 @@ export class AdminCatalogController {
   constructor(
     private readonly catalog: AdminCatalogService,
     private readonly queries: AdminQueriesService,
-    private readonly media: MediaService,
   ) {}
 
   @Get('overview')
@@ -111,20 +100,6 @@ export class AdminCatalogController {
     return this.catalog.accountAction(id, action, dto.reason, actor);
   }
 
-  @Post('stores')
-  createStore(@Body() dto: AdminCreateStoreDto, @Actor() actor: AdminActor) {
-    return this.catalog.createStore(dto, actor);
-  }
-
-  @Patch('stores/:id')
-  updateStore(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: AdminUpdateStoreDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.catalog.updateStore(id, dto, actor);
-  }
-
   @Post('stores/:id/badge')
   badge(
     @Param('id', ParseUUIDPipe) id: string,
@@ -134,55 +109,6 @@ export class AdminCatalogController {
     return this.catalog.badge(id, dto.enabled, dto.reason, actor);
   }
 
-  @Post('products')
-  createProduct(
-    @Body() dto: AdminCreateProductDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.catalog.createProduct(dto, actor);
-  }
-
-  @Patch('products/:id')
-  updateProduct(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateProductDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.catalog.updateProduct(id, dto, actor);
-  }
-
-  @Post('posts')
-  createPost(@Body() dto: AdminCreatePostDto, @Actor() actor: AdminActor) {
-    return this.catalog.createPost(dto, actor);
-  }
-
-  @Patch('posts/:id')
-  updatePost(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateShowcaseDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.catalog.updatePost(id, dto, actor);
-  }
-
-  @Post('posts/:id/media/negotiate')
-  negotiateMedia(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: PresignedUrlDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.media.adminPresigned(dto, id, actor);
-  }
-
-  @Post('posts/:id/media/complete')
-  completeMedia(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: MediaCompleteDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.media.adminComplete(dto, id, actor);
-  }
-
   @Get('media/:id/preview')
   previewMedia(
     @Param('id', ParseUUIDPipe) id: string,
@@ -190,15 +116,6 @@ export class AdminCatalogController {
     @Query('label') label?: string,
   ) {
     return this.catalog.previewMedia(id, actor, label);
-  }
-
-  @Patch('media/:id')
-  updateMedia(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: AdminMediaUpdateDto,
-    @Actor() actor: AdminActor,
-  ) {
-    return this.catalog.updateMedia(id, dto, actor);
   }
 
   @Post('media/:id/retry')

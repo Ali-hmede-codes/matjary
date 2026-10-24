@@ -12,13 +12,47 @@ import { PricingPage } from './components/PricingPage';
 import { storeSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { LoginPage, ProtectedPanel } from './features/shared/PanelAuth';
+import { Loading } from './features/shared/PanelUI';
+import './features/shared/panels.css';
+const AdminPanel = lazy(() => import('./features/admin/AdminPanel'));
+const OwnerPanel = lazy(() => import('./features/dashboard/OwnerPanel'));
+
 export default function App() {
-  const pathname = window.location.pathname;
-  if (pathname === '/pricing' || pathname === '/pricing/')
-    return <PricingPage />;
-  if (pathname !== '/')
-    return <StorePage key={pathname} slug={storeSlugFromPath(pathname)} />;
-  return <DiscoveryPage />;
+  return (
+    <BrowserRouter>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/" element={<DiscoveryPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/admin/*"
+            element={
+              <ProtectedPanel admin>
+                {(session) => <AdminPanel session={session} />}
+              </ProtectedPanel>
+            }
+          />
+          <Route
+            path="/dashboard/*"
+            element={
+              <ProtectedPanel>
+                {(session) => <OwnerPanel session={session} />}
+              </ProtectedPanel>
+            }
+          />
+          <Route path="*" element={<StoreRoute />} />
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
+  );
+}
+function StoreRoute() {
+  const { pathname } = useLocation();
+  return <StorePage key={pathname} slug={storeSlugFromPath(pathname)} />;
 }
 
 function DiscoveryPage() {

@@ -187,11 +187,10 @@ export class StoresController {
 
   /**
    * Grant a verification badge to a store
-   * - Store owners can request badge (will check subscription limits/pricing)
-   * - Admins can grant badge for free (bypasses limits)
+   * Only administrators can grant verification; a subscription is not verification.
    */
   @Post('badge/grant')
-  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  @UseGuards(SessionGuard, AdminGuard, AuthOriginGuard, AuthRateLimitGuard)
   async grantBadge(
     @Body() dto: GrantVerificationBadgeDto,
     @Req() request: AuthenticatedRequest,

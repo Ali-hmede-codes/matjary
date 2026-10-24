@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatProductPrice,
+  priceInput,
+  decimalPrice,
   isStoreVerified,
   storeMap,
   storeMediaUrl,
@@ -10,6 +12,16 @@ import {
   storeSlugFromPath,
   storeSocialLinks,
 } from './storefront.ts';
+
+test('owner price entry is exact and rejects invalid or unsafe amounts', () => {
+  assert.equal(priceInput('12.50'), 1250);
+  assert.equal(priceInput('0'), 0);
+  assert.equal(priceInput(' 7.1 '), 710);
+  assert.equal(priceInput('90071992547409.91'), Number.MAX_SAFE_INTEGER);
+  for (const value of ['', '-1', '1e3', '1.005', 'NaN', '90071992547409.92'])
+    assert.equal(priceInput(value), null);
+  assert.equal(decimalPrice('1250'), '12.50');
+});
 
 test('verification requires an active API badge and rejects expired timestamps', () => {
   const now = Date.parse('2026-10-24T12:00:00Z');

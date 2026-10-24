@@ -20,6 +20,8 @@ import {
   StoreType,
   moderationWhere,
   visibilitySql,
+  MEDIA_OWNER_ID,
+  MEDIA_OWNER_JOINS,
 } from '@app/database';
 import { SubscriptionPlansService } from '../subscriptions/subscription-plans.service';
 import {
@@ -136,13 +138,11 @@ export class UserDashboardService {
         productsPerStore.map((p) => [p.storeId, parseInt(p.active, 10)]),
       );
 
-      // 4. Sum denormalized media_count from all user's showcases (single query)
-      const totalMediaResult = await this.showcases
-        .createQueryBuilder('sc')
-        .select('SUM(sc.mediaCount)', 'totalMedia')
-        .where('sc.ownerId = :userId', { userId })
-        .andWhere(visibilitySql('post', 'sc'))
-        .getRawOne();
+      // Count all owned media targets without double-counting product/store joins.
+      const [totalMediaResult] = await this.mediaAssets.manager.query(
+        `SELECT COUNT(*) AS totalMedia FROM media_assets a ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ? AND a.status = 'ready' AND ${visibilitySql('media', 'a')}`,
+        [userId],
+      );
       const totalMedia = totalMediaResult?.totalMedia
         ? parseInt(totalMediaResult.totalMedia, 10)
         : 0;
@@ -603,7 +603,10 @@ export class UserDashboardService {
       return this.mediaAssets.find({
         where: { showcaseId, ...moderationWhere('media') },
         order: { position: 'ASC' },
+        take: 100,
+        relations: ['variants'],
         select: {
+          variants: { id: true, storageKey: true, mimeType: true, width: true },
           id: true,
           kind: true,
           status: true,

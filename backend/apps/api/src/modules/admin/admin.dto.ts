@@ -111,14 +111,6 @@ export class AdminUpdateStoreDto extends UpdateStoreDto {
   @ValidateNested()
   @Type(() => AdminDesignDto)
   designSettings?: AdminDesignDto | null;
-
-  @IsOptional()
-  @IsBoolean()
-  enableCart?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  enableWhatsAppCheckout?: boolean;
 }
 
 export class AdminCreateProductDto extends CreateProductDto {

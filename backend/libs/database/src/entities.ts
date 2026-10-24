@@ -874,9 +874,29 @@ export class MediaAsset extends BaseEntity {
   })
   uploadExpiresAt!: Date | null;
 
-  // Ownership is inherited from the showcase, avoiding conflicting owner IDs.
-  @Column({ name: 'showcase_id', type: 'varchar', length: 36 })
-  showcaseId!: string;
+  // Exactly one parent owns an asset; ownership cannot be supplied separately.
+  @Column({ name: 'showcase_id', type: 'varchar', length: 36, nullable: true })
+  showcaseId!: string | null;
+
+  @Column({ name: 'store_id', type: 'varchar', length: 36, nullable: true })
+  storeId!: string | null;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'store_id', foreignKeyConstraintName: 'fk_media_store' })
+  store!: Relation<Store | null>;
+
+  @Column({ name: 'product_id', type: 'varchar', length: 36, nullable: true })
+  productId!: string | null;
+
+  @ManyToOne(() => Product, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({
+    name: 'product_id',
+    foreignKeyConstraintName: 'fk_media_product',
+  })
+  product!: Relation<Product | null>;
+
+  @Column({ type: 'varchar', length: 24, default: 'post' })
+  purpose!: 'post' | 'store_logo' | 'store_banner' | 'product_image';
 
   // Explicit cleanup must remove storage objects before metadata is deleted.
   @ManyToOne(() => Showcase, (showcase) => showcase.mediaAssets, {
@@ -886,7 +906,7 @@ export class MediaAsset extends BaseEntity {
     name: 'showcase_id',
     foreignKeyConstraintName: 'fk_media_showcase',
   })
-  showcase!: Relation<Showcase>;
+  showcase!: Relation<Showcase | null>;
 
   @Column({ type: 'enum', enum: MediaKind })
   kind!: MediaKind;

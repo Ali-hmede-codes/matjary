@@ -17,6 +17,8 @@ import {
   effectiveLimits,
   assertQuota,
   moderationWhere,
+  chooseContentSlug,
+  assertMediaAttachment,
 } from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -160,15 +162,22 @@ export class ProductsService {
             throw new ForbiddenException('You do not own this store');
           }
 
-          const existing = await manager.findOneBy(Product, { slug: dto.slug });
+          const slug = await chooseContentSlug(dto.name, dto.slug, (value) =>
+            manager.getRepository(Product).findOneBy({ slug: value }),
+          );
+          const existing = await manager.findOneBy(Product, { slug });
           if (existing) {
             throw new ConflictException(
               'A product with this slug already exists',
             );
           }
 
+          if (dto.imageKeys?.length)
+            throw new ConflictException(
+              'Save the product before uploading its photos',
+            );
           const product = manager.create(Product, {
-            slug: dto.slug,
+            slug,
             name: dto.name,
             description: dto.description ?? null,
             priceCents: dto.priceCents.toString(),
@@ -240,6 +249,14 @@ export class ProductsService {
         throw new ForbiddenException('You do not own this product');
       }
 
+      await assertMediaAttachment(
+        this.products.manager,
+        userId,
+        'product_image',
+        product.id,
+        dto.imageKeys ?? [],
+        product.imageKeys ?? [],
+      );
       if (dto.name !== undefined) product.name = dto.name;
       if (dto.description !== undefined) product.description = dto.description;
       if (dto.priceCents !== undefined)

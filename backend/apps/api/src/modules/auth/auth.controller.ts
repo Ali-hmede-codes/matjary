@@ -19,7 +19,6 @@ import {
   SessionGuard,
   type AuthenticatedRequest,
 } from './guards/auth.guards';
-import { AUTH_HTML, AUTH_SCRIPT } from './auth.page';
 
 @Controller('auth')
 export class AuthController {
@@ -29,15 +28,8 @@ export class AuthController {
   ) {}
 
   @Get('login')
-  @Header('Content-Type', 'text/html; charset=utf-8')
-  loginPage(): string {
-    return AUTH_HTML;
-  }
-
-  @Get('client.js')
-  @Header('Content-Type', 'application/javascript; charset=utf-8')
-  clientScript(): string {
-    return AUTH_SCRIPT;
+  loginPage(@Res() response: Response): void {
+    response.redirect('/login');
   }
 
   @Post('bootstrap')

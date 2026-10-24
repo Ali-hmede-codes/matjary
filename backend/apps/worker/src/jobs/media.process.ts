@@ -150,7 +150,9 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
           ? await encodeImage(input, directory, options)
           : await encodeVideo(input, directory, options);
       for (const variant of encoded.variants) {
-        const storageKey = `media/${asset.showcaseId}/${asset.id}/${path.basename(variant.file)}`;
+        const parentId = asset.showcaseId ?? asset.storeId ?? asset.productId;
+        if (!parentId) throw new InvalidMediaError('Missing media parent');
+        const storageKey = `media/${parentId}/${asset.id}/${path.basename(variant.file)}`;
         await this.storage.uploadFile(
           storageKey,
           variant.file,
@@ -174,7 +176,7 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
             durationMs: encoded.durationMs,
           },
         );
-        if (result.affected)
+        if (result.affected && asset.showcaseId)
           await manager.increment(
             Showcase,
             { id: asset.showcaseId },

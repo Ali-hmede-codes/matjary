@@ -29,6 +29,8 @@ export class StoreResponseDto {
   brandColor!: string | null;
   description!: string | null;
   storeType!: StoreType;
+  enableCart!: boolean;
+  enableWhatsAppCheckout!: boolean;
   socialMediaLinks!: SocialMediaLinks | null;
   logoKey!: string | null;
   bannerKey!: string | null;
@@ -87,6 +89,8 @@ export function toStoreResponseDto(
     brandColor: store.brandColor,
     description: store.description,
     storeType: store.storeType,
+    enableCart: store.enableCart,
+    enableWhatsAppCheckout: store.enableWhatsAppCheckout,
     socialMediaLinks: store.socialMediaLinks,
     logoKey: store.logoKey,
     bannerKey: store.bannerKey,

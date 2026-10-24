@@ -22,6 +22,8 @@ import {
   effectiveSubscription,
   assertQuota,
   moderationWhere,
+  chooseContentSlug,
+  assertMediaAttachment,
   visibilitySql,
   ShowcaseStatus,
   actorContext,
@@ -170,7 +172,10 @@ export class StoresService {
     ownerId: string,
   ): Promise<StoreResponseDto> {
     try {
-      const existing = await this.stores.findOneBy({ slug: dto.slug });
+      const slug = await chooseContentSlug(dto.name, dto.slug, (value) =>
+        this.stores.findOneBy({ slug: value }),
+      );
+      const existing = await this.stores.findOneBy({ slug });
       if (existing) {
         throw new ConflictException('A store with this slug already exists');
       }
@@ -216,7 +221,7 @@ export class StoresService {
 
       const store = this.stores.create({
         name: dto.name,
-        slug: dto.slug,
+        slug,
         brandColor: dto.brandColor ?? null,
         description: dto.description ?? null,
         storeType: dto.storeType ?? StoreType.ECOMMERCE,
@@ -274,6 +279,38 @@ export class StoresService {
         throw new ForbiddenException('You do not own this store');
       }
 
+      if (
+        dto.enableCart !== undefined ||
+        dto.enableWhatsAppCheckout !== undefined
+      ) {
+        const limits = await effectiveLimits(this.stores.manager, userId);
+        if (
+          (dto.enableCart && !limits.enableCart) ||
+          (dto.enableWhatsAppCheckout && !limits.enableWhatsAppCheckout)
+        )
+          throw new ConflictException(
+            'This feature is not included in your plan',
+          );
+        if (dto.enableCart !== undefined) store.enableCart = dto.enableCart;
+        if (dto.enableWhatsAppCheckout !== undefined)
+          store.enableWhatsAppCheckout = dto.enableWhatsAppCheckout;
+      }
+      await assertMediaAttachment(
+        this.stores.manager,
+        userId,
+        'store_logo',
+        store.id,
+        [dto.logoKey],
+        [store.logoKey],
+      );
+      await assertMediaAttachment(
+        this.stores.manager,
+        userId,
+        'store_banner',
+        store.id,
+        [dto.bannerKey],
+        [store.bannerKey],
+      );
       if (dto.name !== undefined) store.name = dto.name;
       if (dto.brandColor !== undefined) store.brandColor = dto.brandColor;
       if (dto.description !== undefined) store.description = dto.description;
@@ -827,7 +864,7 @@ export class StoresService {
 
   /**
    * Grant a verification badge to a store
-   * Can be called by admin (free grant) or by store owner (paid via subscription)
+   * Verification is an administrator decision, never a subscription self-service action.
    */
   async grantVerificationBadge(
     storeId: string,
@@ -854,53 +891,27 @@ export class StoresService {
           where: { id: storeId },
           lock: { mode: 'pessimistic_write' },
         });
-        const adminGrant = Boolean(
-          actor && !actor.suspendedAt && this.admin.isAdmin(actor),
-        );
-        if (
-          !actor ||
-          actor.suspendedAt ||
-          (!adminGrant && store.ownerId !== grantedBy)
-        )
-          throw new ForbiddenException('You do not own this store');
+        if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
+          throw new ForbiddenException('Administrator access required');
         if (
           store.hasVerificationBadge &&
           (!store.verificationBadgeExpiresAt ||
             store.verificationBadgeExpiresAt > new Date())
         )
           return { success: true };
-        if (!adminGrant) {
-          const limits = await effectiveLimits(manager, store.ownerId);
-          assertQuota(
-            await this.activeBadgeCount(manager, store.ownerId),
-            limits.maxVerificationBadges,
-            'Verification badge',
-          );
-          const price = limits.verificationBadgePriceCents ?? 0;
-          if (price > 0)
-            return {
-              success: false,
-              requiresPayment: true,
-              priceCents: price,
-              error: 'Paid badge checkout is not available',
-            };
-          store.verificationBadgeExpiresAt =
-            (await effectiveSubscription(manager, store.ownerId))?.expiresAt ??
-            null;
-        } else store.verificationBadgeExpiresAt = null;
+        store.verificationBadgeExpiresAt = null;
         store.hasVerificationBadge = true;
         store.verificationBadgeGrantedAt = new Date();
         store.verificationBadgeGrantedBy = grantedBy;
         await manager.save(store);
-        if (adminGrant)
-          await appendAdminAudit(
-            manager,
-            actorContext(grantedBy),
-            'stores',
-            storeId,
-            'badge.grant',
-            ['hasVerificationBadge'],
-          );
+        await appendAdminAudit(
+          manager,
+          actorContext(grantedBy),
+          'stores',
+          storeId,
+          'badge.grant',
+          ['hasVerificationBadge'],
+        );
         return { success: true };
       });
     } catch (error) {

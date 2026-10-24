@@ -90,8 +90,7 @@ import {
 } from '../../apps/api/src/modules/monitoring/monitoring.controller';
 import { MonitoringService } from '../../apps/api/src/modules/monitoring/monitoring.service';
 import { PrometheusService } from '../../apps/api/src/modules/monitoring/prometheus.service';
-import { ADMIN_SCRIPT } from '../../apps/api/src/modules/admin/ui/admin.client';
-import { ADMIN_SCHEMA_SCRIPT } from '../../apps/api/src/modules/admin/ui/admin.schema';
+
 import { CreateBoostCampaignDto } from '../../apps/api/src/modules/boost/dto/boost-coin.dto';
 import { SubscriptionPlansService } from '../../apps/api/src/modules/subscriptions/subscription-plans.service';
 import { BoostService } from '../../apps/api/src/modules/boost/boost.service';
@@ -356,82 +355,26 @@ test('user roles migration is registered, defaults to user and has a rollback', 
   );
 });
 
-test('catalog create/edit preserves target ownership, exact money and owner quotas', async () => {
+test('administrator catalog is read-only except audited oversight actions', async () => {
   const f = fixture();
-  f.add(SubscriptionPlan, {
-    slug: 'free',
-    limits: { maxProducts: 1, maxTotalPosts: 1 },
-  });
-  const store = await f.catalog.createStore(
-    { ownerId, slug: 'store', name: 'Store' },
-    actor,
-  );
-  assert.equal(f.rows(Store)[0]?.ownerId, ownerId);
-  await f.catalog.updateStore(
-    store.id,
-    { name: 'Renamed', enableCart: false },
-    actor,
-  );
-  assert.equal(f.rows(Store)[0]?.enableCart, false);
-  const product = await f.catalog.createProduct(
-    {
-      storeId: store.id,
-      slug: 'item',
-      name: 'Item',
-      priceCents: Number.MAX_SAFE_INTEGER,
-    },
-    actor,
-  );
-  assert.equal(f.rows(Product)[0]?.priceCents, String(Number.MAX_SAFE_INTEGER));
-  await f.catalog.updateProduct(
-    product.id,
-    { priceCents: 25, status: ProductStatus.ACTIVE },
-    actor,
-  );
-  assert.equal(f.rows(Product)[0]?.priceCents, '25');
-  await assert.rejects(
-    f.catalog.createProduct(
-      { storeId: store.id, slug: 'other', name: 'Other', priceCents: 1 },
-      actor,
-    ),
-    ConflictException,
-  );
-  const post = await f.catalog.createPost(
-    {
-      ownerId,
-      storeId: store.id,
-      slug: 'post',
-      title: 'Post',
-      status: ShowcaseStatus.PUBLISHED,
-    },
-    actor,
-  );
-  await f.catalog.updatePost(post.id, { status: ShowcaseStatus.DRAFT }, actor);
-  assert.equal(f.rows(Showcase)[0]?.status, ShowcaseStatus.DRAFT);
-  await assert.rejects(
-    f.catalog.createPost({ ownerId, slug: 'another', title: 'Another' }, actor),
-    ConflictException,
-  );
-  await f.catalog.badge(store.id, true, 'Verification confirmed', actor);
+  for (const method of [
+    'createStore',
+    'updateStore',
+    'createProduct',
+    'updateProduct',
+    'createPost',
+    'updatePost',
+    'updateMedia',
+  ]) {
+    assert.equal(method in f.catalog, false);
+    assert.equal(method in AdminCatalogController.prototype, false);
+  }
+  f.add(Store, { id: resourceId, ownerId, hasVerificationBadge: false });
+  await f.catalog.badge(resourceId, true, 'Identity reviewed', actor);
   assert.equal(f.rows(Store)[0]?.hasVerificationBadge, true);
-  await f.catalog.badge(store.id, false, 'Verification withdrawn', actor);
+  await f.catalog.badge(resourceId, false, 'Verification withdrawn', actor);
   assert.equal(f.rows(Store)[0]?.hasVerificationBadge, false);
-  f.add(MediaAsset, {
-    id: resourceId,
-    status: MediaStatus.READY,
-    altText: null,
-    position: 0,
-  });
-  await f.catalog.updateMedia(
-    resourceId,
-    { altText: 'Accessible description', position: 2 },
-    actor,
-  );
-  assert.equal(f.rows(MediaAsset)[0]?.altText, 'Accessible description');
-  f.add(Cart, { id: resourceId, status: CartStatus.ACTIVE });
-  await f.catalog.expireCart(resourceId, 'Expired on request', actor);
-  assert.equal(f.rows(Cart)[0]?.status, CartStatus.EXPIRED);
-  assert.equal(f.rows(AdminAuditLog).length, 10);
+  assert.equal(f.rows(AdminAuditLog).length, 2);
 });
 
 test('subscription management preserves free fallback and historical assignments', async () => {
@@ -889,9 +832,6 @@ test('admin DTOs reject unbounded pagination, unsafe money and arbitrary theme p
     targeting: {},
   });
   assert.equal((await validate(campaign)).length, 0);
-  assert.doesNotThrow(() => new Script(ADMIN_SCRIPT));
-  assert.doesNotThrow(() => new Script(ADMIN_SCHEMA_SCRIPT));
-  assert.doesNotMatch(ADMIN_SCRIPT, /\.innerHTML\s*=|localStorage|eval\(/);
 });
 
 test('HTTP admin pages and mutations enforce Google sessions, roles, origin and strict DTOs', async () => {
@@ -998,28 +938,18 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
       302,
     );
     assert.equal((await fetch(base + '/api/v1/admin/data/users')).status, 401);
-    const guestDashboard = await fetch(base + '/api/v1/dashboard/home', {
-      redirect: 'manual',
-    });
-    assert.equal(guestDashboard.status, 302);
-    assert.equal(guestDashboard.headers.get('location'), '/api/v1/auth/login');
-    for (const path of [
-      'dashboard',
-      'dashboard/client.js',
-      'dashboard/style.css',
-    ]) {
-      assert.equal((await fetch(base + '/api/v1/' + path)).status, 401);
-    }
     const ownerHeaders = { Cookie: 'matjary_session=owner' };
-    const ownerPage = await fetch(base + '/api/v1/dashboard/home', {
-      headers: ownerHeaders,
-    });
-    assert.equal(ownerPage.status, 200);
-    assert.equal(ownerPage.headers.get('cache-control'), 'no-store');
-    assert.equal(ownerPage.headers.get('x-robots-tag'), 'noindex, nofollow');
-    const ownerHtml = await ownerPage.text();
-    assert.match(ownerHtml, /My dashboard · Matjary/);
-    assert.doesNotMatch(ownerHtml, /ADMIN WORKSPACE|\/admin\//);
+    for (const [oldPath, nextPath] of [
+      ['admin', '/admin'],
+      ['dashboard/home', '/dashboard'],
+    ]) {
+      const page = await fetch(base + '/api/v1/' + oldPath, {
+        redirect: 'manual',
+      });
+      assert.equal(page.status, 302);
+      assert.equal(page.headers.get('location'), nextPath);
+    }
+    assert.equal((await fetch(base + '/api/v1/dashboard')).status, 401);
     assert.deepEqual(
       await (
         await fetch(base + '/api/v1/dashboard?ownerId=' + adminId, {
@@ -1028,44 +958,29 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
       ).json(),
       { scope: ownerId },
     );
-    const adminRedirect = await fetch(base + '/api/v1/dashboard/home', {
-      headers: { Cookie: 'matjary_session=admin' },
-      redirect: 'manual',
-    });
-    assert.equal(adminRedirect.status, 302);
-    assert.equal(adminRedirect.headers.get('location'), '/api/v1/admin');
-    for (const asset of ['client.js', 'style.css']) {
+    for (const path of [
+      'admin/client.js',
+      'admin/schema.js',
+      'dashboard/client.js',
+      'dashboard/style.css',
+    ])
       assert.equal(
-        (
-          await fetch(base + '/api/v1/dashboard/' + asset, {
-            headers: ownerHeaders,
-          })
-        ).status,
-        200,
+        (await fetch(base + '/api/v1/' + path, { headers: ownerHeaders }))
+          .status,
+        404,
       );
-      assert.equal(
-        (
-          await fetch(base + '/api/v1/admin/' + asset, {
-            headers: ownerHeaders,
-          })
-        ).status,
-        403,
-      );
+    for (const resource of ['stores', 'products', 'posts']) {
+      const denied = await fetch(base + '/api/v1/admin/' + resource, {
+        method: 'POST',
+        headers: {
+          Cookie: 'matjary_session=admin',
+          Origin: 'http://localhost:3000',
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      assert.equal(denied.status, 404);
     }
-    assert.equal(
-      (
-        await fetch(base + '/api/v1/admin', {
-          headers: { Cookie: 'matjary_session=owner' },
-        })
-      ).status,
-      403,
-    );
-    const page = await fetch(base + '/api/v1/admin', {
-      headers: { Cookie: 'matjary_session=admin' },
-    });
-    assert.equal(page.status, 200);
-    assert.match(await page.text(), /Matjary · Administration/);
-    assert.equal(page.headers.get('x-robots-tag'), 'noindex, nofollow');
     assert.equal(
       (await patch({ displayName: 'Changed' }, 'owner')).status,
       403,

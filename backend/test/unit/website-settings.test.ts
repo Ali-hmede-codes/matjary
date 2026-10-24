@@ -34,11 +34,6 @@ import {
   AdminWebsiteSettingsController,
   PublicWebsiteSettingsController,
 } from '../../apps/api/src/modules/admin/website-settings.controller';
-import {
-  ADMIN_VIEWS,
-  ADMIN_SCHEMA_SCRIPT,
-} from '../../apps/api/src/modules/admin/ui/admin.schema';
-import { ADMIN_SCRIPT } from '../../apps/api/src/modules/admin/ui/admin.client';
 import { AuthService } from '../../apps/api/src/modules/auth/auth.service';
 import { AuthCookies } from '../../apps/api/src/modules/auth/auth.cookies';
 import {
@@ -461,24 +456,6 @@ test('migration registration, singleton seed, reversibility, defaults and metada
   await migration.down(runner);
   assert.equal(queries[2], 'DROP TABLE `website_settings`');
 });
-test('admin editor exposes all supported fields with color pickers and safe scripts', () => {
-  const view = ADMIN_VIEWS['website-settings'];
-  assert.equal(view?.endpoint, 'website-settings');
-  assert.equal(view?.settings, true);
-  assert.deepEqual(
-    view?.edit?.map((field) => field.name),
-    [...WEBSITE_SETTINGS_FIELDS],
-  );
-  for (const key of colors)
-    assert.equal(
-      view?.edit?.find((field) => field.name === key)?.type,
-      'color',
-    );
-  assert.match(ADMIN_SCRIPT, /\['website-settings', 'Website settings'/);
-  assert.doesNotThrow(() => new Script(ADMIN_SCRIPT));
-  assert.doesNotThrow(() => new Script(ADMIN_SCHEMA_SCRIPT));
-});
-
 test('website settings HTTP API uses real guards, validation, service, and audit boundary', async (t) => {
   const f = fixture();
   let limited = false;

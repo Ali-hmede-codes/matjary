@@ -140,10 +140,14 @@ export class MediaRecovery
         for (const width of [480, 1080, 1600])
           for (const format of ['avif', 'webp', 'jpeg'])
             keys.add(
-              `media/${asset.showcaseId}/${id}/${format}-${width}.${format === 'jpeg' ? 'jpg' : format}`,
+              `media/${asset.showcaseId ?? asset.storeId ?? asset.productId}/${id}/${format}-${width}.${format === 'jpeg' ? 'jpg' : format}`,
             );
-        keys.add(`media/${asset.showcaseId}/${id}/mp4-720.mp4`);
-        keys.add(`media/${asset.showcaseId}/${id}/poster-jpeg.jpg`);
+        keys.add(
+          `media/${asset.showcaseId ?? asset.storeId ?? asset.productId}/${id}/mp4-720.mp4`,
+        );
+        keys.add(
+          `media/${asset.showcaseId ?? asset.storeId ?? asset.productId}/${id}/poster-jpeg.jpg`,
+        );
         for (const key of keys) await this.storage.deleteObject(key);
         await manager.delete(MediaVariant, { assetId: id });
       }

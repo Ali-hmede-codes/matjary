@@ -51,6 +51,133 @@ import {
   type EncodingOptions,
 } from '../../libs/media-processing/src/encode';
 
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Product, ProductStatus } from '../../libs/database/src/entities';
+import { assertMediaAttachment } from '../../libs/database/src/media-target';
+import { OwnerMediaTargets1793832000000 } from '../../libs/database/src/migrations/1793832000000-OwnerMediaTargets';
+import type { EntityManager, QueryRunner } from 'typeorm';
+
+test('store and product images require the correct owner, target, readiness and public attachment', async () => {
+  const store: Store = Object.assign(new Store(), {
+    id: 'store',
+    ownerId: 'owner',
+    logoKey: null,
+  });
+  const product = Object.assign(new Product(), {
+    id: 'product',
+    storeId: store.id,
+    status: ProductStatus.DRAFT,
+    imageKeys: ['image-key'],
+  });
+  const asset: MediaAsset = Object.assign(new MediaAsset(), {
+    id: 'asset',
+    showcaseId: null,
+    storeId: store.id,
+    productId: null,
+    purpose: 'store_logo',
+    kind: MediaKind.IMAGE,
+    status: MediaStatus.READY,
+  });
+  const variant = Object.assign(new MediaVariant(), {
+    asset,
+    assetId: asset.id,
+    storageKey: 'image-key',
+    mimeType: 'image/webp',
+  });
+  let hidden = false;
+  const manager = {
+    findOne: async (
+      _target: unknown,
+      options: { where: { storageKey: string } },
+    ) => (options.where.storageKey === variant.storageKey ? variant : null),
+    findOneBy: async (target: unknown) =>
+      hidden
+        ? null
+        : target === Store
+          ? store
+          : target === Product
+            ? product
+            : null,
+    getRepository: () => ({ findOne: async () => variant }),
+  } as unknown as EntityManager;
+  const media = new MediaService(
+    {} as never,
+    {} as never,
+    { manager, findOne: async () => null } as never,
+    {} as never,
+    {} as never,
+    configuration('.tmp'),
+  );
+  await assert.rejects(media.authorizeDownload('image-key'), NotFoundException);
+  assert.deepEqual(await media.authorizeDownload('image-key', 'owner'), {
+    mimeType: 'image/webp',
+    public: false,
+  });
+  await assertMediaAttachment(manager, 'owner', 'store_logo', store.id, [
+    'image-key',
+  ]);
+  await assert.rejects(
+    assertMediaAttachment(manager, 'other', 'store_logo', store.id, [
+      'image-key',
+    ]),
+    ConflictException,
+  );
+  await assert.rejects(
+    assertMediaAttachment(manager, 'owner', 'store_banner', store.id, [
+      'image-key',
+    ]),
+    ConflictException,
+  );
+  await assert.rejects(
+    assertMediaAttachment(manager, 'owner', 'store_logo', 'another-store', [
+      'image-key',
+    ]),
+    ConflictException,
+  );
+  store.logoKey = 'image-key';
+  assert.equal((await media.authorizeDownload('image-key')).public, true);
+  asset.status = MediaStatus.PROCESSING;
+  await assert.rejects(
+    assertMediaAttachment(manager, 'owner', 'store_logo', store.id, [
+      'image-key',
+    ]),
+    ConflictException,
+  );
+  await assert.rejects(media.authorizeDownload('image-key'), NotFoundException);
+  asset.status = MediaStatus.READY;
+  asset.storeId = null;
+  asset.productId = product.id;
+  asset.purpose = 'product_image';
+  await assert.rejects(media.authorizeDownload('image-key'), NotFoundException);
+  product.status = ProductStatus.ACTIVE;
+  assert.equal((await media.authorizeDownload('image-key')).public, true);
+  hidden = true;
+  await assert.rejects(
+    media.authorizeDownload('image-key', 'owner'),
+    NotFoundException,
+  );
+});
+
+test('owner media migration preserves existing assets and refuses destructive reversal', async () => {
+  const statements: string[] = [];
+  let nonPostAssets = 0;
+  const runner = {
+    query: async (sql: string) => {
+      statements.push(sql);
+      return [{ count: nonPostAssets }];
+    },
+  } as unknown as QueryRunner;
+  const migration = new OwnerMediaTargets1793832000000();
+  await migration.up(runner);
+  assert.match(statements.join(' '), /chk_media_parent/);
+  assert.match(statements.join(' '), /ON DELETE RESTRICT/);
+  nonPostAssets = 1;
+  await assert.rejects(migration.down(runner), /Move non-post media/);
+  nonPostAssets = 0;
+  await migration.down(runner);
+  assert.match(statements.at(-1)!, /DROP CHECK chk_media_parent/);
+});
+
 async function tempDirectory(): Promise<string> {
   const root = path.resolve('.tmp');
   await fs.mkdir(root, { recursive: true });
@@ -224,11 +351,16 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
         ? asset
         : null,
     manager: {
-      findOneBy: async () => ({
-        id: 'admin',
-        email: 'admin@example.test',
-        suspendedAt: null,
-      }),
+      findOneBy: async (target: unknown) =>
+        target === Showcase
+          ? hidden()
+            ? null
+            : showcase
+          : {
+              id: 'admin',
+              email: 'admin@example.test',
+              suspendedAt: null,
+            },
       getRepository: () => ({
         findOne: async (options: {
           where: { storageKey: string; asset?: unknown };
@@ -293,6 +425,11 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
         body: bytes,
       });
     assert.equal((await upload('other')).status, 404);
+    assert.equal(
+      (await upload('admin')).status,
+      404,
+      'administrators cannot upload for another owner',
+    );
     assert.equal((await upload('')).status, 401);
     assert.equal((await upload('owner', 'https://evil.test')).status, 403);
     asset.uploadExpiresAt = new Date(0);

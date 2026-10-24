@@ -16,6 +16,7 @@ import {
   effectiveLimits,
   assertQuota,
   moderationWhere,
+  chooseContentSlug,
 } from '@app/database';
 import { CreateShowcaseDto } from './dto/create-showcase.dto';
 import { UpdateShowcaseDto } from './dto/update-showcase.dto';
@@ -143,8 +144,11 @@ export class ShowcasesService {
             .getCount();
           assertQuota(total, limits.maxTotalPosts, 'Total post');
           assertQuota(monthly, limits.maxPostsPerMonth, 'Monthly post');
+          const slug = await chooseContentSlug(dto.title, dto.slug, (value) =>
+            manager.getRepository(Showcase).findOneBy({ slug: value }),
+          );
           const existing = await manager.findOneBy(Showcase, {
-            slug: dto.slug,
+            slug,
           });
           if (existing) {
             throw new ConflictException('A post with this slug already exists');
@@ -165,7 +169,7 @@ export class ShowcasesService {
           }
 
           const showcase = manager.create(Showcase, {
-            slug: dto.slug,
+            slug,
             title: dto.title,
             description: dto.description ?? null,
             status: dto.status ?? ShowcaseStatus.DRAFT,

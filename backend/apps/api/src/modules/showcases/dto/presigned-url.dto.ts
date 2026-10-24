@@ -10,7 +10,7 @@ import {
   Length,
   IsIn,
 } from 'class-validator';
-import { MediaKind } from '@app/database';
+import { MediaKind, type MediaAsset } from '@app/database';
 
 export class PresignedUrlDto {
   @IsString()
@@ -39,4 +39,12 @@ export class PresignedUrlDto {
   @IsOptional()
   @IsUUID('4')
   storeId?: string;
+}
+
+export class OwnerUploadDto extends PresignedUrlDto {
+  @IsUUID('4')
+  targetId!: string;
+
+  @IsIn(['post', 'store_logo', 'store_banner', 'product_image'])
+  purpose!: MediaAsset['purpose'];
 }

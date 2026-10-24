@@ -1,0 +1,867 @@
+import { useState, type FormEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom';
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  CreditCard,
+  Search,
+  ShieldCheck,
+  Store,
+  Users,
+  Package,
+  Images,
+} from 'lucide-react';
+import {
+  getJson,
+  mutate,
+  panelError,
+  recordName,
+  dateLabel,
+  type Page,
+  type PanelRecord,
+  type Session,
+} from '../shared/panel-api';
+import {
+  Empty,
+  Loading,
+  Modal,
+  Notice,
+  PageTitle,
+  Pagination,
+  PanelShell,
+  Retry,
+} from '../shared/PanelUI';
+import {
+  storeMediaUrl,
+  formatProductPrice,
+  isStoreVerified,
+} from '../../lib/storefront';
+
+type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
+export default function AdminPanel({ session }: { session: Session }) {
+  return (
+    <PanelShell session={session} admin>
+      <Routes>
+        <Route index element={<Overview id={session.user.id} />} />
+        <Route
+          path="users"
+          element={
+            <AdminList key="users" resource="users" id={session.user.id} />
+          }
+        />
+        <Route
+          path="stores"
+          element={
+            <AdminList key="stores" resource="stores" id={session.user.id} />
+          }
+        />
+        <Route
+          path="content"
+          element={
+            <AdminList
+              key="products"
+              resource="products"
+              id={session.user.id}
+            />
+          }
+        />
+        <Route
+          path="content/posts"
+          element={
+            <AdminList key="posts" resource="posts" id={session.user.id} />
+          }
+        />
+        <Route
+          path="subscriptions"
+          element={
+            <AdminList
+              key="subscriptions"
+              resource="subscriptions"
+              id={session.user.id}
+            />
+          }
+        />
+        <Route
+          path="verification"
+          element={
+            <AdminList
+              key="verification"
+              resource="stores"
+              id={session.user.id}
+              verification
+            />
+          }
+        />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
+      </Routes>
+    </PanelShell>
+  );
+}
+function Overview({ id }: { id: string }) {
+  const query = useQuery({
+    queryKey: ['panel', id, 'overview'],
+    queryFn: ({ signal }) =>
+      getJson<Record<string, number>>('admin/overview', signal),
+  });
+  const cards = [
+    { label: 'Users', key: 'users', href: 'users', icon: Users },
+    { label: 'Stores', key: 'stores', href: 'stores', icon: Store },
+    { label: 'Products', key: 'products', href: 'content', icon: Package },
+    { label: 'Posts', key: 'posts', href: 'content/posts', icon: Images },
+  ];
+  return (
+    <>
+      <PageTitle
+        eyebrow="ADMINISTRATION"
+        title="A clear view of your platform."
+        description="Support your store owners. Keep the community moving."
+      />
+      {query.isPending ? (
+        <Loading />
+      ) : query.isError ? (
+        <Retry error={query.error} retry={() => void query.refetch()} />
+      ) : (
+        <div className="panel-stats">
+          {cards.map((card) => (
+            <Link
+              className="panel-stat"
+              to={`/admin/${card.href}`}
+              key={card.key}
+            >
+              <span>
+                <card.icon size={20} />
+                {card.label}
+                <ArrowUpRight size={16} />
+              </span>
+              <strong>{query.data[card.key]?.toLocaleString() ?? 0}</strong>
+              <small>View all {card.label.toLowerCase()}</small>
+            </Link>
+          ))}
+        </div>
+      )}
+      <div className="panel-two-columns">
+        <section className="panel-card panel-feature">
+          <CreditCard size={28} />
+          <h2>The right plan, for every owner.</h2>
+          <p>
+            Assign subscriptions and keep track of expiry dates in one place.
+          </p>
+          <Link className="panel-primary" to="/admin/subscriptions">
+            Manage subscriptions <ArrowUpRight size={16} />
+          </Link>
+        </section>
+        <section className="panel-card panel-feature">
+          <BadgeCheck size={28} />
+          <h2>Help trusted stores stand out.</h2>
+          <p>Review a store and manage its verification badge.</p>
+          <Link className="panel-secondary" to="/admin/verification">
+            Review verification <ArrowUpRight size={16} />
+          </Link>
+        </section>
+      </div>
+      <div className="panel-note">
+        <ShieldCheck size={20} />
+        <p>
+          <strong>Owners create. You support.</strong>
+          <br />
+          Stores, products, and uploads are managed by their owners. This
+          workspace is for oversight, subscriptions, and verification.
+        </p>
+      </div>
+    </>
+  );
+}
+function AdminList({
+  resource,
+  id,
+  verification = false,
+}: {
+  resource: Resource;
+  id: string;
+  verification?: boolean;
+}) {
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [archive, setArchive] = useState('all');
+  const [selected, setSelected] = useState<PanelRecord>();
+  const [assign, setAssign] = useState<PanelRecord | null | undefined>();
+  const params = new URLSearchParams({
+    limit: '20',
+    offset: String(offset),
+    archive,
+  });
+  if (search) params.set('search', search);
+  const query = useQuery({
+    queryKey: ['panel', id, resource, params.toString()],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>(`admin/data/${resource}?${params}`, signal),
+  });
+  const title = verification
+    ? 'Verification'
+    : resource === 'products' || resource === 'posts'
+      ? 'Content'
+      : resource[0]!.toUpperCase() + resource.slice(1);
+  return (
+    <>
+      <PageTitle
+        eyebrow="ADMINISTRATION"
+        title={title}
+        description={
+          verification
+            ? 'Recognize genuine stores with a verified badge.'
+            : resource === 'subscriptions'
+              ? 'Assign a plan to a user. They take care of their store.'
+              : 'Find, review, and support the people behind the platform.'
+        }
+        action={
+          resource === 'subscriptions' && (
+            <button className="panel-primary" onClick={() => setAssign(null)}>
+              Assign subscription
+            </button>
+          )
+        }
+      />
+      {(resource === 'products' || resource === 'posts') && (
+        <nav className="panel-tabs" aria-label="Content type">
+          <NavLink end to="/admin/content">
+            Products
+          </NavLink>
+          <NavLink to="/admin/content/posts">Posts</NavLink>
+        </nav>
+      )}
+      <section className="panel-card panel-list-card">
+        <form
+          className="panel-toolbar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSearch(searchInput.trim());
+            setOffset(0);
+          }}
+        >
+          <label className="panel-search">
+            <Search size={18} />
+            <input
+              aria-label={`Search ${title}`}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={
+                resource === 'subscriptions'
+                  ? 'Search owner name, email or plan'
+                  : `Search ${title.toLowerCase()}…`
+              }
+              maxLength={100}
+            />
+          </label>
+          <button type="submit">Search</button>
+          {resource !== 'subscriptions' && (
+            <select
+              aria-label="Visibility filter"
+              value={archive}
+              onChange={(e) => {
+                setArchive(e.target.value);
+                setOffset(0);
+              }}
+            >
+              <option value="all">All records</option>
+              <option value="active">
+                {resource === 'users' ? 'Active accounts' : 'Not hidden'}
+              </option>
+              <option value="archived">
+                {resource === 'users' ? 'Suspended accounts' : 'Hidden'}
+              </option>
+            </select>
+          )}
+        </form>
+        {query.isPending ? (
+          <Loading />
+        ) : query.isError ? (
+          <Retry error={query.error} retry={() => void query.refetch()} />
+        ) : (
+          <>
+            {query.data.items.length ? (
+              <div className="panel-record-list">
+                {query.data.items.map((item) => (
+                  <article className="panel-record" key={item.id}>
+                    <div className="panel-record-icon">
+                      {item.logoKey ? (
+                        <img src={storeMediaUrl(item.logoKey)} alt="" />
+                      ) : resource === 'users' ? (
+                        <Users size={20} />
+                      ) : resource === 'subscriptions' ? (
+                        <CreditCard size={20} />
+                      ) : (
+                        <Store size={20} />
+                      )}
+                    </div>
+                    <div className="panel-record-info">
+                      <h3>
+                        {recordName(item)}{' '}
+                        {isStoreVerified(item) && (
+                          <BadgeCheck
+                            size={17}
+                            className="panel-verified"
+                            aria-label="Verified"
+                          />
+                        )}
+                      </h3>
+                      <p>
+                        {item.owner
+                          ? `${item.owner.displayName} · ${item.owner.email}`
+                          : item.email ||
+                            item.store?.name ||
+                            item.slug ||
+                            'Subscription assignment'}
+                      </p>
+                      {resource === 'subscriptions' && (
+                        <small>Expires {dateLabel(item.expiresAt)}</small>
+                      )}
+                    </div>
+                    <span
+                      className={`panel-pill ${item.adminArchivedAt || item.suspendedAt ? 'muted' : ''}`}
+                    >
+                      {item.adminArchivedAt
+                        ? 'Hidden'
+                        : item.suspendedAt
+                          ? 'Suspended'
+                          : resource === 'stores'
+                            ? isStoreVerified(item)
+                              ? 'Verified'
+                              : 'Not verified'
+                            : item.status || 'Active'}
+                    </span>
+                    <button onClick={() => setSelected(item)}>
+                      View details <ArrowUpRight size={15} />
+                    </button>
+                    {resource === 'users' && (
+                      <button onClick={() => setAssign(item)}>
+                        Assign plan
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <Empty title="Nothing here yet">
+                <p>
+                  {search
+                    ? 'Try another search or clear your filters.'
+                    : 'New activity will appear here.'}
+                </p>
+              </Empty>
+            )}
+            <Pagination
+              offset={offset}
+              total={query.data.total}
+              onChange={setOffset}
+            />
+          </>
+        )}
+      </section>
+      {selected && (
+        <Detail
+          resource={resource}
+          item={selected}
+          id={id}
+          close={() => setSelected(undefined)}
+          assign={(user) => {
+            setSelected(undefined);
+            setAssign(user);
+          }}
+        />
+      )}
+      {assign !== undefined && (
+        <AssignSubscription
+          user={assign}
+          id={id}
+          close={() => setAssign(undefined)}
+        />
+      )}
+    </>
+  );
+}
+function Detail({
+  resource,
+  item,
+  id,
+  close,
+  assign,
+}: {
+  resource: Resource;
+  item: PanelRecord;
+  id: string;
+  close: () => void;
+  assign: (user: PanelRecord) => void;
+}) {
+  const query = useQuery({
+    queryKey: ['panel', id, resource, item.id],
+    queryFn: ({ signal }) =>
+      getJson<PanelRecord>(`admin/data/${resource}/${item.id}`, signal),
+  });
+  const data = query.data ?? item;
+  const [action, setAction] = useState<{
+    path: string;
+    title: string;
+    body?: object;
+    reasons: string[];
+  }>();
+  const imageKeys = [
+    ...(data.imageKeys ?? []),
+    data.logoKey,
+    data.bannerKey,
+  ].filter((key): key is string => Boolean(key));
+  return (
+    <Modal title={recordName(data)} onClose={close}>
+      {query.isPending ? (
+        <Loading />
+      ) : query.isError ? (
+        <Retry error={query.error} retry={() => void query.refetch()} />
+      ) : (
+        <>
+          <p className="panel-muted">
+            {data.description || 'No description provided.'}
+          </p>
+          <dl className="panel-details">
+            <div>
+              <dt>Owner</dt>
+              <dd>
+                {data.owner?.displayName || data.displayName || '—'}
+                <small>{data.owner?.email || data.email}</small>
+              </dd>
+            </div>
+            {data.store && (
+              <div>
+                <dt>Store</dt>
+                <dd>{data.store.name}</dd>
+              </div>
+            )}
+            {data.plan && (
+              <div>
+                <dt>Plan</dt>
+                <dd>{data.plan.name}</dd>
+              </div>
+            )}
+            {data.priceCents != null && (
+              <div>
+                <dt>Price</dt>
+                <dd>
+                  {formatProductPrice(data.priceCents, data.currency || 'USD')}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt>Created</dt>
+              <dd>{dateLabel(data.createdAt)}</dd>
+            </div>
+            {resource === 'subscriptions' && (
+              <>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{data.status}</dd>
+                </div>
+                <div>
+                  <dt>Expires</dt>
+                  <dd>{dateLabel(data.expiresAt)}</dd>
+                </div>
+              </>
+            )}
+          </dl>
+          {!!imageKeys.length && (
+            <div className="panel-photo-grid">
+              {imageKeys.map((key) => (
+                <img
+                  key={key}
+                  src={storeMediaUrl(key)}
+                  alt="Store content"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+          {data.media?.map((media) =>
+            media.key ? (
+              media.kind === 'video' ? (
+                <video
+                  className="panel-preview-media"
+                  key={media.id}
+                  controls
+                  preload="metadata"
+                  src={storeMediaUrl(media.key)}
+                />
+              ) : (
+                <img
+                  className="panel-preview-media"
+                  key={media.id}
+                  src={storeMediaUrl(media.key)}
+                  alt="Post content"
+                />
+              )
+            ) : (
+              <p key={media.id}>Media: {media.status}</p>
+            ),
+          )}
+          <div className="panel-actions">
+            {resource === 'users' && (
+              <button className="panel-primary" onClick={() => assign(data)}>
+                Assign subscription
+              </button>
+            )}
+            {resource === 'stores' && (
+              <>
+                <Link className="panel-secondary" to={`/stores/${data.slug}`}>
+                  Open storefront
+                </Link>
+                <button
+                  className="panel-primary"
+                  onClick={() =>
+                    setAction({
+                      path: `admin/stores/${data.id}/badge`,
+                      title: isStoreVerified(data)
+                        ? 'Revoke verification badge'
+                        : 'Grant verification badge',
+                      body: { enabled: !isStoreVerified(data) },
+                      reasons: isStoreVerified(data)
+                        ? [
+                            'Verification no longer valid',
+                            'Owner requested removal',
+                          ]
+                        : [
+                            'Store identity reviewed',
+                            'Business ownership confirmed',
+                          ],
+                    })
+                  }
+                >
+                  {isStoreVerified(data) ? 'Revoke badge' : 'Grant badge'}
+                </button>
+              </>
+            )}
+            {['stores', 'products', 'posts'].includes(resource) && (
+              <button
+                onClick={() =>
+                  setAction({
+                    path: `admin/${resource}/${data.id}/${data.adminArchivedAt ? 'restore' : 'archive'}`,
+                    title: data.adminArchivedAt
+                      ? 'Restore visibility'
+                      : 'Hide this content',
+                    reasons: data.adminArchivedAt
+                      ? ['Review completed', 'Issue resolved']
+                      : [
+                          'Community guidelines concern',
+                          'Owner requested removal',
+                        ],
+                  })
+                }
+              >
+                {data.adminArchivedAt ? 'Restore visibility' : 'Hide content'}
+              </button>
+            )}
+            {resource === 'subscriptions' && data.status === 'active' && (
+              <button
+                onClick={() =>
+                  setAction({
+                    path: `admin/subscriptions/${data.id}/cancel`,
+                    title: 'Cancel subscription',
+                    reasons: [
+                      'Owner requested cancellation',
+                      'Subscription assigned in error',
+                    ],
+                  })
+                }
+              >
+                Cancel subscription
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {action && (
+        <ConfirmAction
+          {...action}
+          id={id}
+          close={() => setAction(undefined)}
+          done={close}
+        />
+      )}
+    </Modal>
+  );
+}
+function ConfirmAction({
+  path,
+  title,
+  body = {},
+  reasons,
+  id,
+  close,
+  done,
+}: {
+  path: string;
+  title: string;
+  body?: object;
+  reasons: string[];
+  id: string;
+  close: () => void;
+  done: () => void;
+}) {
+  const [reason, setReason] = useState(reasons[0] || 'Reviewed');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const client = useQueryClient();
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate(path, { ...body, reason });
+      await client.invalidateQueries({ queryKey: ['panel', id] });
+      done();
+    } catch (e) {
+      setError(panelError(e));
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={title} onClose={close} busy={busy}>
+      <form onSubmit={(e) => void submit(e)} className="panel-form">
+        <p>This change is recorded in the administrative activity log.</p>
+        <label>
+          Reason
+          <select value={reason} onChange={(e) => setReason(e.target.value)}>
+            {reasons.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </select>
+        </label>
+        {error && <Notice error>{error}</Notice>}
+        <div className="panel-actions">
+          <button disabled={busy} type="button" onClick={close}>
+            Go back
+          </button>
+          <button disabled={busy} className="panel-primary">
+            {busy ? 'Saving…' : 'Confirm change'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function AssignSubscription({
+  user,
+  id,
+  close,
+}: {
+  user: PanelRecord | null;
+  id: string;
+  close: () => void;
+}) {
+  const [selected, setSelected] = useState(user);
+  const [input, setInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [planId, setPlanId] = useState('');
+  const [date, setDate] = useState('');
+  const [custom, setCustom] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const client = useQueryClient();
+  const users = useQuery({
+    queryKey: ['panel', id, 'user-picker', search, offset],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>(
+        `admin/data/users?limit=20&offset=${offset}&search=${encodeURIComponent(search)}&archive=active`,
+        signal,
+      ),
+    enabled: !selected,
+  });
+  const plans = useQuery({
+    queryKey: ['panel', id, 'plans'],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>('admin/data/plans?limit=100', signal),
+  });
+  const current = useQuery({
+    queryKey: ['panel', id, 'user-subscription', selected?.id],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>(
+        `admin/data/subscriptions?ownerId=${selected!.id}&status=active&limit=20`,
+        signal,
+      ),
+    enabled: Boolean(selected),
+  });
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!selected || !planId || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate('admin/subscriptions/assign', {
+        userId: selected.id,
+        planId,
+        ...(custom
+          ? { expiresAt: new Date(`${date}T23:59:59`).toISOString() }
+          : {}),
+      });
+      await client.invalidateQueries({ queryKey: ['panel', id] });
+      setSaved(true);
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Assign a subscription" onClose={close} busy={busy}>
+      {saved ? (
+        <>
+          <Notice>Subscription assigned successfully.</Notice>
+          <button className="panel-primary" onClick={close}>
+            Done
+          </button>
+        </>
+      ) : !selected ? (
+        <>
+          <p>First, choose the store owner.</p>
+          <form
+            className="panel-toolbar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearch(input);
+              setOffset(0);
+            }}
+          >
+            <input
+              aria-label="Find a user"
+              placeholder="Search name or email"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              maxLength={100}
+            />
+            <button>Search</button>
+          </form>
+          {users.isPending ? (
+            <Loading />
+          ) : users.isError ? (
+            <Retry error={users.error} retry={() => void users.refetch()} />
+          ) : (
+            <>
+              {users.data.items.map((u) => (
+                <button
+                  className="panel-picker-row"
+                  key={u.id}
+                  onClick={() => setSelected(u)}
+                >
+                  <strong>{u.displayName}</strong>
+                  <small>{u.email}</small>
+                </button>
+              ))}
+              {!users.data.items.length && <p>No matching users.</p>}
+              <Pagination
+                total={users.data.total}
+                offset={offset}
+                onChange={setOffset}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <form className="panel-form" onSubmit={(e) => void submit(e)}>
+          <div className="panel-note">
+            <Users size={20} />
+            <div>
+              <strong>{selected.displayName}</strong>
+              <small>{selected.email}</small>
+            </div>
+            <button type="button" onClick={() => setSelected(null)}>
+              Change
+            </button>
+          </div>
+          {current.isPending ? (
+            <Loading />
+          ) : current.isError ? (
+            <Retry error={current.error} retry={() => void current.refetch()} />
+          ) : (
+            <p className="panel-muted">
+              Current:{' '}
+              {current.data.items.find(
+                (s) =>
+                  (!s.expiresAt || Date.parse(s.expiresAt) > Date.now()) &&
+                  (!s.startsAt || Date.parse(s.startsAt) <= Date.now()),
+              )?.plan?.name || 'Free plan'}
+              . A new assignment replaces the current subscription.
+            </p>
+          )}
+          <fieldset>
+            <legend>Choose a plan</legend>
+            {plans.isPending ? (
+              <Loading />
+            ) : plans.isError ? (
+              <Retry error={plans.error} retry={() => void plans.refetch()} />
+            ) : (
+              <div className="panel-plan-options">
+                {plans.data.items
+                  .filter((p) => p.isActive)
+                  .map((p) => (
+                    <label
+                      className={`panel-choice ${planId === p.id ? 'selected' : ''}`}
+                      key={p.id}
+                    >
+                      <input
+                        required
+                        type="radio"
+                        name="plan"
+                        value={p.id}
+                        checked={planId === p.id}
+                        onChange={() => setPlanId(p.id)}
+                      />
+                      <strong>{p.name}</strong>
+                      <span>
+                        {formatProductPrice(
+                          p.priceCents || '0',
+                          p.currency || 'USD',
+                        )}{' '}
+                        / {p.billingCycle}
+                      </span>
+                    </label>
+                  ))}
+                {!plans.data.items.some((p) => p.isActive) && (
+                  <p>No active plans are available.</p>
+                )}
+              </div>
+            )}
+          </fieldset>
+          <label>
+            Duration
+            <select
+              value={custom ? 'custom' : 'default'}
+              onChange={(e) => setCustom(e.target.value === 'custom')}
+            >
+              <option value="default">Use the plan's normal duration</option>
+              <option value="custom">Choose an expiry date</option>
+            </select>
+          </label>
+          {custom && (
+            <label>
+              Expires on
+              <input
+                type="date"
+                required
+                min={new Date().toLocaleDateString('en-CA')}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </label>
+          )}
+          {error && <Notice error>{error}</Notice>}
+          <button
+            className="panel-primary"
+            disabled={busy || !planId || current.isPending || current.isError}
+          >
+            {busy ? 'Assigning…' : 'Confirm subscription'}
+          </button>
+        </form>
+      )}
+    </Modal>
+  );
+}

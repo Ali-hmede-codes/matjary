@@ -484,9 +484,13 @@ test('HTTP auth flow enforces CSRF, validates input, restores sessions and revok
       body: JSON.stringify(body),
     });
   try {
-    const page = await fetch(base + '/');
-    assert.equal(page.status, 200);
-    assert.match(await page.text(), /Welcome to Matjary/);
+    const root = await fetch(base + '/', { redirect: 'manual' });
+    assert.equal(root.headers.get('location'), '/api/v1/auth/login');
+    const page = await fetch(base + '/api/v1/auth/login', {
+      redirect: 'manual',
+    });
+    assert.equal(page.status, 302);
+    assert.equal(page.headers.get('location'), '/login');
     assert.match(
       page.headers.get('content-security-policy')!,
       /frame-ancestors 'none'/,

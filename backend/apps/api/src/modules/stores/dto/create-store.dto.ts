@@ -117,10 +117,11 @@ export class CreateStoreDto {
   @Length(1, 200)
   name!: string;
 
+  @IsOptional()
   @IsString()
   @Length(1, 191)
   @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/)
-  slug!: string;
+  slug?: string;
 
   @IsOptional()
   @IsHexColor()

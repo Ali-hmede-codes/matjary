@@ -82,7 +82,7 @@ export interface Category {
   count: number;
 }
 
-export const loginUrl = `${__DEV_BACKEND_ORIGIN__ ?? ''}/api/v1/auth/login`;
+export const loginUrl = '/login';
 export const assetUrl = (value: string | null | undefined) =>
   mediaUrl(value, __DEV_BACKEND_ORIGIN__);
 

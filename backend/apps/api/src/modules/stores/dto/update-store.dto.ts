@@ -8,6 +8,7 @@ import {
   IsUrl,
   IsEnum,
   IsNumber,
+  IsBoolean,
   Min,
   Max,
 } from 'class-validator';
@@ -110,6 +111,14 @@ export class UpdateStoreLocationDto {
 }
 
 export class UpdateStoreDto {
+  @IsOptional()
+  @IsBoolean()
+  enableCart?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableWhatsAppCheckout?: boolean;
+
   @IsOptional()
   @IsString()
   @Length(1, 200)

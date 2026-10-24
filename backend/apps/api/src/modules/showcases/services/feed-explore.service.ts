@@ -806,6 +806,7 @@ export class FeedExploreService {
     // Group media by showcase
     const mediaByShowcase = new Map<string, MediaAsset[]>();
     for (const asset of mediaAssets) {
+      if (!asset.showcaseId) continue;
       const arr = mediaByShowcase.get(asset.showcaseId) || [];
       arr.push(asset);
       mediaByShowcase.set(asset.showcaseId, arr);

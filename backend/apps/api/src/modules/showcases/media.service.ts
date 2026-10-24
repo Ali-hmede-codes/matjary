@@ -20,18 +20,19 @@ import {
   MediaVariant,
   MediaProcessingOutbox,
   User,
-  ShowcaseStatus,
   effectiveLimits,
   boundedLimit,
   assertQuota,
   moderationWhere,
   requireAdmin,
-  appendAdminAudit,
+  mediaParent,
+  MEDIA_OWNER_JOINS,
+  MEDIA_OWNER_ID,
   type AdminActor,
 } from '@app/database';
 import { QueueService } from '@app/queue';
 import { StorageService } from '@app/storage';
-import { PresignedUrlDto } from './dto/presigned-url.dto';
+import { PresignedUrlDto, OwnerUploadDto } from './dto/presigned-url.dto';
 import { MediaCompleteDto } from './dto/media-complete.dto';
 import { randomUUID } from 'node:crypto';
 
@@ -40,8 +41,7 @@ export class MediaService {
   constructor(
     @InjectRepository(Showcase)
     private readonly showcases: Repository<Showcase>,
-    @InjectRepository(Store)
-    private readonly stores: Repository<Store>,
+    @InjectRepository(Store) private readonly stores: Repository<Store>,
     @InjectRepository(MediaAsset)
     private readonly mediaAssets: Repository<MediaAsset>,
     private readonly storage: StorageService,
@@ -49,61 +49,85 @@ export class MediaService {
     private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
 
-  /**
-   * Negotiate an upload with the selected local or S3 provider.
-   * Validates ownership, subscription limits, and file constraints before
-   * creating a pending MediaAsset record.
-   */
-  async presignedUrl(
-    dto: PresignedUrlDto,
-    slug: string,
+  async presignedUrl(dto: PresignedUrlDto, slug: string, ownerId: string) {
+    const post = await this.showcases.findOneBy({
+      slug,
+      ...moderationWhere('post'),
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    if (dto.storeId && dto.storeId !== post.storeId)
+      throw new BadRequestException('Store must match the post');
+    return this.negotiate(
+      { ...dto, targetId: post.id, purpose: 'post' },
+      ownerId,
+    );
+  }
+
+  async negotiate(
+    dto: OwnerUploadDto,
     ownerId: string,
-    administrator?: AdminActor,
   ): Promise<{ url: string; mediaId: string; key: string }> {
     try {
       return await this.mediaAssets.manager.transaction(async (manager) => {
-        if (administrator)
-          await requireAdmin(
-            manager,
-            administrator,
-            this.config.get('ADMIN_EMAILS', { infer: true }),
-          );
-        await manager.findOneOrFail(User, {
+        const user = await manager.findOneOrFail(User, {
           where: { id: ownerId },
           lock: { mode: 'pessimistic_write' },
         });
-        const showcase = await manager.findOneBy(Showcase, {
-          slug,
-          ...moderationWhere('post'),
-        });
-        if (!showcase) throw new NotFoundException('Post not found');
-        if (showcase.ownerId !== ownerId)
-          throw new ForbiddenException('You do not own this post');
-        if (dto.storeId && showcase.storeId !== dto.storeId)
-          throw new BadRequestException('Store must match the post');
+        if (user.suspendedAt)
+          throw new ForbiddenException('Account unavailable');
+        const target = {
+          showcaseId: dto.purpose === 'post' ? dto.targetId : null,
+          storeId:
+            dto.purpose === 'store_logo' || dto.purpose === 'store_banner'
+              ? dto.targetId
+              : null,
+          productId: dto.purpose === 'product_image' ? dto.targetId : null,
+        };
+        const parent = await mediaParent(manager, target);
+        if (parent.ownerId !== ownerId)
+          throw new ForbiddenException('You do not own this content');
+        if (dto.purpose !== 'post' && dto.kind !== MediaKind.IMAGE)
+          throw new BadRequestException('Choose an image');
+        if (!dto.fileType.startsWith(`${dto.kind}/`))
+          throw new BadRequestException('File type does not match media kind');
         const limits = await effectiveLimits(manager, ownerId);
+        const assets = manager
+          .getRepository(MediaAsset)
+          .createQueryBuilder('asset');
+        if (target.showcaseId)
+          assets.where('asset.showcaseId = :id', { id: target.showcaseId });
+        else if (target.productId)
+          assets.where('asset.productId = :id', { id: target.productId });
+        else
+          assets.where('asset.storeId = :id AND asset.purpose = :purpose', {
+            id: target.storeId,
+            purpose: dto.purpose,
+          });
+        assets.andWhere('asset.kind = :kind AND asset.status != :failed', {
+          kind: dto.kind,
+          failed: MediaStatus.FAILED,
+        });
+        if (!target.showcaseId)
+          assets.andWhere('asset.status != :ready', {
+            ready: MediaStatus.READY,
+          });
+        const count = await assets.getCount();
         if (dto.kind === MediaKind.IMAGE) {
-          const count = await manager
-            .getRepository(MediaAsset)
-            .createQueryBuilder('asset')
-            .where(
-              'asset.showcaseId = :id AND asset.kind = :kind AND asset.status != :failed',
-              {
-                id: showcase.id,
-                kind: MediaKind.IMAGE,
-                failed: MediaStatus.FAILED,
-              },
-            )
-            .getCount();
-          assertQuota(count, limits.maxImageCount, 'Image');
+          const attached = parent.product?.imageKeys?.length ?? 0;
+          const limit = target.storeId
+            ? 1
+            : target.productId
+              ? boundedLimit(20, limits.maxImageCount)
+              : limits.maxImageCount;
+          assertQuota(count + attached, limit, 'Image');
         }
         if (limits.maxStorageBytes != null) {
           const usage = (await manager.query(
-            `SELECT COALESCE(SUM(a.size_bytes), 0) AS used FROM media_assets a JOIN showcases s ON s.id = a.showcase_id WHERE s.owner_id = ? AND a.original_key IS NOT NULL`,
+            `SELECT COALESCE(SUM(a.size_bytes), 0) AS used FROM media_assets a ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ? AND a.original_key IS NOT NULL`,
             [ownerId],
           )) as Array<{ used: string }>;
           const variants = (await manager.query(
-            `SELECT COALESCE(SUM(v.size_bytes), 0) AS used FROM media_variants v JOIN media_assets a ON a.id = v.asset_id JOIN showcases s ON s.id = a.showcase_id WHERE s.owner_id = ?`,
+            `SELECT COALESCE(SUM(v.size_bytes), 0) AS used FROM media_variants v JOIN media_assets a ON a.id = v.asset_id ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ?`,
             [ownerId],
           )) as Array<{ used: string }>;
           if (
@@ -116,39 +140,19 @@ export class MediaService {
               'Storage limit reached for your subscription',
             );
         }
-
-        // Validate MIME type prefix matches the declared kind.
-        const isImage = dto.fileType.startsWith('image/');
-        const isVideo = dto.fileType.startsWith('video/');
-        if (
-          (dto.kind === MediaKind.IMAGE && !isImage) ||
-          (dto.kind === MediaKind.VIDEO && !isVideo)
-        ) {
-          throw new BadRequestException(
-            'File type does not match the specified media kind',
-          );
-        }
-
-        // Validate file size against the configured limit for the media kind.
-        const maxImageSize = this.config.get('MEDIA_MAX_IMAGE_SIZE_BYTES', {
-          infer: true,
-        });
-        const maxVideoSize = this.config.get('MEDIA_MAX_VIDEO_SIZE_BYTES', {
-          infer: true,
-        });
-        const maxSize =
+        const maxBytes =
           dto.kind === MediaKind.IMAGE
-            ? boundedLimit(maxImageSize, limits.maxImageSizeBytes)
-            : boundedLimit(maxVideoSize, limits.maxVideoSizeBytes);
-        if (dto.fileSize > maxSize) {
-          throw new BadRequestException(
-            'File exceeds the size limit for the specified media kind',
-          );
-        }
-
-        const mediaId = randomUUID();
-        const originalKey = `originals/${showcase.id}/${mediaId}/source`;
-        const qualityHeights: Record<string, number> = {
+            ? boundedLimit(
+                this.config.get('MEDIA_MAX_IMAGE_SIZE_BYTES', { infer: true }),
+                limits.maxImageSizeBytes,
+              )
+            : boundedLimit(
+                this.config.get('MEDIA_MAX_VIDEO_SIZE_BYTES', { infer: true }),
+                limits.maxVideoSizeBytes,
+              );
+        if (dto.fileSize > maxBytes)
+          throw new BadRequestException('File exceeds the size limit');
+        const heights: Record<string, number> = {
           '480p': 480,
           '720p': 720,
           '1080p': 1080,
@@ -157,11 +161,22 @@ export class MediaService {
         };
         const videoHeight = Math.min(
           this.config.get('MEDIA_MAX_VIDEO_HEIGHT', { infer: true }),
-          qualityHeights[limits.maxVideoQuality ?? '1080p'] ?? 1080,
+          heights[limits.maxVideoQuality ?? '1080p'] ?? 1080,
         );
-        const mediaAsset = manager.create(MediaAsset, {
+        const id = randomUUID();
+        const originalKey = `originals/${dto.targetId}/${id}/source`;
+        const asset = manager.create(MediaAsset, {
+          id,
+          ...target,
+          purpose: dto.purpose,
+          kind: dto.kind,
+          status: MediaStatus.PENDING,
+          originalKey,
+          mimeType: dto.fileType,
+          sizeBytes: String(dto.fileSize),
+          uploadExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
           processingLimits: {
-            maxBytes: maxSize,
+            maxBytes,
             maxDurationSeconds: boundedLimit(
               this.config.get('MEDIA_MAX_VIDEO_DURATION_SECONDS', {
                 infer: true,
@@ -180,170 +195,136 @@ export class MediaService {
               infer: true,
             }),
           },
-          uploadExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          id: mediaId,
-          showcaseId: showcase.id,
-          kind: dto.kind,
-          status: MediaStatus.PENDING,
-          originalKey,
-          mimeType: dto.fileType,
-          sizeBytes: String(dto.fileSize),
         });
-
-        await manager.save(mediaAsset);
-        if (administrator)
-          await appendAdminAudit(
-            manager,
-            administrator,
-            'media',
-            mediaId,
-            'upload.negotiate',
-            ['showcaseId', 'kind', 'sizeBytes'],
-          );
+        await manager.save(asset);
         const { url } = await this.storage.presignedPutUrl(
           originalKey,
           dto.fileType,
           dto.fileSize,
         );
-        return { url, mediaId, key: originalKey };
+        return { url, mediaId: id, key: originalKey };
       });
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof ConflictException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
       this.sanitize(error);
     }
   }
 
-  /**
-   * Atomically mark completion and retain durable dispatch intent. Redis
-   * outages cannot strand an upload between the database and the queue.
-   */
   async mediaComplete(
     dto: MediaCompleteDto,
     slug: string,
     ownerId: string,
-    administrator?: AdminActor,
   ): Promise<void> {
+    const post = await this.showcases.findOneBy({
+      slug,
+      ...moderationWhere('post'),
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    const asset = await this.ownedAsset(dto.mediaId, ownerId);
+    if (asset.showcaseId !== post.id)
+      throw new NotFoundException('Media asset not found');
+    await this.complete(dto.mediaId, ownerId);
+  }
+
+  private async ownedAsset(id: string, ownerId: string): Promise<MediaAsset> {
+    const asset = await this.mediaAssets.findOneBy({
+      id,
+      ...moderationWhere('media'),
+    });
+    if (
+      !asset ||
+      (await mediaParent(this.mediaAssets.manager, asset)).ownerId !== ownerId
+    )
+      throw new NotFoundException('Media asset not found');
+    return asset;
+  }
+
+  async complete(id: string, ownerId: string): Promise<void> {
     try {
-      if (administrator)
-        await requireAdmin(
-          this.mediaAssets.manager,
-          administrator,
-          this.config.get('ADMIN_EMAILS', { infer: true }),
-        );
-      const showcase = await this.showcases.findOneBy({
-        slug,
-        ...moderationWhere('post'),
-      });
-      if (!showcase) {
-        throw new NotFoundException('Post not found');
-      }
-
-      if (showcase.ownerId !== ownerId) {
-        throw new ForbiddenException('You do not own this post');
-      }
-
-      const mediaAsset = await this.mediaAssets.findOneBy({
-        id: dto.mediaId,
-        ...moderationWhere('media'),
-      });
-      if (!mediaAsset) {
-        throw new NotFoundException('Media asset not found');
-      }
-
-      if (mediaAsset.showcaseId !== showcase.id) {
-        throw new NotFoundException('Media asset not found');
-      }
-
-      if (
-        [MediaStatus.PROCESSING, MediaStatus.READY].includes(mediaAsset.status)
-      )
+      const asset = await this.ownedAsset(id, ownerId);
+      if ([MediaStatus.PROCESSING, MediaStatus.READY].includes(asset.status))
         return;
-      if (
-        mediaAsset.status !== MediaStatus.PENDING ||
-        !mediaAsset.originalKey ||
-        !mediaAsset.uploadExpiresAt ||
-        mediaAsset.uploadExpiresAt <= new Date()
-      )
+      this.pending(asset);
+      if (!asset.originalKey)
         throw new ConflictException('Upload is no longer pending');
-      const stored = await this.storage.statObject(mediaAsset.originalKey);
+      const stored = await this.storage.statObject(asset.originalKey);
       if (
-        stored.size !== Number(mediaAsset.sizeBytes) ||
-        stored.size > (mediaAsset.processingLimits?.maxBytes ?? 0)
+        stored.size !== Number(asset.sizeBytes) ||
+        stored.size > (asset.processingLimits?.maxBytes ?? 0)
       )
         throw new BadRequestException('Uploaded media size is invalid');
       await this.mediaAssets.manager.transaction(async (manager) => {
         const current = await manager.findOneOrFail(MediaAsset, {
-          where: { id: mediaAsset.id },
+          where: { id },
           lock: { mode: 'pessimistic_write' },
         });
         if (
           [MediaStatus.PROCESSING, MediaStatus.READY].includes(current.status)
         )
           return;
-        if (current.status !== MediaStatus.PENDING)
-          throw new ConflictException('Upload is no longer pending');
+        this.pending(current);
+        if ((await mediaParent(manager, current)).ownerId !== ownerId)
+          throw new NotFoundException('Media asset not found');
         current.status = MediaStatus.PROCESSING;
         await manager.save(current);
-        await manager.insert(MediaProcessingOutbox, { assetId: current.id });
-        if (administrator) {
-          await requireAdmin(
-            manager,
-            administrator,
-            this.config.get('ADMIN_EMAILS', { infer: true }),
-          );
-          await appendAdminAudit(
-            manager,
-            administrator,
-            'media',
-            current.id,
-            'upload.complete',
-            ['status'],
-          );
-        }
+        await manager.insert(MediaProcessingOutbox, { assetId: id });
       });
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof ConflictException
-      ) {
-        throw error;
-      }
       this.sanitize(error);
     }
   }
 
-  async authorizeUpload(
-    key: string,
-    ownerId: string,
-    administrator?: AdminActor,
-  ): Promise<MediaAsset> {
-    this.requireLocal();
-    if (administrator)
-      await requireAdmin(
-        this.mediaAssets.manager,
-        administrator,
-        this.config.get('ADMIN_EMAILS', { infer: true }),
-      );
-    const asset = await this.mediaAssets.findOne({
-      where: { originalKey: key, ...moderationWhere('media') },
-      relations: ['showcase'],
-    });
-    if (!asset || (!administrator && asset.showcase.ownerId !== ownerId))
-      throw new NotFoundException('Media asset not found');
+  async abandon(id: string, ownerId: string): Promise<void> {
+    const asset = await this.ownedAsset(id, ownerId);
+    if (asset.status !== MediaStatus.PENDING)
+      throw new ConflictException('Upload cannot be abandoned');
+    await this.mediaAssets.update(
+      { id, status: MediaStatus.PENDING },
+      { status: MediaStatus.FAILED },
+    );
+  }
+
+  async status(id: string, ownerId: string) {
+    const asset = await this.ownedAsset(id, ownerId);
+    const variants =
+      asset.status === MediaStatus.READY
+        ? await this.mediaAssets.manager.find(MediaVariant, {
+            where: { assetId: id },
+            take: 30,
+          })
+        : [];
+    return {
+      id,
+      status: asset.status,
+      kind: asset.kind,
+      variants: variants.map((v) => ({
+        key: v.storageKey,
+        mimeType: v.mimeType,
+        width: v.width,
+        height: v.height,
+      })),
+    };
+  }
+
+  private pending(asset: MediaAsset): void {
     if (
       asset.status !== MediaStatus.PENDING ||
       !asset.uploadExpiresAt ||
       asset.uploadExpiresAt <= new Date()
     )
       throw new ConflictException('Upload is no longer pending');
+  }
+
+  async authorizeUpload(key: string, ownerId: string): Promise<MediaAsset> {
+    this.requireLocal();
+    const asset = await this.mediaAssets.findOne({
+      where: { originalKey: key, ...moderationWhere('media') },
+    });
+    if (
+      !asset ||
+      (await mediaParent(this.mediaAssets.manager, asset)).ownerId !== ownerId
+    )
+      throw new NotFoundException('Media asset not found');
+    this.pending(asset);
     return asset;
   }
 
@@ -366,14 +347,26 @@ export class MediaService {
           storageKey: key,
           ...(administrator ? {} : { asset: moderationWhere('media') }),
         },
-        relations: ['asset', 'asset.showcase'],
+        relations: ['asset'],
       });
     if (variant) {
       if (administrator) return { mimeType: variant.mimeType, public: false };
-      const visible =
-        variant.asset.status === MediaStatus.READY &&
-        variant.asset.showcase.status === ShowcaseStatus.PUBLISHED;
-      if (visible || variant.asset.showcase.ownerId === ownerId)
+      const {
+        post,
+        store,
+        product,
+        ownerId: actualOwner,
+      } = await mediaParent(this.mediaAssets.manager, variant.asset);
+      const attached = post
+        ? post.status === 'published'
+        : product
+          ? product.status === 'active' &&
+            Boolean(product.imageKeys?.includes(key))
+          : Boolean(
+              store && (store.logoKey === key || store.bannerKey === key),
+            );
+      const visible = variant.asset.status === MediaStatus.READY && attached;
+      if (visible || actualOwner === ownerId)
         return { mimeType: variant.mimeType, public: visible };
     }
     const original = await this.mediaAssets.findOne({
@@ -381,62 +374,15 @@ export class MediaService {
         originalKey: key,
         ...(administrator ? {} : moderationWhere('media')),
       },
-      relations: ['showcase'],
     });
-    if (original && (administrator || original.showcase.ownerId === ownerId))
+    if (
+      original &&
+      (administrator ||
+        (await mediaParent(this.mediaAssets.manager, original)).ownerId ===
+          ownerId)
+    )
       return { mimeType: original.mimeType, public: false };
     throw new NotFoundException('Media asset not found');
-  }
-
-  async adminPresigned(
-    dto: PresignedUrlDto,
-    postId: string,
-    actor: AdminActor,
-  ) {
-    await requireAdmin(
-      this.mediaAssets.manager,
-      actor,
-      this.config.get('ADMIN_EMAILS', { infer: true }),
-    );
-    const post = await this.showcases.findOneBy({
-      id: postId,
-      ...moderationWhere('post'),
-    });
-    if (!post) throw new NotFoundException('Post not found');
-    return this.presignedUrl(dto, post.slug, post.ownerId, actor);
-  }
-
-  async adminComplete(
-    dto: MediaCompleteDto,
-    postId: string,
-    actor: AdminActor,
-  ) {
-    await requireAdmin(
-      this.mediaAssets.manager,
-      actor,
-      this.config.get('ADMIN_EMAILS', { infer: true }),
-    );
-    const post = await this.showcases.findOneBy({
-      id: postId,
-      ...moderationWhere('post'),
-    });
-    if (!post) throw new NotFoundException('Post not found');
-    return this.mediaComplete(dto, post.slug, post.ownerId, actor);
-  }
-
-  async recordAdminUpload(
-    id: string,
-    actor: AdminActor,
-    action: string,
-  ): Promise<void> {
-    await this.mediaAssets.manager.transaction(async (manager) => {
-      await requireAdmin(
-        manager,
-        actor,
-        this.config.get('ADMIN_EMAILS', { infer: true }),
-      );
-      await appendAdminAudit(manager, actor, 'media', id, action);
-    });
   }
 
   requireLocal(): void {

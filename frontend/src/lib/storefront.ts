@@ -150,6 +150,20 @@ export function formatProductPrice(cents: string, currency: string): string {
   }
 }
 
+export function priceInput(value: string): number | null {
+  if (value.length > 32 || !/^\d+(?:\.\d{1,2})?$/.test(value.trim()))
+    return null;
+  const [whole = '0', fraction = ''] = value.trim().split('.');
+  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
+}
+
+export function decimalPrice(cents: string): string {
+  if (!/^\d+$/.test(cents)) return '';
+  const n = BigInt(cents);
+  return `${n / 100n}.${(n % 100n).toString().padStart(2, '0')}`;
+}
+
 export function productCategoryLabel(category: string): string {
   return category
     .replace(/_/gu, ' ')

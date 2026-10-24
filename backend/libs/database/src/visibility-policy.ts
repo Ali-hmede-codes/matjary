@@ -16,7 +16,11 @@ export function visibilitySql(kind: ContentKind, alias: string): string {
   const post = (a: string) =>
     `${a}.admin_archived_at IS NULL AND EXISTS (SELECT 1 FROM users vis_post_owner WHERE vis_post_owner.id = ${a}.owner_id AND vis_post_owner.suspended_at IS NULL) AND (${a}.store_id IS NULL OR EXISTS (SELECT 1 FROM stores vis_post_store JOIN users vis_parent_owner ON vis_parent_owner.id = vis_post_store.owner_id WHERE vis_post_store.id = ${a}.store_id AND vis_post_store.admin_archived_at IS NULL AND vis_parent_owner.suspended_at IS NULL))`;
   if (kind === 'post') return post(alias);
-  return `${own} AND EXISTS (SELECT 1 FROM showcases vis_media_post WHERE vis_media_post.id = ${alias}.showcase_id AND ${post('vis_media_post')})`;
+  return `${own} AND (
+    EXISTS (SELECT 1 FROM showcases vis_media_post WHERE vis_media_post.id = ${alias}.showcase_id AND ${post('vis_media_post')}) OR
+    EXISTS (SELECT 1 FROM stores vis_media_store WHERE vis_media_store.id = ${alias}.store_id AND ${visibilitySql('store', 'vis_media_store')}) OR
+    EXISTS (SELECT 1 FROM products vis_media_product WHERE vis_media_product.id = ${alias}.product_id AND ${visibilitySql('product', 'vis_media_product')})
+  )`;
 }
 
 export function moderationWhere(kind: ContentKind) {
