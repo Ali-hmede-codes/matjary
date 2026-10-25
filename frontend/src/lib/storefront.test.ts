@@ -17,7 +17,6 @@ import {
   isStoreVerified,
   menuCategoryGroups,
   productCategoryKey,
-  sharePreviewPath,
   storeCategoryPath,
   storeMenuPath,
   storefrontRouteFromPath,
@@ -301,22 +300,6 @@ test('category slugs stay readable, stable, and unique for other scripts', () =>
   assert.equal(
     storeMenuPath('olive', true),
     '/stores/olive?view=catalog&demo=1',
-  );
-  assert.equal(
-    sharePreviewPath('/stores/olive-kitchen'),
-    '/api/v1/seo/share/stores/olive-kitchen',
-  );
-  assert.equal(
-    sharePreviewPath('/stores/olive-kitchen/c/main-dishes'),
-    '/api/v1/seo/share/stores/olive-kitchen/c/main-dishes',
-  );
-  assert.equal(
-    sharePreviewPath('/stores/olive-kitchen/p/harvest-bowl?demo=1'),
-    '/api/v1/seo/share/stores/olive-kitchen/p/harvest-bowl',
-  );
-  assert.equal(
-    sharePreviewPath('stores/olive-kitchen'),
-    '/api/v1/seo/share/stores/olive-kitchen',
   );
   assert.equal(
     storeProductPath('olive', 'harvest-bowl', true),

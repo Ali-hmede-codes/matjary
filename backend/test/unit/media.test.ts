@@ -46,6 +46,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { QueueService } from '../../libs/queue/src/queue.service';
 import {
   encodeImage,
+  encodeShareCard,
   encodeVideo,
   validateSignature,
   InvalidMediaError,
@@ -55,6 +56,10 @@ import {
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Product, ProductStatus } from '../../libs/database/src/entities';
 import { assertMediaAttachment } from '../../libs/database/src/media-target';
+import {
+  mediaAssetIdFromKey,
+  storeShareCardKey,
+} from '../../libs/storage/src/share-card-key';
 import { OwnerMediaTargets1793832000000 } from '../../libs/database/src/migrations/1793832000000-OwnerMediaTargets';
 import type { EntityManager, QueryRunner } from 'typeorm';
 
@@ -183,6 +188,78 @@ test('store and product images require the correct owner, target, readiness and 
     media.authorizeDownload('image-key', 'owner'),
     NotFoundException,
   );
+});
+
+test('share sizes of attached store and product images are public; detached ones are not', async () => {
+  const storeId = '11111111-1111-4111-8111-111111111111';
+  const assetId = '22222222-2222-4222-8222-222222222222';
+  const otherAssetId = '33333333-3333-4333-8333-333333333333';
+  const productId = '44444444-4444-4444-8444-444444444444';
+  const logoKey = `media/${storeId}/${assetId}/webp-1080.webp`;
+  const wideKey = `media/${storeId}/${assetId}/jpeg-1600.jpg`;
+  const store = Object.assign(new Store(), {
+    id: storeId,
+    ownerId: 'owner',
+    logoKey,
+    bannerKey: null,
+    status: StoreStatus.ACTIVE,
+  });
+  const product = Object.assign(new Product(), {
+    id: productId,
+    storeId,
+    status: ProductStatus.ACTIVE,
+    imageKeys: [logoKey],
+  });
+  const asset: MediaAsset = Object.assign(new MediaAsset(), {
+    id: assetId,
+    showcaseId: null,
+    storeId,
+    productId: null,
+    purpose: 'store_logo',
+    kind: MediaKind.IMAGE,
+    status: MediaStatus.READY,
+  });
+  const variant = Object.assign(new MediaVariant(), {
+    asset,
+    assetId: asset.id,
+    storageKey: wideKey,
+    mimeType: 'image/jpeg',
+    width: 1600,
+  });
+  const manager = {
+    findOne: async (
+      _target: unknown,
+      options: { where: { storageKey: string } },
+    ) => (options.where.storageKey === variant.storageKey ? variant : null),
+    findOneBy: async (target: unknown) =>
+      target === Store ? store : target === Product ? product : null,
+    getRepository: () => ({
+      findOne: async (options: { where: { storageKey: string } }) =>
+        options.where.storageKey === variant.storageKey ? variant : null,
+    }),
+  } as unknown as EntityManager;
+  const media = new MediaService(
+    {} as never,
+    {} as never,
+    { manager, findOne: async () => null } as never,
+    {} as never,
+    {} as never,
+    configuration('.tmp'),
+  );
+  // The owner saved one size; the wider JPEG sibling of the same asset is public.
+  assert.equal((await media.authorizeDownload(wideKey)).public, true);
+  asset.storeId = null;
+  asset.productId = product.id;
+  assert.equal((await media.authorizeDownload(wideKey)).public, true);
+  product.imageKeys = [`media/${storeId}/${otherAssetId}/jpeg-1600.jpg`];
+  await assert.rejects(media.authorizeDownload(wideKey), NotFoundException);
+  product.imageKeys = [logoKey];
+  product.status = ProductStatus.DRAFT;
+  await assert.rejects(media.authorizeDownload(wideKey), NotFoundException);
+  product.status = ProductStatus.ACTIVE;
+  assert.equal((await media.authorizeDownload(wideKey)).public, true);
+  store.status = StoreStatus.OFFLINE;
+  await assert.rejects(media.authorizeDownload(wideKey), NotFoundException);
 });
 
 test('owner media migration preserves existing assets and refuses destructive reversal', async () => {
@@ -599,6 +676,62 @@ test('images auto-orient, strip EXIF and report real dimensions without upscalin
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test('share cards compose a branded 1200x630 JPEG from a shop logo', async () => {
+  const directory = await tempDirectory();
+  try {
+    const input = path.join(directory, 'logo.png');
+    await sharp({
+      create: {
+        width: 320,
+        height: 320,
+        channels: 4,
+        background: { r: 240, g: 90, b: 40, alpha: 1 },
+      },
+    })
+      .png()
+      .toFile(input);
+    const card = await encodeShareCard(input, directory, {
+      background: '#994a2c',
+      signal: AbortSignal.timeout(30000),
+      deadline: Date.now() + 30000,
+    });
+    assert.equal(card.mimeType, 'image/jpeg');
+    assert.equal(card.width, 1200);
+    assert.equal(card.height, 630);
+    const info = await sharp(card.file).metadata();
+    assert.equal(info.format, 'jpeg');
+    assert.equal(info.width, 1200);
+    assert.equal(info.height, 630);
+    assert.equal(String((await fs.stat(card.file)).size), card.sizeBytes);
+    assert.ok(Number(card.sizeBytes) > 5000);
+    await assert.rejects(
+      encodeShareCard(path.join(directory, 'missing.png'), directory, {
+        background: '#994a2c',
+        signal: AbortSignal.timeout(5000),
+        deadline: Date.now() + 5000,
+      }),
+      InvalidMediaError,
+    );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('share card keys derive from the logo asset', () => {
+  const storeId = '11111111-1111-4111-8111-111111111111';
+  const assetId = '22222222-2222-4222-8222-222222222222';
+  assert.equal(
+    mediaAssetIdFromKey(`media/${storeId}/${assetId}/jpeg-1600.jpg`),
+    assetId,
+  );
+  assert.equal(mediaAssetIdFromKey('image-key'), null);
+  assert.equal(mediaAssetIdFromKey(null), null);
+  assert.equal(
+    storeShareCardKey(storeId, assetId),
+    `og/store/${storeId}/${assetId}.jpg`,
+  );
 });
 
 test('FFmpeg smoke: valid MP4/poster, overlong rejection and bounded deadlines', async (t) => {

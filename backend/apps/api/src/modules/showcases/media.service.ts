@@ -33,7 +33,7 @@ import {
   type AdminActor,
 } from '@app/database';
 import { QueueService } from '@app/queue';
-import { StorageService } from '@app/storage';
+import { StorageService, mediaAssetIdFromKey } from '@app/storage';
 import { PresignedUrlDto, OwnerUploadDto } from './dto/presigned-url.dto';
 import { MediaCompleteDto } from './dto/media-complete.dto';
 import { randomUUID } from 'node:crypto';
@@ -379,13 +379,20 @@ export class MediaService {
         product,
         ownerId: actualOwner,
       } = await mediaParent(this.mediaAssets.manager, variant.asset);
+      // Any READY size of an attached image is public: variants carry the same
+      // picture, and share previews need a wider (JPEG) sibling than the key
+      // the owner saved. Detached assets never qualify.
+      const belongs = (candidate: string | null | undefined) =>
+        candidate != null &&
+        (candidate === key ||
+          mediaAssetIdFromKey(candidate) === variant.assetId);
       const attached = post
         ? post.status === 'published'
         : product
           ? product.status === 'active' &&
-            Boolean(product.imageKeys?.includes(key))
+            Boolean(product.imageKeys?.some(belongs))
           : Boolean(
-              store && (store.logoKey === key || store.bannerKey === key),
+              store && (belongs(store.logoKey) || belongs(store.bannerKey)),
             );
       const visible =
         variant.asset.status === MediaStatus.READY &&

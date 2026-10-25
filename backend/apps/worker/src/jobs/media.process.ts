@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import type { Repository } from 'typeorm';
+import { IsNull, Not, type Repository } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
 import {
   MediaAsset,
@@ -15,6 +15,7 @@ import {
   MediaStatus,
   MediaProcessingOutbox,
   Showcase,
+  Store,
 } from '@app/database';
 import {
   QueueService,
@@ -22,9 +23,14 @@ import {
   PROCESS_MEDIA_JOB,
   type MediaProcessingJob,
 } from '@app/queue';
-import { StorageService } from '@app/storage';
+import {
+  StorageService,
+  storeShareCardKey,
+  mediaAssetIdFromKey,
+} from '@app/storage';
 import {
   encodeImage,
+  encodeShareCard,
   encodeVideo,
   validateSignature,
   InvalidMediaError,
@@ -64,6 +70,11 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
       },
     );
     this.worker.on('error', () => this.logger.warn('Media queue unavailable'));
+    // Shops uploaded before the share-card feature get one after a deploy;
+    // the backfill runs in the background so readiness is never delayed.
+    void this.backfillShareCards().catch(() =>
+      this.logger.warn('Share card backfill failed'),
+    );
   }
 
   isRunning(): boolean {
@@ -185,6 +196,27 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
           );
         await manager.delete(MediaProcessingOutbox, { assetId: asset.id });
       });
+      // A logo-derived card powers link previews. Prefer the wide JPEG variant
+      // so the card is not built from a small file; failures never fail the job.
+      if (
+        asset.purpose === 'store_logo' &&
+        asset.storeId &&
+        asset.kind === MediaKind.IMAGE
+      ) {
+        const source =
+          [...encoded.variants]
+            .filter((variant) => variant.mimeType === 'image/jpeg')
+            .sort((a, b) => b.width - a.width)[0] ?? encoded.variants[0];
+        if (source)
+          await this.generateShareCard(
+            asset.storeId,
+            asset.id,
+            source.file,
+            directory,
+            signal,
+            deadline,
+          );
+      }
       // OriginalKey is a durable cleanup marker. A separate sweep removes it
       // only after readiness commits, and retries storage failures.
     } catch (error) {
@@ -204,6 +236,96 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
       throw new Error('Media processing temporarily failed');
     } finally {
       if (directory) await fs.rm(directory, { recursive: true, force: true });
+    }
+  }
+
+  private async generateShareCard(
+    storeId: string,
+    assetId: string,
+    input: string,
+    directory: string,
+    signal: AbortSignal,
+    deadline: number,
+  ): Promise<void> {
+    try {
+      const store = await this.mediaAssets.manager.findOneBy(Store, {
+        id: storeId,
+      });
+      if (!store) return;
+      const card = await encodeShareCard(input, directory, {
+        background: store.brandColor ?? '',
+        signal,
+        deadline,
+      });
+      await this.storage.uploadFile(
+        storeShareCardKey(store.id, assetId),
+        card.file,
+        card.mimeType,
+        signal,
+      );
+    } catch {
+      // The API falls back to the logo variant when the card is missing.
+      this.logger.warn(`Share card generation failed for asset ${assetId}`);
+    }
+  }
+
+  /** Builds logo cards for shops that were uploaded before this feature. */
+  private async backfillShareCards(): Promise<void> {
+    const batch = 50;
+    for (let skip = 0; ; skip += batch) {
+      const stores = await this.mediaAssets.manager.find(Store, {
+        where: { logoKey: Not(IsNull()) },
+        order: { createdAt: 'DESC' },
+        take: batch,
+        skip,
+      });
+      for (const store of stores) await this.backfillShareCard(store);
+      if (stores.length < batch) return;
+    }
+  }
+
+  private async backfillShareCard(store: Store): Promise<void> {
+    const assetId = mediaAssetIdFromKey(store.logoKey);
+    if (!assetId) return;
+    try {
+      await this.storage.statObject(storeShareCardKey(store.id, assetId));
+      return;
+    } catch {
+      /* No card yet; build one below. */
+    }
+    const variant =
+      (await this.mediaVariants.findOne({
+        where: { assetId, mimeType: 'image/jpeg' },
+        order: { width: 'DESC' },
+      })) ??
+      (await this.mediaVariants.findOne({
+        where: { assetId },
+        order: { width: 'DESC' },
+      }));
+    if (!variant) return;
+    const directory = await fs.mkdtemp(
+      path.join(this.config.get('MEDIA_TEMP_DIR', { infer: true }), 'share-'),
+    );
+    try {
+      const input = path.join(directory, 'logo');
+      await this.storage.downloadToFile(
+        variant.storageKey,
+        input,
+        20 * 1024 * 1024,
+        AbortSignal.timeout(30_000),
+      );
+      await this.generateShareCard(
+        store.id,
+        assetId,
+        input,
+        directory,
+        AbortSignal.timeout(30_000),
+        Date.now() + 30_000,
+      );
+    } catch {
+      /* A missing card falls back to the logo variant in the API. */
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
     }
   }
 }

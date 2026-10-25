@@ -38,7 +38,6 @@ import {
   catalogLayout,
   menuCategoryGroups,
   productCategoryKey,
-  sharePreviewPath,
   storeCategoryPath,
   storeMediaUrl,
   storePath,
@@ -233,14 +232,6 @@ export function StorePage({ slug }: { slug: string | null }) {
   }, [contactOpen, focusContact]);
 
   const home = demo ? '/?demo=1' : '/';
-  // Preview the API's OG document; it forwards visitors to this page.
-  const shopShareUrl = store
-    ? `${window.location.origin}${
-        demo
-          ? storePath(store.slug, true)
-          : sharePreviewPath(storePath(store.slug))
-      }`
-    : home;
   const posts = demo
     ? demoPosts.filter((item) => item.store?.id === store?.id)
     : (postsQuery.data?.pages.flatMap((page) => page.items) ?? []);
@@ -399,7 +390,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                 void share.share({
                   title: store.name,
                   text: store.description ?? undefined,
-                  url: shopShareUrl,
+                  url: `${window.location.origin}${storePath(store.slug, demo)}`,
                 })
               }
             >

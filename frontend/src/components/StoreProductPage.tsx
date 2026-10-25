@@ -17,7 +17,6 @@ import {
   formatProductPrice,
   menuCategoryGroups,
   productCategoryKey,
-  sharePreviewPath,
   storeCategoryPath,
   storeMediaUrl,
   storePath,
@@ -126,14 +125,7 @@ export function StoreProductPage({
   const share = useShare();
   const images = product?.imageKeys?.filter(Boolean) ?? [];
   const heroImage = images[imageIndex] ?? images[0];
-  const productPath = storeProductPath(shopSlug, productSlug, demo);
-  const productUrl = `${window.location.origin}${productPath}`;
-  // Preview the API's OG document; it forwards visitors to this page.
-  const shareUrl = `${window.location.origin}${
-    demo
-      ? productPath
-      : sharePreviewPath(storeProductPath(shopSlug, productSlug))
-  }`;
+  const shareUrl = `${window.location.origin}${storeProductPath(shopSlug, productSlug, demo)}`;
   const price = product ? decimalPrice(product.priceCents) : '';
 
   usePageSeo(
@@ -160,7 +152,7 @@ export function StoreProductPage({
             sku: product.slug,
             offers: {
               '@type': 'Offer',
-              url: productUrl,
+              url: shareUrl,
               priceCurrency: product.currency,
               ...(price ? { price } : {}),
               availability:

@@ -110,16 +110,6 @@ export function storeMenuPath(shopSlug: string, demo = false): string {
   return `/stores/${encodeURIComponent(shopSlug)}?${params}`;
 }
 
-/**
- * Crawler-readable URL for a storefront path. The API renders the OG tags and
- * forwards real browsers to the page, so a shared link shows the shop,
- * section, or product even when the static host cannot intercept bots.
- */
-export function sharePreviewPath(path: string): string {
-  const clean = path.replace(/[?#].*$/u, '').replace(/^\/+/u, '');
-  return `/api/v1/seo/share/${clean}`;
-}
-
 export function storeProductPath(
   shopSlug: string,
   productSlug: string,

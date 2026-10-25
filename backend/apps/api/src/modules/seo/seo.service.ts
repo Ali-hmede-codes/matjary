@@ -11,7 +11,12 @@ import { Repository, DataSource, IsNull, type EntityManager } from 'typeorm';
 import { plainToInstance, ClassConstructor } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminGuard } from '../auth/guards/auth.guards';
-import { StorageService } from '@app/storage';
+import {
+  StorageService,
+  mediaAssetIdFromKey,
+  storeShareCardKey,
+} from '@app/storage';
+import type { Readable } from 'node:stream';
 import {
   StoreSeoDto,
   ProductSeoDto,
@@ -543,6 +548,7 @@ export class SeoService {
     const canonical = `${this.baseUrl}/stores/${store.slug}/c/${this.categoryPathSlug(name)}`;
     const ogImage =
       (first ? await this.buildProductImageUrl(first) : undefined) ??
+      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.buildImageUrl(settings.defaultOgImageKey));
@@ -1189,6 +1195,7 @@ export class SeoService {
     // All three are store-owned READY variants, so a share card never leaks
     // an unpublished asset.
     const ogImage =
+      (await this.buildStoreShareImageUrl(store)) ??
       (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
@@ -1257,6 +1264,7 @@ export class SeoService {
     const ogImage =
       (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
       (await this.buildProductImageUrl(product)) ??
+      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.buildImageUrl(settings.defaultOgImageKey));
@@ -2237,9 +2245,9 @@ export class SeoService {
   }
 
   /**
-   * Resolve a store- or product-owned image variant and pick the widest image
-   * of the same asset. This is how a logo becomes a usable share card without
-   * a separate upload: the largest READY image is advertised automatically.
+   * Resolve a store- or product-owned image variant and advertise a format and
+   * width that link previews render reliably. The worker creates a branded
+   * logo card for shares; this is the fallback for shops without one.
    */
   private async buildOwnedImageUrl(
     owner: { storeId?: string; productId?: string },
@@ -2258,17 +2266,61 @@ export class SeoService {
       },
     });
     if (!variant) return undefined;
+    return this.buildPreviewVariantUrl(variant);
+  }
+
+  /**
+   * The auto-generated card built from the shop's logo. The worker stores it at
+   * a deterministic key, so a replaced logo gets a fresh card automatically.
+   */
+  private async buildStoreShareImageUrl(
+    store: Store,
+  ): Promise<string | undefined> {
+    const assetId = mediaAssetIdFromKey(store.logoKey);
+    if (!assetId) return undefined;
+    try {
+      await this.storage.statObject(storeShareCardKey(store.id, assetId));
+      // The asset id busts client and social caches after a logo replacement.
+      return `${this.baseUrl}/api/v1/seo/og/${encodeURIComponent(store.slug)}.jpg?v=${assetId}`;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Public stream of the card referenced by a store's share metadata. */
+  async openShareCard(
+    storeSlug: string,
+  ): Promise<{ stream: Readable; size: number } | undefined> {
+    const store = await this.dataSource.manager.findOneBy(Store, {
+      slug: storeSlug,
+      ...publicWhere('store'),
+    });
+    const assetId = mediaAssetIdFromKey(store?.logoKey);
+    if (!store || !assetId) return undefined;
+    const key = storeShareCardKey(store.id, assetId);
+    try {
+      const { size } = await this.storage.statObject(key);
+      return { stream: await this.storage.openReadStream(key), size };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Prefer JPEG/PNG at card width; fall back to any image variant. */
+  private async buildPreviewVariantUrl(variant: MediaVariant): Promise<string> {
     const siblings = await this.dataSource.manager.find(MediaVariant, {
       where: { assetId: variant.assetId },
       order: { width: 'DESC' },
       take: 12,
     });
+    const images = siblings.filter((entry) =>
+      /^image\/(?:jpeg|png)$/iu.test(entry.mimeType),
+    );
     const image =
-      siblings.find(
-        (entry) => entry.mimeType.startsWith('image/') && entry.width >= 600,
-      ) ?? siblings.find((entry) => entry.mimeType.startsWith('image/'));
-    if (!image) return undefined;
-    return this.storage.presignedGetUrl(image.storageKey);
+      images.find((entry) => entry.width >= 600) ??
+      images[0] ??
+      siblings.find((entry) => entry.mimeType.startsWith('image/'));
+    return this.storage.presignedGetUrl((image ?? variant).storageKey);
   }
 
   private async buildImageUrl(
@@ -2282,12 +2334,11 @@ export class SeoService {
         asset: {
           ...publicWhere('media'),
           status: MediaStatus.READY,
-          showcase: { status: ShowcaseStatus.PUBLISHED },
         },
       },
     });
     if (!variant || !variant.mimeType.startsWith('image/')) return undefined;
-    return this.storage.presignedGetUrl(key);
+    return this.buildPreviewVariantUrl(variant);
   }
 
   private truncate(str: string, maxLen: number): string {

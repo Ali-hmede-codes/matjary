@@ -615,6 +615,7 @@ printf '\nBackend and worker health checks passed. Frontend files are published.
 printf '\nFINAL CLOUDPANEL STEP (host Nginx has NOT been changed):\n'
 printf 'Open %s > Vhost. In the HTTPS server block, apply the following locations.\n' "$DOMAIN"
 printf 'Add/replace locations without duplicates; keep SSL/ACME/root/security settings. Save through CloudPanel.\n'
+printf 'Social previews for shared shop links depend on the /stores/ crawler location below; without it every link previews as the site title.\n'
 printf 'If these matching locations are already installed, no Vhost change is necessary.\n\n'
 cat "$STATE/cloudpanel.locations.conf"
 printf '\nVerify social previews with a crawler user agent (use a real shop slug):\n'

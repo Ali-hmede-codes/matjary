@@ -39,7 +39,7 @@ export interface EncodingOptions {
   ffprobe: string;
 }
 
-function remaining(options: EncodingOptions): number {
+function remaining(options: { signal: AbortSignal; deadline: number }): number {
   options.signal.throwIfAborted();
   const time = options.deadline - Date.now();
   if (time <= 0) throw new Error('Media processing deadline exceeded');
@@ -143,6 +143,98 @@ export async function encodeImage(
     }
   }
   return { width, height, durationMs: null, variants };
+}
+
+export interface ShareCardOptions {
+  background: string;
+  signal: AbortSignal;
+  deadline: number;
+}
+
+// Social clients crop link images to a wide card. Draw the shop logo on a
+// branded 1200x630 panel so the preview is readable in every client instead
+// of stretching a square logo.
+const SHARE_CARD_WIDTH = 1200;
+const SHARE_CARD_HEIGHT = 630;
+const SHARE_CARD_BACKGROUND = '#254e40';
+
+export async function encodeShareCard(
+  input: string,
+  directory: string,
+  options: ShareCardOptions,
+): Promise<EncodedVariant> {
+  const background = /^#[0-9a-f]{6}$/iu.test(options.background)
+    ? options.background
+    : SHARE_CARD_BACKGROUND;
+  const file = path.join(directory, 'share-card.jpg');
+  const timeout = {
+    seconds: Math.max(1, Math.ceil(remaining(options) / 1000)),
+  };
+  let logo: Buffer;
+  let logoWidth = 0;
+  let logoHeight = 0;
+  try {
+    const resized = await sharp(input, { failOn: 'warning' })
+      .rotate()
+      .resize({
+        width: 440,
+        height: 340,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 90 })
+      .timeout(timeout)
+      .toBuffer({ resolveWithObject: true });
+    logo = resized.data;
+    logoWidth = resized.info.width;
+    logoHeight = resized.info.height;
+  } catch {
+    remaining(options);
+    throw new InvalidMediaError('Invalid image');
+  }
+  remaining(options);
+  // Only validated hex colors reach this markup, so no font or script exists.
+  const frame =
+    Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" viewBox="0 0 ${SHARE_CARD_WIDTH} ${SHARE_CARD_HEIGHT}">
+<defs>
+<linearGradient id="shade" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#ffffff" stop-opacity="0.1"/>
+<stop offset="1" stop-color="#000000" stop-opacity="0.24"/>
+</linearGradient>
+</defs>
+<rect width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" fill="${background}"/>
+<rect width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" fill="url(#shade)"/>
+<circle cx="1060" cy="80" r="240" fill="#ffffff" fill-opacity="0.07"/>
+<circle cx="120" cy="580" r="200" fill="#ffffff" fill-opacity="0.05"/>
+<rect x="330" y="95" width="540" height="440" rx="46" fill="#ffffff"/>
+</svg>`);
+  try {
+    const info = await sharp(frame)
+      .composite([
+        {
+          input: logo,
+          left: Math.round((SHARE_CARD_WIDTH - logoWidth) / 2),
+          top: Math.round((SHARE_CARD_HEIGHT - logoHeight) / 2),
+        },
+      ])
+      .jpeg({ quality: 86 })
+      .timeout(timeout)
+      .toFile(file);
+    remaining(options);
+    return {
+      label: 'share-1200',
+      file,
+      mimeType: 'image/jpeg',
+      width: info.width,
+      height: info.height,
+      sizeBytes: String(info.size),
+      durationMs: null,
+    };
+  } catch {
+    remaining(options);
+    throw new InvalidMediaError('Share card encoding failed');
+  }
 }
 
 interface ProbeStream {

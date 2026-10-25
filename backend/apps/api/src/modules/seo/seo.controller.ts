@@ -12,8 +12,10 @@ import {
   UseGuards,
   HttpStatus,
   HttpCode,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { pipeline } from 'node:stream/promises';
 import {
   ApiTags,
   ApiOperation,
@@ -201,6 +203,29 @@ export class SeoController {
     @Param('postSlug') postSlug: string,
   ): Promise<MetaTags | { error: string }> {
     return this.seoService.getMetaBySlug('showcase', postSlug);
+  }
+
+  @Get('og/:file')
+  @ApiOperation({
+    summary: 'Serve the auto-generated store share card image',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'JPEG share card',
+    content: { 'image/jpeg': {} },
+  })
+  async getShareCard(
+    @Param('file') file: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const slug = /^([a-z0-9]+(?:-[a-z0-9]+)*)\.jpg$/u.exec(file)?.[1];
+    const card = slug ? await this.seoService.openShareCard(slug) : undefined;
+    if (!card) throw new NotFoundException('Image not found');
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Length', String(card.size));
+    await pipeline(card.stream, res).catch(() => res.destroy());
   }
 
   @Get('share/{*path}')
