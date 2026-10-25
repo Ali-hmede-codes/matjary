@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Share2 } from 'lucide-react';
+import { LayoutGrid, Share2, ShoppingBag, Utensils } from 'lucide-react';
 import {
   ApiError,
   assetUrl,
@@ -17,6 +17,7 @@ import {
   productCategoryKey,
   storeCategoryPath,
   storeMediaUrl,
+  storeMenuPath,
   storePath,
   storePresentation,
 } from '../lib/storefront';
@@ -29,7 +30,6 @@ import {
   StoreDetailLoading,
   StoreDetailMissing,
   StoreDetailShell,
-  catalogLayoutLabel,
 } from './StoreDetail';
 import { StatusBanner } from './Feedback';
 
@@ -194,21 +194,29 @@ export function StoreCategoryPage({
         <span aria-hidden="true">/</span>
         <span aria-current="page">{group.name}</span>
       </nav>
-      <header className="shop-category-head">
-        <div>
+      <header className="shop-detail-hero">
+        <div className="shop-detail-hero-copy">
           <p className="shop-detail-eyebrow">
+            {presentation.restaurant ? (
+              <Utensils size={13} aria-hidden="true" />
+            ) : (
+              <ShoppingBag size={13} aria-hidden="true" />
+            )}
             {presentation.restaurant ? 'Menu section' : 'Collection'}{' '}
-            {categoryPosition + 1} of {groups.length} ·{' '}
-            {catalogLayoutLabel(layout)}
+            {categoryPosition + 1} of {groups.length}
           </p>
-          <h1>{group.name}</h1>
-          <p className="shop-category-count">
-            {group.count} {group.count === 1 ? 'item' : 'items'}
-          </p>
+          <div className="shop-detail-title-row">
+            <h1>{group.name}</h1>
+            <span className="shop-count-pill">
+              {group.count} {group.count === 1 ? 'item' : 'items'}
+            </span>
+          </div>
         </div>
         <button
           type="button"
-          className="shop-share-button secondary-button"
+          className="shop-detail-share shop-glass"
+          aria-label={`Share ${group.name}`}
+          title="Share this section"
           disabled={share.sharing}
           onClick={() =>
             void share.share({
@@ -218,11 +226,14 @@ export function StoreCategoryPage({
             })
           }
         >
-          <Share2 size={17} aria-hidden="true" />
-          Share
+          <Share2 size={19} aria-hidden="true" />
         </button>
       </header>
       <nav className="shop-category-switcher" aria-label="Shop categories">
+        <a className="shop-switcher-all" href={storeMenuPath(shopSlug, demo)}>
+          <LayoutGrid size={15} aria-hidden="true" />
+          All items
+        </a>
         {groups.map((entry) => {
           const active = entry.key === group.key;
           return (

@@ -103,6 +103,13 @@ export function storeCategoryPath(
   return `/stores/${encodeURIComponent(shopSlug)}/c/${encodeURIComponent(categorySlug)}${demo ? '?demo=1' : ''}`;
 }
 
+/** Shop URL that opens the catalogue tab directly ("All items" links). */
+export function storeMenuPath(shopSlug: string, demo = false): string {
+  const params = new URLSearchParams({ view: 'catalog' });
+  if (demo) params.set('demo', '1');
+  return `/stores/${encodeURIComponent(shopSlug)}?${params}`;
+}
+
 export function storeProductPath(
   shopSlug: string,
   productSlug: string,

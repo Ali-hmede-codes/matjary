@@ -18,6 +18,7 @@ import {
   menuCategoryGroups,
   productCategoryKey,
   storeCategoryPath,
+  storeMenuPath,
   storefrontRouteFromPath,
   storeMap,
   storeMediaUrl,
@@ -294,6 +295,11 @@ test('category slugs stay readable, stable, and unique for other scripts', () =>
   assert.equal(
     storeCategoryPath('olive', 'main-dishes'),
     '/stores/olive/c/main-dishes',
+  );
+  assert.equal(storeMenuPath('olive'), '/stores/olive?view=catalog');
+  assert.equal(
+    storeMenuPath('olive', true),
+    '/stores/olive?view=catalog&demo=1',
   );
   assert.equal(
     storeProductPath('olive', 'harvest-bowl', true),

@@ -8,26 +8,11 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 import { assetUrl, type Product, type Store } from '../lib/api';
-import {
-  storeMediaUrl,
-  storePath,
-  storePresentation,
-  type CatalogLayout,
-} from '../lib/storefront';
+import { storeMediaUrl, storePath, storePresentation } from '../lib/storefront';
 import type { ShopCartController } from '../hooks/useShopCart';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
-
-const layoutNames: Record<CatalogLayout, string> = {
-  list: 'List',
-  cards: 'Gallery',
-  compact: 'Price list',
-};
-
-export function catalogLayoutLabel(layout: CatalogLayout): string {
-  return layoutNames[layout];
-}
 
 /** Absolute media URL for canonical/OG metadata (relative local keys included). */
 export function absoluteMediaUrl(
@@ -74,8 +59,18 @@ export function StoreDetailShell({
         Skip to content
       </a>
       <header className="shop-detail-bar">
-        <a className="shop-back shop-glass" href={shopHref}>
-          <ArrowLeft size={17} aria-hidden="true" /> {store.name}
+        <a
+          className="shop-detail-identity"
+          href={shopHref}
+          aria-label={`Back to ${store.name}`}
+          title={`Back to ${store.name}`}
+        >
+          <span className="shop-detail-back" aria-hidden="true">
+            <ArrowLeft size={17} />
+          </span>
+          <StoreAvatar store={store} />
+          <strong>{store.name}</strong>
+          <StoreVerifiedBadge store={store} size={16} />
         </a>
         <div
           className="shop-tools"
@@ -101,16 +96,6 @@ export function StoreDetailShell({
         </div>
       </header>
       <main id="shop-detail-main" className="shop-detail-main">
-        <div className="shop-detail-brandbar">
-          <StoreAvatar store={store} />
-          <div>
-            <strong>
-              {store.name}
-              <StoreVerifiedBadge store={store} size={18} />
-            </strong>
-            <a href={shopHref}>Back to shop</a>
-          </div>
-        </div>
         {children}
       </main>
       <footer className="shop-detail-footer">
