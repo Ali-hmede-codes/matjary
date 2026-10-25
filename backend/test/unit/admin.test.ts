@@ -534,6 +534,7 @@ test('wallet adjustments are idempotent, preserve reservations and roll back wit
     {} as never,
     f.access.database,
     config,
+    { setIfNotExistsWithTtl: async () => true } as never,
   );
   const operation = randomUUID();
   const result = await boosts.adminAdjustBalance(
@@ -624,6 +625,7 @@ test('campaign review, pause, resume and cancel preserve spending and enforce ta
     {} as never,
     f.access.database,
     config,
+    { setIfNotExistsWithTtl: async () => true } as never,
   );
   await assert.rejects(
     boosts.adminReviewCampaign(campaignId, ownerId, 'approve'),
@@ -701,6 +703,7 @@ test('ad delivery debits reserved coins once and completes an exhausted campaign
     {} as never,
     f.access.database,
     config,
+    { setIfNotExistsWithTtl: async () => true } as never,
   );
   await boosts.recordClick(campaignId);
   assert.equal(f.rows(BoostCoin)[0]?.balance, '995');

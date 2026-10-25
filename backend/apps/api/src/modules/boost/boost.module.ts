@@ -13,6 +13,7 @@ import {
 import { BoostService } from './boost.service';
 import { BoostController } from './boost.controller';
 import { ConfigurationModule } from '@app/config';
+import { RedisModule } from '@app/queue';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { AuthModule } from '../auth/auth.module';
     ]),
     ConfigurationModule,
     AuthModule,
+    RedisModule,
   ],
   controllers: [BoostController],
   providers: [BoostService],

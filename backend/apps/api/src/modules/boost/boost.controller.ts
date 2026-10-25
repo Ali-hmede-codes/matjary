@@ -15,6 +15,7 @@ import {
   ParseIntPipe,
   ForbiddenException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { BoostService } from './boost.service';
 import {
   BoostBalanceResponseDto,
@@ -308,20 +309,32 @@ export class BoostController {
 
   // Track ad impression (called by frontend when ad is shown)
   @Post('ads/:campaignId/impression')
-  @UseGuards(AuthOriginGuard, AuthRateLimitGuard)
+  @UseGuards(AuthRateLimitGuard, AuthOriginGuard, OptionalSessionGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   async recordImpression(
     @Param('campaignId') campaignId: string,
+    @Req() request: AuthenticatedRequest,
   ): Promise<void> {
-    await this.boostService.recordImpression(campaignId);
+    await this.boostService.recordImpression(
+      campaignId,
+      new Date(),
+      this.viewerKey(request),
+    );
   }
 
   // Track ad click (called by frontend when ad is clicked)
   @Post('ads/:campaignId/click')
-  @UseGuards(AuthOriginGuard, AuthRateLimitGuard)
+  @UseGuards(AuthRateLimitGuard, AuthOriginGuard, OptionalSessionGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  async recordClick(@Param('campaignId') campaignId: string): Promise<void> {
-    await this.boostService.recordClick(campaignId);
+  async recordClick(
+    @Param('campaignId') campaignId: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
+    await this.boostService.recordClick(
+      campaignId,
+      new Date(),
+      this.viewerKey(request),
+    );
   }
 
   // ============================================
@@ -444,6 +457,16 @@ export class BoostController {
   // ============================================
   // Helper
   // ============================================
+
+  // Logged-in viewers are identified by account; anonymous viewers by a
+  // hashed network and user-agent pair so raw addresses never reach Redis.
+  private viewerKey(request: AuthenticatedRequest): string {
+    if (request.user?.id) return `user:${request.user.id}`;
+    const ip = request.ip ?? request.socket?.remoteAddress ?? 'unknown';
+    return `anon:${createHash('sha256')
+      .update(`${ip}|${request.headers['user-agent'] ?? ''}`)
+      .digest('hex')}`;
+  }
 
   private async toCampaignResponse(
     campaign: any,

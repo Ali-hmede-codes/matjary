@@ -323,6 +323,8 @@ export async function trackAdEvent(
       {
         method: 'POST',
         credentials: 'same-origin',
+        // keepalive lets the click beacon finish after the ad navigates away.
+        keepalive: true,
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',

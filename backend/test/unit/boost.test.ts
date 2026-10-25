@@ -3,6 +3,7 @@ import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { BoostBidStrategy } from '../../libs/database/src/entities';
 import {
+  assertBidMeetsMinimum,
   billableDeliveryCoins,
   coinAmount,
 } from '../../apps/api/src/modules/boost/boost.service';
@@ -51,5 +52,34 @@ test('campaign delivery bills clicks and completed impression blocks only', () =
   assert.equal(
     billableDeliveryCoins(BoostBidStrategy.CPM, null, 1, 'impressions', 1000n),
     0n,
+  );
+});
+
+test('bids below the configured floor are rejected on every write path', () => {
+  const minimums = { cpc: 3, cpm: 25 };
+  assert.doesNotThrow(() =>
+    assertBidMeetsMinimum(BoostBidStrategy.CPC, '3', minimums),
+  );
+  assert.throws(
+    () => assertBidMeetsMinimum(BoostBidStrategy.CPC, undefined, minimums),
+    BadRequestException,
+  );
+  assert.throws(
+    () => assertBidMeetsMinimum(BoostBidStrategy.CPC, '0', minimums),
+    BadRequestException,
+  );
+  assert.throws(
+    () => assertBidMeetsMinimum(BoostBidStrategy.CPM, '24', minimums),
+    BadRequestException,
+  );
+  assert.doesNotThrow(() =>
+    assertBidMeetsMinimum(BoostBidStrategy.CPM, '25', minimums),
+  );
+  assert.doesNotThrow(() =>
+    assertBidMeetsMinimum(BoostBidStrategy.AUTO, undefined, minimums),
+  );
+  assert.throws(
+    () => assertBidMeetsMinimum(BoostBidStrategy.AUTO, '1.5', minimums),
+    BadRequestException,
   );
 });

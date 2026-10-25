@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import type { AppEnvironment } from '@app/config';
+import { RedisService } from '@app/queue';
 import {
   Repository,
   DataSource,
@@ -14,7 +15,7 @@ import {
   Between,
   type EntityManager,
 } from 'typeorm';
-import { randomUUID as uuidv4 } from 'node:crypto';
+import { createHash, randomUUID as uuidv4 } from 'node:crypto';
 
 export function coinAmount(value: string | number, signed = false): bigint {
   const text = String(value);
@@ -45,6 +46,7 @@ import {
   Showcase,
   Store,
   MediaAsset,
+  MediaKind,
   MediaStatus,
   MediaVariant,
   publicWhere,
@@ -81,6 +83,30 @@ export function billableDeliveryCoins(
     : 0n;
 }
 
+// The floor applies to every write path: a bid below it would deliver free
+// advertising that never exhausts the campaign budget.
+export function assertBidMeetsMinimum(
+  strategy: BoostBidStrategy,
+  bidAmountCoins: string | null | undefined,
+  minimums: { cpc: number; cpm: number },
+): void {
+  if (strategy === BoostBidStrategy.AUTO) {
+    if (bidAmountCoins) coinAmount(bidAmountCoins);
+    return;
+  }
+  const minimum =
+    strategy === BoostBidStrategy.CPC ? minimums.cpc : minimums.cpm;
+  if (!bidAmountCoins || coinAmount(bidAmountCoins) < BigInt(minimum))
+    throw new BadRequestException(
+      `Minimum ${strategy.toUpperCase()} bid is ${minimum} coins`,
+    );
+}
+
+// Client-reported delivery is deduplicated per viewer so a retry or a scripted
+// loop cannot credit the same impression or click window repeatedly.
+export const IMPRESSION_DEDUPE_SECONDS = 600;
+export const CLICK_DEDUPE_SECONDS = 60;
+
 @Injectable()
 export class BoostService {
   constructor(
@@ -102,6 +128,7 @@ export class BoostService {
     private readonly storeRepo: Repository<Store>,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService<AppEnvironment, true>,
+    private readonly redis: RedisService,
   ) {}
 
   private async auditContext(
@@ -641,10 +668,19 @@ export class BoostService {
       order: { position: 'ASC' },
     });
     if (!asset) return undefined;
-    const variant = await this.showcaseRepo.manager.findOne(MediaVariant, {
-      where: { assetId: asset.id, label: 'webp-480' },
+    const variants = await this.showcaseRepo.manager.find(MediaVariant, {
+      where: { assetId: asset.id },
+      select: { label: true, storageKey: true },
     });
-    return variant?.storageKey ?? asset.originalKey ?? undefined;
+    // Videos produce a poster instead of image variants; a video original can
+    // never render inside the sponsored image slot.
+    const preview =
+      variants.find((variant) => variant.label === 'webp-480') ??
+      variants.find((variant) => variant.label.startsWith('poster-'));
+    if (preview) return preview.storageKey;
+    return asset.kind === MediaKind.IMAGE
+      ? (asset.originalKey ?? undefined)
+      : undefined;
   }
 
   async getCampaignTargetInfo(
@@ -675,6 +711,16 @@ export class BoostService {
       }
     }
     return { name: '', slug: '' };
+  }
+
+  private async assertBid(
+    strategy: BoostBidStrategy,
+    bidAmountCoins: string | null | undefined,
+  ): Promise<void> {
+    assertBidMeetsMinimum(strategy, bidAmountCoins, {
+      cpc: await this.getCpcMinBidCoins(),
+      cpm: await this.getCpmMinBidCoins(),
+    });
   }
 
   async createCampaign(
@@ -730,23 +776,7 @@ export class BoostService {
     }
 
     // Validate bid amounts
-    if (dto.bidStrategy === BoostBidStrategy.CPC) {
-      const minBid = await this.getCpcMinBidCoins();
-      if (
-        !dto.bidAmountCoins ||
-        coinAmount(dto.bidAmountCoins) < BigInt(minBid)
-      ) {
-        throw new BadRequestException(`Minimum CPC bid is ${minBid} coins`);
-      }
-    } else if (dto.bidStrategy === BoostBidStrategy.CPM) {
-      const minBid = await this.getCpmMinBidCoins();
-      if (
-        !dto.bidAmountCoins ||
-        coinAmount(dto.bidAmountCoins) < BigInt(minBid)
-      ) {
-        throw new BadRequestException(`Minimum CPM bid is ${minBid} coins`);
-      }
-    }
+    await this.assertBid(dto.bidStrategy, dto.bidAmountCoins);
 
     // Determine initial status
     const reviewRequired = await this.isCampaignReviewRequired();
@@ -765,7 +795,6 @@ export class BoostService {
         coinAmount(dto.dailyBudgetCoins) > budgetCoins)
     )
       throw new BadRequestException('Invalid daily budget');
-    if (dto.bidAmountCoins) coinAmount(dto.bidAmountCoins);
     return this.dataSource.transaction(async (manager) => {
       const wallet = await this.lockedBalance(manager, userId);
       // Starting a new promotion requires an active trial or paid plan.
@@ -918,7 +947,7 @@ export class BoostService {
               coinAmount(campaign.budgetCoins))
         )
           throw new BadRequestException('Invalid daily budget');
-        if (campaign.bidAmountCoins) coinAmount(campaign.bidAmountCoins);
+        await this.assertBid(campaign.bidStrategy, campaign.bidAmountCoins);
         if (
           campaign.endAt &&
           (!Number.isFinite(campaign.endAt.getTime()) ||
@@ -1011,15 +1040,55 @@ export class BoostService {
   async recordImpression(
     campaignId: string,
     date: Date = new Date(),
+    viewerKey?: string,
   ): Promise<void> {
+    if (
+      !(await this.claimDelivery(
+        'impression',
+        campaignId,
+        viewerKey,
+        IMPRESSION_DEDUPE_SECONDS,
+      ))
+    )
+      return;
     await this.incrementPerformance(campaignId, 'impressions', date);
   }
 
   async recordClick(
     campaignId: string,
     date: Date = new Date(),
+    viewerKey?: string,
   ): Promise<void> {
+    if (
+      !(await this.claimDelivery(
+        'click',
+        campaignId,
+        viewerKey,
+        CLICK_DEDUPE_SECONDS,
+      ))
+    )
+      return;
     await this.incrementPerformance(campaignId, 'clicks', date);
+  }
+
+  // Returns true when this viewer may still credit the delivery window. A
+  // missing viewer key (internal callers) is always allowed.
+  private async claimDelivery(
+    kind: 'impression' | 'click',
+    campaignId: string,
+    viewerKey: string | undefined,
+    seconds: number,
+  ): Promise<boolean> {
+    if (!viewerKey) return true;
+    const key = `matjary:boost:${kind}:${createHash('sha256')
+      .update(`${campaignId}|${viewerKey}`)
+      .digest('hex')}`;
+    try {
+      return await this.redis.setIfNotExistsWithTtl(key, '1', seconds);
+    } catch {
+      // Delivery telemetry must not fail a page interaction when Redis is down.
+      return true;
+    }
   }
 
   private assertActive(campaign: BoostCampaign, date: Date): void {
@@ -1471,6 +1540,15 @@ export class BoostService {
       .andWhere('(campaign.endAt IS NULL OR campaign.endAt > :now)', { now })
       .andWhere(
         'CAST(campaign.spent_coins AS UNSIGNED) < CAST(campaign.budget_coins AS UNSIGNED)',
+      )
+      // Promoted shops obey the same daily cap as feed ads.
+      .andWhere(
+        `
+        (campaign.daily_budget_coins IS NULL OR
+         (SELECT COALESCE(SUM(CAST(p.spend_coins AS UNSIGNED)), 0)
+          FROM boost_campaign_performance p
+          WHERE p.campaign_id = campaign.id AND p.date = UTC_DATE()) < CAST(campaign.daily_budget_coins AS UNSIGNED))
+      `,
       )
       .andWhere(publicVisibilitySql('store', 'store'))
       .orderBy('CAST(campaign.bid_amount_coins AS UNSIGNED)', 'DESC')
