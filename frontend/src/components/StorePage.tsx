@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowUp,
   ArrowUpRight,
@@ -11,6 +12,7 @@ import {
   Layers,
   LoaderCircle,
   MapPin,
+  Minus,
   Package,
   Play,
   Plus,
@@ -30,11 +32,14 @@ import {
   type Product,
   type ProductList,
   type Store,
+  type StoreCategoryList,
 } from '../lib/api';
 import { demoPosts, demoProducts, demoStores } from '../lib/demo';
 import {
   formatProductPrice,
-  productCategoryLabel,
+  menuCategoryGroups,
+  productCategoryKey,
+  productCategoryName,
   storeMediaUrl,
   storePresentation,
   storeSocialLinks,
@@ -50,11 +55,6 @@ import { LoadingBar, StatusBanner } from './Feedback';
 import { MediaView } from './MediaView';
 import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
-
-const productCategoryKey = (product: Product) =>
-  product.categoryId ?? product.category;
-const productCategoryName = (product: Product) =>
-  product.categoryName ?? productCategoryLabel(product.category);
 
 function ShopImage({
   value,
@@ -186,6 +186,74 @@ function ShopPageLoading() {
   );
 }
 
+function AddToCart({
+  product,
+  cart,
+}: {
+  product: Product;
+  cart: ShopCartController;
+}) {
+  const item = cart.cart?.items.find((entry) => entry.productId === product.id);
+  const quantity = item?.quantity ?? 0;
+  const limit = productCartLimit(product);
+  const blocked = cart.busy || cart.loading;
+  if (limit === 0)
+    return (
+      <button
+        type="button"
+        className="shop-add-to-cart"
+        disabled
+        title={`${product.name} is sold out`}
+      >
+        Sold out
+      </button>
+    );
+  // The cart never opens on add; the quantity control and toast confirm it.
+  if (!item)
+    return (
+      <button
+        type="button"
+        className="shop-add-to-cart"
+        disabled={blocked}
+        aria-label={`Add ${product.name} to cart`}
+        title={`Add ${product.name} to cart`}
+        onClick={() => cart.add(product)}
+      >
+        <Plus size={17} aria-hidden="true" />
+        Add
+      </button>
+    );
+  return (
+    <div
+      className="shop-qty-stepper"
+      role="group"
+      aria-label={`Quantity of ${product.name} in cart`}
+    >
+      <button
+        type="button"
+        disabled={blocked}
+        aria-label={
+          quantity === 1
+            ? `Remove ${product.name} from cart`
+            : `Remove one ${product.name} from cart`
+        }
+        onClick={() => cart.update(item, quantity - 1)}
+      >
+        <Minus size={15} aria-hidden="true" />
+      </button>
+      <output aria-live="polite">{quantity}</output>
+      <button
+        type="button"
+        disabled={blocked || quantity >= limit}
+        aria-label={`Add another ${product.name} to cart`}
+        onClick={() => cart.update(item, quantity + 1)}
+      >
+        <Plus size={15} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function ProductCard({
   product,
   cart,
@@ -197,12 +265,6 @@ function ProductCard({
     cart.cart?.items.find((item) => item.productId === product.id)?.quantity ??
     0;
   const unavailable = productCartLimit(product) === 0;
-  const atLimit = quantity >= productCartLimit(product);
-  const actionLabel = unavailable
-    ? `${product.name} is unavailable`
-    : atLimit
-      ? `Maximum quantity of ${product.name} in cart`
-      : `Add ${product.name} to cart`;
   return (
     <article className={`shop-product${unavailable ? ' is-unavailable' : ''}`}>
       <div className="shop-product-image">
@@ -224,23 +286,39 @@ function ProductCard({
           <strong>
             {formatProductPrice(product.priceCents, product.currency)}
           </strong>
-          <button
-            type="button"
-            className="shop-add-to-cart"
-            disabled={unavailable || atLimit || cart.busy || cart.loading}
-            aria-label={actionLabel}
-            title={actionLabel}
-            aria-haspopup="dialog"
-            onClick={() => cart.add(product)}
-          >
-            {unavailable ? (
-              <Package size={20} aria-hidden="true" />
-            ) : atLimit ? (
-              <Check size={20} aria-hidden="true" />
-            ) : (
-              <Plus size={22} aria-hidden="true" />
-            )}
-          </button>
+          <AddToCart product={product} cart={cart} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// Menu rows are image-first and compact, so a full page of dishes stays scannable.
+function MenuItem({
+  product,
+  cart,
+}: {
+  product: Product;
+  cart: ShopCartController;
+}) {
+  const unavailable = productCartLimit(product) === 0;
+  return (
+    <article
+      className={`shop-product shop-menu-item${unavailable ? ' is-unavailable' : ''}`}
+    >
+      <div className="shop-product-image">
+        <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
+      </div>
+      <div className="shop-product-copy">
+        <h3>{product.name}</h3>
+        {product.description && (
+          <p title={product.description}>{product.description}</p>
+        )}
+        <div className="shop-product-bottom">
+          <strong>
+            {formatProductPrice(product.priceCents, product.currency)}
+          </strong>
+          <AddToCart product={product} cart={cart} />
         </div>
       </div>
     </article>
@@ -262,6 +340,13 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [sharing, setSharing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const viewedPosts = useRef(new Set<string>());
+  // A restaurant opens on its menu; the choice only sticks once the shopper
+  // switches tabs themselves, so a late store response cannot steal the tab.
+  const tabChosen = useRef(false);
+  const selectTab = (tab: 'posts' | 'catalog') => {
+    tabChosen.current = true;
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     if (!notice) return;
@@ -301,6 +386,16 @@ export function StorePage({ slug }: { slug: string | null }) {
         : undefined,
     enabled: Boolean(store) && !demo,
   });
+  const categoriesQuery = useQuery({
+    queryKey: ['storefront-categories', slug],
+    queryFn: ({ signal }) =>
+      getJson<StoreCategoryList>(
+        `stores/${encodeURIComponent(slug!)}/categories`,
+        signal,
+      ),
+    enabled: Boolean(store) && !demo,
+    staleTime: 5 * 60_000,
+  });
   const postsQuery = useInfiniteQuery({
     queryKey: ['storefront-posts', slug],
     initialPageParam: '',
@@ -318,6 +413,10 @@ export function StorePage({ slug }: { slug: string | null }) {
   const presentation = storePresentation(store ?? { brandColor: null });
   const missing = notFound || (demo && !store);
   const loadingShop = !store && !missing && !storeQuery.isError;
+  useEffect(() => {
+    if (tabChosen.current || !store) return;
+    if (store.storeType === 'restaurant_menu') setActiveTab('catalog');
+  }, [store]);
   useEffect(() => {
     document.title = `${store?.name ?? (missing ? 'Shop not found' : 'Shop')} — ${settings.siteName}`;
     document
@@ -364,11 +463,16 @@ export function StorePage({ slug }: { slug: string | null }) {
   const uniqueProducts = [
     ...new Map(products.map((item) => [item.id, item])).values(),
   ];
-  const categoryNames = new Map<string, string>();
-  for (const item of uniqueProducts) {
-    categoryNames.set(productCategoryKey(item), productCategoryName(item));
-  }
-  const categories = [...categoryNames.keys()];
+  // Owner-defined categories keep the shop's order; product-only categories
+  // (older products without a category row) are appended by the helper.
+  const menuGroups = menuCategoryGroups(
+    uniqueProducts,
+    demo ? [] : (categoriesQuery.data?.items ?? []),
+  );
+  const showCategoryCounts = demo || !productsQuery.hasNextPage;
+  const catalogTotal = demo
+    ? uniqueProducts.length
+    : (productsQuery.data?.pages[0]?.total ?? uniqueProducts.length);
   const visible = uniqueProducts.filter(
     (item) =>
       (!category || productCategoryKey(item) === category) &&
@@ -442,9 +546,20 @@ export function StorePage({ slug }: { slug: string | null }) {
     }
   }
 
+  const cartItems = cart.cart?.itemCount ?? 0;
+  const toast = cart.flash
+    ? {
+        tone: cart.flash.tone,
+        text: cart.flash.text,
+        key: `cart-${cart.flash.key}`,
+      }
+    : notice
+      ? { tone: 'info' as const, text: notice, key: 'notice' }
+      : null;
+
   return (
     <div
-      className={`app storefront ${store ? 'has-store' : ''} ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}`}
+      className={`app storefront ${store ? 'has-store' : ''} ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${cartItems > 0 && !cart.open ? ' has-cart' : ''}`}
       style={presentation.theme as CSSProperties}
     >
       <a className="skip-link" href="#shop-main">
@@ -563,6 +678,15 @@ export function StorePage({ slug }: { slug: string | null }) {
                   {store.description?.trim() && (
                     <p className="shop-description">{store.description}</p>
                   )}
+                  {presentation.restaurant && catalogTotal > 0 && (
+                    <p className="shop-menu-summary">
+                      <Utensils size={15} aria-hidden="true" />
+                      {catalogTotal} {catalogTotal === 1 ? 'item' : 'items'}
+                      {menuGroups.length > 0
+                        ? ` across ${menuGroups.length} menu ${menuGroups.length === 1 ? 'section' : 'sections'}`
+                        : ' on the menu'}
+                    </p>
+                  )}
                   {(socials.length > 0 || branches.length > 0) && (
                     <div className="shop-meta">
                       {socials.length > 0 && (
@@ -651,317 +775,366 @@ export function StorePage({ slug }: { slug: string | null }) {
                 shown.
               </StatusBanner>
             )}
-            <div className="shop-nav" role="tablist" aria-label="Shop content">
-              {(
-                [
-                  { id: 'posts', label: 'Posts', Icon: Images },
-                  {
-                    id: 'catalog',
-                    label: presentation.catalogTabLabel,
-                    Icon: presentation.restaurant ? Utensils : ShoppingBag,
-                  },
-                ] as const
-              ).map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  id={`shop-tab-${id}`}
-                  type="button"
-                  role="tab"
-                  aria-controls={`shop-${id}`}
-                  aria-selected={activeTab === id}
-                  tabIndex={activeTab === id ? 0 : -1}
-                  onClick={() => setActiveTab(id)}
-                  onKeyDown={(event) => {
-                    let next: 'posts' | 'catalog';
-                    if (event.key === 'Home') next = 'posts';
-                    else if (event.key === 'End') next = 'catalog';
-                    else if (
-                      event.key === 'ArrowLeft' ||
-                      event.key === 'ArrowRight'
-                    )
-                      next = id === 'posts' ? 'catalog' : 'posts';
-                    else return;
-                    event.preventDefault();
-                    setActiveTab(next);
-                    document.getElementById(`shop-tab-${next}`)?.focus();
-                  }}
-                >
-                  <Icon size={18} aria-hidden="true" />
-                  {label}
-                </button>
-              ))}
-            </div>
-            <section
-              id="shop-posts"
-              className="shop-section shop-tabpanel shop-posts-panel"
-              role="tabpanel"
-              aria-labelledby="shop-tab-posts"
-              tabIndex={0}
-              hidden={activeTab !== 'posts'}
-            >
-              {activeTab === 'posts' && (
-                <>
-                  <h2 className="sr-only">Posts</h2>
-                  {!demo && postsQuery.isPending && (
-                    <ShopCardsLoading posts label="Loading posts…" />
-                  )}
-                  {!demo && postsQuery.isError && (
-                    <StatusBanner
-                      action="Retry posts"
-                      onAction={() => void postsQuery.refetch()}
-                    >
-                      Posts couldn’t load right now.
-                    </StatusBanner>
-                  )}
-                  <div className="shop-post-grid">
-                    {[
-                      ...new Map(posts.map((post) => [post.id, post])).values(),
-                    ].map((post) => (
-                      <button
-                        className="shop-post-tile"
-                        key={post.id}
-                        type="button"
-                        aria-label={`Open post: ${post.title}`}
-                        aria-haspopup="dialog"
-                        onClick={() => openStorePost(post)}
-                      >
-                        <span
-                          className="shop-post-thumbnail"
-                          aria-hidden="true"
-                        >
-                          <MediaView media={post.media[0]} title={post.title} />
-                        </span>
-                        <span
-                          className="shop-post-indicators"
-                          aria-hidden="true"
-                        >
-                          {post.media.some(
-                            (media) => media.kind === 'video',
-                          ) && <Play size={19} fill="currentColor" />}
-                          {post.media.length > 1 && <Layers size={19} />}
-                        </span>
-                        <span className="shop-post-open" aria-hidden="true">
-                          <Expand size={25} />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {!posts.length && (demo || postsQuery.isSuccess) && (
-                    <p className="shop-inline-state">
-                      This shop hasn’t shared any posts yet.
-                    </p>
-                  )}
-                  {!demo && postsQuery.hasNextPage && (
-                    <button
-                      className="secondary-button"
-                      disabled={postsQuery.isFetching}
-                      onClick={() => void postsQuery.fetchNextPage()}
-                    >
-                      {postsQuery.isFetchingNextPage && (
-                        <LoaderCircle
-                          className="spin"
-                          size={16}
-                          aria-hidden="true"
-                        />
-                      )}
-                      {postsQuery.isFetchingNextPage
-                        ? 'Loading…'
-                        : 'More posts'}
-                    </button>
-                  )}
-                </>
-              )}
-            </section>
-            <section
-              id="shop-catalog"
-              className="shop-section shop-tabpanel"
-              role="tabpanel"
-              aria-labelledby="shop-tab-catalog"
-              tabIndex={0}
-              hidden={activeTab !== 'catalog'}
-            >
-              <div className="shop-section-heading">
-                <h2 id="catalog-title">
-                  {presentation.restaurant ? 'Our menu' : 'Our products'}
-                </h2>
-                <label className="shop-search">
-                  <Search size={18} />
-                  <span className="sr-only">
-                    Search loaded{' '}
-                    {presentation.restaurant ? 'menu items' : 'products'}
-                  </span>
-                  <input
-                    ref={searchInput}
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={
-                      presentation.restaurant
-                        ? 'Search the menu…'
-                        : 'Search products…'
-                    }
-                    type="search"
-                  />
-                </label>
-              </div>
-              <div className="shop-filter-summary">
-                {(demo || productsQuery.isSuccess) && (
-                  <p className="shop-results" role="status">
-                    {visible.length} {visible.length === 1 ? 'item' : 'items'}
-                    {search || category ? ' found' : ''}
-                    {!demo && productsQuery.hasNextPage
-                      ? ' in the loaded collection'
-                      : ''}
-                  </p>
-                )}
-                {(search || category) && (
+            <div className="shop-content">
+              <div
+                className="shop-nav"
+                role="tablist"
+                aria-label="Shop content"
+              >
+                {(
+                  [
+                    { id: 'posts', label: 'Posts', Icon: Images },
+                    {
+                      id: 'catalog',
+                      label: presentation.catalogTabLabel,
+                      Icon: presentation.restaurant ? Utensils : ShoppingBag,
+                    },
+                  ] as const
+                ).map(({ id, label, Icon }) => (
                   <button
+                    key={id}
+                    id={`shop-tab-${id}`}
                     type="button"
-                    className="shop-clear-filters"
-                    onClick={() => {
-                      setSearch('');
-                      setCategory('');
+                    role="tab"
+                    aria-controls={`shop-${id}`}
+                    aria-selected={activeTab === id}
+                    tabIndex={activeTab === id ? 0 : -1}
+                    onClick={() => selectTab(id)}
+                    onKeyDown={(event) => {
+                      let next: 'posts' | 'catalog';
+                      if (event.key === 'Home') next = 'posts';
+                      else if (event.key === 'End') next = 'catalog';
+                      else if (
+                        event.key === 'ArrowLeft' ||
+                        event.key === 'ArrowRight'
+                      )
+                        next = id === 'posts' ? 'catalog' : 'posts';
+                      else return;
+                      event.preventDefault();
+                      selectTab(next);
+                      document.getElementById(`shop-tab-${next}`)?.focus();
                     }}
                   >
-                    Clear filters
+                    <Icon size={18} aria-hidden="true" />
+                    {label}
                   </button>
-                )}
-              </div>
-              {categories.length > 1 && (
-                <div
-                  className="shop-categories"
-                  role="group"
-                  aria-label="Categories in loaded items"
-                >
-                  <button
-                    aria-pressed={!category}
-                    onClick={() => setCategory('')}
-                  >
-                    All items
-                  </button>
-                  {categories.map((item) => (
-                    <button
-                      key={item}
-                      aria-pressed={category === item}
-                      onClick={() => setCategory(item)}
-                    >
-                      {categoryNames.get(item) ?? productCategoryLabel(item)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {!demo && productsQuery.isPending && (
-                <ShopCardsLoading
-                  label={
-                    presentation.restaurant
-                      ? 'Loading the menu…'
-                      : 'Loading the collection…'
-                  }
-                />
-              )}
-              {!demo && productsQuery.isError && (
-                <StatusBanner
-                  action="Try again"
-                  onAction={() => void productsQuery.refetch()}
-                >
-                  The {presentation.restaurant ? 'menu' : 'collection'} couldn’t
-                  load. Please try again.
-                </StatusBanner>
-              )}
-              {visible.length > 0 &&
-                (presentation.restaurant ? (
-                  <div className="shop-menu">
-                    {categories
-                      .filter((item) =>
-                        visible.some(
-                          (product) => productCategoryKey(product) === item,
-                        ),
-                      )
-                      .map((item) => (
-                        <section className="shop-menu-group" key={item}>
-                          <h3>
-                            {categoryNames.get(item) ??
-                              productCategoryLabel(item)}
-                          </h3>
-                          <div className="shop-products">
-                            {visible
-                              .filter(
-                                (product) =>
-                                  productCategoryKey(product) === item,
-                              )
-                              .map((product) => (
-                                <ProductCard
-                                  key={product.id}
-                                  product={product}
-                                  cart={cart}
-                                />
-                              ))}
-                          </div>
-                        </section>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="shop-products">
-                    {visible.map((product) => (
-                      <ProductCard
-                        key={product.id}
-                        product={product}
-                        cart={cart}
-                      />
-                    ))}
-                  </div>
                 ))}
-              {!visible.length && (demo || productsQuery.isSuccess) && (
-                <div className="shop-inline-state">
-                  <h3>
-                    {search || category
-                      ? 'No matching items in this selection.'
-                      : presentation.restaurant
-                        ? 'The menu is coming soon.'
-                        : 'New finds are on their way.'}
-                  </h3>
-                  <p>
-                    {search || category
-                      ? 'Try another search or category, or load more items below.'
-                      : 'Check back soon for the latest from this shop.'}
-                  </p>
-                  {(search || category) && (
-                    <button
-                      className="secondary-button"
-                      onClick={() => {
-                        setSearch('');
-                        setCategory('');
-                      }}
+              </div>
+              <section
+                id="shop-posts"
+                className="shop-section shop-tabpanel shop-posts-panel"
+                role="tabpanel"
+                aria-labelledby="shop-tab-posts"
+                tabIndex={0}
+                hidden={activeTab !== 'posts'}
+              >
+                {activeTab === 'posts' && (
+                  <>
+                    <h2 className="sr-only">Posts</h2>
+                    {!demo && postsQuery.isPending && (
+                      <ShopCardsLoading posts label="Loading posts…" />
+                    )}
+                    {!demo && postsQuery.isError && (
+                      <StatusBanner
+                        action="Retry posts"
+                        onAction={() => void postsQuery.refetch()}
+                      >
+                        Posts couldn’t load right now.
+                      </StatusBanner>
+                    )}
+                    <div className="shop-post-grid">
+                      {[
+                        ...new Map(
+                          posts.map((post) => [post.id, post]),
+                        ).values(),
+                      ].map((post) => (
+                        <button
+                          className="shop-post-tile"
+                          key={post.id}
+                          type="button"
+                          aria-label={`Open post: ${post.title}`}
+                          aria-haspopup="dialog"
+                          onClick={() => openStorePost(post)}
+                        >
+                          <span
+                            className="shop-post-thumbnail"
+                            aria-hidden="true"
+                          >
+                            <MediaView
+                              media={post.media[0]}
+                              title={post.title}
+                            />
+                          </span>
+                          <span
+                            className="shop-post-indicators"
+                            aria-hidden="true"
+                          >
+                            {post.media.some(
+                              (media) => media.kind === 'video',
+                            ) && <Play size={19} fill="currentColor" />}
+                            {post.media.length > 1 && <Layers size={19} />}
+                          </span>
+                          <span className="shop-post-open" aria-hidden="true">
+                            <Expand size={25} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {!posts.length && (demo || postsQuery.isSuccess) && (
+                      <p className="shop-inline-state">
+                        This shop hasn’t shared any posts yet.
+                      </p>
+                    )}
+                    {!demo && postsQuery.hasNextPage && (
+                      <button
+                        className="secondary-button"
+                        disabled={postsQuery.isFetching}
+                        onClick={() => void postsQuery.fetchNextPage()}
+                      >
+                        {postsQuery.isFetchingNextPage && (
+                          <LoaderCircle
+                            className="spin"
+                            size={16}
+                            aria-hidden="true"
+                          />
+                        )}
+                        {postsQuery.isFetchingNextPage
+                          ? 'Loading…'
+                          : 'More posts'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </section>
+              <section
+                id="shop-catalog"
+                className="shop-section shop-tabpanel"
+                role="tabpanel"
+                aria-labelledby="shop-tab-catalog"
+                tabIndex={0}
+                hidden={activeTab !== 'catalog'}
+              >
+                <div
+                  className={`shop-catalog-layout${menuGroups.length > 0 ? ' has-categories' : ''}`}
+                >
+                  <div className="shop-catalog-head">
+                    <div className="shop-catalog-title">
+                      <h2 id="catalog-title">
+                        {presentation.restaurant ? 'Our menu' : 'Our products'}
+                      </h2>
+                      {(demo || productsQuery.isSuccess) && (
+                        <p className="shop-results" role="status">
+                          {visible.length}{' '}
+                          {visible.length === 1 ? 'item' : 'items'}
+                          {search || category ? ' found' : ''}
+                          {!demo && productsQuery.hasNextPage
+                            ? ' in the loaded collection'
+                            : ''}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shop-catalog-tools">
+                      <label className="shop-search">
+                        <Search size={18} aria-hidden="true" />
+                        <span className="sr-only">
+                          Search loaded{' '}
+                          {presentation.restaurant ? 'menu items' : 'products'}
+                        </span>
+                        <input
+                          ref={searchInput}
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder={
+                            presentation.restaurant
+                              ? 'Search the menu…'
+                              : 'Search products…'
+                          }
+                          type="search"
+                        />
+                      </label>
+                      {(search || category) && (
+                        <button
+                          type="button"
+                          className="shop-clear-filters"
+                          onClick={() => {
+                            setSearch('');
+                            setCategory('');
+                          }}
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {menuGroups.length > 0 && (
+                    <nav
+                      className="shop-catalog-rail"
+                      aria-label={
+                        presentation.restaurant
+                          ? 'Menu categories'
+                          : 'Product categories'
+                      }
                     >
-                      Clear filters
-                    </button>
+                      <p className="shop-rail-title" aria-hidden="true">
+                        {presentation.restaurant ? 'Menu' : 'Categories'}
+                      </p>
+                      <div
+                        className="shop-category-list"
+                        role="group"
+                        aria-label="Filter by category"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={!category}
+                          onClick={() => setCategory('')}
+                        >
+                          <span>All items</span>
+                          {showCategoryCounts && (
+                            <span className="shop-category-count">
+                              {uniqueProducts.length}
+                            </span>
+                          )}
+                        </button>
+                        {menuGroups.map((group) => (
+                          <button
+                            key={group.key}
+                            type="button"
+                            aria-pressed={category === group.key}
+                            onClick={() => setCategory(group.key)}
+                          >
+                            <span>{group.name}</span>
+                            {showCategoryCounts && (
+                              <span className="shop-category-count">
+                                {group.count}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </nav>
                   )}
-                </div>
-              )}
-              {!demo && productsQuery.hasNextPage && (
-                <div className="shop-pagination">
-                  <p>
-                    Showing {uniqueProducts.length} loaded items. Search and
-                    categories apply to these items.
-                  </p>
-                  <button
-                    className="secondary-button"
-                    disabled={productsQuery.isFetching}
-                    onClick={() => void productsQuery.fetchNextPage()}
-                  >
-                    {productsQuery.isFetchingNextPage && (
-                      <LoaderCircle
-                        className="spin"
-                        size={16}
-                        aria-hidden="true"
+                  <div className="shop-catalog-body">
+                    {!demo && productsQuery.isPending && (
+                      <ShopCardsLoading
+                        label={
+                          presentation.restaurant
+                            ? 'Loading the menu…'
+                            : 'Loading the collection…'
+                        }
                       />
                     )}
-                    {productsQuery.isFetchingNextPage
-                      ? 'Loading…'
-                      : 'Load more items'}
-                  </button>
+                    {!demo && productsQuery.isError && (
+                      <StatusBanner
+                        action="Try again"
+                        onAction={() => void productsQuery.refetch()}
+                      >
+                        The {presentation.restaurant ? 'menu' : 'collection'}{' '}
+                        couldn’t load. Please try again.
+                      </StatusBanner>
+                    )}
+                    {visible.length > 0 &&
+                      (presentation.restaurant ? (
+                        <div className="shop-menu">
+                          {menuGroups.map((group, index) => {
+                            const items = visible.filter(
+                              (product) =>
+                                productCategoryKey(product) === group.key,
+                            );
+                            if (!items.length) return null;
+                            return (
+                              <section
+                                className="shop-menu-group"
+                                key={group.key}
+                                aria-labelledby={`shop-menu-${index}`}
+                              >
+                                <header className="shop-menu-heading">
+                                  <h3 id={`shop-menu-${index}`}>
+                                    {group.name}
+                                  </h3>
+                                  <span>
+                                    {items.length}{' '}
+                                    {items.length === 1 ? 'item' : 'items'}
+                                  </span>
+                                </header>
+                                <div className="shop-products">
+                                  {items.map((product) => (
+                                    <MenuItem
+                                      key={product.id}
+                                      product={product}
+                                      cart={cart}
+                                    />
+                                  ))}
+                                </div>
+                              </section>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="shop-products">
+                          {visible.map((product) => (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              cart={cart}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    {!visible.length && (demo || productsQuery.isSuccess) && (
+                      <div className="shop-inline-state">
+                        <h3>
+                          {search || category
+                            ? 'No matching items in this selection.'
+                            : presentation.restaurant
+                              ? 'The menu is coming soon.'
+                              : 'New finds are on their way.'}
+                        </h3>
+                        <p>
+                          {search || category
+                            ? 'Try another search or category, or load more items below.'
+                            : 'Check back soon for the latest from this shop.'}
+                        </p>
+                        {(search || category) && (
+                          <button
+                            className="secondary-button"
+                            onClick={() => {
+                              setSearch('');
+                              setCategory('');
+                            }}
+                          >
+                            Clear filters
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {!demo && productsQuery.hasNextPage && (
+                      <div className="shop-pagination">
+                        <p>
+                          Showing {uniqueProducts.length} loaded items. Search
+                          and categories apply to these items.
+                        </p>
+                        <button
+                          className="secondary-button"
+                          disabled={productsQuery.isFetching}
+                          onClick={() => void productsQuery.fetchNextPage()}
+                        >
+                          {productsQuery.isFetchingNextPage && (
+                            <LoaderCircle
+                              className="spin"
+                              size={16}
+                              aria-hidden="true"
+                            />
+                          )}
+                          {productsQuery.isFetchingNextPage
+                            ? 'Loading…'
+                            : 'Load more items'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </section>
+              </section>
+            </div>
           </>
         )}
       </main>
@@ -995,6 +1168,37 @@ export function StorePage({ slug }: { slug: string | null }) {
           </a>
         </div>
       </footer>
+      {cartItems > 0 && !cart.open && store && (
+        <div className="shop-cart-dock">
+          <button
+            type="button"
+            className="shop-cart-dock-button"
+            onClick={() => cart.setOpen(true)}
+            aria-haspopup="dialog"
+            aria-label={`View cart, ${cartItems} ${cartItems === 1 ? 'item' : 'items'}, subtotal ${formatProductPrice(cart.cart?.subtotalCents ?? '0', cart.cart?.currency ?? 'USD')}`}
+          >
+            <span className="shop-cart-dock-count" aria-hidden="true">
+              <ShoppingCart size={21} />
+              <strong>{cartItems > 99 ? '99+' : cartItems}</strong>
+            </span>
+            <span className="shop-cart-dock-copy">
+              <small>
+                {cartItems} {cartItems === 1 ? 'item' : 'items'} in cart
+              </small>
+              <strong>
+                {formatProductPrice(
+                  cart.cart?.subtotalCents ?? '0',
+                  cart.cart?.currency ?? 'USD',
+                )}
+              </strong>
+            </span>
+            <span className="shop-cart-dock-action" aria-hidden="true">
+              View cart
+              <ArrowUpRight size={15} />
+            </span>
+          </button>
+        </div>
+      )}
       {cart.open && store && (
         <ShopCart
           store={store}
@@ -1003,7 +1207,7 @@ export function StorePage({ slug }: { slug: string | null }) {
           demo={demo}
           onBrowse={() => {
             cart.setOpen(false);
-            setActiveTab('catalog');
+            selectTab('catalog');
             setFocusSearch(true);
           }}
           onContact={() => {
@@ -1022,10 +1226,20 @@ export function StorePage({ slug }: { slug: string | null }) {
           onClose={() => setSelectedPost(null)}
         />
       )}
-      {notice && (
-        <div className="toast shop-notice" role="status">
-          <Share2 size={16} aria-hidden="true" />
-          {notice}
+      {toast && (
+        <div
+          key={toast.key}
+          className={`toast shop-notice is-${toast.tone}`}
+          role={toast.tone === 'error' ? 'alert' : 'status'}
+        >
+          {toast.tone === 'success' ? (
+            <Check size={16} aria-hidden="true" />
+          ) : toast.tone === 'error' ? (
+            <AlertCircle size={16} aria-hidden="true" />
+          ) : (
+            <Share2 size={16} aria-hidden="true" />
+          )}
+          {toast.text}
         </div>
       )}
     </div>

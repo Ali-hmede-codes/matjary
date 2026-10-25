@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, Store } from '../lib/api';
 import { demoProducts } from '../lib/demo';
@@ -26,6 +26,23 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
   const unsavedPreview = useRef<ShopCart | undefined>(undefined);
   const [message, setMessage] = useState('');
   const [checkout, setCheckout] = useState<CartCheckout>();
+  // Adding to the cart must not steal the page: a short toast confirms the
+  // write and the cart stays closed until the shopper asks for it.
+  const [flash, setFlash] = useState<{
+    tone: 'success' | 'error';
+    text: string;
+    key: number;
+  }>();
+  const flashKey = useRef(0);
+  const notify = (tone: 'success' | 'error', text: string) => {
+    flashKey.current += 1;
+    setFlash({ tone, text, key: flashKey.current });
+  };
+  useEffect(() => {
+    if (!flash) return;
+    const timeout = window.setTimeout(() => setFlash(undefined), 3600);
+    return () => window.clearTimeout(timeout);
+  }, [flash]);
   const queryKey = ['shop-cart', demo ? 'demo' : 'live', store?.slug];
   const query = useQuery({
     queryKey,
@@ -55,11 +72,12 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
   async function change(
     operation: (current: ShopCart) => Promise<ShopCart>,
     action: 'update' | 'checkout' = 'update',
-  ) {
-    if (!store || !cart || disabled || lock.current) return;
+  ): Promise<boolean> {
+    if (!store || !cart || disabled || lock.current) return false;
     lock.current = true;
     setBusy(true);
     setMessage('');
+    let saved = false;
     try {
       // A stale read must not overwrite the result of a cart mutation.
       await client.cancelQueries({ queryKey });
@@ -79,39 +97,46 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
           );
         }
       }
+      saved = true;
     } catch (error) {
-      setMessage(cartErrorMessage(error, action));
+      const failure = cartErrorMessage(error, action);
+      setMessage(failure);
+      notify('error', failure);
       // Reconcile an uncertain write, but never automatically replay it.
       if (!demo) await query.refetch();
     } finally {
       lock.current = false;
       setBusy(false);
     }
+    return saved;
   }
 
   function add(product: Product) {
-    setOpen(true);
     setCheckout(undefined);
+    if (!store || product.storeId !== store.id) return;
     const quantity =
       (cart?.items.find((item) => item.productId === product.id)?.quantity ??
         0) + 1;
-    if (!store || product.storeId !== store.id) return;
     if (quantity > productCartLimit(product)) {
       setMessage('You’ve reached the available quantity for this item.');
+      notify('error', 'You’ve reached the available quantity for this item.');
       return;
     }
     // The existing server cart has one currency. Never silently relabel a price.
     if (cart && product.currency !== cart.currency) {
-      setMessage(
-        'This item’s currency is not supported by this shop’s cart. Please contact the shop to order it.',
-      );
+      const failure =
+        'This item’s currency is not supported by this shop’s cart. Please contact the shop to order it.';
+      setMessage(failure);
+      notify('error', failure);
       return;
     }
     void change(async (current) =>
       demo
         ? updateDemoCart(current, product, quantity)
         : cartApi.add(store.slug, product.id),
-    );
+    ).then((ok) => {
+      if (ok) notify('success', `${product.name} added to cart`);
+    });
   }
 
   function update(item: CartItem, quantity: number) {
@@ -159,6 +184,7 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
     failed: query.isError,
     error: query.isError ? cartErrorMessage(query.error, 'load') : message,
     checkout,
+    flash,
     add,
     update,
     clear,

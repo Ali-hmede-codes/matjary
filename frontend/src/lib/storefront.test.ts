@@ -11,6 +11,8 @@ import {
   priceInput,
   decimalPrice,
   isStoreVerified,
+  menuCategoryGroups,
+  productCategoryKey,
   storeMap,
   storeMediaUrl,
   storePath,
@@ -205,6 +207,39 @@ test('store type selects the layout and safely derives shop colors', () => {
       '--brand-primary'
     ],
     '#994a2c',
+  );
+});
+
+test('menu categories follow the owner order and absorb product fallbacks', () => {
+  const products = [
+    {
+      category: 'dessert',
+      categoryId: 'cat-dessert',
+      categoryName: 'Desserts',
+    },
+    { category: 'food', categoryId: 'cat-mains', categoryName: 'Mains' },
+    { category: 'food', categoryId: 'cat-mains', categoryName: 'Mains' },
+    { category: 'beverage', categoryId: null, categoryName: null },
+  ];
+  const groups = menuCategoryGroups(products, [
+    { id: 'cat-drinks', name: 'Drinks' },
+    { id: 'cat-mains', name: 'Mains' },
+    { id: 'cat-dessert', name: 'Desserts' },
+  ]);
+  // Owner order wins, empty categories are dropped, repeated rows are counted.
+  assert.deepEqual(groups, [
+    { key: 'cat-mains', name: 'Mains', count: 2 },
+    { key: 'cat-dessert', name: 'Desserts', count: 1 },
+    { key: 'beverage', name: 'Beverage', count: 1 },
+  ]);
+  assert.equal(productCategoryKey(products[1]!), 'cat-mains');
+  assert.deepEqual(menuCategoryGroups([]), []);
+  // A product without any category still gets a visible group, never a blank one.
+  assert.deepEqual(
+    menuCategoryGroups([
+      { category: '', categoryId: null, categoryName: '  ' },
+    ]),
+    [{ key: '', name: 'Other items', count: 1 }],
   );
 });
 

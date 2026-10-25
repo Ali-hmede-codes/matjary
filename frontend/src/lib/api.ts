@@ -67,6 +67,20 @@ export interface ProductList {
   total: number;
 }
 
+// Owner-defined shop category, returned in the shop's own sort order.
+export interface StoreCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+  productCount?: number;
+}
+
+export interface StoreCategoryList {
+  items: StoreCategory[];
+  total: number;
+  limit?: number | null;
+}
+
 export interface Media {
   id: string;
   kind: 'image' | 'video';

@@ -1,0 +1,464 @@
+/* Menu-style catalog: a sticky category index on desktop, a swipeable chip
+   strip on phones, compact dish rows, and a cart dock that never covers the
+   footer or the last row. Loaded after StorePage.css so it owns the layout. */
+.storefront {
+  --shop-nav-height: 56px;
+}
+/* Tabs and panels share one wrapper: a sticky element is clamped to its grid
+   area, so a lone grid child could never pin the tabs (or the category strip). */
+.shop-content {
+  min-width: 0;
+}
+.shop-catalog-layout {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-areas:
+    'rail head'
+    'rail body';
+  column-gap: 32px;
+  align-items: start;
+}
+/* Without categories (loading or an empty menu) the content owns the width. */
+.shop-catalog-layout:not(.has-categories) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'head'
+    'body';
+}
+.shop-catalog-head {
+  grid-area: head;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 20px;
+  margin-bottom: 22px;
+}
+.shop-catalog-title {
+  min-width: 0;
+}
+.shop-catalog-title .shop-results {
+  margin-top: 6px;
+}
+.shop-catalog-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.shop-catalog-rail {
+  grid-area: rail;
+  position: sticky;
+  top: calc(var(--shop-nav-height) + 20px);
+  align-self: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.shop-rail-title {
+  padding: 2px 8px 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.shop-category-list {
+  display: grid;
+  gap: 3px;
+  max-height: calc(100dvh - var(--shop-nav-height) - 140px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shop-category-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: left;
+}
+.shop-category-list button > span:first-child {
+  min-width: 0;
+}
+.shop-category-list button:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+.shop-category-list button[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+  background: color-mix(in srgb, var(--primary) 11%, var(--surface));
+  color: var(--ink);
+}
+.shop-category-count {
+  flex-shrink: 0;
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.shop-category-list button[aria-pressed='true'] .shop-category-count {
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface));
+  color: color-mix(in srgb, var(--primary) 72%, var(--ink));
+}
+.shop-catalog-body {
+  grid-area: body;
+  min-width: 0;
+}
+.shop-menu {
+  display: grid;
+  gap: 34px;
+}
+.shop-menu-group {
+  display: grid;
+  gap: 16px;
+}
+.shop-menu-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.shop-menu-heading h3 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  line-height: 1.25;
+}
+.shop-menu-heading span {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.shop-menu-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* Shelf grids size themselves, so cards stay readable beside the rail. */
+.shop-catalog-body .shop-products {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+.storefront-restaurant .shop-catalog-body .shop-products {
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
+}
+.storefront-restaurant .shop-product.shop-menu-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: 20px;
+}
+.shop-menu-item .shop-product-image {
+  flex: 0 0 104px;
+  width: 104px;
+  height: 104px;
+  aspect-ratio: auto;
+  border-radius: 15px;
+}
+.shop-menu-item .shop-product-copy {
+  padding: 4px 6px 4px 0;
+}
+.shop-menu-item h3 {
+  font-size: 16px;
+  letter-spacing: -0.2px;
+  margin-bottom: 4px;
+}
+.shop-menu-item p {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-menu-item .shop-product-bottom {
+  padding-top: 10px;
+  font-size: 17px;
+  letter-spacing: -0.3px;
+}
+/* The dock and its toast must clear the fixed bar instead of hiding under it. */
+.storefront.has-cart .shop-footer {
+  padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+.storefront.has-cart .shop-notice {
+  bottom: calc(112px + env(safe-area-inset-bottom));
+}
+.shop-cart-dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 45;
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  animation: shop-dock-rise 0.22s ease-out;
+}
+.shop-cart-dock-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px 10px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: 20px;
+  background: var(--ink);
+  color: var(--surface);
+  box-shadow: 0 18px 40px #0000003d;
+  text-align: left;
+}
+.shop-cart-dock-button:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+.shop-cart-dock-count {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 16%, transparent);
+}
+.shop-cart-dock-count strong {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+.shop-cart-dock-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.shop-cart-dock-copy small {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+.shop-cart-dock-copy strong {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-cart-dock-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+.shop-cart-dock-button:hover .shop-cart-dock-action {
+  background: var(--accent-wash);
+}
+@keyframes shop-dock-rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@media (max-width: 1000px) {
+  .shop-catalog-layout {
+    grid-template-columns: 210px minmax(0, 1fr);
+    column-gap: 22px;
+  }
+}
+@media (max-width: 900px) {
+  /* A single-row grid area would clip a sticky strip to its own height, so
+     phones stack the catalog in flex and let the strip travel with the menu. */
+  .shop-catalog-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .shop-catalog-head {
+    align-items: stretch;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+  .shop-catalog-tools {
+    flex-wrap: wrap;
+  }
+  /* Phones get a swipeable strip pinned under the section tabs. */
+  .shop-catalog-rail {
+    top: var(--shop-nav-height);
+    z-index: 4;
+    margin: 0 calc(var(--shop-gutter) * -1);
+    padding: 10px var(--shop-gutter);
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--wash) 92%, transparent);
+    box-shadow: none;
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(150%);
+  }
+  .shop-category-list {
+    display: flex;
+    gap: 8px;
+    max-height: none;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .shop-rail-title {
+    display: none;
+  }
+  .shop-category-list button {
+    flex: 0 0 auto;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 14px;
+    border-color: var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .shop-category-list button[aria-pressed='true'] {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+  .shop-category-list button[aria-pressed='true'] .shop-category-count {
+    background: color-mix(in srgb, var(--on-primary) 24%, transparent);
+    color: var(--on-primary);
+  }
+  .storefront-restaurant .shop-catalog-body .shop-products {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .storefront {
+    --shop-nav-height: 52px;
+  }
+  .shop-catalog-title h2 {
+    font-size: 22px;
+  }
+  .shop-menu {
+    gap: 28px;
+  }
+  .shop-menu-heading h3 {
+    font-size: 19px;
+  }
+  .shop-menu-item .shop-product-image {
+    flex-basis: 92px;
+    width: 92px;
+    height: 92px;
+    border-radius: 14px;
+  }
+  .shop-menu-item h3 {
+    font-size: 15px;
+  }
+  .shop-menu-item .shop-product-bottom {
+    font-size: 16px;
+  }
+  .shop-cart-dock {
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: calc(100vw - 20px);
+  }
+  .shop-cart-dock-button {
+    gap: 10px;
+    padding: 9px;
+    border-radius: 18px;
+  }
+  .shop-cart-dock-count {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+  .shop-cart-dock-action {
+    padding: 9px 12px;
+  }
+  .storefront.has-cart .shop-footer {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  .storefront.has-cart .shop-notice {
+    bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 380px) {
+  .shop-menu-item .shop-product-image {
+    flex-basis: 80px;
+    width: 80px;
+    height: 80px;
+  }
+  .shop-catalog-rail {
+    margin-inline: calc(var(--shop-gutter) * -1);
+  }
+  .shop-cart-dock-action {
+    padding: 9px 10px;
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-cart-dock {
+    animation: none;
+  }
+}
+/* Cart feedback: success keeps the neutral toast, failures must stand out. */
+.shop-notice.is-error {
+  background: #7c3223;
+  color: #fff;
+}
+.shop-notice.is-success {
+  background: var(--ink);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .shop-catalog-rail {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (max-width: 900px) and (prefers-reduced-transparency: reduce) {
+  .shop-catalog-rail {
+    background: var(--wash);
+  }
+}

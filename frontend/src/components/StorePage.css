@@ -414,13 +414,6 @@
   letter-spacing: -0.7px;
   line-height: 1.3;
 }
-.shop-section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 16px;
-}
 .shop-search {
   display: flex;
   align-items: center;
@@ -449,14 +442,6 @@
 .shop-search input:focus-visible {
   outline: none;
 }
-.shop-filter-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 28px;
-  margin-bottom: 14px;
-}
 .shop-results {
   color: var(--muted);
   font-size: 12px;
@@ -469,29 +454,6 @@
   text-decoration: underline;
   text-underline-offset: 3px;
   flex-shrink: 0;
-}
-.shop-categories {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-.shop-categories button {
-  min-height: 44px;
-  padding: 10px 20px;
-  border: 1px solid var(--line);
-  border-radius: 30px;
-  background: var(--surface);
-  font-size: 12px;
-  font-weight: 600;
-}
-.shop-categories button:hover {
-  border-color: var(--ink);
-}
-.shop-categories button[aria-pressed='true'] {
-  background: var(--ink);
-  color: var(--surface);
-  border-color: var(--ink);
 }
 .shop-products {
   display: grid;
@@ -966,59 +928,9 @@
   text-underline-offset: 4px;
 }
 
-/* Menus keep a compact horizontal layout with the same image-first treatment. */
-.storefront-restaurant .shop-products {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-.shop-menu {
-  display: grid;
-  gap: 36px;
-}
-.shop-menu-group > h3 {
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.6px;
-  margin-bottom: 18px;
-}
-.storefront-restaurant .shop-product {
-  flex-direction: row;
-  align-items: center;
-  padding: 10px;
-  gap: 18px;
-}
-.storefront-restaurant .shop-product-image {
-  width: 144px;
-  flex: 0 0 144px;
-  aspect-ratio: 1;
-  border-radius: 22px;
-}
-.storefront-restaurant .shop-stock-label {
-  inset: auto 6px 6px;
-  max-width: none;
-  padding: 5px;
-  font-size: 10px;
-  justify-content: center;
-}
-.storefront-restaurant .shop-product-copy {
-  padding: 8px 8px 8px 0;
-}
-.storefront-restaurant .shop-product-category {
-  display: none;
-}
-.storefront-restaurant .shop-product-bottom {
-  margin-top: 14px;
-  padding-top: 0;
-  font-size: 20px;
-}
-
 @media (max-width: 1000px) {
   .shop-products {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .storefront-restaurant .shop-product-image {
-    width: 112px;
-    flex-basis: 112px;
   }
 }
 @media (max-width: 700px) {
@@ -1117,11 +1029,6 @@
   .shop-section h2 {
     font-size: 22px;
   }
-  .shop-section-heading {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 16px;
-  }
   .shop-search {
     width: 100%;
   }
@@ -1162,17 +1069,6 @@
     gap: 8px;
     padding-top: 14px;
     font-size: 18px;
-  }
-  .shop-product .shop-add-to-cart {
-    flex-basis: 44px;
-    width: 44px;
-    height: 44px;
-  }
-  .storefront-restaurant .shop-products {
-    grid-template-columns: 1fr;
-  }
-  .storefront-restaurant .shop-product {
-    gap: 14px;
   }
   .shop-post-grid {
     gap: 3px;

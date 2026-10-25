@@ -1,4 +1,4 @@
-import type { Store } from './api';
+import type { Product, Store, StoreCategory } from './api';
 import { contrastColor, safeUrl } from './website.ts';
 
 export type StoreLifecycleStatus =
@@ -254,4 +254,55 @@ export function productCategoryLabel(category: string): string {
   return category
     .replace(/_/gu, ' ')
     .replace(/\b\w/gu, (char) => char.toUpperCase());
+}
+
+export interface MenuCategoryGroup {
+  key: string;
+  name: string;
+  count: number;
+}
+
+export function productCategoryKey(
+  product: Pick<Product, 'category' | 'categoryId'>,
+): string {
+  return product.categoryId ?? product.category ?? '';
+}
+
+export function productCategoryName(
+  product: Pick<Product, 'category' | 'categoryName'>,
+): string {
+  return (
+    product.categoryName?.trim() || productCategoryLabel(product.category ?? '')
+  );
+}
+
+/**
+ * Merge the owner's ordered category list with the categories actually carried
+ * by the loaded products. The API order wins so a menu reads the way its owner
+ * arranged it; products without a category row still get a group of their own,
+ * and empty categories are dropped because an empty menu section is noise.
+ */
+export function menuCategoryGroups(
+  products: Pick<Product, 'category' | 'categoryId' | 'categoryName'>[],
+  categories: Pick<StoreCategory, 'id' | 'name'>[] = [],
+): MenuCategoryGroup[] {
+  const groups = new Map<string, MenuCategoryGroup>();
+  for (const category of categories) {
+    const key = category.id?.trim();
+    const name = category.name?.trim();
+    if (!key || !name || groups.has(key)) continue;
+    groups.set(key, { key, name, count: 0 });
+  }
+  for (const product of products) {
+    const key = productCategoryKey(product);
+    const group = groups.get(key);
+    if (group) group.count += 1;
+    else
+      groups.set(key, {
+        key,
+        name: productCategoryName(product) || 'Other items',
+        count: 1,
+      });
+  }
+  return [...groups.values()].filter((group) => group.count > 0);
 }

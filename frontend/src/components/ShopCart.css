@@ -18,15 +18,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 46px;
-  width: 46px;
-  height: 46px;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 82px;
+  min-height: 42px;
   margin-left: auto;
-  padding: 0;
+  padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--primary) 85%, var(--ink));
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--primary);
   color: var(--on-primary);
+  font-size: 13px;
+  font-weight: 700;
   box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 .shop-add-to-cart:hover:not(:disabled) {
@@ -39,6 +42,41 @@
   color: var(--muted);
   box-shadow: none;
   opacity: 1;
+}
+/* Once an item is in the cart the button becomes an inline quantity control,
+   so adding another one never opens the cart panel. */
+.shop-qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--line));
+  border-radius: 999px;
+  background: var(--surface);
+}
+.shop-qty-stepper button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--primary);
+}
+.shop-qty-stepper button:hover:not(:disabled) {
+  background: var(--accent-wash);
+}
+.shop-qty-stepper button:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+}
+.shop-qty-stepper output {
+  min-width: 22px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
 }
 .shop-cart-dialog {
   inset: 0;
