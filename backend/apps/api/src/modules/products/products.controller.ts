@@ -30,10 +30,16 @@ import {
   OptionalSessionGuard,
 } from '../auth/guards/auth.guards';
 import { ProductStatus, ProductCategory } from '@app/database';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 @Controller('stores/:storeSlug/products')
 export class ProductsController {
@@ -51,15 +57,25 @@ export class ProductsController {
     offset: number,
     @Query('status') status?: ProductStatus,
     @Query('category') category?: ProductCategory,
+    @Query('categoryId') categoryId?: string,
   ): Promise<ProductListResponseDto> {
     const safeLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
     const safeOffset = Math.max(offset, 0);
+    // A malformed owner-defined category id is rejected before it reaches the
+    // query builder, and the filter stays scoped to this store.
+    if (
+      categoryId !== undefined &&
+      categoryId !== 'uncategorized' &&
+      !UUID_PATTERN.test(categoryId)
+    )
+      throw new BadRequestException('Invalid category');
     return this.products.findByStoreSlug(
       storeSlug,
       safeLimit,
       safeOffset,
       ProductStatus.ACTIVE,
       category,
+      categoryId,
     );
   }
 

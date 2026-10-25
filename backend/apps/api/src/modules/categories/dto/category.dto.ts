@@ -51,4 +51,7 @@ export class CategoryListResponseDto {
   total!: number;
   // Owner view only; null means unlimited.
   limit?: number | null;
+  // Public view: active products without an owner-defined category. The
+  // storefront lists them under a final "More items" section.
+  uncategorized?: number;
 }

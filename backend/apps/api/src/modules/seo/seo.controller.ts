@@ -203,6 +203,26 @@ export class SeoController {
     return this.seoService.getMetaBySlug('showcase', postSlug);
   }
 
+  @Get('share/{*path}')
+  @ApiOperation({
+    summary: 'Server-rendered Open Graph page for social link previews',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Minimal HTML document with OG/Twitter tags',
+    content: { 'text/html': {} },
+  })
+  async getSharePage(
+    @Param('path') path: string | string[],
+    @Res() res: Response,
+  ): Promise<void> {
+    const target = Array.isArray(path) ? path.join('/') : (path ?? '');
+    const html = await this.seoService.renderShareHtml(target);
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(html);
+  }
+
   @Get('redirect/{*fromPath}')
   @ApiOperation({ summary: 'Check if a redirect exists for a path' })
   @ApiResponse({ status: 200, description: 'Redirect target if exists' })

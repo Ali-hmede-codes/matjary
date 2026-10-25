@@ -203,6 +203,28 @@ location = /index.html {
     try_files \$uri =404;
 }
 
+# Social crawlers never run the SPA. Send only those user agents to the API's
+# Open Graph document so shared shop/category/product links show real titles
+# and images; browsers and search engine renderers keep the React app.
+location ^~ /stores/ {
+    error_page 418 = @matjary_share;
+    if (\$http_user_agent ~* "(facebookexternalhit|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly)") {
+        return 418;
+    }
+    try_files \$uri \$uri/ /index.html;
+}
+
+location @matjary_share {
+    proxy_pass http://127.0.0.1:$API_PORT/api/v1/seo/share\$request_uri;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Connection "";
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 30s;
+}
+
 location / {
     try_files \$uri \$uri/ /index.html;
 }

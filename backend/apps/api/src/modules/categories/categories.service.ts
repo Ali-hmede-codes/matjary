@@ -7,9 +7,15 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
+import {
+  QueryFailedError,
+  IsNull,
+  Repository,
+  type EntityManager,
+} from 'typeorm';
 import {
   Product,
+  ProductStatus,
   Store,
   StoreCategory,
   User,
@@ -18,6 +24,7 @@ import {
   effectiveLimits,
   ownerWhere,
   publicWhere,
+  publicVisibilitySql,
 } from '@app/database';
 import {
   CategoryListResponseDto,
@@ -91,15 +98,29 @@ export class CategoriesService {
   async listPublic(slug: string): Promise<CategoryListResponseDto> {
     try {
       const store = await this.publicStore(slug);
-      const items = await this.categories.find({
-        where: { storeId: store.id },
-        order: { sortOrder: 'ASC', name: 'ASC' },
-      });
+      // Public item counts let the storefront render a category index without
+      // downloading every product of the shop first.
+      const [items, counts, uncategorized] = await Promise.all([
+        this.categories.find({
+          where: { storeId: store.id },
+          order: { sortOrder: 'ASC', name: 'ASC' },
+        }),
+        this.productCounts(store.id, true),
+        this.products.count({
+          where: {
+            storeId: store.id,
+            categoryId: IsNull(),
+            status: ProductStatus.ACTIVE,
+            ...publicWhere('product'),
+          },
+        }),
+      ]);
       return {
         items: items.map((category) =>
-          CategoryResponseDto.fromEntity(category),
+          CategoryResponseDto.fromEntity(category, counts[category.id] ?? 0),
         ),
         total: items.length,
+        uncategorized,
       };
     } catch (error) {
       this.sanitize(error);
@@ -250,13 +271,22 @@ export class CategoriesService {
 
   private async productCounts(
     storeId: string,
+    publicOnly = false,
   ): Promise<Record<string, number>> {
-    const rows = await this.products
+    const query = this.products
       .createQueryBuilder('product')
       .select('product.categoryId', 'categoryId')
       .addSelect('COUNT(*)', 'count')
       .where('product.storeId = :storeId', { storeId })
-      .andWhere('product.categoryId IS NOT NULL')
+      .andWhere('product.categoryId IS NOT NULL');
+    if (publicOnly) {
+      query
+        .andWhere('product.status = :status', {
+          status: ProductStatus.ACTIVE,
+        })
+        .andWhere(publicVisibilitySql('product', 'product'));
+    }
+    const rows = await query
       .groupBy('product.categoryId')
       .getRawMany<{ categoryId: string; count: string }>();
     const counts: Record<string, number> = {};

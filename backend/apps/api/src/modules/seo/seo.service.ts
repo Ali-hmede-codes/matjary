@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, type EntityManager } from 'typeorm';
+import { Repository, DataSource, IsNull, type EntityManager } from 'typeorm';
 import { plainToInstance, ClassConstructor } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminGuard } from '../auth/guards/auth.guards';
@@ -36,6 +36,7 @@ import {
 } from './seo.entities';
 import {
   Store,
+  StoreCategory,
   Product,
   Showcase,
   ShowcaseStatus,
@@ -446,6 +447,180 @@ export class SeoService {
     });
     if (!showcase) throw new NotFoundException('Post not found');
     return this.generateShowcaseMetaTags(showcase, showcase.store ?? null);
+  }
+
+  /**
+   * Minimal server-rendered page for social crawlers (WhatsApp, Facebook,
+   * Telegram, Slack, X, LinkedIn) that never execute the SPA. A reverse proxy
+   * forwards only those user agents for /stores/... paths; people still get
+   * the React app.
+   */
+  async renderShareHtml(path: string): Promise<string> {
+    const target = path.replace(/[?#].*$/u, '').replace(/^\/+|\/+$/gu, '');
+    const route =
+      /^stores\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([cp])\/([a-z0-9]+(?:-[a-z0-9]+)*))?$/u.exec(
+        target,
+      );
+    if (!route?.[1]) throw new NotFoundException('Page not found');
+    const store = await this.dataSource.manager.findOneBy(Store, {
+      slug: route[1],
+      ...publicWhere('store'),
+    });
+    if (!store) throw new NotFoundException('Page not found');
+    const meta = await this.shareMetaFor(store, route[2], route[3]);
+    return this.renderSharePage(meta);
+  }
+
+  private async shareMetaFor(
+    store: Store,
+    kind?: string,
+    slug?: string,
+  ): Promise<MetaTags> {
+    if (kind === 'p' && slug) {
+      const product = await this.dataSource.manager.findOneBy(Product, {
+        slug,
+        storeId: store.id,
+        status: ProductStatus.ACTIVE,
+        ...publicWhere('product'),
+      });
+      if (!product) throw new NotFoundException('Page not found');
+      return this.generateProductMetaTags(product, store);
+    }
+    if (kind === 'c' && slug) {
+      if (slug === 'more-items') {
+        return this.generateCategoryPageMeta(store, 'More items', {
+          storeId: store.id,
+          categoryId: IsNull(),
+          status: ProductStatus.ACTIVE,
+          ...publicWhere('product'),
+        });
+      }
+      const categories = await this.dataSource.manager.find(StoreCategory, {
+        where: { storeId: store.id },
+        order: { sortOrder: 'ASC', name: 'ASC' },
+      });
+      const category = categories.find(
+        (entry) => this.categoryPathSlug(entry.name) === slug,
+      );
+      if (!category) throw new NotFoundException('Page not found');
+      return this.generateCategoryMetaTags(store, category);
+    }
+    return this.generateStoreMetaTags(store);
+  }
+
+  private async generateCategoryMetaTags(
+    store: Store,
+    category: StoreCategory,
+  ): Promise<MetaTags> {
+    return this.generateCategoryPageMeta(store, category.name, {
+      storeId: store.id,
+      categoryId: category.id,
+      status: ProductStatus.ACTIVE,
+      ...publicWhere('product'),
+    });
+  }
+
+  private async generateCategoryPageMeta(
+    store: Store,
+    name: string,
+    where: Record<string, unknown>,
+  ): Promise<MetaTags> {
+    const manager = this.dataSource.manager;
+    const settings = await this.getSettings();
+    const [count, first] = await Promise.all([
+      manager.count(Product, { where }),
+      manager.findOne(Product, {
+        where,
+        order: { sortOrder: 'ASC', createdAt: 'DESC' },
+      }),
+    ]);
+    const title = `${name} — ${store.name}`;
+    const description = `${count} ${count === 1 ? 'item' : 'items'} in ${name} at ${store.name}.`;
+    const canonical = `${this.baseUrl}/stores/${store.slug}/c/${this.categoryPathSlug(name)}`;
+    const ogImage =
+      (first ? await this.buildProductImageUrl(first) : undefined) ??
+      (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (await this.buildStoreImageUrl(store, store.logoKey)) ??
+      (await this.buildImageUrl(settings.defaultOgImageKey));
+    return {
+      title: this.truncate(title, 60),
+      description: this.truncate(description, 160),
+      robots: RobotsDirective.INDEX_FOLLOW,
+      canonical,
+      og: {
+        title: this.truncate(title, 60),
+        description: this.truncate(description, 160),
+        image: ogImage,
+        type: 'website',
+        siteName: settings.siteName,
+        url: canonical,
+        locale: 'en_US',
+      },
+      twitter: {
+        card: ogImage ? 'summary_large_image' : 'summary',
+        title: this.truncate(title, 70),
+        description: this.truncate(description, 200),
+        image: ogImage,
+      },
+    };
+  }
+
+  // Category rows have no slug column; mirror the storefront's name slug so a
+  // shared /c/ link resolves to the same section.
+  private categoryPathSlug(name: string): string {
+    const base = name
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gu, '-')
+      .slice(0, 80)
+      .replace(/^-+|-+$/gu, '');
+    if (base) return base;
+    let hash = 2166136261;
+    for (const char of name.trim() || 'category') {
+      hash ^= char.codePointAt(0) ?? 0;
+      hash = Math.imul(hash, 16777619);
+    }
+    return `category-${(hash >>> 0).toString(36).padStart(6, '0').slice(0, 6)}`;
+  }
+
+  private renderSharePage(meta: MetaTags): string {
+    const escape = (value: string) => this.escapeXml(value);
+    const tags = [
+      `<title>${escape(meta.title)}</title>`,
+      `<meta name="description" content="${escape(meta.description)}">`,
+      `<meta name="robots" content="${escape(meta.robots)}">`,
+      `<link rel="canonical" href="${escape(meta.canonical)}">`,
+      `<meta property="og:type" content="${escape(meta.og.type)}">`,
+      `<meta property="og:title" content="${escape(meta.og.title)}">`,
+      `<meta property="og:description" content="${escape(meta.og.description)}">`,
+      `<meta property="og:url" content="${escape(meta.og.url)}">`,
+      `<meta property="og:site_name" content="${escape(meta.og.siteName ?? 'Matjary')}">`,
+      meta.og.image
+        ? `<meta property="og:image" content="${escape(meta.og.image)}">`
+        : '',
+      `<meta name="twitter:card" content="${escape(meta.twitter.card)}">`,
+      `<meta name="twitter:title" content="${escape(meta.twitter.title)}">`,
+      `<meta name="twitter:description" content="${escape(meta.twitter.description)}">`,
+      meta.twitter.image
+        ? `<meta name="twitter:image" content="${escape(meta.twitter.image)}">`
+        : '',
+    ];
+    return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+${tags.filter(Boolean).join('\n')}
+</head>
+<body>
+<main>
+<h1>${escape(meta.title)}</h1>
+<p>${escape(meta.description)}</p>
+<p><a href="${escape(meta.canonical)}">Open this page</a></p>
+</main>
+</body>
+</html>`;
   }
 
   private assertSiteUrl(value: string): void {
@@ -1042,11 +1217,17 @@ export class SeoService {
       store.description ||
       settings.defaultDescription ||
       '';
-    const canonical = seo.canonicalUrl || this.baseUrl + '/shop/' + store.slug;
+    const canonical =
+      seo.canonicalUrl || this.baseUrl + '/stores/' + store.slug;
 
-    const ogImage = await this.buildImageUrl(
-      seo.ogImageKey || store.logoKey || settings.defaultOgImageKey,
-    );
+    // Prefer a wide banner, then the logo, and only then the platform default.
+    // All three are store-owned READY variants, so a share card never leaks
+    // an unpublished asset.
+    const ogImage =
+      (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
+      (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (await this.buildStoreImageUrl(store, store.logoKey)) ??
+      (await this.buildImageUrl(settings.defaultOgImageKey));
     const ogTitle = seo.ogTitle || store.name;
     const ogDescription = seo.ogDescription || store.description || description;
 
@@ -1100,17 +1281,20 @@ export class SeoService {
     const settings = await this.getSettings();
 
     const title = seo.metaTitle || product.name + ' - ' + store.name;
-    const description = seo.metaDescription || product.description || '';
+    const description =
+      seo.metaDescription ||
+      product.description ||
+      `${product.name} at ${store.name}.`;
     const canonical =
       seo.canonicalUrl ||
-      this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug;
+      `${this.baseUrl}/stores/${store.slug}/p/${product.slug}`;
 
-    const ogImage = await this.buildImageUrl(
-      seo.ogImageKey ??
-        product.imageKeys?.[0] ??
-        store.logoKey ??
-        settings.defaultOgImageKey,
-    );
+    const ogImage =
+      (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
+      (await this.buildProductImageUrl(product)) ??
+      (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (await this.buildStoreImageUrl(store, store.logoKey)) ??
+      (await this.buildImageUrl(settings.defaultOgImageKey));
     const ogTitle = seo.ogTitle || product.name;
     const ogDescription =
       seo.ogDescription || product.description || description;
@@ -1177,7 +1361,7 @@ export class SeoService {
     const canonical =
       seo.canonicalUrl ||
       (store
-        ? this.baseUrl + '/shop/' + store.slug + '/post/' + showcase.slug
+        ? this.baseUrl + '/stores/' + store.slug + '/post/' + showcase.slug
         : this.baseUrl + '/post/' + showcase.slug);
 
     const ogImage = await this.buildImageUrl(
@@ -1306,7 +1490,7 @@ export class SeoService {
         '@context': 'https://schema.org',
         '@type': store.storeType === 'restaurant_menu' ? 'Restaurant' : 'Store',
         name: store.name,
-        url: this.baseUrl + '/shop/' + store.slug,
+        url: this.baseUrl + '/stores/' + store.slug,
         description: store.description,
         image: await this.buildImageUrl(store.logoKey),
         address: {
@@ -1328,7 +1512,7 @@ export class SeoService {
     jsonLd.push(
       this.buildBreadcrumbJsonLd([
         { name: 'Home', url: this.baseUrl },
-        { name: store.name, url: this.baseUrl + '/shop/' + store.slug },
+        { name: store.name, url: this.baseUrl + '/stores/' + store.slug },
       ]),
     );
 
@@ -1346,7 +1530,7 @@ export class SeoService {
 
     const offers = {
       '@type': 'Offer',
-      url: this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug,
+      url: this.baseUrl + '/stores/' + store.slug + '/p/' + product.slug,
       priceCurrency: product.currency,
       price,
       availability: isInStock
@@ -1407,15 +1591,14 @@ export class SeoService {
     jsonLd.push(
       this.buildBreadcrumbJsonLd([
         { name: 'Home', url: this.baseUrl },
-        { name: store.name, url: this.baseUrl + '/shop/' + store.slug },
+        { name: store.name, url: this.baseUrl + '/stores/' + store.slug },
         {
           name: 'Products',
-          url: this.baseUrl + '/shop/' + store.slug + '/products',
+          url: this.baseUrl + '/stores/' + store.slug,
         },
         {
           name: product.name,
-          url:
-            this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug,
+          url: this.baseUrl + '/stores/' + store.slug + '/p/' + product.slug,
         },
       ]),
     );
@@ -1479,11 +1662,11 @@ export class SeoService {
     if (store) {
       breadcrumbs.push({
         name: store.name,
-        url: this.baseUrl + '/shop/' + store.slug,
+        url: this.baseUrl + '/stores/' + store.slug,
       });
       breadcrumbs.push({
         name: 'Posts',
-        url: this.baseUrl + '/shop/' + store.slug + '/posts',
+        url: this.baseUrl + '/stores/' + store.slug,
       });
     }
     breadcrumbs.push({
@@ -1572,21 +1755,21 @@ export class SeoService {
       if (seo.store && !seo.robots?.includes('noindex')) {
         entries.push({
           title: seo.store.name,
-          url: this.baseUrl + '/shop/' + seo.store.slug,
+          url: this.baseUrl + '/stores/' + seo.store.slug,
           description: seo.store.description || `Shop by ${seo.store.name}`,
           priority: 'high',
         });
 
         entries.push({
           title: `${seo.store.name} - Products`,
-          url: this.baseUrl + '/shop/' + seo.store.slug + '/products',
+          url: this.baseUrl + '/stores/' + seo.store.slug,
           description: `Browse products from ${seo.store.name}`,
           priority: 'medium',
         });
 
         entries.push({
           title: `${seo.store.name} - Posts`,
-          url: this.baseUrl + '/shop/' + seo.store.slug + '/posts',
+          url: this.baseUrl + '/stores/' + seo.store.slug,
           description: `Read posts from ${seo.store.name}`,
           priority: 'medium',
         });
@@ -1612,7 +1795,7 @@ export class SeoService {
       if (product) {
         entries.push({
           title: product.name,
-          url: `${this.baseUrl}/shop/${product.store.slug}/product/${product.slug}`,
+          url: `${this.baseUrl}/stores/${product.store.slug}/p/${product.slug}`,
           description: product.description?.substring(0, 200) || product.name,
           priority: 'medium',
         });
@@ -1849,7 +2032,7 @@ export class SeoService {
       return;
     let url: string;
     if (entityType === 'store') {
-      url = this.baseUrl + '/shop/' + (entity as Store).slug;
+      url = this.baseUrl + '/stores/' + (entity as Store).slug;
     } else if (entityType === 'product') {
       const product = entity as Product;
       if (product.status !== ProductStatus.ACTIVE) return;
@@ -1857,7 +2040,7 @@ export class SeoService {
         id: product.storeId,
       });
       if (!store) return;
-      url = this.baseUrl + '/shop/' + store.slug + '/product/' + product.slug;
+      url = this.baseUrl + '/stores/' + store.slug + '/p/' + product.slug;
     } else {
       if ((entity as Showcase).status !== ShowcaseStatus.PUBLISHED) return;
       url = this.baseUrl + '/post/' + (entity as Showcase).slug;
@@ -1890,7 +2073,7 @@ export class SeoService {
         const seo = await this.getStoreSeo(store.id);
         if (!indexable(seo)) continue;
         urls.push({
-          url: seo?.canonicalUrl || `${this.baseUrl}/shop/${store.slug}`,
+          url: seo?.canonicalUrl || `${this.baseUrl}/stores/${store.slug}`,
           lastmod: store.updatedAt.toISOString().split('T')[0],
           changefreq: 'weekly',
           priority: 0.8,
@@ -1912,7 +2095,7 @@ export class SeoService {
         urls.push({
           url:
             seo?.canonicalUrl ||
-            `${this.baseUrl}/shop/${product.store.slug}/product/${product.slug}`,
+            `${this.baseUrl}/stores/${product.store.slug}/p/${product.slug}`,
           lastmod: product.updatedAt.toISOString().split('T')[0],
           changefreq: 'weekly',
           priority: 0.6,
@@ -2070,6 +2253,58 @@ export class SeoService {
   // ============================================
   // Helpers
   // ============================================
+
+  private async buildStoreImageUrl(
+    store: Store,
+    key: string | null | undefined,
+  ): Promise<string | undefined> {
+    return this.buildOwnedImageUrl({ storeId: store.id }, key);
+  }
+
+  private async buildProductImageUrl(
+    product: Product,
+  ): Promise<string | undefined> {
+    for (const key of product.imageKeys ?? []) {
+      const url = await this.buildOwnedImageUrl({ productId: product.id }, key);
+      if (url) return url;
+    }
+    return undefined;
+  }
+
+  /**
+   * Resolve a store- or product-owned image variant and pick the widest image
+   * of the same asset. This is how a logo becomes a usable share card without
+   * a separate upload: the largest READY image is advertised automatically.
+   */
+  private async buildOwnedImageUrl(
+    owner: { storeId?: string; productId?: string },
+    key: string | null | undefined,
+  ): Promise<string | undefined> {
+    if (!key) return undefined;
+    const variant = await this.dataSource.manager.findOne(MediaVariant, {
+      where: {
+        storageKey: key,
+        asset: {
+          ...(owner.storeId ? { storeId: owner.storeId } : {}),
+          ...(owner.productId ? { productId: owner.productId } : {}),
+          ...publicWhere('media'),
+          status: MediaStatus.READY,
+        },
+      },
+    });
+    if (!variant) return undefined;
+    const siblings = await this.dataSource.manager.find(MediaVariant, {
+      where: { assetId: variant.assetId },
+      order: { width: 'DESC' },
+      take: 12,
+    });
+    const image =
+      siblings.find(
+        (entry) => entry.mimeType.startsWith('image/') && entry.width >= 600,
+      ) ?? siblings.find((entry) => entry.mimeType.startsWith('image/'));
+    if (!image) return undefined;
+    return this.storage.presignedGetUrl(image.storageKey);
+  }
 
   private async buildImageUrl(
     key: string | null | undefined,

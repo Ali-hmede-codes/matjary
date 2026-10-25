@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  catalogLayout,
+  categoryIndexGroups,
+  categorySlug,
+  findCategoryBySlug,
   formatProductPrice,
   readOwnerStoreId,
   rememberOwnerStore,
@@ -13,10 +17,13 @@ import {
   isStoreVerified,
   menuCategoryGroups,
   productCategoryKey,
+  storeCategoryPath,
+  storefrontRouteFromPath,
   storeMap,
   storeMediaUrl,
   storePath,
   storePresentation,
+  storeProductPath,
   storeSlugFromPath,
   storeSocialLinks,
 } from './storefront.ts';
@@ -240,6 +247,86 @@ test('menu categories follow the owner order and absorb product fallbacks', () =
       { category: '', categoryId: null, categoryName: '  ' },
     ]),
     [{ key: '', name: 'Other items', count: 1 }],
+  );
+});
+
+test('storefront routes resolve shop, category, and product slugs', () => {
+  assert.deepEqual(storefrontRouteFromPath('/stores/olive'), {
+    shopSlug: 'olive',
+  });
+  assert.deepEqual(storefrontRouteFromPath('/stores/olive/'), {
+    shopSlug: 'olive',
+  });
+  assert.deepEqual(storefrontRouteFromPath('/stores/olive/c/main-dishes'), {
+    shopSlug: 'olive',
+    categorySlug: 'main-dishes',
+  });
+  assert.deepEqual(storefrontRouteFromPath('/stores/olive/p/harvest-bowl'), {
+    shopSlug: 'olive',
+    productSlug: 'harvest-bowl',
+  });
+  for (const path of [
+    '/',
+    '/stores',
+    '/stores/',
+    '/stores/a/products',
+    '/stores/a/c/',
+    '/stores/a/x/mains',
+    '/stores/a/p/b/c',
+    '/stores/UPPER',
+    '/stores/a/c/UPPER',
+    '/stores/%2f',
+    '/stores/%',
+  ])
+    assert.equal(storefrontRouteFromPath(path), null);
+});
+
+test('category slugs stay readable, stable, and unique for other scripts', () => {
+  assert.equal(categorySlug('Main Dishes'), 'main-dishes');
+  assert.equal(categorySlug('  Café  &  Crêpes '), 'cafe-crepes');
+  assert.equal(categorySlug('مشروبات'), categorySlug('مشروبات'));
+  assert.match(categorySlug('مشروبات'), /^category-[a-z0-9]{6}$/u);
+  assert.notEqual(categorySlug('مشروبات'), categorySlug('حلويات'));
+  assert.equal(
+    findCategoryBySlug([{ id: 'a', name: 'Main Dishes' }], 'main-dishes')?.id,
+    'a',
+  );
+  assert.equal(
+    storeCategoryPath('olive', 'main-dishes'),
+    '/stores/olive/c/main-dishes',
+  );
+  assert.equal(
+    storeProductPath('olive', 'harvest-bowl', true),
+    '/stores/olive/p/harvest-bowl?demo=1',
+  );
+});
+
+test('catalog layouts rotate by category position', () => {
+  assert.deepEqual(
+    [0, 1, 2, 3, 4, 5].map((index) => catalogLayout(index)),
+    ['list', 'cards', 'compact', 'list', 'cards', 'compact'],
+  );
+  assert.equal(catalogLayout(-1), 'list');
+  assert.equal(catalogLayout(Number.NaN), 'list');
+});
+
+test('public category counts drop empty and duplicate sections', () => {
+  assert.deepEqual(
+    categoryIndexGroups([
+      { id: 'a', name: 'Mains', productCount: 3 },
+      { id: 'b', name: 'Empty', productCount: 0 },
+      { id: 'a', name: 'Mains', productCount: 1 },
+      { id: '', name: 'Broken', productCount: 4 },
+    ]),
+    [{ key: 'a', name: 'Mains', count: 3 }],
+  );
+  assert.deepEqual(categoryIndexGroups([]), []);
+  assert.deepEqual(
+    categoryIndexGroups([{ id: 'a', name: 'Mains', productCount: 2 }], 3),
+    [
+      { key: 'a', name: 'Mains', count: 2 },
+      { key: 'uncategorized', name: 'More items', count: 3 },
+    ],
   );
 });
 

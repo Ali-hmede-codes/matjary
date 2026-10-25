@@ -79,6 +79,8 @@ export interface StoreCategoryList {
   items: StoreCategory[];
   total: number;
   limit?: number | null;
+  // Public: active products without an owner-defined category.
+  uncategorized?: number;
 }
 
 export interface Media {

@@ -9,8 +9,10 @@ import { SiteHeader } from './components/SiteHeader';
 import { StoreStrip } from './components/StoreStrip';
 import { TrendingStores } from './components/TrendingStores';
 import { StorePage } from './components/StorePage';
+import { StoreCategoryPage } from './components/StoreCategoryPage';
+import { StoreProductPage } from './components/StoreProductPage';
 import { PricingPage } from './components/PricingPage';
-import { storeSlugFromPath } from './lib/storefront';
+import { storefrontRouteFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 
 import { lazy, Suspense } from 'react';
@@ -53,7 +55,27 @@ export default function App() {
 }
 function StoreRoute() {
   const { pathname } = useLocation();
-  return <StorePage key={pathname} slug={storeSlugFromPath(pathname)} />;
+  const route = storefrontRouteFromPath(pathname);
+  const demo = new URLSearchParams(window.location.search).get('demo') === '1';
+  if (route?.productSlug)
+    return (
+      <StoreProductPage
+        key={pathname}
+        shopSlug={route.shopSlug}
+        productSlug={route.productSlug}
+        demo={demo}
+      />
+    );
+  if (route?.categorySlug)
+    return (
+      <StoreCategoryPage
+        key={pathname}
+        shopSlug={route.shopSlug}
+        categorySlug={route.categorySlug}
+        demo={demo}
+      />
+    );
+  return <StorePage key={pathname} slug={route?.shopSlug ?? null} />;
 }
 
 function DiscoveryPage() {

@@ -95,6 +95,103 @@ export function storePath(slug: string, demo = false): string {
   return `/stores/${encodeURIComponent(slug)}${demo ? '?demo=1' : ''}`;
 }
 
+export function storeCategoryPath(
+  shopSlug: string,
+  categorySlug: string,
+  demo = false,
+): string {
+  return `/stores/${encodeURIComponent(shopSlug)}/c/${encodeURIComponent(categorySlug)}${demo ? '?demo=1' : ''}`;
+}
+
+export function storeProductPath(
+  shopSlug: string,
+  productSlug: string,
+  demo = false,
+): string {
+  return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}${demo ? '?demo=1' : ''}`;
+}
+
+export interface StorefrontRoute {
+  shopSlug: string;
+  categorySlug?: string;
+  productSlug?: string;
+}
+
+const routeSlugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+function readRouteSlug(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const slug = decodeURIComponent(value);
+    return slug.length <= 191 && routeSlugPattern.test(slug) ? slug : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One parser for every storefront URL shape:
+ *   /stores/:shop
+ *   /stores/:shop/c/:categorySlug
+ *   /stores/:shop/p/:productSlug
+ * Anything else belongs to another route and must not render a shop.
+ */
+export function storefrontRouteFromPath(
+  pathname: string,
+): StorefrontRoute | null {
+  const match = /^\/stores\/([^/]+)(?:\/([cp])\/([^/]+))?\/?$/u.exec(pathname);
+  if (!match?.[1]) return null;
+  const shopSlug = readRouteSlug(match[1]);
+  if (!shopSlug) return null;
+  if (!match[2]) return { shopSlug };
+  const slug = readRouteSlug(match[3]);
+  if (!slug) return null;
+  return match[2] === 'c'
+    ? { shopSlug, categorySlug: slug }
+    : { shopSlug, productSlug: slug };
+}
+
+// Category rows have no slug column; their unique-per-shop name is the source.
+// Non-Latin names get a stable short hash so URLs stay unique instead of
+// collapsing into one unreadable "category" path.
+function shortNameHash(value: string): string {
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).padStart(6, '0').slice(0, 6);
+}
+
+export function categorySlug(name: string): string {
+  const base = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .slice(0, 80)
+    .replace(/^-+|-+$/gu, '');
+  return base || `category-${shortNameHash(name.trim() || 'category')}`;
+}
+
+export function findCategoryBySlug<
+  T extends { id: string; name: string; productCount?: number },
+>(categories: T[], slug: string): T | undefined {
+  return categories.find((category) => categorySlug(category.name) === slug);
+}
+
+export type CatalogLayout = 'list' | 'cards' | 'compact';
+const catalogLayouts: readonly CatalogLayout[] = ['list', 'cards', 'compact'];
+
+/**
+ * Category order decides the visual rhythm of the shop: 1st section is a menu
+ * list, 2nd a photo grid, 3rd a compact price list, then it repeats.
+ */
+export function catalogLayout(index: number): CatalogLayout {
+  const safe = Number.isInteger(index) && index > 0 ? index : 0;
+  return catalogLayouts[safe % catalogLayouts.length] ?? 'list';
+}
+
 export function storeSlugFromPath(pathname: string): string | null {
   const match = /^\/stores\/([^/]+)\/?$/u.exec(pathname);
   if (!match?.[1]) return null;
@@ -274,6 +371,30 @@ export function productCategoryName(
   return (
     product.categoryName?.trim() || productCategoryLabel(product.category ?? '')
   );
+}
+
+export function categoryIndexGroups(
+  categories: Pick<StoreCategory, 'id' | 'name' | 'productCount'>[],
+  uncategorized = 0,
+): MenuCategoryGroup[] {
+  const seen = new Set<string>();
+  const groups: MenuCategoryGroup[] = [];
+  for (const category of categories) {
+    const key = category.id?.trim();
+    const name = category.name?.trim();
+    if (!key || !name || seen.has(key)) continue;
+    seen.add(key);
+    const count = Math.max(0, category.productCount ?? 0);
+    if (count > 0) groups.push({ key, name, count });
+  }
+  // Older products without a category row must stay reachable from the index.
+  if (uncategorized > 0)
+    groups.push({
+      key: 'uncategorized',
+      name: 'More items',
+      count: uncategorized,
+    });
+  return groups;
 }
 
 /**

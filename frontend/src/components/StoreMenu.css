@@ -1,32 +1,19 @@
-/* Menu-style catalog: a sticky category index on desktop, a swipeable chip
-   strip on phones, compact dish rows, and a cart dock that never covers the
-   footer or the last row. Loaded after StorePage.css so it owns the layout. */
+/* Storefront catalog and detail pages. Loaded after StorePage.css so it owns
+   the category index, the three alternating item layouts, and the detail
+   shells. Every block is width-safe: no 100vw, no negative margins. */
 .storefront {
   --shop-nav-height: 56px;
+  max-width: 100%;
+  overflow-x: clip;
 }
 /* Tabs and panels share one wrapper: a sticky element is clamped to its grid
-   area, so a lone grid child could never pin the tabs (or the category strip). */
+   area, so a lone grid child could never pin the tabs (or a category strip). */
 .shop-content {
   min-width: 0;
 }
-.shop-catalog-layout {
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  grid-template-areas:
-    'rail head'
-    'rail body';
-  column-gap: 32px;
-  align-items: start;
-}
-/* Without categories (loading or an empty menu) the content owns the width. */
-.shop-catalog-layout:not(.has-categories) {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    'head'
-    'body';
-}
+
+/* ---------- Shop page: category index ---------- */
 .shop-catalog-head {
-  grid-area: head;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -42,112 +29,10 @@
 }
 .shop-catalog-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   min-width: 0;
-}
-.shop-catalog-rail {
-  grid-area: rail;
-  position: sticky;
-  top: calc(var(--shop-nav-height) + 20px);
-  align-self: start;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: var(--surface);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 5%, transparent);
-}
-.shop-rail-title {
-  padding: 2px 8px 10px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.shop-category-list {
-  display: grid;
-  gap: 3px;
-  max-height: calc(100dvh - var(--shop-nav-height) - 140px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.shop-category-list button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 44px;
-  padding: 9px 12px;
-  border: 1px solid transparent;
-  border-radius: 13px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.4;
-  text-align: left;
-}
-.shop-category-list button > span:first-child {
-  min-width: 0;
-}
-.shop-category-list button:hover {
-  background: var(--wash);
-  color: var(--ink);
-}
-.shop-category-list button[aria-pressed='true'] {
-  border-color: color-mix(in srgb, var(--primary) 26%, transparent);
-  background: color-mix(in srgb, var(--primary) 11%, var(--surface));
-  color: var(--ink);
-}
-.shop-category-count {
-  flex-shrink: 0;
-  min-width: 24px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--wash);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.shop-category-list button[aria-pressed='true'] .shop-category-count {
-  background: color-mix(in srgb, var(--primary) 18%, var(--surface));
-  color: color-mix(in srgb, var(--primary) 72%, var(--ink));
-}
-.shop-catalog-body {
-  grid-area: body;
-  min-width: 0;
-}
-.shop-menu {
-  display: grid;
-  gap: 34px;
-}
-.shop-menu-group {
-  display: grid;
-  gap: 16px;
-}
-.shop-menu-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
-}
-.shop-menu-heading h3 {
-  font-size: 21px;
-  font-weight: 650;
-  letter-spacing: -0.5px;
-  line-height: 1.25;
-}
-.shop-menu-heading span {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 .shop-menu-summary {
   display: flex;
@@ -158,16 +43,214 @@
   font-size: 12px;
   line-height: 1.5;
 }
-/* Shelf grids size themselves, so cards stay readable beside the rail. */
-.shop-catalog-body .shop-products {
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 20px;
+.shop-category-index {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 14px;
 }
-.storefront-restaurant .shop-catalog-body .shop-products {
+.shop-category-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  min-height: 96px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, var(--surface));
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--ink) 3%, transparent);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+.shop-category-tile:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--surface));
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--ink) 7%, transparent);
+  transform: translateY(-2px);
+}
+.shop-category-tile-number {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  color: color-mix(in srgb, var(--primary) 75%, var(--ink));
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.shop-category-tile.layout-cards .shop-category-tile-number {
+  border-radius: 50%;
+}
+.shop-category-tile.layout-compact .shop-category-tile-number {
+  border-radius: 8px;
+}
+.shop-category-tile-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.shop-category-tile-copy strong {
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-category-tile-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.shop-category-tile-arrow {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+/* ---------- Category page ---------- */
+.shop-detail-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 22px clamp(16px, 4vw, 40px) 64px;
+  min-width: 0;
+}
+.shop-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.shop-crumbs a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shop-crumbs span[aria-current='page'] {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-detail-eyebrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.shop-category-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0 20px;
+}
+.shop-category-head h1 {
+  margin: 6px 0 4px;
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -1px;
+  line-height: 1.15;
+}
+.shop-category-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+.shop-share-button {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+.shop-category-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.shop-category-switcher a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.shop-category-switcher a:hover {
+  border-color: var(--primary);
+}
+.shop-category-switcher a.is-active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.shop-category-switcher a span {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.shop-category-switcher a.is-active span {
+  background: color-mix(in srgb, var(--on-primary) 24%, transparent);
+  color: var(--on-primary);
+}
+
+/* ---------- Three item layouts, alternating per category ---------- */
+.shop-catalog-items {
+  display: grid;
+  min-width: 0;
+}
+.shop-catalog-items.layout-list {
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
   gap: 14px;
 }
-.storefront-restaurant .shop-product.shop-menu-item {
+.shop-catalog-items.layout-cards {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 20px;
+}
+.shop-catalog-items.layout-compact {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* Layout 1: horizontal menu rows. */
+.shop-product-image-link {
+  display: block;
+}
+.shop-product h3 a:hover,
+.shop-price-row h3 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.storefront .shop-menu-item {
   flex-direction: row;
   align-items: center;
   gap: 14px;
@@ -202,20 +285,309 @@
   font-size: 17px;
   letter-spacing: -0.3px;
 }
-/* The dock and its toast must clear the fixed bar instead of hiding under it. */
+/* Layout 2: photo cards. */
+.storefront .shop-photo-card {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px;
+  border-radius: 24px;
+}
+.shop-photo-card .shop-product-image,
+.storefront .shop-photo-card .shop-product-image {
+  flex: none;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  border-radius: 18px;
+}
+.shop-photo-card .shop-product-copy {
+  padding: 16px 10px 8px;
+}
+.shop-photo-card h3 {
+  font-size: 16px;
+}
+.shop-photo-card .shop-product-bottom {
+  padding-top: 12px;
+  font-size: 17px;
+}
+/* Layout 3: compact price list without images. */
+.shop-price-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 15px 4px;
+  border-bottom: 1px solid var(--line);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+.shop-price-row-copy {
+  flex: 1;
+  min-width: 0;
+}
+.shop-price-row-copy h3 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  line-height: 1.4;
+}
+.shop-price-row-copy p {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-price-leader {
+  display: none;
+}
+.shop-price-row-price {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-price-row .shop-add-to-cart,
+.shop-price-row .shop-qty-stepper {
+  margin-left: 0;
+  flex-shrink: 0;
+}
+.shop-catalog-items.layout-compact > .shop-skeleton {
+  display: block;
+  height: 68px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+/* ---------- Product page ---------- */
+.shop-product-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 34px;
+  align-items: start;
+  margin-top: 18px;
+}
+.shop-product-gallery {
+  min-width: 0;
+}
+.shop-product-main-image {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 26px;
+  background: var(--wash);
+}
+.shop-product-main-image .shop-image {
+  position: absolute;
+  inset: 0;
+}
+.shop-product-thumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.shop-product-thumbs button {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--wash);
+}
+.shop-product-thumbs button.is-active {
+  border-color: var(--primary);
+}
+.shop-product-thumbs img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.shop-product-info {
+  min-width: 0;
+  padding-top: 4px;
+}
+.shop-product-info h1 {
+  margin: 6px 0 10px;
+  font-size: clamp(24px, 3.4vw, 34px);
+  letter-spacing: -1px;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+.shop-product-detail-price {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-product-detail-description {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-line;
+}
+.shop-product-stock {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.shop-product-stock.is-sold-out {
+  color: #8a4a1f;
+  font-weight: 650;
+}
+.shop-product-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+.shop-product-actions .shop-add-to-cart,
+.shop-product-actions .shop-qty-stepper {
+  margin-left: 0;
+}
+.shop-product-actions .shop-add-to-cart {
+  min-height: 50px;
+  min-width: 150px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+.shop-product-category-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.shop-product-category-link strong {
+  color: var(--ink);
+}
+.shop-product-category-link:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Detail shell ---------- */
+.storefront-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+.shop-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px clamp(16px, 4vw, 40px);
+  color: #fff;
+  background: #171a1d;
+}
+.shop-detail-bar .shop-back {
+  min-height: 44px;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-weight: 650;
+}
+.shop-detail-brandbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+.shop-detail-brandbar .store-avatar {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 14px;
+}
+.shop-detail-brandbar > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.shop-detail-brandbar strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.shop-detail-brandbar a {
+  color: var(--muted);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shop-detail-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+  padding: 16px clamp(16px, 4vw, 40px);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.shop-detail-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--ink);
+  font-weight: 650;
+}
+.shop-detail-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  min-height: 70dvh;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--ink);
+  background: var(--wash);
+}
+.shop-detail-state p {
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ---------- Cart dock and feedback ---------- */
 .storefront.has-cart .shop-footer {
   padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+.storefront-detail.has-cart .shop-detail-footer {
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 .storefront.has-cart .shop-notice {
   bottom: calc(112px + env(safe-area-inset-bottom));
 }
 .shop-cart-dock {
   position: fixed;
-  left: 50%;
+  left: 16px;
+  right: 16px;
   bottom: calc(18px + env(safe-area-inset-bottom));
   z-index: 45;
-  width: min(560px, calc(100vw - 32px));
-  transform: translateX(-50%);
+  width: auto;
+  max-width: 560px;
+  margin-inline: auto;
   animation: shop-dock-rise 0.22s ease-out;
 }
 .shop-cart-dock-button {
@@ -267,9 +639,12 @@
   min-width: 0;
 }
 .shop-cart-dock-copy small {
+  overflow: hidden;
   font-size: 10px;
   letter-spacing: 0.1em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
   opacity: 0.72;
 }
 .shop-cart-dock-copy strong {
@@ -295,83 +670,39 @@
 @keyframes shop-dock-rise {
   from {
     opacity: 0;
-    transform: translate(-50%, 12px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
   }
 }
-@media (max-width: 1000px) {
-  .shop-catalog-layout {
-    grid-template-columns: 210px minmax(0, 1fr);
-    column-gap: 22px;
-  }
+/* Cart feedback: success keeps the neutral toast, failures must stand out. */
+.shop-notice.is-error {
+  background: #7c3223;
+  color: #fff;
 }
+.shop-notice.is-success {
+  background: var(--ink);
+}
+
+/* Fixed toasts must fit the viewport: 100% resolves against the initial
+   containing block, unlike 100vw which includes the classic scrollbar. */
+.shop-notice {
+  max-width: calc(100% - 30px);
+}
+
+/* ---------- Responsive ---------- */
 @media (max-width: 900px) {
-  /* A single-row grid area would clip a sticky strip to its own height, so
-     phones stack the catalog in flex and let the strip travel with the menu. */
-  .shop-catalog-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+  .shop-category-index {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   }
-  .shop-catalog-head {
-    align-items: stretch;
-    flex-direction: column;
-    margin-bottom: 0;
-  }
-  .shop-catalog-tools {
-    flex-wrap: wrap;
-  }
-  /* Phones get a swipeable strip pinned under the section tabs. */
-  .shop-catalog-rail {
-    top: var(--shop-nav-height);
-    z-index: 4;
-    margin: 0 calc(var(--shop-gutter) * -1);
-    padding: 10px var(--shop-gutter);
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    border-radius: 0;
-    background: color-mix(in srgb, var(--wash) 92%, transparent);
-    box-shadow: none;
-    -webkit-backdrop-filter: blur(16px) saturate(150%);
-    backdrop-filter: blur(16px) saturate(150%);
-  }
-  .shop-category-list {
-    display: flex;
-    gap: 8px;
-    max-height: none;
-    padding-bottom: 2px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-  }
-  .shop-rail-title {
-    display: none;
-  }
-  .shop-category-list button {
-    flex: 0 0 auto;
-    gap: 8px;
-    min-height: 40px;
-    padding: 8px 14px;
-    border-color: var(--line);
-    border-radius: 999px;
-    background: var(--surface);
-    color: var(--ink);
-    white-space: nowrap;
-  }
-  .shop-category-list button[aria-pressed='true'] {
-    border-color: var(--primary);
-    background: var(--primary);
-    color: var(--on-primary);
-  }
-  .shop-category-list button[aria-pressed='true'] .shop-category-count {
-    background: color-mix(in srgb, var(--on-primary) 24%, transparent);
-    color: var(--on-primary);
-  }
-  .storefront-restaurant .shop-catalog-body .shop-products {
+  .shop-catalog-items.layout-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .shop-catalog-items.layout-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 }
 @media (max-width: 700px) {
@@ -381,11 +712,22 @@
   .shop-catalog-title h2 {
     font-size: 22px;
   }
-  .shop-menu {
-    gap: 28px;
+  .shop-category-index {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
-  .shop-menu-heading h3 {
-    font-size: 19px;
+  .shop-category-tile {
+    min-height: 84px;
+    padding: 14px;
+    gap: 12px;
+  }
+  .shop-category-tile-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+  .shop-category-tile-copy strong {
+    font-size: 15px;
   }
   .shop-menu-item .shop-product-image {
     flex-basis: 92px;
@@ -399,9 +741,72 @@
   .shop-menu-item .shop-product-bottom {
     font-size: 16px;
   }
+  .shop-photo-card .shop-product-copy {
+    padding: 12px 8px 6px;
+  }
+  .shop-photo-card h3 {
+    font-size: 14px;
+  }
+  .shop-photo-card .shop-product-bottom {
+    font-size: 15px;
+  }
+  .shop-photo-card .shop-add-to-cart {
+    min-width: 0;
+    padding: 0 12px;
+  }
+  .shop-price-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 12px 2px;
+  }
+  .shop-price-row-copy {
+    flex-basis: 100%;
+  }
+  .shop-price-row-price {
+    margin-right: auto;
+  }
+  .shop-category-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .shop-category-head h1 {
+    font-size: 27px;
+  }
+  .shop-category-switcher {
+    margin-bottom: 18px;
+  }
+  .shop-product-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+  .shop-product-main-image {
+    aspect-ratio: 4 / 3;
+    border-radius: 20px;
+  }
+  .shop-product-detail-price {
+    font-size: 23px;
+  }
+  .shop-detail-bar {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .shop-detail-bar .shop-back {
+    min-height: 42px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .shop-detail-main {
+    padding: 16px 16px 52px;
+  }
+  .shop-detail-footer {
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
   .shop-cart-dock {
+    left: 10px;
+    right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
-    width: calc(100vw - 20px);
   }
   .shop-cart-dock-button {
     gap: 10px;
@@ -423,42 +828,34 @@
     bottom: calc(100px + env(safe-area-inset-bottom));
   }
 }
-@media (max-width: 380px) {
-  .shop-menu-item .shop-product-image {
-    flex-basis: 80px;
-    width: 80px;
-    height: 80px;
-  }
-  .shop-catalog-rail {
-    margin-inline: calc(var(--shop-gutter) * -1);
+@media (max-width: 420px) {
+  .shop-detail-bar .shop-back {
+    max-width: 62%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .shop-cart-dock-action {
     padding: 9px 10px;
     font-size: 11px;
+  }
+  .shop-cart-dock-copy small {
+    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .shop-cart-dock {
     animation: none;
   }
-}
-/* Cart feedback: success keeps the neutral toast, failures must stand out. */
-.shop-notice.is-error {
-  background: #7c3223;
-  color: #fff;
-}
-.shop-notice.is-success {
-  background: var(--ink);
-}
-@media (prefers-reduced-transparency: reduce) {
-  .shop-catalog-rail {
-    background: var(--surface);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+  .shop-category-tile,
+  .shop-category-tile:hover {
+    transform: none;
+    transition: none;
   }
 }
-@media (max-width: 900px) and (prefers-reduced-transparency: reduce) {
-  .shop-catalog-rail {
-    background: var(--wash);
+@media (prefers-reduced-transparency: reduce) {
+  .shop-category-switcher a {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }

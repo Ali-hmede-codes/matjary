@@ -1,21 +1,17 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowUp,
   ArrowUpRight,
-  Check,
   ChevronDown,
   Expand,
   Images,
   Layers,
   LoaderCircle,
   MapPin,
-  Minus,
   Package,
   Play,
-  Plus,
   Search,
   Share2,
   ShoppingBag,
@@ -29,132 +25,44 @@ import {
   registerPostView,
   type Feed,
   type Post,
-  type Product,
-  type ProductList,
   type Store,
   type StoreCategoryList,
 } from '../lib/api';
 import { demoPosts, demoProducts, demoStores } from '../lib/demo';
 import {
-  formatProductPrice,
+  categoryIndexGroups,
+  categorySlug,
+  catalogLayout,
   menuCategoryGroups,
-  productCategoryKey,
-  productCategoryName,
+  storeCategoryPath,
   storeMediaUrl,
+  storePath,
   storePresentation,
   storeSocialLinks,
 } from '../lib/storefront';
 import { branchOpenState, primaryBranch, storeBranches } from '../lib/branches';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
-import { useShopCart, type ShopCartController } from '../hooks/useShopCart';
-import { productCartLimit } from '../lib/cart';
+import { useShopCart } from '../hooks/useShopCart';
+import { usePageSeo } from '../hooks/usePageSeo';
+import { useShare } from '../hooks/useShare';
 import { ShopCart } from './ShopCart';
+import { ShopCartDock, ShopToast } from './ShopCartDock';
+import { ShopImage } from './StoreCatalog';
 import { ShopBranches } from './ShopBranches';
 import { SocialIcon } from './SocialIcon';
 import { LoadingBar, StatusBanner } from './Feedback';
 import { MediaView } from './MediaView';
 import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
+import { absoluteMediaUrl, catalogLayoutLabel } from './StoreDetail';
 
-function ShopImage({
-  value,
-  alt,
-  eager = false,
-  fallbackName,
-  fallbackLabel,
-}: {
-  value?: string | null;
-  alt: string;
-  eager?: boolean;
-  fallbackName?: string;
-  fallbackLabel?: string;
-}) {
-  const src = assetUrl(storeMediaUrl(value));
-  const [failedSrc, setFailedSrc] = useState<string>();
-  const [loadedSrc, setLoadedSrc] = useState<string>();
-  const loading = Boolean(src && src !== failedSrc && src !== loadedSrc);
-  return (
-    <span
-      className={`shop-image ${loading ? 'is-loading' : ''}`}
-      aria-busy={loading}
-    >
-      {src && failedSrc !== src ? (
-        <img
-          key={src}
-          src={src}
-          alt={alt}
-          loading={eager ? 'eager' : 'lazy'}
-          decoding="async"
-          ref={(image) => {
-            if (image?.complete && image.naturalWidth > 0) setLoadedSrc(src);
-          }}
-          onLoad={() => setLoadedSrc(src)}
-          onError={() => setFailedSrc(src)}
-        />
-      ) : (
-        <span
-          className="shop-image-fallback"
-          role={alt ? 'img' : undefined}
-          aria-label={alt || undefined}
-          aria-hidden={!alt}
-        >
-          {fallbackName ? (
-            <span className="shop-fallback-brand">
-              <span className="shop-fallback-monogram">
-                {fallbackName
-                  .trim()
-                  .split(/\s+/u)
-                  .map((part) => part[0])
-                  .slice(0, 2)
-                  .join('')}
-              </span>
-              <strong>{fallbackName}</strong>
-              <small>{fallbackLabel}</small>
-            </span>
-          ) : (
-            <Package size={32} />
-          )}
-        </span>
-      )}
-      {loading && (
-        <span className="shop-skeleton shop-image-loading" aria-hidden="true" />
-      )}
-    </span>
-  );
-}
-
-function ShopCardsLoading({
-  posts = false,
-  label = 'Loading the collection…',
-}: {
-  posts?: boolean;
-  label?: string;
-}) {
+function ShopCardsLoading({ label = 'Loading posts…' }: { label?: string }) {
   return (
     <div role="status">
       <span className="sr-only">{label}</span>
-      <div
-        className={posts ? 'shop-post-grid' : 'shop-products'}
-        aria-hidden="true"
-      >
-        {(posts ? [0, 1, 2, 3, 4, 5] : [0, 1, 2]).map((index) => (
-          <div
-            className={
-              posts ? 'shop-post-skeleton shop-skeleton' : 'shop-product'
-            }
-            key={index}
-          >
-            {!posts && (
-              <>
-                <div className="shop-product-image shop-skeleton" />
-                <div className="shop-product-copy">
-                  <div className="shop-skeleton shop-skeleton-title" />
-                  <div className="shop-skeleton shop-skeleton-line" />
-                  <div className="shop-skeleton shop-skeleton-short" />
-                </div>
-              </>
-            )}
-          </div>
+      <div className="shop-post-grid" aria-hidden="true">
+        {[0, 1, 2, 3, 4, 5].map((index) => (
+          <div className="shop-post-skeleton shop-skeleton" key={index} />
         ))}
       </div>
     </div>
@@ -180,148 +88,9 @@ function ShopPageLoading() {
         </div>
       </div>
       <div className="shop-loading-content">
-        <ShopCardsLoading posts label="Loading posts…" />
+        <ShopCardsLoading label="Loading posts…" />
       </div>
     </section>
-  );
-}
-
-function AddToCart({
-  product,
-  cart,
-}: {
-  product: Product;
-  cart: ShopCartController;
-}) {
-  const item = cart.cart?.items.find((entry) => entry.productId === product.id);
-  const quantity = item?.quantity ?? 0;
-  const limit = productCartLimit(product);
-  const blocked = cart.busy || cart.loading;
-  if (limit === 0)
-    return (
-      <button
-        type="button"
-        className="shop-add-to-cart"
-        disabled
-        title={`${product.name} is sold out`}
-      >
-        Sold out
-      </button>
-    );
-  // The cart never opens on add; the quantity control and toast confirm it.
-  if (!item)
-    return (
-      <button
-        type="button"
-        className="shop-add-to-cart"
-        disabled={blocked}
-        aria-label={`Add ${product.name} to cart`}
-        title={`Add ${product.name} to cart`}
-        onClick={() => cart.add(product)}
-      >
-        <Plus size={17} aria-hidden="true" />
-        Add
-      </button>
-    );
-  return (
-    <div
-      className="shop-qty-stepper"
-      role="group"
-      aria-label={`Quantity of ${product.name} in cart`}
-    >
-      <button
-        type="button"
-        disabled={blocked}
-        aria-label={
-          quantity === 1
-            ? `Remove ${product.name} from cart`
-            : `Remove one ${product.name} from cart`
-        }
-        onClick={() => cart.update(item, quantity - 1)}
-      >
-        <Minus size={15} aria-hidden="true" />
-      </button>
-      <output aria-live="polite">{quantity}</output>
-      <button
-        type="button"
-        disabled={blocked || quantity >= limit}
-        aria-label={`Add another ${product.name} to cart`}
-        onClick={() => cart.update(item, quantity + 1)}
-      >
-        <Plus size={15} aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
-function ProductCard({
-  product,
-  cart,
-}: {
-  product: Product;
-  cart: ShopCartController;
-}) {
-  const quantity =
-    cart.cart?.items.find((item) => item.productId === product.id)?.quantity ??
-    0;
-  const unavailable = productCartLimit(product) === 0;
-  return (
-    <article className={`shop-product${unavailable ? ' is-unavailable' : ''}`}>
-      <div className="shop-product-image">
-        <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-        <span className="shop-product-category shop-glass">
-          {productCategoryName(product)}
-        </span>
-        {(unavailable || quantity > 0) && (
-          <span className="shop-stock-label shop-glass">
-            {!unavailable && <Check size={13} aria-hidden="true" />}
-            {unavailable ? 'Unavailable' : `${quantity} in cart`}
-          </span>
-        )}
-      </div>
-      <div className="shop-product-copy">
-        <h3>{product.name}</h3>
-        {product.description && <p>{product.description}</p>}
-        <div className="shop-product-bottom">
-          <strong>
-            {formatProductPrice(product.priceCents, product.currency)}
-          </strong>
-          <AddToCart product={product} cart={cart} />
-        </div>
-      </div>
-    </article>
-  );
-}
-
-// Menu rows are image-first and compact, so a full page of dishes stays scannable.
-function MenuItem({
-  product,
-  cart,
-}: {
-  product: Product;
-  cart: ShopCartController;
-}) {
-  const unavailable = productCartLimit(product) === 0;
-  return (
-    <article
-      className={`shop-product shop-menu-item${unavailable ? ' is-unavailable' : ''}`}
-    >
-      <div className="shop-product-image">
-        <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-      </div>
-      <div className="shop-product-copy">
-        <h3>{product.name}</h3>
-        {product.description && (
-          <p title={product.description}>{product.description}</p>
-        )}
-        <div className="shop-product-bottom">
-          <strong>
-            {formatProductPrice(product.priceCents, product.currency)}
-          </strong>
-          <AddToCart product={product} cart={cart} />
-        </div>
-      </div>
-    </article>
   );
 }
 
@@ -329,15 +98,12 @@ export function StorePage({ slug }: { slug: string | null }) {
   const demo = new URLSearchParams(window.location.search).get('demo') === '1';
   const { settings } = useWebsiteSettings(false);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('');
   const [activeTab, setActiveTab] = useState<'posts' | 'catalog'>('posts');
   const [focusSearch, setFocusSearch] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const [contactOpen, setContactOpen] = useState(false);
   const [focusContact, setFocusContact] = useState(false);
   const contactDetails = useRef<HTMLElement>(null);
-  const [notice, setNotice] = useState('');
-  const [sharing, setSharing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const viewedPosts = useRef(new Set<string>());
   // A restaurant opens on its menu; the choice only sticks once the shopper
@@ -348,11 +114,6 @@ export function StorePage({ slug }: { slug: string | null }) {
     setActiveTab(tab);
   };
 
-  useEffect(() => {
-    if (!notice) return;
-    const timeout = window.setTimeout(() => setNotice(''), 6000);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
   const storeQuery = useQuery({
     queryKey: ['storefront', slug],
     queryFn: ({ signal }) =>
@@ -372,20 +133,6 @@ export function StorePage({ slug }: { slug: string | null }) {
       ? demoStores.find((item) => item.slug === slug)
       : storeQuery.data;
   const cart = useShopCart(store, demo);
-  const productsQuery = useInfiniteQuery({
-    queryKey: ['storefront-products', slug],
-    initialPageParam: 0,
-    queryFn: ({ signal, pageParam }) =>
-      getJson<ProductList>(
-        `stores/${encodeURIComponent(slug!)}/products?limit=24&offset=${pageParam}`,
-        signal,
-      ),
-    getNextPageParam: (page, _pages, offset) =>
-      page.items.length && offset + page.items.length < page.total
-        ? offset + page.items.length
-        : undefined,
-    enabled: Boolean(store) && !demo,
-  });
   const categoriesQuery = useQuery({
     queryKey: ['storefront-categories', slug],
     queryFn: ({ signal }) =>
@@ -408,24 +155,19 @@ export function StorePage({ slug }: { slug: string | null }) {
       );
     },
     getNextPageParam: (page) => (page.hasMore ? page.nextCursor : undefined),
-    enabled: Boolean(store) && !demo,
+    // Restaurants open on the menu, so their feed is fetched only when the
+    // Posts tab is actually opened.
+    enabled: Boolean(store) && !demo && activeTab === 'posts',
   });
   const presentation = storePresentation(store ?? { brandColor: null });
   const missing = notFound || (demo && !store);
   const loadingShop = !store && !missing && !storeQuery.isError;
+  const share = useShare();
   useEffect(() => {
     if (tabChosen.current || !store) return;
     if (store.storeType === 'restaurant_menu') setActiveTab('catalog');
   }, [store]);
   useEffect(() => {
-    document.title = `${store?.name ?? (missing ? 'Shop not found' : 'Shop')} — ${settings.siteName}`;
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute(
-        'content',
-        store?.description ||
-          `Explore ${store?.name || 'independent shops'} on ${settings.siteName}.`,
-      );
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', presentation.theme['--brand-primary']);
@@ -437,7 +179,33 @@ export function StorePage({ slug }: { slug: string | null }) {
           assetUrl(settings.faviconUrl) ||
           '/favicon.svg',
       );
-  }, [store, missing, settings, presentation.theme['--brand-primary']]);
+  }, [store, settings, presentation.theme['--brand-primary']]);
+  usePageSeo(
+    store
+      ? {
+          title: `${store.name} — ${settings.siteName}`,
+          description:
+            store.description ||
+            `Explore ${store.name} on ${settings.siteName}.`,
+          image:
+            absoluteMediaUrl(store.bannerKey || store.logoKey) ??
+            assetUrl(settings.logoUrl),
+          canonical: storePath(store.slug, demo),
+          siteName: settings.siteName,
+          jsonLd: {
+            '@context': 'https://schema.org',
+            '@type':
+              store.storeType === 'restaurant_menu' ? 'Restaurant' : 'Store',
+            name: store.name,
+            description: store.description ?? undefined,
+            image:
+              absoluteMediaUrl(store.bannerKey || store.logoKey) ??
+              assetUrl(settings.logoUrl),
+            url: `${window.location.origin}${storePath(store.slug, demo)}`,
+          },
+        }
+      : null,
+  );
 
   useEffect(() => {
     if (!focusSearch || activeTab !== 'catalog') return;
@@ -454,32 +222,24 @@ export function StorePage({ slug }: { slug: string | null }) {
   }, [contactOpen, focusContact]);
 
   const home = demo ? '/?demo=1' : '/';
-  const products = demo
-    ? demoProducts.filter((item) => item.storeId === store?.id)
-    : (productsQuery.data?.pages.flatMap((page) => page.items) ?? []);
   const posts = demo
     ? demoPosts.filter((item) => item.store?.id === store?.id)
     : (postsQuery.data?.pages.flatMap((page) => page.items) ?? []);
-  const uniqueProducts = [
-    ...new Map(products.map((item) => [item.id, item])).values(),
-  ];
-  // Owner-defined categories keep the shop's order; product-only categories
-  // (older products without a category row) are appended by the helper.
-  const menuGroups = menuCategoryGroups(
-    uniqueProducts,
-    demo ? [] : (categoriesQuery.data?.items ?? []),
-  );
-  const showCategoryCounts = demo || !productsQuery.hasNextPage;
-  const catalogTotal = demo
-    ? uniqueProducts.length
-    : (productsQuery.data?.pages[0]?.total ?? uniqueProducts.length);
-  const visible = uniqueProducts.filter(
-    (item) =>
-      (!category || productCategoryKey(item) === category) &&
-      `${item.name} ${item.description ?? ''}`
-        .toLowerCase()
-        .includes(search.trim().toLowerCase()),
-  );
+  // The shop page lists sections only; each section opens its own URL with a
+  // filtered request, so no shop ever downloads its whole catalogue to browse.
+  const groups = demo
+    ? menuCategoryGroups(
+        demoProducts.filter((item) => item.storeId === store?.id),
+      )
+    : categoryIndexGroups(
+        categoriesQuery.data?.items ?? [],
+        categoriesQuery.data?.uncategorized ?? 0,
+      );
+  const catalogTotal = groups.reduce((sum, group) => sum + group.count, 0);
+  const searchTerm = search.trim().toLowerCase();
+  const visibleGroups = searchTerm
+    ? groups.filter((group) => group.name.toLowerCase().includes(searchTerm))
+    : groups;
   const branches = storeBranches(store);
   const mainBranch = primaryBranch(branches);
   const branchOpenStates = branches
@@ -523,39 +283,7 @@ export function StorePage({ slug }: { slug: string | null }) {
       });
   }
 
-  async function shareShop() {
-    if (!store || sharing) return;
-    const url = `${window.location.origin}${window.location.pathname}${demo ? '?demo=1' : ''}`;
-    setNotice('');
-    setSharing(true);
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: store.name, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        setNotice('Shop link copied.');
-      }
-    } catch (error) {
-      if (!(error instanceof Error && error.name === 'AbortError')) {
-        setNotice(
-          'Couldn’t share the link. You can copy it from the address bar.',
-        );
-      }
-    } finally {
-      setSharing(false);
-    }
-  }
-
   const cartItems = cart.cart?.itemCount ?? 0;
-  const toast = cart.flash
-    ? {
-        tone: cart.flash.tone,
-        text: cart.flash.text,
-        key: `cart-${cart.flash.key}`,
-      }
-    : notice
-      ? { tone: 'info' as const, text: notice, key: 'notice' }
-      : null;
 
   return (
     <div
@@ -578,10 +306,10 @@ export function StorePage({ slug }: { slug: string | null }) {
             <button
               type="button"
               className="shop-glass"
-              aria-label="Search this shop"
-              title="Search this shop"
+              aria-label="Search shop categories"
+              title="Search shop categories"
               onClick={() => {
-                setActiveTab('catalog');
+                selectTab('catalog');
                 setFocusSearch(true);
               }}
             >
@@ -592,8 +320,14 @@ export function StorePage({ slug }: { slug: string | null }) {
               className="shop-glass"
               aria-label="Share this shop"
               title="Share this shop"
-              disabled={sharing}
-              onClick={() => void shareShop()}
+              disabled={share.sharing}
+              onClick={() =>
+                void share.share({
+                  title: store.name,
+                  text: store.description ?? undefined,
+                  url: `${window.location.origin}${storePath(store.slug, demo)}`,
+                })
+              }
             >
               <Share2 size={20} aria-hidden="true" />
             </button>
@@ -678,13 +412,12 @@ export function StorePage({ slug }: { slug: string | null }) {
                   {store.description?.trim() && (
                     <p className="shop-description">{store.description}</p>
                   )}
-                  {presentation.restaurant && catalogTotal > 0 && (
+                  {presentation.restaurant && groups.length > 0 && (
                     <p className="shop-menu-summary">
                       <Utensils size={15} aria-hidden="true" />
-                      {catalogTotal} {catalogTotal === 1 ? 'item' : 'items'}
-                      {menuGroups.length > 0
-                        ? ` across ${menuGroups.length} menu ${menuGroups.length === 1 ? 'section' : 'sections'}`
-                        : ' on the menu'}
+                      {catalogTotal} {catalogTotal === 1 ? 'item' : 'items'}{' '}
+                      across {groups.length} menu{' '}
+                      {groups.length === 1 ? 'section' : 'sections'}
                     </p>
                   )}
                   {(socials.length > 0 || branches.length > 0) && (
@@ -832,7 +565,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                   <>
                     <h2 className="sr-only">Posts</h2>
                     {!demo && postsQuery.isPending && (
-                      <ShopCardsLoading posts label="Loading posts…" />
+                      <ShopCardsLoading label="Loading posts…" />
                     )}
                     {!demo && postsQuery.isError && (
                       <StatusBanner
@@ -914,225 +647,125 @@ export function StorePage({ slug }: { slug: string | null }) {
                 tabIndex={0}
                 hidden={activeTab !== 'catalog'}
               >
-                <div
-                  className={`shop-catalog-layout${menuGroups.length > 0 ? ' has-categories' : ''}`}
-                >
-                  <div className="shop-catalog-head">
-                    <div className="shop-catalog-title">
-                      <h2 id="catalog-title">
-                        {presentation.restaurant ? 'Our menu' : 'Our products'}
-                      </h2>
-                      {(demo || productsQuery.isSuccess) && (
-                        <p className="shop-results" role="status">
-                          {visible.length}{' '}
-                          {visible.length === 1 ? 'item' : 'items'}
-                          {search || category ? ' found' : ''}
-                          {!demo && productsQuery.hasNextPage
-                            ? ' in the loaded collection'
-                            : ''}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shop-catalog-tools">
-                      <label className="shop-search">
-                        <Search size={18} aria-hidden="true" />
-                        <span className="sr-only">
-                          Search loaded{' '}
-                          {presentation.restaurant ? 'menu items' : 'products'}
-                        </span>
-                        <input
-                          ref={searchInput}
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder={
-                            presentation.restaurant
-                              ? 'Search the menu…'
-                              : 'Search products…'
-                          }
-                          type="search"
-                        />
-                      </label>
-                      {(search || category) && (
-                        <button
-                          type="button"
-                          className="shop-clear-filters"
-                          onClick={() => {
-                            setSearch('');
-                            setCategory('');
-                          }}
-                        >
-                          Clear filters
-                        </button>
-                      )}
-                    </div>
+                <div className="shop-catalog-head">
+                  <div className="shop-catalog-title">
+                    <h2 id="catalog-title">
+                      {presentation.restaurant ? 'Our menu' : 'Our products'}
+                    </h2>
+                    <p className="shop-results" role="status">
+                      {visibleGroups.length}{' '}
+                      {visibleGroups.length === 1 ? 'section' : 'sections'}
+                      {search ? ' found' : ''}
+                    </p>
                   </div>
-                  {menuGroups.length > 0 && (
-                    <nav
-                      className="shop-catalog-rail"
-                      aria-label={
-                        presentation.restaurant
-                          ? 'Menu categories'
-                          : 'Product categories'
-                      }
-                    >
-                      <p className="shop-rail-title" aria-hidden="true">
-                        {presentation.restaurant ? 'Menu' : 'Categories'}
-                      </p>
-                      <div
-                        className="shop-category-list"
-                        role="group"
-                        aria-label="Filter by category"
-                      >
-                        <button
-                          type="button"
-                          aria-pressed={!category}
-                          onClick={() => setCategory('')}
-                        >
-                          <span>All items</span>
-                          {showCategoryCounts && (
-                            <span className="shop-category-count">
-                              {uniqueProducts.length}
-                            </span>
-                          )}
-                        </button>
-                        {menuGroups.map((group) => (
-                          <button
-                            key={group.key}
-                            type="button"
-                            aria-pressed={category === group.key}
-                            onClick={() => setCategory(group.key)}
-                          >
-                            <span>{group.name}</span>
-                            {showCategoryCounts && (
-                              <span className="shop-category-count">
-                                {group.count}
-                              </span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </nav>
-                  )}
-                  <div className="shop-catalog-body">
-                    {!demo && productsQuery.isPending && (
-                      <ShopCardsLoading
-                        label={
-                          presentation.restaurant
-                            ? 'Loading the menu…'
-                            : 'Loading the collection…'
-                        }
+                  <div className="shop-catalog-tools">
+                    <label className="shop-search">
+                      <Search size={18} aria-hidden="true" />
+                      <span className="sr-only">Search shop categories</span>
+                      <input
+                        ref={searchInput}
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Search sections…"
+                        type="search"
                       />
-                    )}
-                    {!demo && productsQuery.isError && (
-                      <StatusBanner
-                        action="Try again"
-                        onAction={() => void productsQuery.refetch()}
+                    </label>
+                    {search && (
+                      <button
+                        type="button"
+                        className="shop-clear-filters"
+                        onClick={() => setSearch('')}
                       >
-                        The {presentation.restaurant ? 'menu' : 'collection'}{' '}
-                        couldn’t load. Please try again.
-                      </StatusBanner>
-                    )}
-                    {visible.length > 0 &&
-                      (presentation.restaurant ? (
-                        <div className="shop-menu">
-                          {menuGroups.map((group, index) => {
-                            const items = visible.filter(
-                              (product) =>
-                                productCategoryKey(product) === group.key,
-                            );
-                            if (!items.length) return null;
-                            return (
-                              <section
-                                className="shop-menu-group"
-                                key={group.key}
-                                aria-labelledby={`shop-menu-${index}`}
-                              >
-                                <header className="shop-menu-heading">
-                                  <h3 id={`shop-menu-${index}`}>
-                                    {group.name}
-                                  </h3>
-                                  <span>
-                                    {items.length}{' '}
-                                    {items.length === 1 ? 'item' : 'items'}
-                                  </span>
-                                </header>
-                                <div className="shop-products">
-                                  {items.map((product) => (
-                                    <MenuItem
-                                      key={product.id}
-                                      product={product}
-                                      cart={cart}
-                                    />
-                                  ))}
-                                </div>
-                              </section>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="shop-products">
-                          {visible.map((product) => (
-                            <ProductCard
-                              key={product.id}
-                              product={product}
-                              cart={cart}
-                            />
-                          ))}
-                        </div>
-                      ))}
-                    {!visible.length && (demo || productsQuery.isSuccess) && (
-                      <div className="shop-inline-state">
-                        <h3>
-                          {search || category
-                            ? 'No matching items in this selection.'
-                            : presentation.restaurant
-                              ? 'The menu is coming soon.'
-                              : 'New finds are on their way.'}
-                        </h3>
-                        <p>
-                          {search || category
-                            ? 'Try another search or category, or load more items below.'
-                            : 'Check back soon for the latest from this shop.'}
-                        </p>
-                        {(search || category) && (
-                          <button
-                            className="secondary-button"
-                            onClick={() => {
-                              setSearch('');
-                              setCategory('');
-                            }}
-                          >
-                            Clear filters
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {!demo && productsQuery.hasNextPage && (
-                      <div className="shop-pagination">
-                        <p>
-                          Showing {uniqueProducts.length} loaded items. Search
-                          and categories apply to these items.
-                        </p>
-                        <button
-                          className="secondary-button"
-                          disabled={productsQuery.isFetching}
-                          onClick={() => void productsQuery.fetchNextPage()}
-                        >
-                          {productsQuery.isFetchingNextPage && (
-                            <LoaderCircle
-                              className="spin"
-                              size={16}
-                              aria-hidden="true"
-                            />
-                          )}
-                          {productsQuery.isFetchingNextPage
-                            ? 'Loading…'
-                            : 'Load more items'}
-                        </button>
-                      </div>
+                        Clear search
+                      </button>
                     )}
                   </div>
                 </div>
+                {!demo && categoriesQuery.isPending && (
+                  <div className="shop-category-index" aria-hidden="true">
+                    {[0, 1, 2, 3].map((index) => (
+                      <div
+                        className="shop-category-tile shop-skeleton"
+                        key={index}
+                      />
+                    ))}
+                  </div>
+                )}
+                {!demo && categoriesQuery.isError && (
+                  <StatusBanner
+                    action="Try again"
+                    onAction={() => void categoriesQuery.refetch()}
+                  >
+                    The shop sections couldn’t load. Please try again.
+                  </StatusBanner>
+                )}
+                {visibleGroups.length > 0 && (
+                  <div className="shop-category-index">
+                    {visibleGroups.map((group) => {
+                      const position = groups.findIndex(
+                        (entry) => entry.key === group.key,
+                      );
+                      const layout = catalogLayout(position);
+                      return (
+                        <a
+                          key={group.key}
+                          className={`shop-category-tile layout-${layout}`}
+                          href={storeCategoryPath(
+                            store.slug,
+                            categorySlug(group.name),
+                            demo,
+                          )}
+                        >
+                          <span
+                            className="shop-category-tile-number"
+                            aria-hidden="true"
+                          >
+                            {String(position + 1).padStart(2, '0')}
+                          </span>
+                          <span className="shop-category-tile-copy">
+                            <strong>{group.name}</strong>
+                            <small>
+                              {group.count}{' '}
+                              {group.count === 1 ? 'item' : 'items'} ·{' '}
+                              {catalogLayoutLabel(layout)}
+                            </small>
+                          </span>
+                          <span
+                            className="shop-category-tile-arrow"
+                            aria-hidden="true"
+                          >
+                            <ArrowUpRight size={18} />
+                          </span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+                {!visibleGroups.length &&
+                  (demo || categoriesQuery.isSuccess) && (
+                    <div className="shop-inline-state">
+                      <h3>
+                        {search
+                          ? 'No matching sections.'
+                          : presentation.restaurant
+                            ? 'The menu is coming soon.'
+                            : 'New finds are on their way.'}
+                      </h3>
+                      <p>
+                        {search
+                          ? 'Try another search, or browse the sections below.'
+                          : 'Check back soon for the latest from this shop.'}
+                      </p>
+                      {search && (
+                        <button
+                          className="secondary-button"
+                          onClick={() => setSearch('')}
+                        >
+                          Clear search
+                        </button>
+                      )}
+                    </div>
+                  )}
               </section>
             </div>
           </>
@@ -1168,41 +801,11 @@ export function StorePage({ slug }: { slug: string | null }) {
           </a>
         </div>
       </footer>
-      {cartItems > 0 && !cart.open && store && (
-        <div className="shop-cart-dock">
-          <button
-            type="button"
-            className="shop-cart-dock-button"
-            onClick={() => cart.setOpen(true)}
-            aria-haspopup="dialog"
-            aria-label={`View cart, ${cartItems} ${cartItems === 1 ? 'item' : 'items'}, subtotal ${formatProductPrice(cart.cart?.subtotalCents ?? '0', cart.cart?.currency ?? 'USD')}`}
-          >
-            <span className="shop-cart-dock-count" aria-hidden="true">
-              <ShoppingCart size={21} />
-              <strong>{cartItems > 99 ? '99+' : cartItems}</strong>
-            </span>
-            <span className="shop-cart-dock-copy">
-              <small>
-                {cartItems} {cartItems === 1 ? 'item' : 'items'} in cart
-              </small>
-              <strong>
-                {formatProductPrice(
-                  cart.cart?.subtotalCents ?? '0',
-                  cart.cart?.currency ?? 'USD',
-                )}
-              </strong>
-            </span>
-            <span className="shop-cart-dock-action" aria-hidden="true">
-              View cart
-              <ArrowUpRight size={15} />
-            </span>
-          </button>
-        </div>
-      )}
+      <ShopCartDock cart={cart} />
       {cart.open && store && (
         <ShopCart
           store={store}
-          products={uniqueProducts}
+          products={[]}
           controller={cart}
           demo={demo}
           onBrowse={() => {
@@ -1226,22 +829,7 @@ export function StorePage({ slug }: { slug: string | null }) {
           onClose={() => setSelectedPost(null)}
         />
       )}
-      {toast && (
-        <div
-          key={toast.key}
-          className={`toast shop-notice is-${toast.tone}`}
-          role={toast.tone === 'error' ? 'alert' : 'status'}
-        >
-          {toast.tone === 'success' ? (
-            <Check size={16} aria-hidden="true" />
-          ) : toast.tone === 'error' ? (
-            <AlertCircle size={16} aria-hidden="true" />
-          ) : (
-            <Share2 size={16} aria-hidden="true" />
-          )}
-          {toast.text}
-        </div>
-      )}
+      <ShopToast cart={cart} notice={share.notice} />
     </div>
   );
 }

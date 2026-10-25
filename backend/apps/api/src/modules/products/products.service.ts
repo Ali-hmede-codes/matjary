@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError } from 'typeorm';
+import { Repository, QueryFailedError, IsNull } from 'typeorm';
 import {
   Store,
   StoreCategory,
@@ -58,12 +58,19 @@ export class ProductsService {
     offset: number,
     status?: ProductStatus,
     category?: ProductCategory,
+    categoryId?: string,
   ): Promise<ProductListResponseDto> {
     try {
       const where: Record<string, unknown> = { ...publicWhere('product') };
       if (storeId) where.storeId = storeId;
       if (status) where.status = status;
       if (category) where.category = category;
+      // Category pages filter on the owner-defined category row so only that
+      // section is transferred, instead of the whole catalogue. "uncategorized"
+      // keeps older products without a category reachable.
+      if (categoryId)
+        where.categoryId =
+          categoryId === 'uncategorized' ? IsNull() : categoryId;
 
       const [items, total] = await this.products.findAndCount({
         where,
@@ -88,6 +95,7 @@ export class ProductsService {
     offset: number,
     status?: ProductStatus,
     category?: ProductCategory,
+    categoryId?: string,
   ): Promise<ProductListResponseDto> {
     try {
       const store = await this.stores.findOneBy({
@@ -98,7 +106,14 @@ export class ProductsService {
         throw new NotFoundException('Store not found');
       }
 
-      return this.findAll(store.id, limit, offset, status, category);
+      return this.findAll(
+        store.id,
+        limit,
+        offset,
+        status,
+        category,
+        categoryId,
+      );
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
