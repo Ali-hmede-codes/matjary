@@ -56,6 +56,7 @@ export const ADMIN_RESOURCES: Record<string, Resource> = {
     search: ['name', 'slug'],
     owner: 'ownerId',
     archive: 'adminArchivedAt',
+    status: 'status',
   },
   products: {
     target: Product,

@@ -17,6 +17,7 @@ const actionLabels: Record<StoreLifecycleAction, string> = {
   archived: 'Archive',
   trashed: 'Move to Trash',
   restore: 'Restore',
+  delete: 'Delete permanently',
 };
 const actionDescriptions: Record<StoreLifecycleAction, string> = {
   active:
@@ -26,9 +27,11 @@ const actionDescriptions: Record<StoreLifecycleAction, string> = {
   archived:
     'Your store, products, posts, and images will be hidden from visitors. The store moves to Archived and remains editable.',
   trashed:
-    'Your store, products, posts, and images will be hidden and kept safely in Trash. Editing and uploads stop until you restore it. Nothing is permanently deleted.',
+    'Your store, products, posts, and images will be hidden and kept safely in Trash. Editing and uploads stop until you restore it. Nothing is deleted until you choose Delete permanently in Trash.',
   restore:
     'Your store and its content will be restored with the store turned off. Turn it on separately when you are ready for visitors.',
+  delete:
+    'This permanently deletes the store, its products, posts, and images. This cannot be undone.',
 };
 
 export function StoreLifecycleControls({
@@ -42,14 +45,20 @@ export function StoreLifecycleControls({
   dirty?: boolean;
   onBusyChange?: (busy: boolean) => void;
 }) {
-  const { savedStore } = useOwner();
+  const { savedStore, removedStore } = useOwner();
   const [action, setAction] = useState<StoreLifecycleAction>();
+  const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const close = () => {
+    setAction(undefined);
+    setConfirmation('');
+  };
   async function confirm() {
     if (!action || disabled || inFlight.current) return;
+    if (action === 'delete' && confirmation.trim() !== store.name) return;
     if (dirty && !window.confirm('Continue without saving your changes?'))
       return;
     inFlight.current = true;
@@ -59,6 +68,12 @@ export function StoreLifecycleControls({
     setNotice('');
     const path = `stores/${encodeURIComponent(store.slug)}`;
     try {
+      if (action === 'delete') {
+        await mutate(`${path}/permanent`, {}, 'DELETE');
+        close();
+        await removedStore(store);
+        return;
+      }
       let updated: OwnerStore;
       if (action === 'trashed') {
         await mutate(path, {}, 'DELETE');
@@ -77,7 +92,7 @@ export function StoreLifecycleControls({
                 'PATCH',
               );
       }
-      setAction(undefined);
+      close();
       await savedStore(updated, true);
       setNotice('Store status updated.');
     } catch (e) {
@@ -99,11 +114,14 @@ export function StoreLifecycleControls({
             key={value}
             type="button"
             className={
-              value === 'trashed' ? 'store-trash-action' : 'panel-secondary'
+              value === 'trashed' || value === 'delete'
+                ? 'store-trash-action'
+                : 'panel-secondary'
             }
             disabled={disabled || busy}
             onClick={() => {
               setError('');
+              setConfirmation('');
               setAction(value);
             }}
           >
@@ -115,12 +133,26 @@ export function StoreLifecycleControls({
       {error && !action && <Notice error>{error}</Notice>}
       {action && (
         <Modal
-          title={`${actionLabels[action]} ${store.name}?`}
+          title={
+            action === 'delete'
+              ? `Permanently delete ${store.name}?`
+              : `${actionLabels[action]} ${store.name}?`
+          }
           busy={busy}
-          onClose={() => setAction(undefined)}
+          onClose={close}
         >
           <p>{actionDescriptions[action]}</p>
-          {store.restricted && (
+          {action === 'delete' && (
+            <label>
+              Type “{store.name}” to confirm
+              <input
+                autoComplete="off"
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+              />
+            </label>
+          )}
+          {store.restricted && action !== 'delete' && (
             <p className="panel-muted">
               The administrator restriction will remain in place.
             </p>
@@ -131,21 +163,29 @@ export function StoreLifecycleControls({
               type="button"
               className="panel-secondary"
               disabled={busy}
-              onClick={() => setAction(undefined)}
+              onClick={close}
             >
               Cancel
             </button>
             <button
               type="button"
               className={
-                action === 'trashed'
+                action === 'trashed' || action === 'delete'
                   ? 'panel-primary store-trash-confirm'
                   : 'panel-primary'
               }
-              disabled={busy || disabled}
+              disabled={
+                busy ||
+                disabled ||
+                (action === 'delete' && confirmation.trim() !== store.name)
+              }
               onClick={() => void confirm()}
             >
-              {busy ? 'Updating…' : actionLabels[action]}
+              {busy
+                ? action === 'delete'
+                  ? 'Deleting…'
+                  : 'Updating…'
+                : actionLabels[action]}
             </button>
           </div>
         </Modal>
@@ -208,8 +248,8 @@ export function StoreManager() {
       </div>
       {tab === 'trashed' && (
         <p className="panel-muted">
-          Nothing here is permanently deleted. Restoring a store keeps it off
-          until you turn it on.
+          Restore a store to keep it, or delete it permanently to remove it and
+          its content from your account. Permanent deletion cannot be undone.
         </p>
       )}
       {!visible.length ? (

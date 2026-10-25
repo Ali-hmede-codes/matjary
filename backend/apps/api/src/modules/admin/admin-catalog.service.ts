@@ -16,6 +16,7 @@ import {
   MediaVariant,
   MediaStatus,
   ShowcaseStatus,
+  StoreStatus,
   Cart,
   CartStatus,
   SystemErrorRecord,
@@ -26,6 +27,7 @@ import {
   effectiveLimits,
   assertQuota,
   assertContentAvailable,
+  purgeStoreRecords,
   type AdminActor,
 } from '@app/database';
 import { StorageService } from '@app/storage';
@@ -37,6 +39,7 @@ import {
   AdminUserRoleDto,
 } from './admin.dto';
 import { SeoService } from '../seo/seo.service';
+import { deleteStoreObjects } from '../stores/store-media-cleanup';
 
 @Injectable()
 export class AdminCatalogService {
@@ -183,6 +186,28 @@ export class AdminCatalogService {
       );
       return { id, adminArchivedAt: item.adminArchivedAt };
     });
+  }
+
+  async purgeStore(id: string, reason: string, input: AdminActor) {
+    const actor = this.access.reason(input, reason);
+    const keys = await this.access.transaction(actor, async (manager) => {
+      const store = await manager.findOne(Store, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!store) throw new NotFoundException('Store not found');
+      // Owners reach this state first; an administrator cannot bypass the
+      // two-step Trash flow and erase an active shop in one request.
+      if (store.status !== StoreStatus.TRASHED)
+        throw new ConflictException(
+          'Move the store to Trash before deleting it permanently',
+        );
+      const keys = await purgeStoreRecords(manager, id);
+      await appendAdminAudit(manager, actor, 'stores', id, 'purge');
+      return keys;
+    });
+    await deleteStoreObjects(this.storage, keys);
+    return { id };
   }
 
   async previewMedia(id: string, actor: AdminActor, label?: string) {

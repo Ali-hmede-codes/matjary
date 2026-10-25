@@ -110,6 +110,16 @@ export class StoresController {
     return this.stores.update(slug, dto, request.user.id);
   }
 
+  @Delete(':slug/permanent')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  async purge(
+    @Param('slug') slug: string,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<void> {
+    await this.stores.purge(slug, request.user.id);
+  }
+
   @Delete(':slug')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)

@@ -324,6 +324,7 @@ function AdminList({
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
   const [archive, setArchive] = useState('all');
+  const [status, setStatus] = useState('all');
   const [selected, setSelected] = useState<PanelRecord>();
   const [assign, setAssign] = useState<PanelRecord | null | undefined>();
   const params = new URLSearchParams({
@@ -332,6 +333,7 @@ function AdminList({
     archive,
   });
   if (search) params.set('search', search);
+  if (resource === 'stores' && status !== 'all') params.set('status', status);
   const query = useQuery({
     queryKey: ['panel', id, resource, params.toString()],
     queryFn: ({ signal }) =>
@@ -413,6 +415,22 @@ function AdminList({
               </option>
             </select>
           )}
+          {resource === 'stores' && (
+            <select
+              aria-label="Store status"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setOffset(0);
+              }}
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Online</option>
+              <option value="offline">Off</option>
+              <option value="archived">Archived</option>
+              <option value="trashed">In Trash</option>
+            </select>
+          )}
         </form>
         {query.isPending ? (
           <Loading />
@@ -466,9 +484,11 @@ function AdminList({
                         : item.suspendedAt
                           ? 'Suspended'
                           : resource === 'stores'
-                            ? isStoreVerified(item)
-                              ? 'Verified'
-                              : 'Not verified'
+                            ? item.status === 'trashed'
+                              ? 'In Trash'
+                              : isStoreVerified(item)
+                                ? 'Verified'
+                                : 'Not verified'
                             : resource === 'users'
                               ? item.role === 'admin'
                                 ? 'Administrator'
@@ -561,6 +581,7 @@ function Detail({
   const [action, setAction] = useState<{
     path: string;
     title: string;
+    description?: string;
     body?: object;
     reasons: string[];
   }>();
@@ -707,9 +728,11 @@ function Detail({
               )}
             {resource === 'stores' && (
               <>
-                <Link className="panel-secondary" to={`/stores/${data.slug}`}>
-                  Open storefront
-                </Link>
+                {data.status !== 'trashed' && (
+                  <Link className="panel-secondary" to={`/stores/${data.slug}`}>
+                    Open storefront
+                  </Link>
+                )}
                 <button
                   className="panel-primary"
                   onClick={() =>
@@ -733,6 +756,26 @@ function Detail({
                 >
                   {isStoreVerified(data) ? 'Revoke badge' : 'Grant badge'}
                 </button>
+                {data.status === 'trashed' && (
+                  <button
+                    className="store-trash-action"
+                    onClick={() =>
+                      setAction({
+                        path: `admin/stores/${data.id}/purge`,
+                        title: `Permanently delete ${recordName(data)}`,
+                        description:
+                          'This removes the store, its products, posts, and uploaded media permanently. This cannot be undone.',
+                        reasons: [
+                          'Owner requested permanent deletion',
+                          'Store abandoned',
+                          'Content policy removal',
+                        ],
+                      })
+                    }
+                  >
+                    Delete permanently
+                  </button>
+                )}
               </>
             )}
             {['stores', 'products', 'posts'].includes(resource) && (
@@ -803,6 +846,7 @@ function Detail({
 function ConfirmAction({
   path,
   title,
+  description,
   body = {},
   reasons,
   id,
@@ -811,6 +855,7 @@ function ConfirmAction({
 }: {
   path: string;
   title: string;
+  description?: string;
   body?: object;
   reasons: string[];
   id: string;
@@ -838,6 +883,7 @@ function ConfirmAction({
   return (
     <Modal title={title} onClose={close} busy={busy}>
       <form onSubmit={(e) => void submit(e)} className="panel-form">
+        {description && <p>{description}</p>}
         <p>This change is recorded in the administrative activity log.</p>
         <label>
           Reason
@@ -852,7 +898,14 @@ function ConfirmAction({
           <button disabled={busy} type="button" onClick={close}>
             Go back
           </button>
-          <button disabled={busy} className="panel-primary">
+          <button
+            disabled={busy}
+            className={
+              path.endsWith('/purge')
+                ? 'panel-primary store-trash-confirm'
+                : 'panel-primary'
+            }
+          >
             {busy ? 'Saving…' : 'Confirm change'}
           </button>
         </div>

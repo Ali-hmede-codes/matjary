@@ -154,8 +154,69 @@ function lifecycleFixture() {
       notifyIndexNowOnChange: async () => {},
     } as never,
     {} as never,
+    { deleteObject: async () => {} } as never,
   );
   return { store, writes, service, manager, control };
+}
+
+function purgeFixture(status = StoreStatus.TRASHED) {
+  const store = Object.assign(new Store(), {
+    id: 'store-1',
+    slug: 'my-store',
+    name: 'My store',
+    ownerId: 'owner',
+    status,
+  });
+  const statements: { sql: string; values: unknown[] }[] = [];
+  const storage = {
+    deleted: [] as string[],
+    async deleteObject(key: string) {
+      storage.deleted.push(key);
+    },
+  };
+  const manager = {
+    async transaction<T>(work: (m: EntityManager) => Promise<T>) {
+      return work(manager as unknown as EntityManager);
+    },
+    async findOne(
+      target: unknown,
+      options: {
+        where: { id?: string; slug?: string; ownerId?: string };
+        lock: { mode: string };
+      },
+    ) {
+      assert.equal(options.lock.mode, 'pessimistic_write');
+      if (target === User)
+        return Object.assign(new User(), { id: options.where.id });
+      if (target === Store) {
+        if (
+          options.where.ownerId !== store.ownerId ||
+          options.where.slug !== store.slug
+        )
+          return null;
+        return Object.assign(new Store(), store);
+      }
+      return null;
+    },
+    async query(sql: string, values: unknown[]) {
+      statements.push({ sql, values });
+      if (sql.startsWith('SELECT original_key'))
+        return [{ storageKey: 'originals/store-1/asset-1/source' }];
+      if (sql.startsWith('SELECT variant.storage_key'))
+        return [{ storageKey: 'media/store-1/asset-1/webp-480.webp' }];
+      return [];
+    },
+  };
+  const service = new StoresService(
+    { manager } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    storage as never,
+  );
+  return { store, statements, storage, service, manager };
 }
 
 test('store lifecycle retains content and restores offline without republishing', async () => {
@@ -247,6 +308,69 @@ test('owner store edits recheck Trash under the account lock after async validat
       'owner',
     ),
     NotFoundException,
+  );
+});
+
+test('permanent store deletion is only available from Trash and removes children first', async () => {
+  const active = purgeFixture(StoreStatus.ACTIVE);
+  await assert.rejects(
+    active.service.purge('my-store', 'owner'),
+    ConflictException,
+  );
+  assert.ok(!active.statements.some(({ sql }) => sql.startsWith('DELETE')));
+  assert.deepEqual(active.storage.deleted, []);
+
+  const f = purgeFixture();
+  await f.service.purge('my-store', 'owner');
+  const statements = f.statements.map(({ sql }) => sql);
+  for (const table of [
+    'media_processing_outbox',
+    'media_variants',
+    'media_assets',
+    'engagement_flush_receipts',
+    'post_engagement',
+    'post_likes',
+    'showcase_seo',
+    'product_seo',
+    'store_seo',
+    'seo_redirects',
+    'cart_items',
+    'carts',
+    'boost_campaign_performance',
+    'boost_campaigns',
+    'products',
+    'showcases',
+    'store_categories',
+  ])
+    assert.ok(
+      statements.some((sql) => sql.startsWith(`DELETE FROM ${table} `)),
+      table,
+    );
+  assert.equal(statements.at(-1), 'DELETE FROM stores WHERE id = ?');
+  for (const statement of f.statements)
+    assert.ok(statement.values.includes('store-1'));
+  assert.deepEqual(f.storage.deleted.sort(), [
+    'media/store-1/asset-1/webp-480.webp',
+    'originals/store-1/asset-1/source',
+  ]);
+});
+
+test('permanent store deletion is owner-scoped, sanitized, and tolerates storage failures', async () => {
+  const f = purgeFixture();
+  await assert.rejects(f.service.purge('my-store', 'other'), NotFoundException);
+  f.storage.deleteObject = async () => {
+    throw new Error('storage unavailable');
+  };
+  await f.service.purge('my-store', 'owner');
+  assert.equal(f.storage.deleted.length, 0);
+  f.manager.query = async () => {
+    throw new Error('private database details');
+  };
+  await assert.rejects(
+    f.service.purge('my-store', 'owner'),
+    (error: unknown) =>
+      error instanceof ServiceUnavailableException &&
+      !error.message.includes('private database details'),
   );
 });
 

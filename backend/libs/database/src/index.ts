@@ -13,3 +13,4 @@ export * from './website-settings.entity';
 export * from './content-input';
 export * from './media-target';
 export * from './owner-write';
+export * from './store-purge';

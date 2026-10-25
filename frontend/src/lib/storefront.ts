@@ -4,7 +4,7 @@ import { contrastColor, safeUrl } from './website.ts';
 export type StoreLifecycleStatus =
   'active' | 'offline' | 'archived' | 'trashed';
 export type StoreLifecycleAction =
-  'active' | 'offline' | 'archived' | 'trashed' | 'restore';
+  'active' | 'offline' | 'archived' | 'trashed' | 'restore' | 'delete';
 export const storeStatusLabel: Record<StoreLifecycleStatus, string> = {
   active: 'Online',
   offline: 'Off',
@@ -65,7 +65,7 @@ export function storeLifecycleActions(store: {
   status: StoreLifecycleStatus;
   restricted?: boolean;
 }): StoreLifecycleAction[] {
-  if (store.status === 'trashed') return ['restore'];
+  if (store.status === 'trashed') return ['restore', 'delete'];
   if (store.status === 'archived') return ['restore', 'trashed'];
   if (!isCurrentStore(store)) return [];
   return [

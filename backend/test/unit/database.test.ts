@@ -71,6 +71,7 @@ test('store listing count queries map storeId to the MySQL column', async () => 
     null!,
     null!,
     null!,
+    null!,
   );
 
   const result = await service.findAll(undefined, 7, 0);

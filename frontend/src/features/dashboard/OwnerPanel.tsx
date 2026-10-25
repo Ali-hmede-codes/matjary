@@ -70,7 +70,18 @@ interface OwnerState {
   store?: OwnerStore;
   summary: OwnerSummary;
   savedStore: (store: OwnerStore, lifecycle?: boolean) => Promise<void>;
+  removedStore: (store: OwnerStore) => Promise<void>;
 }
+const panelQueryPrefixes = [
+  'panel',
+  'stores',
+  'storefront',
+  'storefront-products',
+  'storefront-posts',
+  'explore',
+  'categories',
+  'shop-cart',
+];
 const OwnerContext = createContext<OwnerState | null>(null);
 export function useOwner() {
   const value = useContext(OwnerContext);
@@ -87,6 +98,12 @@ export default function OwnerPanel({ session }: { session: Session }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const client = useQueryClient();
+  const refresh = () =>
+    Promise.all(
+      panelQueryPrefixes.map((prefix) =>
+        client.invalidateQueries({ queryKey: [prefix] }),
+      ),
+    );
   const stores = useQuery({
     queryKey: ['panel', session.user.id, 'my-stores'],
     queryFn: ({ signal }) =>
@@ -141,18 +158,29 @@ export default function OwnerPanel({ session }: { session: Session }) {
         { replace: true },
       );
     }
-    await Promise.all(
-      [
-        'panel',
-        'stores',
-        'storefront',
-        'storefront-products',
-        'storefront-posts',
-        'explore',
-        'categories',
-        'shop-cart',
-      ].map((prefix) => client.invalidateQueries({ queryKey: [prefix] })),
+    await refresh();
+  }
+  async function removedStore(removed: OwnerStore) {
+    const key = ['panel', session.user.id, 'my-stores'];
+    await client.cancelQueries({ queryKey: key });
+    client.setQueryData<OwnerStore[]>(key, (old) =>
+      old?.filter((item) => item.id !== removed.id),
     );
+    // A deleted shop must not stay selected or linger in the ?store= address.
+    if (selected === removed.id || requested === removed.id) {
+      setSelected('');
+      rememberOwnerStore(window.localStorage, session.user.id, null);
+      setParams(
+        (old) => {
+          const next = new URLSearchParams(old);
+          next.delete('store');
+          next.set('tab', 'trashed');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+    await refresh();
   }
   return (
     <PanelShell session={session}>
@@ -174,6 +202,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
             store,
             summary: summary.data,
             savedStore,
+            removedStore,
           }}
         >
           {selectable.length > 1 && (

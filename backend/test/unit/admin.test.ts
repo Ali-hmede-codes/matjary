@@ -38,6 +38,7 @@ import {
   SubscriptionStatus,
   ShowcaseStatus,
   ProductStatus,
+  StoreStatus,
   BoostCoin,
   BoostTransaction,
   BoostCampaign,
@@ -127,6 +128,7 @@ function fixture() {
         ),
       ]),
     );
+  const statements: { sql: string; parameters: unknown[] }[] = [];
   const name = (target: unknown) => (target as { name: string }).name;
   const managerFor = (data: Map<string, Row[]>) => {
     const find = async (target: unknown, where: Row) =>
@@ -134,7 +136,13 @@ function fixture() {
         Object.entries(where).every(([key, value]) => row[key] === value),
       ) ?? null;
     const manager = {
-      query: async (sql: string, parameters: unknown[]) => {
+      query: async (sql: string, parameters: unknown[] = []) => {
+        statements.push({ sql, parameters });
+        if (sql.startsWith('DELETE FROM ')) return [];
+        if (sql.startsWith('SELECT original_key AS storageKey'))
+          return [{ storageKey: 'originals/store/asset/source' }];
+        if (sql.startsWith('SELECT variant.storage_key AS storageKey'))
+          return [{ storageKey: 'media/store/asset/webp-480.webp' }];
         if (sql.startsWith('UPDATE `users` SET `role`')) {
           assert.match(sql, /session_version = session_version \+ 1/);
           const row = await find(User, { id: parameters[1] });
@@ -223,7 +231,13 @@ function fixture() {
   const access = new AdminAccessService(database, config);
   let jobState = 'failed';
   let removals = 0;
-  const storage = { statObject: async () => ({ size: 10 }) };
+  const deleted: string[] = [];
+  const storage = {
+    statObject: async () => ({ size: 10 }),
+    deleteObject: async (key: string) => {
+      deleted.push(key);
+    },
+  };
   const queue = {
     getQueue: () => ({
       getJob: async () => ({
@@ -263,6 +277,8 @@ function fixture() {
     access,
     add,
     rows: (target: { name: string }) => rows.get(target.name) ?? [],
+    statements: () => statements,
+    deleted: () => deleted,
     failAudit: () => {
       auditFailure = true;
     },
@@ -377,6 +393,46 @@ test('administrator catalog is read-only except audited oversight actions', asyn
   await f.catalog.badge(resourceId, false, 'Verification withdrawn', actor);
   assert.equal(f.rows(Store)[0]?.hasVerificationBadge, false);
   assert.equal(f.rows(AdminAuditLog).length, 2);
+});
+
+test('permanent store purge requires Trash, removes child records, and is audited', async () => {
+  const f = fixture();
+  const trashedId = '55555555-5555-4555-8555-555555555555';
+  f.add(Store, { id: trashedId, ownerId, status: StoreStatus.TRASHED });
+  await assert.rejects(
+    f.catalog.purgeStore(resourceId, 'Owner requested removal', actor),
+    NotFoundException,
+  );
+  f.add(Store, { id: resourceId, ownerId, status: StoreStatus.ACTIVE });
+  await assert.rejects(
+    f.catalog.purgeStore(resourceId, 'Owner requested removal', actor),
+    ConflictException,
+  );
+  assert.ok(!f.statements().some(({ sql }) => sql.startsWith('DELETE')));
+
+  await f.catalog.purgeStore(trashedId, 'Owner requested removal', actor);
+  const statements = f.statements().map(({ sql }) => sql);
+  assert.ok(statements.some((sql) => sql.startsWith('DELETE FROM products ')));
+  assert.ok(statements.some((sql) => sql.startsWith('DELETE FROM showcases ')));
+  assert.equal(statements.at(-1), 'DELETE FROM stores WHERE id = ?');
+  assert.deepEqual(f.deleted().sort(), [
+    'media/store/asset/webp-480.webp',
+    'originals/store/asset/source',
+  ]);
+  assert.equal(f.rows(AdminAuditLog).at(-1)?.action, 'purge');
+  assert.equal(f.rows(AdminAuditLog).at(-1)?.reason, 'Owner requested removal');
+});
+
+test('permanent store purge rolls back and removes no bytes when its audit fails', async () => {
+  const f = fixture();
+  const id = '66666666-6666-4666-8666-666666666666';
+  f.add(Store, { id, ownerId, status: StoreStatus.TRASHED });
+  f.failAudit();
+  await assert.rejects(
+    f.catalog.purgeStore(id, 'Owner requested removal', actor),
+    ServiceUnavailableException,
+  );
+  assert.deepEqual(f.deleted(), []);
 });
 
 test('subscription management preserves free fallback and historical assignments', async () => {

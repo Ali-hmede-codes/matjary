@@ -34,7 +34,9 @@ import {
   ShowcaseStatus,
   actorContext,
   appendAdminAudit,
+  purgeStoreRecords,
 } from '@app/database';
+import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
 import { UpdateStoreDto, UpdateStoreLocationDto } from './dto/update-store.dto';
 import { StoreResponseDto, toStoreResponseDto } from './dto/store-response.dto';
@@ -44,6 +46,7 @@ import {
 } from './services/location.service';
 import { SeoService } from '../seo/seo.service';
 import { AdminGuard } from '../auth/guards/auth.guards';
+import { deleteStoreObjects } from './store-media-cleanup';
 
 @Injectable()
 export class StoresService {
@@ -59,6 +62,7 @@ export class StoresService {
     private readonly locationService: LocationService,
     private readonly seoService: SeoService,
     private readonly admin: AdminGuard,
+    private readonly storage: StorageService,
   ) {}
 
   private sanitize(error: unknown): never {
@@ -507,6 +511,35 @@ export class StoresService {
 
   async restore(slug: string, userId: string): Promise<StoreResponseDto> {
     return this.transition(slug, 'restore', userId);
+  }
+
+  // Permanent deletion is only reachable from Trash, so a mistaken request can
+  // never erase an active shop. The locked row is checked again under the lock.
+  async purge(slug: string, userId: string): Promise<void> {
+    let keys: string[] = [];
+    try {
+      keys = await this.stores.manager.transaction(async (manager) => {
+        const user = await manager.findOne(User, {
+          where: { id: userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!user || user.suspendedAt)
+          throw new ForbiddenException('Account unavailable');
+        const store = await manager.findOne(Store, {
+          where: { slug, ownerId: userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!store) throw new NotFoundException('Store not found');
+        if (store.status !== StoreStatus.TRASHED)
+          throw new ConflictException(
+            'Move the store to Trash before deleting it permanently',
+          );
+        return purgeStoreRecords(manager, store.id);
+      });
+    } catch (error) {
+      this.sanitize(error);
+    }
+    await deleteStoreObjects(this.storage, keys);
   }
 
   private async transition(

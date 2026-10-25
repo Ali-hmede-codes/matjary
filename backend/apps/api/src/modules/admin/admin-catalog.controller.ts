@@ -109,6 +109,15 @@ export class AdminCatalogController {
     return this.catalog.badge(id, dto.enabled, dto.reason, actor);
   }
 
+  @Post('stores/:id/purge')
+  purgeStore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminReasonDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.catalog.purgeStore(id, dto.reason, actor);
+  }
+
   @Get('media/:id/preview')
   previewMedia(
     @Param('id', ParseUUIDPipe) id: string,

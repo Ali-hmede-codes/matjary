@@ -77,7 +77,7 @@ test('owner store choice is remembered per account and validated', () => {
   rememberOwnerStore(denied, 'user-a', storeId);
 });
 
-test('owner lifecycle controls only offer valid actions and Trash is restore-only', () => {
+test('owner lifecycle controls only offer valid actions and Trash offers restore or permanent delete', () => {
   assert.deepEqual(storeLifecycleActions({ status: 'active' }), [
     'offline',
     'archived',
@@ -92,7 +92,10 @@ test('owner lifecycle controls only offer valid actions and Trash is restore-onl
     'restore',
     'trashed',
   ]);
-  assert.deepEqual(storeLifecycleActions({ status: 'trashed' }), ['restore']);
+  assert.deepEqual(storeLifecycleActions({ status: 'trashed' }), [
+    'restore',
+    'delete',
+  ]);
   assert.deepEqual(
     storeLifecycleActions({ status: 'offline', restricted: true }),
     ['archived', 'trashed'],

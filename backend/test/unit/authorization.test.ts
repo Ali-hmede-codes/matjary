@@ -143,6 +143,7 @@ test('shop verification requires administrators even with an eligible subscripti
     {} as any,
     {} as any,
     new AdminGuard(config()),
+    null!,
   );
   await assert.rejects(
     service.checkBadgeEligibility('shop', 'other'),
