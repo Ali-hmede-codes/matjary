@@ -9,6 +9,7 @@ import { Repository, LessThan } from 'typeorm';
 import {
   User,
   Store,
+  StoreCategory,
   Showcase,
   Product,
   MediaAsset,
@@ -159,6 +160,10 @@ export class UserDashboardService {
       const totalMedia = totalMediaResult?.totalMedia
         ? parseInt(totalMediaResult.totalMedia, 10)
         : 0;
+      // Categories are account-wide, matching the maxCategories plan quota.
+      const totalCategories = await this.stores.manager.count(StoreCategory, {
+        where: { store: { ownerId: userId } },
+      });
 
       // 5. Build stores with counts
       const storesWithCounts: UserStoreSummaryDto[] = userStores.map(
@@ -229,6 +234,7 @@ export class UserDashboardService {
             0,
           ),
           totalMedia,
+          totalCategories,
         },
       };
     } catch (error) {
@@ -618,6 +624,7 @@ export class UserDashboardService {
       const qb = this.products
         .createQueryBuilder('p')
         .leftJoinAndSelect('p.store', 'store')
+        .leftJoinAndSelect('p.categoryRef', 'category')
         .where('store.ownerId = :userId', { userId })
         .andWhere(ownerVisibilitySql('product', 'p'))
         .orderBy('p.createdAt', 'DESC')
@@ -653,6 +660,7 @@ export class UserDashboardService {
           'p.priceCents',
           'p.currency',
           'p.category',
+          'p.categoryId',
           'p.status',
           'p.stockQuantity',
           'p.imageKeys',
@@ -663,6 +671,8 @@ export class UserDashboardService {
           'store.id',
           'store.slug',
           'store.name',
+          'category.id',
+          'category.name',
         ])
         .getMany();
 

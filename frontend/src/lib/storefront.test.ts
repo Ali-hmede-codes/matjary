@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   formatProductPrice,
+  readOwnerStoreId,
+  rememberOwnerStore,
   selectOwnerStore,
   storeLifecycleActions,
   isCurrentStore,
@@ -37,6 +39,42 @@ test('owner selection never defaults to archived, trashed, or restricted stores'
     stores.filter(isCurrentStore).map((s) => s.id),
     ['restricted', 'off'],
   );
+});
+
+test('owner store choice is remembered per account and validated', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
+  };
+  const storeId = '0b8f4bd8-8dd6-4df1-9a52-6c7c64f5f2a4';
+  assert.equal(readOwnerStoreId(storage, 'user-a'), '');
+  rememberOwnerStore(storage, 'user-a', storeId);
+  assert.equal(readOwnerStoreId(storage, 'user-a'), storeId);
+  assert.equal(readOwnerStoreId(storage, 'user-b'), '');
+  assert.equal(values.get('matjary:owner-store:user-a'), storeId);
+  rememberOwnerStore(storage, 'user-a', null);
+  assert.equal(readOwnerStoreId(storage, 'user-a'), '');
+  values.set('matjary:owner-store:user-b', 'not-a-store');
+  assert.equal(readOwnerStoreId(storage, 'user-b'), '');
+  const denied = {
+    getItem: () => {
+      throw new Error('denied');
+    },
+    setItem: () => {
+      throw new Error('denied');
+    },
+    removeItem: () => {
+      throw new Error('denied');
+    },
+  };
+  assert.equal(readOwnerStoreId(denied, 'user-a'), '');
+  rememberOwnerStore(denied, 'user-a', storeId);
 });
 
 test('owner lifecycle controls only offer valid actions and Trash is restore-only', () => {

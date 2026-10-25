@@ -12,7 +12,9 @@ export interface SubscriptionPlan {
   limits: {
     maxPostsPerMonth?: number | null;
     maxTotalPosts?: number | null;
+    maxShops?: number | null;
     maxProducts?: number | null;
+    maxCategories?: number | null;
     maxStorageBytes?: number | null;
     enableCart?: boolean;
     enableWhatsAppCheckout?: boolean;
@@ -61,6 +63,8 @@ function storageQuota(bytes: number | null | undefined): string {
 export function planFeatures(plan: SubscriptionPlan) {
   const limits = plan.limits;
   return [
+    { label: 'Max shops', value: quota(limits.maxShops) },
+    { label: 'Max categories', value: quota(limits.maxCategories) },
     { label: 'Max posts', value: quota(limits.maxTotalPosts) },
     { label: 'Max products', value: quota(limits.maxProducts) },
     { label: 'Media storage', value: storageQuota(limits.maxStorageBytes) },

@@ -63,6 +63,11 @@ import { MediaView } from './MediaView';
 import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
+const productCategoryKey = (product: Product) =>
+  product.categoryId ?? product.category;
+const productCategoryName = (product: Product) =>
+  product.categoryName ?? productCategoryLabel(product.category);
+
 function ShopImage({
   value,
   alt,
@@ -216,7 +221,7 @@ function ProductCard({
       <div className="shop-product-image">
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
         <span className="shop-product-category shop-glass">
-          {productCategoryLabel(product.category)}
+          {productCategoryName(product)}
         </span>
         {(unavailable || quantity > 0) && (
           <span className="shop-stock-label shop-glass">
@@ -433,10 +438,14 @@ export function StorePage({ slug }: { slug: string | null }) {
   const uniqueProducts = [
     ...new Map(products.map((item) => [item.id, item])).values(),
   ];
-  const categories = [...new Set(uniqueProducts.map((item) => item.category))];
+  const categoryNames = new Map<string, string>();
+  for (const item of uniqueProducts) {
+    categoryNames.set(productCategoryKey(item), productCategoryName(item));
+  }
+  const categories = [...categoryNames.keys()];
   const visible = uniqueProducts.filter(
     (item) =>
-      (!category || item.category === category) &&
+      (!category || productCategoryKey(item) === category) &&
       `${item.name} ${item.description ?? ''}`
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
@@ -1024,7 +1033,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       aria-pressed={category === item}
                       onClick={() => setCategory(item)}
                     >
-                      {productCategoryLabel(item)}
+                      {categoryNames.get(item) ?? productCategoryLabel(item)}
                     </button>
                   ))}
                 </div>
@@ -1052,14 +1061,22 @@ export function StorePage({ slug }: { slug: string | null }) {
                   <div className="shop-menu">
                     {categories
                       .filter((item) =>
-                        visible.some((product) => product.category === item),
+                        visible.some(
+                          (product) => productCategoryKey(product) === item,
+                        ),
                       )
                       .map((item) => (
                         <section className="shop-menu-group" key={item}>
-                          <h3>{productCategoryLabel(item)}</h3>
+                          <h3>
+                            {categoryNames.get(item) ??
+                              productCategoryLabel(item)}
+                          </h3>
                           <div className="shop-products">
                             {visible
-                              .filter((product) => product.category === item)
+                              .filter(
+                                (product) =>
+                                  productCategoryKey(product) === item,
+                              )
                               .map((product) => (
                                 <ProductCard
                                   key={product.id}

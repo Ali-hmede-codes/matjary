@@ -70,11 +70,25 @@ export class CreateSubscriptionLimitsDto implements Partial<SubscriptionLimits> 
   @Min(0)
   maxTotalPosts?: number | null;
 
+  // Maximum shops across the account.
+  @IsOptional()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxShops?: number | null;
+
   @IsOptional()
   @IsInt()
   @Max(Number.MAX_SAFE_INTEGER)
   @Min(0)
   maxProducts?: number | null;
+
+  // Maximum custom categories across every owned shop.
+  @IsOptional()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxCategories?: number | null;
 
   @IsOptional()
   @IsInt()

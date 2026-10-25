@@ -51,6 +51,8 @@ test('pricing distinguishes zero, unlimited, missing quotas and disabled feature
     ...plan,
     limits: {
       maxTotalPosts: 200,
+      maxShops: 5,
+      maxCategories: 40,
       maxProducts: null,
       maxStorageBytes: 1073741824,
       enableCart: true,
@@ -60,6 +62,8 @@ test('pricing distinguishes zero, unlimited, missing quotas and disabled feature
   const value = (label: string) =>
     features.find((feature) => feature.label === label)?.value;
   assert.equal(value('Max posts'), '200');
+  assert.equal(value('Max shops'), '5');
+  assert.equal(value('Max categories'), '40');
   assert.equal(value('Max products'), 'Unlimited');
   assert.equal(value('Media storage'), '1 GiB');
   assert.equal(value('Shopping cart'), true);

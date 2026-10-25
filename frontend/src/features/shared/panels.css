@@ -185,6 +185,9 @@
 }
 .panel-app label {
   display: grid;
+  /* Keep text/input/help stacked at their natural size: a taller sibling cell
+     must not inflate this label's rows (which would stretch its input). */
+  align-content: start;
   gap: 8px;
   font-weight: 600;
 }
@@ -709,17 +712,22 @@
 .panel-two-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  align-items: start;
   gap: 16px;
 }
 /* Compact quota fields: as many columns as fit, never a cramped input. */
 .panel-field-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* Top-align cells so fields with helper text keep inputs on the same line
+     and no field is stretched to the height of its tallest neighbour. */
+  align-items: start;
   gap: 14px;
 }
 .panel-feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  align-items: start;
   gap: 12px 18px;
 }
 .panel-form fieldset > label,

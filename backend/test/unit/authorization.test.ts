@@ -806,6 +806,8 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
         slug: 'basic',
         limits: {
           maxProducts: null,
+          maxShops: 5,
+          maxCategories: 40,
           maxImageCount: 0,
           maxStorageBytes: 999,
           maxPostsPerMonth: 3,
@@ -815,6 +817,8 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
   ];
   const limits = await effectiveLimits(manager, 'owner', now);
   assert.equal(limits.maxProducts, null);
+  assert.equal(limits.maxShops, 5);
+  assert.equal(limits.maxCategories, 40);
   assert.equal(limits.maxImageCount, 0);
   // Storage never becomes a plan cap, even when an older row carries one.
   assert.equal(limits.maxStorageBytes, null);
@@ -824,4 +828,10 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
   assert.equal(boundedLimit(90, null), 90);
   assert.equal(boundedLimit(90, 200), 90);
   assert.throws(() => assertQuota(0, 0, 'Image'));
+  // Plans that omit the new quotas inherit the free-plan values, and the
+  // expired state closes both of them.
+  assert.equal(FREE_LIMITS.maxShops, 1);
+  assert.equal(FREE_LIMITS.maxCategories, 10);
+  assert.equal(EXPIRED_LIMITS.maxShops, 0);
+  assert.equal(EXPIRED_LIMITS.maxCategories, 0);
 });

@@ -9,6 +9,7 @@ import { UsersModule } from './modules/users/users.module';
 import { StorageModule } from '@app/storage';
 import { StoresModule } from './modules/stores/stores.module';
 import { ProductsModule } from './modules/products/products.module';
+import { CategoriesModule } from './modules/categories/categories.module';
 import { CartsModule } from './modules/carts/carts.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { UserDashboardModule } from './modules/user-dashboard/user-dashboard.module';
@@ -32,6 +33,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     HealthModule,
     StoresModule,
     ProductsModule,
+    CategoriesModule,
     CartsModule,
     SubscriptionsModule,
     UserDashboardModule,

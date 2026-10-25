@@ -27,7 +27,9 @@ export interface PlanLimits {
   maxImageHeight?: number | null;
   maxPostsPerMonth?: number | null;
   maxTotalPosts?: number | null;
+  maxShops?: number | null;
   maxProducts?: number | null;
+  maxCategories?: number | null;
   maxStorageBytes?: number | null;
   enableCart?: boolean;
   enableWhatsAppCheckout?: boolean;

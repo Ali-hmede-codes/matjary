@@ -35,6 +35,8 @@ export interface Product {
   priceCents: string;
   currency: string;
   category: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
   stockQuantity: number | null;
   imageKeys: string[] | null;
   tags: string[] | null;

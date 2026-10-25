@@ -114,6 +114,8 @@ export class UserProductSummaryDto {
   priceCents!: string;
   currency!: string;
   category!: string;
+  categoryId!: string | null;
+  categoryName!: string | null;
   status!: 'draft' | 'active' | 'archived' | 'out_of_stock';
   stockQuantity!: number | null;
   imageKeys!: string[] | null;
@@ -135,6 +137,8 @@ export class UserProductSummaryDto {
     dto.priceCents = product.priceCents;
     dto.currency = product.currency;
     dto.category = product.category;
+    dto.categoryId = product.categoryId ?? null;
+    dto.categoryName = product.categoryRef?.name ?? null;
     dto.status = product.status;
     dto.stockQuantity = product.stockQuantity;
     dto.imageKeys = product.imageKeys;
@@ -193,5 +197,6 @@ export class DashboardSummaryDto {
     publishedPosts: number;
     activeProducts: number;
     totalMedia: number;
+    totalCategories: number;
   };
 }

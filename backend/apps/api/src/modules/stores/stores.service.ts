@@ -240,7 +240,22 @@ export class StoresService {
         ...locationData,
       });
 
-      const saved = await this.stores.save(store);
+      const saved = await this.stores.manager.transaction(async (manager) => {
+        const owner = await manager.findOne(User, {
+          where: { id: ownerId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!owner || owner.suspendedAt)
+          throw new NotFoundException('Store not found');
+        await assertSubscriptionActive(manager, ownerId);
+        const limits = await effectiveLimits(manager, ownerId);
+        // Trashed shops keep their rows but release a shop slot.
+        const count = await manager.count(Store, {
+          where: { ownerId, status: Not(StoreStatus.TRASHED) },
+        });
+        assertQuota(count, limits.maxShops, 'Store');
+        return manager.save(store);
+      });
 
       // Auto-generate SEO for the new store
       try {
@@ -528,6 +543,15 @@ export class StoresService {
           next = action;
         }
         if (store.status === next) return toStoreResponseDto(store, true);
+        // Restoring from Trash re-occupies a shop slot; archived shops already
+        // count toward the plan quota.
+        if (action === 'restore' && store.status === StoreStatus.TRASHED) {
+          const limits = await effectiveLimits(manager, userId);
+          const count = await manager.count(Store, {
+            where: { ownerId: userId, status: Not(StoreStatus.TRASHED) },
+          });
+          assertQuota(count, limits.maxShops, 'Store');
+        }
         if (next === StoreStatus.ACTIVE && store.adminArchivedAt)
           throw new ForbiddenException(
             'This store is restricted by an administrator',

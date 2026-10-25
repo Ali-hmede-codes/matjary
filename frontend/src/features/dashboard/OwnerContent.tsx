@@ -21,7 +21,11 @@ import {
   useUnsaved,
 } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
-import { formatProductPrice, storeMediaUrl } from '../../lib/storefront';
+import {
+  formatProductPrice,
+  productCategoryLabel,
+  storeMediaUrl,
+} from '../../lib/storefront';
 import { useOwner } from './OwnerPanel';
 
 interface Content {
@@ -34,10 +38,23 @@ interface Content {
   priceCents?: string;
   currency?: string;
   category?: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
   stockQuantity?: number | null;
   imageKeys?: string[] | null;
   // Posts carry their first ready media variant here; products use imageKeys.
   thumbnailKey?: string | null;
+}
+interface Category {
+  id: string;
+  name: string;
+  sortOrder: number;
+  productCount?: number;
+}
+interface CategoryList {
+  items: Category[];
+  total: number;
+  limit?: number | null;
 }
 interface PostMedia {
   id: string;
@@ -50,7 +67,18 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState('');
   const [editor, setEditor] = useState<Content | null | undefined>();
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const product = kind === 'products';
+  const categoryQuery = useQuery({
+    queryKey: ['categories', store!.slug, 'my'],
+    queryFn: ({ signal }) =>
+      getJson<CategoryList>(
+        `stores/${encodeURIComponent(store!.slug)}/categories/my`,
+        signal,
+      ),
+    enabled: product,
+  });
   const params = new URLSearchParams({
     storeId: store!.id,
     limit: '20',
@@ -62,7 +90,6 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
     queryFn: ({ signal }) =>
       getJson<Page<Content>>(`dashboard/${kind}?${params}`, signal),
   });
-  const product = kind === 'products';
   // Never index into a missing envelope: an unexpected payload must degrade to
   // an empty list instead of taking the whole panel down.
   const items = query.data?.items ?? [];
@@ -112,6 +139,11 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
             {product && <option value="out_of_stock">Out of stock</option>}
           </select>
         </label>
+        {product && (
+          <button type="button" onClick={() => setCategoriesOpen(true)}>
+            Manage categories
+          </button>
+        )}
         <Link to="/dashboard/plan">View my plan limits</Link>
       </div>
       {query.isPending ? (
@@ -171,6 +203,16 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
           <Pagination total={total} offset={offset} onChange={setOffset} />
         </>
       )}
+      {categoriesOpen && (
+        <CategoryManager
+          slug={store!.slug}
+          close={() => setCategoriesOpen(false)}
+          changed={() => {
+            void categoryQuery.refetch();
+            void query.refetch();
+          }}
+        />
+      )}
       {editor !== undefined && (
         <ContentEditor
           key={editor?.id || 'new'}
@@ -206,10 +248,7 @@ function ContentEditor({
     item?.priceCents ? decimalPrice(item.priceCents) : '',
   );
   const [currency, setCurrency] = useState(item?.currency || 'USD');
-  const [category, setCategory] = useState(
-    item?.category ||
-      (store?.storeType === 'restaurant_menu' ? 'food' : 'other'),
-  );
+  const [categoryId, setCategoryId] = useState(item?.categoryId ?? '');
   const [stock, setStock] = useState(
     item?.stockQuantity == null ? '' : String(item.stockQuantity),
   );
@@ -225,7 +264,7 @@ function ContentEditor({
     name,
     price,
     currency,
-    category,
+    categoryId,
     stock,
     description,
     keys,
@@ -240,6 +279,15 @@ function ContentEditor({
     enabled: !product && Boolean(record),
     refetchInterval: (query) =>
       query.state.data?.some((a) => a.status === 'processing') ? 3000 : false,
+  });
+  const categoryList = useQuery({
+    queryKey: ['categories', store!.slug, 'my'],
+    queryFn: ({ signal }) =>
+      getJson<CategoryList>(
+        `stores/${encodeURIComponent(store!.slug)}/categories/my`,
+        signal,
+      ),
+    enabled: product,
   });
   const existingPending =
     !product &&
@@ -281,7 +329,7 @@ function ContentEditor({
               name: name.trim(),
               priceCents: cents,
               currency,
-              category,
+              categoryId: categoryId || null,
               stockQuantity: stock === '' ? null : Number(stock),
               ...(record ? { imageKeys: keys } : {}),
               ...(!record
@@ -414,15 +462,21 @@ function ContentEditor({
             <label>
               Category
               <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
               >
-                <option value="other">General</option>
-                <option value="food">Food</option>
-                <option value="beverage">Drinks</option>
-                <option value="merchandise">Merchandise</option>
-                <option value="service">Services</option>
+                <option value="">No category</option>
+                {(categoryList.data?.items ?? []).map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
               </select>
+              <small>
+                {item?.categoryId == null && item?.category
+                  ? `Legacy category: ${productCategoryLabel(item.category)}. Choose a shop category to replace it.`
+                  : 'Categories are managed per shop and count toward your plan.'}
+              </small>
             </label>
           </>
         )}
@@ -572,6 +626,180 @@ function ContentEditor({
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function CategoryManager({
+  slug,
+  close,
+  changed,
+}: {
+  slug: string;
+  close: () => void;
+  changed: () => void;
+}) {
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ['categories', slug, 'my'],
+    queryFn: ({ signal }) =>
+      getJson<CategoryList>(
+        `stores/${encodeURIComponent(slug)}/categories/my`,
+        signal,
+      ),
+  });
+  const [name, setName] = useState('');
+  const [renames, setRenames] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const path = `stores/${encodeURIComponent(slug)}/categories`;
+  const limit = query.data?.limit;
+
+  async function refresh() {
+    await client.invalidateQueries({ queryKey: ['categories', slug] });
+    changed();
+  }
+
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    const value = name.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await mutate(path, { name: value });
+      setName('');
+      setNotice('Category added.');
+      await refresh();
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rename(category: Category) {
+    const value = (renames[category.id] ?? category.name).trim();
+    if (!value || value === category.name || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await mutate(`${path}/${category.id}`, { name: value }, 'PATCH');
+      setRenames((current) => {
+        const next = { ...current };
+        delete next[category.id];
+        return next;
+      });
+      setNotice('Category renamed.');
+      await refresh();
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(category: Category) {
+    if (busy || (category.productCount ?? 0) > 0) return;
+    if (!window.confirm(`Delete “${category.name}”?`)) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await mutate(`${path}/${category.id}`, {}, 'DELETE');
+      setNotice('Category deleted.');
+      await refresh();
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Categories" onClose={close} busy={busy}>
+      <p className="panel-muted">
+        {query.data
+          ? `${query.data.total} of ${limit == null ? 'unlimited' : limit} categories used across all your shops.`
+          : 'Categories group the items in this shop.'}
+      </p>
+      <form className="panel-toolbar" onSubmit={(e) => void add(e)}>
+        <input
+          maxLength={100}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="New category name"
+          aria-label="New category name"
+        />
+        <button className="panel-primary" disabled={busy || !name.trim()}>
+          Add category
+        </button>
+      </form>
+      {notice && <Notice>{notice}</Notice>}
+      {query.isPending ? (
+        <Loading />
+      ) : query.isError ? (
+        <Retry error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.items.length ? (
+        <div className="panel-list-card">
+          {query.data.items.map((category) => {
+            const value = renames[category.id] ?? category.name;
+            const used = category.productCount ?? 0;
+            return (
+              <div className="panel-record" key={category.id}>
+                <div className="panel-record-info">
+                  <input
+                    maxLength={100}
+                    value={value}
+                    onChange={(e) =>
+                      setRenames((current) => ({
+                        ...current,
+                        [category.id]: e.target.value,
+                      }))
+                    }
+                    aria-label={`Name for ${category.name}`}
+                  />
+                  <p>
+                    {used} {used === 1 ? 'item' : 'items'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || value.trim() === category.name}
+                  onClick={() => void rename(category)}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || used > 0}
+                  title={
+                    used > 0
+                      ? 'Move or delete its products first'
+                      : 'Delete category'
+                  }
+                  onClick={() => void remove(category)}
+                >
+                  Delete
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <Empty title="No categories yet">
+          <p>Add a category to group menu items or products.</p>
+        </Empty>
+      )}
+      {error && <Notice error>{error}</Notice>}
+      <div className="panel-actions">
+        <button type="button" onClick={close}>
+          Close
+        </button>
+      </div>
     </Modal>
   );
 }

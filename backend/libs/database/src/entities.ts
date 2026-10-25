@@ -94,8 +94,14 @@ export interface SubscriptionLimits {
   maxPostsPerMonth?: number | null; // legacy monthly quota; not enforced
   maxTotalPosts?: number | null; // max posts across the account; null = unlimited
 
+  // Store limits
+  maxShops?: number | null; // max shops across the account; null = unlimited
+
   // Product limits (for ecommerce)
   maxProducts?: number | null; // null = unlimited (for ecommerce shops)
+
+  // Custom categories shared across every owned shop (menu or ecommerce).
+  maxCategories?: number | null; // max categories across the account; null = unlimited
 
   // Storage limits
   maxStorageBytes?: number | null; // null = unlimited
@@ -675,6 +681,29 @@ export class UserSubscription extends BaseEntity {
   externalStatus!: string | null;
 }
 
+// Owner-defined categories for every shop type (menu or ecommerce). The table
+// is store-scoped, while the plan quota counts rows across all owned shops.
+@Entity({ name: 'store_categories', engine: 'InnoDB' })
+@Index('uq_store_categories_store_name', ['storeId', 'name'], { unique: true })
+@Index('idx_store_categories_store_sort', ['storeId', 'sortOrder'])
+export class StoreCategory extends BaseEntity {
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_store_categories_store',
+  })
+  store!: Relation<Store>;
+
+  @Column({ type: 'varchar', length: 100 })
+  name!: string;
+
+  @Column({ name: 'sort_order', type: 'int', unsigned: true, default: 0 })
+  sortOrder!: number;
+}
+
 export enum ProductStatus {
   DRAFT = 'draft',
   ACTIVE = 'active',
@@ -734,12 +763,23 @@ export class Product extends BaseEntity {
   @Column({ name: 'currency', type: 'varchar', length: 3, default: 'USD' })
   currency!: string;
 
+  // Legacy fixed category kept for older rows; new writes use categoryId.
   @Column({
     type: 'enum',
     enum: ProductCategory,
     default: ProductCategory.OTHER,
   })
   category!: ProductCategory;
+
+  @Column({ name: 'category_id', type: 'varchar', length: 36, nullable: true })
+  categoryId!: string | null;
+
+  @ManyToOne(() => StoreCategory, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'category_id',
+    foreignKeyConstraintName: 'fk_products_category',
+  })
+  categoryRef!: Relation<StoreCategory | null>;
 
   @Column({ type: 'enum', enum: ProductStatus, default: ProductStatus.DRAFT })
   status!: ProductStatus;
@@ -1626,6 +1666,7 @@ export const databaseEntities = [
   User,
   Showcase,
   Store,
+  StoreCategory,
   Product,
   Cart,
   CartItem,

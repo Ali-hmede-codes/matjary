@@ -367,6 +367,7 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
   const service = new UserDashboardService(
     {} as never,
     {
+      manager: { count: async () => 0 },
       find: async ({
         where,
       }: {
@@ -381,6 +382,7 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
     repository('product') as never,
     {
       manager: {
+        count: async () => 0,
         query: async (sql: string, values: string[]) => {
           assert.deepEqual(values, [ownerId]);
           assert.match(sql, /a.store_id/);

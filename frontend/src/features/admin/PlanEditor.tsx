@@ -23,7 +23,9 @@ const PLATFORM_DEFAULTS: PlanLimits = {
   maxImageHeight: 1080,
   maxPostsPerMonth: null,
   maxTotalPosts: 20,
+  maxShops: 1,
   maxProducts: 10,
+  maxCategories: 10,
   // Storage is unlimited for every plan; only file/duration ceilings apply.
   maxStorageBytes: null,
   enableCart: true,
@@ -55,6 +57,8 @@ const counted = (value?: number | null) =>
 function limitFields(plan?: PanelRecord) {
   const limits: PlanLimits = { ...PLATFORM_DEFAULTS, ...plan?.limits };
   return {
+    maxShops: counted(limits.maxShops),
+    maxCategories: counted(limits.maxCategories),
     maxProducts: counted(limits.maxProducts),
     maxTotalPosts: counted(limits.maxTotalPosts),
     maxImageCount: counted(limits.maxImageCount),
@@ -149,6 +153,8 @@ export function planSummary(limits?: PlanLimits) {
       ? `Unlimited ${noun}`
       : `${value.toLocaleString('en-US')} ${noun}`;
   return [
+    quotaText(merged.maxShops, 'shops'),
+    quotaText(merged.maxCategories, 'categories'),
     quotaText(merged.maxProducts, 'products'),
     quotaText(merged.maxTotalPosts, 'posts'),
     'Unlimited storage',
@@ -205,6 +211,8 @@ export function PlanEditor({
     if (form.badgePrice.trim() && badgePrice === null)
       errors.push('Badge price');
     const limits: PlanLimits = {
+      maxShops: quota(form.maxShops, 'Max shops', errors),
+      maxCategories: quota(form.maxCategories, 'Max categories', errors),
       maxProducts: quota(form.maxProducts, 'Max products', errors),
       // The legacy monthly quota is disabled; one total maximum is used.
       maxPostsPerMonth: null,
@@ -391,6 +399,24 @@ export function PlanEditor({
             file-size and duration ceilings still apply.
           </p>
           <div className="panel-field-grid">
+            <label>
+              Max shops
+              <input
+                inputMode="numeric"
+                value={form.maxShops}
+                onChange={(e) => update({ maxShops: e.target.value })}
+              />
+              <small>How many shops one owner can create.</small>
+            </label>
+            <label>
+              Max categories
+              <input
+                inputMode="numeric"
+                value={form.maxCategories}
+                onChange={(e) => update({ maxCategories: e.target.value })}
+              />
+              <small>Total across every shop the owner creates.</small>
+            </label>
             <label>
               Max products
               <input

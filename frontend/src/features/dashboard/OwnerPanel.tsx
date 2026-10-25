@@ -22,6 +22,8 @@ import {
   storeMediaUrl,
   isStoreVerified,
   isCurrentStore,
+  readOwnerStoreId,
+  rememberOwnerStore,
   selectOwnerStore,
   storeStatusLabel,
   type StoreLifecycleStatus,
@@ -30,6 +32,7 @@ import { getJson, dateLabel, type Session } from '../shared/panel-api';
 import {
   Empty,
   Loading,
+  Modal,
   PageTitle,
   PanelShell,
   Retry,
@@ -75,7 +78,12 @@ export function useOwner() {
   return value;
 }
 export default function OwnerPanel({ session }: { session: Session }) {
-  const [selected, setSelected] = useState('');
+  // This panel remounts on every tab change, so the chosen store is restored
+  // from device storage instead of falling back to the first store.
+  const [selected, setSelected] = useState(() =>
+    readOwnerStoreId(window.localStorage, session.user.id),
+  );
+  const [pendingStore, setPendingStore] = useState('');
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -90,12 +98,30 @@ export default function OwnerPanel({ session }: { session: Session }) {
   });
   const requested = params.get('store');
   useEffect(() => {
-    if (requested) setSelected(requested);
-  }, [requested]);
-  const store = selectOwnerStore(stores.data ?? [], requested || selected);
-  const selectable = (stores.data ?? []).filter(
+    if (!requested) return;
+    setSelected(requested);
+    rememberOwnerStore(window.localStorage, session.user.id, requested);
+  }, [requested, session.user.id]);
+  const available = stores.data ?? [];
+  // An explicit ?store= link wins. A remembered store falls back to the
+  // default once it is archived, trashed, or restricted.
+  const store = requested
+    ? selectOwnerStore(available, requested)
+    : (selectOwnerStore(available, selected) ?? selectOwnerStore(available));
+  const selectable = available.filter(
     (s) => !s.restricted && (isCurrentStore(s) || s.id === store?.id),
   );
+  const pending = selectable.find((s) => s.id === pendingStore);
+  function switchStore(id: string) {
+    setSelected(id);
+    rememberOwnerStore(window.localStorage, session.user.id, id);
+    setParams((old) => {
+      const next = new URLSearchParams(old);
+      next.set('store', id);
+      return next;
+    });
+    setPendingStore('');
+  }
   async function savedStore(updated: OwnerStore, lifecycle = false) {
     const key = ['panel', session.user.id, 'my-stores'];
     await client.cancelQueries({ queryKey: key });
@@ -104,9 +130,12 @@ export default function OwnerPanel({ session }: { session: Session }) {
         ? old.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))
         : [...(old ?? []), updated],
     );
-    if (!lifecycle) setSelected(updated.id);
-    else if (store?.id === updated.id && !isCurrentStore(updated)) {
+    if (!lifecycle) {
+      setSelected(updated.id);
+      rememberOwnerStore(window.localStorage, session.user.id, updated.id);
+    } else if (store?.id === updated.id && !isCurrentStore(updated)) {
       setSelected('');
+      rememberOwnerStore(window.localStorage, session.user.id, null);
       navigate(
         `/dashboard/stores?tab=${updated.status === 'trashed' ? 'trashed' : 'archived'}`,
         { replace: true },
@@ -153,16 +182,8 @@ export default function OwnerPanel({ session }: { session: Session }) {
               <select
                 value={store?.id}
                 onChange={(e) => {
-                  if (
-                    window.confirm('Switch stores? Save any changes first.')
-                  ) {
-                    setSelected(e.target.value);
-                    setParams((old) => {
-                      const next = new URLSearchParams(old);
-                      next.set('store', e.target.value);
-                      return next;
-                    });
-                  }
+                  if (e.target.value !== store?.id)
+                    setPendingStore(e.target.value);
                 }}
               >
                 {selectable.map((s) => (
@@ -172,6 +193,39 @@ export default function OwnerPanel({ session }: { session: Session }) {
                 ))}
               </select>
             </label>
+          )}
+          {pending && (
+            <Modal
+              title={`Switch to ${pending.name}?`}
+              onClose={() => setPendingStore('')}
+            >
+              <p>
+                {store
+                  ? `You’re working in ${store.name}. Switching opens ${pending.name} instead.`
+                  : `Switching opens ${pending.name}.`}
+              </p>
+              <p className="panel-muted">
+                Save any changes to the current store first — unsaved edits are
+                discarded when you switch. Your choice is remembered on this
+                device.
+              </p>
+              <div className="store-lifecycle-actions">
+                <button
+                  type="button"
+                  className="panel-secondary"
+                  onClick={() => setPendingStore('')}
+                >
+                  Stay in {store?.name ?? 'the current store'}
+                </button>
+                <button
+                  type="button"
+                  className="panel-primary"
+                  onClick={() => switchStore(pending.id)}
+                >
+                  Switch store
+                </button>
+              </div>
+            </Modal>
           )}
           <PlanBanner />
           <Routes>
@@ -384,6 +438,8 @@ function OwnerPlan() {
             ? `Expires ${dateLabel(summary.subscription.expiresAt)}`
             : 'A great place to start your business.';
   const limits = [
+    ['Shops', 'maxShops', 'totalStores'],
+    ['Categories', 'maxCategories', 'totalCategories'],
     ['Products', 'maxProducts', 'totalProducts'],
     ['Total posts', 'maxTotalPosts', 'totalPosts'],
   ] as const;

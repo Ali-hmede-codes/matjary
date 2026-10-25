@@ -60,7 +60,7 @@ export const ADMIN_RESOURCES: Record<string, Resource> = {
   products: {
     target: Product,
     fields: fields(
-      'id storeId slug name description priceCents currency category status sku stockQuantity weightGrams imageKeys tags sortOrder requiresShipping adminArchivedAt createdAt updatedAt',
+      'id storeId slug name description priceCents currency category categoryId status sku stockQuantity weightGrams imageKeys tags sortOrder requiresShipping adminArchivedAt createdAt updatedAt',
     ),
     search: ['name', 'slug'],
     parent: 'storeId',

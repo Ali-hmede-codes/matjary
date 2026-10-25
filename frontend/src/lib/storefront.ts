@@ -27,6 +27,40 @@ export function selectOwnerStore<
       )
     : stores.find((store) => isCurrentStore(store) && !store.restricted);
 }
+// The owner panel remounts on every tab change, so the chosen store must be
+// remembered per account. Without this the workspace silently fell back to
+// the first current store whenever a tab was opened.
+const ownerStoreStorageKey = (userId: string) =>
+  `matjary:owner-store:${userId}`;
+const storeIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+export function readOwnerStoreId(
+  storage: Pick<Storage, 'getItem'>,
+  userId: string,
+): string {
+  try {
+    const value = storage.getItem(ownerStoreStorageKey(userId))?.trim() ?? '';
+    return storeIdPattern.test(value) ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+export function rememberOwnerStore(
+  storage: Pick<Storage, 'setItem' | 'removeItem'>,
+  userId: string,
+  storeId: string | null,
+) {
+  try {
+    if (storeId && storeIdPattern.test(storeId))
+      storage.setItem(ownerStoreStorageKey(userId), storeId);
+    else storage.removeItem(ownerStoreStorageKey(userId));
+  } catch {
+    // Private browsing can refuse storage; the in-memory choice still works.
+  }
+}
+
 export function storeLifecycleActions(store: {
   status: StoreLifecycleStatus;
   restricted?: boolean;

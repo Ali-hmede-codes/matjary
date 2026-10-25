@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
   ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
 import {
   Store,
+  StoreCategory,
   Product,
   ProductStatus,
   ProductCategory,
@@ -65,6 +67,7 @@ export class ProductsService {
 
       const [items, total] = await this.products.findAndCount({
         where,
+        relations: ['categoryRef'],
         order: { sortOrder: 'ASC', createdAt: 'DESC' },
         take: limit,
         skip: offset,
@@ -114,14 +117,15 @@ export class ProductsService {
         status: ProductStatus.ACTIVE,
         ...publicWhere('product'),
       };
-      const product = await this.products.findOneBy(
-        userId
+      const product = await this.products.findOne({
+        where: userId
           ? [
               publicItem,
               { slug, store: { ownerId: userId }, ...ownerWhere('product') },
             ]
           : publicItem,
-      );
+        relations: ['categoryRef'],
+      });
       if (!product) {
         throw new NotFoundException('Product not found');
       }
@@ -152,8 +156,8 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto> {
     try {
-      const { saved, store } = await this.products.manager.transaction(
-        async (manager) => {
+      const { saved, store, categoryName } =
+        await this.products.manager.transaction(async (manager) => {
           await manager.findOneOrFail(User, {
             where: { id: userId },
             lock: { mode: 'pessimistic_write' },
@@ -174,6 +178,15 @@ export class ProductsService {
           if (store.ownerId !== userId) {
             throw new ForbiddenException('You do not own this store');
           }
+
+          const category = dto.categoryId
+            ? await manager.findOneBy(StoreCategory, {
+                id: dto.categoryId,
+                storeId,
+              })
+            : null;
+          if (dto.categoryId && !category)
+            throw new BadRequestException('Category not found for this store');
 
           const slug = await chooseContentSlug(dto.name, dto.slug, (value) =>
             manager.getRepository(Product).findOneBy({ slug: value }),
@@ -196,6 +209,7 @@ export class ProductsService {
             priceCents: dto.priceCents.toString(),
             currency: dto.currency ?? 'USD',
             category: dto.category ?? ProductCategory.OTHER,
+            categoryId: category?.id ?? null,
             status: dto.status ?? ProductStatus.DRAFT,
             sku: dto.sku ?? null,
             stockQuantity: dto.stockQuantity ?? null,
@@ -208,9 +222,8 @@ export class ProductsService {
           });
 
           const saved = await manager.save(product);
-          return { saved, store };
-        },
-      );
+          return { saved, store, categoryName: category?.name ?? null };
+        });
 
       // Auto-generate SEO for the new product
       try {
@@ -220,12 +233,13 @@ export class ProductsService {
         this.logger.warn('Failed to auto-generate product SEO:', error);
       }
 
-      return toProductResponseDto(saved);
+      return toProductResponseDto(saved, categoryName);
     } catch (error) {
       if (
         error instanceof ConflictException ||
         error instanceof NotFoundException ||
-        error instanceof ForbiddenException
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -287,11 +301,36 @@ export class ProductsService {
       if (dto.requiresShipping !== undefined)
         product.requiresShipping = dto.requiresShipping;
 
-      const saved = await this.products.manager.transaction(async (manager) => {
-        await lockOwnerContent(manager, 'product', product.id, userId);
-        await assertSubscriptionActive(manager, userId);
-        return manager.save(product);
-      });
+      const { saved, categoryName } = await this.products.manager.transaction(
+        async (manager) => {
+          await lockOwnerContent(manager, 'product', product.id, userId);
+          await assertSubscriptionActive(manager, userId);
+          let categoryName: string | null = null;
+          if (dto.categoryId === null) {
+            product.categoryId = null;
+          } else if (dto.categoryId !== undefined) {
+            const category = await manager.findOneBy(StoreCategory, {
+              id: dto.categoryId,
+              storeId: product.storeId,
+            });
+            if (!category)
+              throw new BadRequestException(
+                'Category not found for this store',
+              );
+            product.categoryId = category.id;
+            categoryName = category.name;
+          } else if (product.categoryId) {
+            categoryName =
+              (
+                await manager.findOneBy(StoreCategory, {
+                  id: product.categoryId,
+                  storeId: product.storeId,
+                })
+              )?.name ?? null;
+          }
+          return { saved: await manager.save(product), categoryName };
+        },
+      );
 
       // Auto-regenerate SEO if content changed and notify IndexNow
       try {
@@ -302,12 +341,13 @@ export class ProductsService {
         this.logger.warn('Failed to auto-generate product SEO:', error);
       }
 
-      return toProductResponseDto(saved);
+      return toProductResponseDto(saved, categoryName);
     } catch (error) {
       if (
         error instanceof NotFoundException ||
         error instanceof ForbiddenException ||
-        error instanceof ConflictException
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -373,10 +413,11 @@ export class ProductsService {
 
       const products = await this.products.find({
         where: { storeId, ...ownerWhere('product') },
+        relations: ['categoryRef'],
         order: { sortOrder: 'ASC', createdAt: 'DESC' },
       });
 
-      return products.map(toProductResponseDto);
+      return products.map((product) => toProductResponseDto(product));
     } catch (error) {
       if (
         error instanceof NotFoundException ||

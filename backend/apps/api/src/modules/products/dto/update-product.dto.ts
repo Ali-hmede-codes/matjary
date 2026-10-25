@@ -10,6 +10,7 @@ import {
   IsEnum,
   IsArray,
   IsUrl,
+  IsUUID,
 } from 'class-validator';
 import { ProductCategory, ProductStatus } from '@app/database';
 
@@ -38,6 +39,11 @@ export class UpdateProductDto {
   @IsOptional()
   @IsEnum(ProductCategory)
   category?: ProductCategory;
+
+  // Owner-defined shop category. Null clears the assignment.
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string | null;
 
   @IsOptional()
   @IsEnum(ProductStatus)

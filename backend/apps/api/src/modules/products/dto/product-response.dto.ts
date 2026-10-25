@@ -9,6 +9,8 @@ export class ProductResponseDto {
   priceCents!: string; // BIGINT stays as string
   currency!: string;
   category!: ProductCategory;
+  categoryId!: string | null;
+  categoryName!: string | null;
   status!: ProductStatus;
   sku!: string | null;
   stockQuantity!: number | null;
@@ -26,7 +28,10 @@ export class ProductListResponseDto {
   total!: number;
 }
 
-export function toProductResponseDto(product: Product): ProductResponseDto {
+export function toProductResponseDto(
+  product: Product,
+  categoryName: string | null = product.categoryRef?.name ?? null,
+): ProductResponseDto {
   return {
     id: product.id,
     storeId: product.storeId,
@@ -36,6 +41,8 @@ export function toProductResponseDto(product: Product): ProductResponseDto {
     priceCents: product.priceCents,
     currency: product.currency,
     category: product.category,
+    categoryId: product.categoryId ?? null,
+    categoryName,
     status: product.status,
     sku: product.sku,
     stockQuantity: product.stockQuantity,

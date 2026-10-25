@@ -155,7 +155,7 @@ export function StoreLifecycleControls({
 }
 
 export function StoreManager() {
-  const { stores } = useOwner();
+  const { stores, summary } = useOwner();
   const [params, setParams] = useSearchParams();
   const tab =
     params.get('tab') === 'archived'
@@ -166,6 +166,8 @@ export function StoreManager() {
   const matches = (store: OwnerStore, value: string) =>
     value === 'current' ? isCurrentStore(store) : store.status === value;
   const visible = stores.filter((store) => matches(store, tab));
+  const usedSlots = stores.filter((store) => store.status !== 'trashed').length;
+  const maxShops = summary.limits.maxShops;
   return (
     <>
       <PageTitle
@@ -178,6 +180,11 @@ export function StoreManager() {
           </Link>
         }
       />
+      <p className="panel-muted">
+        {maxShops == null
+          ? 'Your plan includes unlimited shops.'
+          : `${usedSlots} of ${String(maxShops)} shop slots in use. Trashed shops do not count.`}
+      </p>
       <div className="store-manager-tabs" role="group" aria-label="Store lists">
         {(
           [

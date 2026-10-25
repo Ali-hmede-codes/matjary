@@ -11,6 +11,7 @@ import {
   IsEnum,
   IsArray,
   IsUrl,
+  IsUUID,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -45,6 +46,11 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductCategory)
   category?: ProductCategory;
+
+  // Owner-defined shop category. Null clears the assignment on update.
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string | null;
 
   @IsOptional()
   @IsEnum(ProductStatus)

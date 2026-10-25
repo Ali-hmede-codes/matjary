@@ -19,7 +19,10 @@ export const FREE_LIMITS: SubscriptionLimits = {
   // and PlanEditor no longer exposes it.
   maxPostsPerMonth: null,
   maxTotalPosts: 20,
+  maxShops: 1,
   maxProducts: 10,
+  // One category allowance covers every shop the owner creates.
+  maxCategories: 10,
   // Storage is a platform resource, not a plan entitlement. Every plan is
   // unlimited; only global per-file/duration ceilings still apply.
   maxStorageBytes: null,
@@ -44,7 +47,9 @@ export const EXPIRED_LIMITS: SubscriptionLimits = {
   maxImageHeight: 0,
   maxPostsPerMonth: 0,
   maxTotalPosts: 0,
+  maxShops: 0,
   maxProducts: 0,
+  maxCategories: 0,
   maxStorageBytes: 0,
   enableCart: false,
   enableWhatsAppCheckout: false,
