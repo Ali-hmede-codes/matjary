@@ -64,7 +64,8 @@
 }
 @media (max-width: 900px) {
   .toast {
-    bottom: calc(80px + env(safe-area-inset-bottom));
+    /* Stay above the floating navigation dock. */
+    bottom: calc(104px + env(safe-area-inset-bottom));
     width: max-content;
   }
 }

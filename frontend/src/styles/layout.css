@@ -25,9 +25,10 @@
   }
 }
 @media (max-width: 900px) {
+  /* Clears the floating navigation dock, which sits above the safe area. */
   .page-shell {
     margin-left: 0;
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
   }
 }
 @media (max-width: 600px) {

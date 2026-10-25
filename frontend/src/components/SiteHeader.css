@@ -2,16 +2,38 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
 }
+/* The glass lives on a pseudo-element: a backdrop-filter on .topbar (or on the
+   header) would become the containing block of the fixed mobile nav, which is a
+   child of this flex row. */
 .topbar {
+  position: relative;
+  isolation: isolate;
   min-height: 72px;
   margin: 0 auto;
   padding: 14px var(--page-padding);
   display: flex;
   align-items: center;
   gap: 24px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: 0 14px 34px -30px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+.topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  pointer-events: none;
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .topbar::before {
+    background: var(--surface);
+  }
 }
 .brand {
   display: inline-flex;
@@ -145,25 +167,47 @@
   display: none;
 }
 @media (max-width: 900px) {
+  /* A floating glass dock above the safe area, not a full-width bar. */
   .main-nav {
-    inset: auto 0 0;
-    width: auto;
+    position: fixed;
+    inset: auto 0 calc(10px + env(safe-area-inset-bottom));
+    width: min(calc(100% - 24px), 520px);
+    margin-inline: auto;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
-    padding: 7px 12px calc(7px + env(safe-area-inset-bottom));
-    background: var(--surface);
-    border-top: 1px solid var(--line);
+    gap: 2px;
+    padding: 7px;
+    border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--surface) 76%, transparent);
+    -webkit-backdrop-filter: blur(24px) saturate(1.7);
+    backdrop-filter: blur(24px) saturate(1.7);
+    box-shadow:
+      0 24px 46px -22px color-mix(in srgb, var(--ink) 42%, transparent),
+      0 2px 10px color-mix(in srgb, var(--ink) 7%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--surface) 55%, #ffffff);
     z-index: 40;
+  }
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    .main-nav {
+      background: var(--surface);
+    }
   }
   .main-nav :is(button, a) {
     flex-direction: column;
     justify-content: center;
-    gap: 4px;
-    min-height: 48px;
-    padding: 6px;
+    gap: 3px;
+    min-height: 52px;
+    padding: 6px 4px;
     font-size: 10px;
-    border-radius: 13px;
+    letter-spacing: 0.1px;
+    border-radius: 17px;
+  }
+  .main-nav :is(button, a).active {
+    box-shadow: 0 12px 20px -14px
+      color-mix(in srgb, var(--primary) 85%, transparent);
   }
 }
 @media (max-width: 600px) {
