@@ -7,6 +7,7 @@ import { In, type EntityTarget, type ObjectLiteral } from 'typeorm';
 import {
   AdminAuditLog,
   BoostCampaign,
+  BoostCampaignStatus,
   BoostCoin,
   BoostTransaction,
   Cart,
@@ -351,12 +352,40 @@ export class AdminQueriesService {
   private async summaries(name: string, items: ObjectLiteral[]) {
     if (
       !items.length ||
-      !['stores', 'products', 'posts', 'subscriptions'].includes(name)
+      ![
+        'stores',
+        'products',
+        'posts',
+        'subscriptions',
+        'campaigns',
+        'wallets',
+        'transactions',
+      ].includes(name)
     )
       return items;
     const manager = this.access.database.manager;
+    const showcaseIds = [
+      ...new Set(items.map((item) => item.targetShowcaseId).filter(Boolean)),
+    ] as string[];
+    const showcaseTargets = showcaseIds.length
+      ? await manager.find(Showcase, {
+          where: { id: In(showcaseIds) },
+          select: ['id', 'title', 'slug', 'storeId'],
+        })
+      : [];
+    const showcaseMap = new Map(
+      showcaseTargets.map((showcase) => [showcase.id, showcase]),
+    );
     const storeIds = [
-      ...new Set(items.map((item) => item.storeId).filter(Boolean)),
+      ...new Set(
+        items
+          .flatMap((item) => [
+            item.storeId,
+            item.targetStoreId,
+            showcaseMap.get(item.targetShowcaseId)?.storeId,
+          ])
+          .filter(Boolean),
+      ),
     ] as string[];
     const stores = storeIds.length
       ? await manager.find(Store, {
@@ -394,20 +423,47 @@ export class AdminQueriesService {
         })
       : [];
     const planMap = new Map(plans.map((plan) => [plan.id, plan]));
-    return items.map((item) => ({
-      ...item,
-      store: storeMap.get(item.storeId),
-      owner: ownerMap.get(
-        item.ownerId || item.userId || storeMap.get(item.storeId)?.ownerId,
-      ),
-      plan: planMap.get(item.planId),
-    }));
+    return items.map((item) => {
+      const targetShowcase = showcaseMap.get(item.targetShowcaseId);
+      const showcaseStoreId = targetShowcase?.storeId ?? undefined;
+      return {
+        ...item,
+        store: storeMap.get(item.storeId),
+        owner: ownerMap.get(
+          item.ownerId || item.userId || storeMap.get(item.storeId)?.ownerId,
+        ),
+        plan: planMap.get(item.planId),
+        targetName:
+          item.targetType === 'store'
+            ? storeMap.get(item.targetStoreId)?.name
+            : targetShowcase?.title,
+        targetSlug:
+          item.targetType === 'store'
+            ? storeMap.get(item.targetStoreId)?.slug
+            : targetShowcase?.slug,
+        targetStoreSlug:
+          item.targetType === 'store'
+            ? storeMap.get(item.targetStoreId)?.slug
+            : showcaseStoreId
+              ? storeMap.get(showcaseStoreId)?.slug
+              : undefined,
+      };
+    });
   }
 
   async overview(actor: AdminActor) {
     await this.access.check(actor);
     const manager = this.access.database.manager;
-    const [users, stores, products, posts, media, errors] = await Promise.all([
+    const [
+      users,
+      stores,
+      products,
+      posts,
+      media,
+      errors,
+      wallets,
+      activeCampaigns,
+    ] = await Promise.all([
       manager.count(User),
       manager.count(Store),
       manager.count(Product),
@@ -418,7 +474,20 @@ export class AdminQueriesService {
         .createQueryBuilder('error')
         .where("error.state != 'resolved'")
         .getCount(),
+      manager.count(BoostCoin),
+      manager.count(BoostCampaign, {
+        where: { status: BoostCampaignStatus.ACTIVE },
+      }),
     ]);
-    return { users, stores, products, posts, media, errors };
+    return {
+      users,
+      stores,
+      products,
+      posts,
+      media,
+      errors,
+      wallets,
+      activeCampaigns,
+    };
   }
 }

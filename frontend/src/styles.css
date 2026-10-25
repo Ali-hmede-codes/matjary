@@ -12,6 +12,8 @@
 @import './components/FeedPosts.css';
 @import './components/MediaView.css';
 @import './components/PostCard.css';
+@import './components/AdCard.css';
+@import './components/TrendingStores.css';
 @import './components/PostActions.css';
 @import './components/SiteFooter.css';
 @import './components/Feedback.css';

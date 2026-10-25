@@ -42,7 +42,9 @@ import {
   BoostCoin,
   BoostTransaction,
   BoostCampaign,
+  BoostCampaignPerformance,
   BoostCampaignStatus,
+  BoostBidStrategy,
   BoostTargetType,
 } from '../../libs/database/src/entities';
 import {
@@ -664,6 +666,50 @@ test('campaign review, pause, resume and cancel preserve spending and enforce ta
   assert.equal(f.rows(BoostCampaign)[0]?.spentCoins, '100');
   assert.equal(f.rows(BoostCoin)[0]?.balance, '1000');
   assert.equal(f.rows(BoostTransaction).length, 0);
+});
+
+test('ad delivery debits reserved coins once and completes an exhausted campaign', async () => {
+  const f = fixture();
+  f.add(BoostCoin, { userId: ownerId, balance: '1000' });
+  f.add(Store, { id: resourceId, ownerId, adminArchivedAt: null });
+  const campaignId = randomUUID();
+  f.add(BoostCampaign, {
+    id: campaignId,
+    userId: ownerId,
+    status: BoostCampaignStatus.ACTIVE,
+    targetType: BoostTargetType.STORE,
+    targetStoreId: resourceId,
+    budgetCoins: '5',
+    spentCoins: '0',
+    bidStrategy: BoostBidStrategy.CPC,
+    bidAmountCoins: '5',
+    startAt: new Date(0),
+    endAt: null,
+  });
+  const repository = {
+    findOne: (options: { where: object }) =>
+      f.access.database.manager.findOne(BoostCampaign, options),
+  };
+  const boosts = new BoostService(
+    {} as never,
+    {} as never,
+    repository as never,
+    {} as never,
+    { find: async () => [] } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    f.access.database,
+    config,
+  );
+  await boosts.recordClick(campaignId);
+  assert.equal(f.rows(BoostCoin)[0]?.balance, '995');
+  assert.equal(f.rows(BoostCampaign)[0]?.spentCoins, '5');
+  assert.equal(f.rows(BoostCampaign)[0]?.status, BoostCampaignStatus.COMPLETED);
+  assert.equal(f.rows(BoostCampaignPerformance)[0]?.clicks, '1');
+  assert.equal(f.rows(BoostCampaignPerformance)[0]?.spendCoins, '5');
+  assert.equal(f.rows(BoostTransaction)[0]?.amount, '-5');
+  await assert.rejects(boosts.recordClick(campaignId), BadRequestException);
 });
 
 test('admin mutations recheck privilege, protect administrators and revoke old session versions', async () => {

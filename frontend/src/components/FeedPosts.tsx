@@ -7,7 +7,9 @@ import {
   Plus,
   RefreshCw,
 } from 'lucide-react';
+import { Fragment } from 'react';
 import type { DiscoveryFeedController } from '../hooks/useDiscoveryFeed';
+import { AdCard } from './AdCard';
 import { PostCard } from './PostCard';
 
 type FeedPostsProps = Pick<
@@ -17,6 +19,7 @@ type FeedPostsProps = Pick<
   | 'layout'
   | 'view'
   | 'posts'
+  | 'ads'
   | 'withLikes'
   | 'liking'
   | 'likePost'
@@ -35,6 +38,7 @@ export function FeedPosts({
   layout,
   view,
   posts,
+  ads,
   withLikes,
   liking,
   likePost,
@@ -90,21 +94,33 @@ export function FeedPosts({
         <div
           className={`post-grid ${layout === 'grid' ? 'compact-grid' : ''} ${view === 'videos' ? 'video-feed' : ''}`}
         >
-          {posts.map((post, index) => (
-            <PostCard
-              key={`${view}:${post.id}`}
-              post={withLikes(post)}
-              preferVideo={view === 'videos'}
-              index={index}
-              liking={liking}
-              onLike={() => void likePost(post)}
-              onNotice={setNotice}
-              saved={saved.includes(post.id)}
-              onSave={() => savePost(post.id)}
-              onOpen={(index) => openPost(post, index)}
-              demo={demo}
-            />
-          ))}
+          {posts.map((post, index) => {
+            // Sponsored cards appear after every fourth post. Short feeds still
+            // show one at the end so a first campaign is never invisible.
+            const slot = posts.length < 4 ? posts.length : 4;
+            const adIndex = (index + 1) / slot - 1;
+            const ad =
+              (index + 1) % slot === 0 && view !== 'saved'
+                ? ads[adIndex]
+                : undefined;
+            return (
+              <Fragment key={`${view}:${post.id}`}>
+                <PostCard
+                  post={withLikes(post)}
+                  preferVideo={view === 'videos'}
+                  index={index}
+                  liking={liking}
+                  onLike={() => void likePost(post)}
+                  onNotice={setNotice}
+                  saved={saved.includes(post.id)}
+                  onSave={() => savePost(post.id)}
+                  onOpen={(index) => openPost(post, index)}
+                  demo={demo}
+                />
+                {ad && <AdCard ad={ad} />}
+              </Fragment>
+            );
+          })}
         </div>
       )}
       {(demo || (!feed.isPending && !feed.isError)) && posts.length === 0 && (

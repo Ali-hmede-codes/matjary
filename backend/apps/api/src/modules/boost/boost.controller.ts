@@ -32,6 +32,7 @@ import {
   BoostCampaignPerformanceSummaryDto,
   CampaignActionResponseDto,
   BoostedContentResponseDto,
+  TrendingBoostStoreDto,
   BoostTargetingDto,
   BoostCreativeDto,
   ReviewCampaignDto,
@@ -41,6 +42,7 @@ import {
   AuthOriginGuard,
   AuthRateLimitGuard,
   SessionGuard,
+  OptionalSessionGuard,
   AdminGuard,
   AuthenticatedRequest,
 } from '../auth/guards/auth.guards';
@@ -259,14 +261,15 @@ export class BoostController {
   // ============================================
 
   @Get('feed/ads')
+  @UseGuards(OptionalSessionGuard)
   async getFeedAds(
-    @Req() request?: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
     @Query('interests') interests?: string,
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit?: number,
   ): Promise<BoostedContentResponseDto[]> {
-    const userId = request?.user?.id;
+    const userId = request.user?.id;
     const location =
       lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : undefined;
     const interestList = interests ? interests.split(',') : undefined;
@@ -285,12 +288,22 @@ export class BoostController {
       targetId: ad.targetId,
       targetName: ad.targetName,
       targetSlug: ad.targetSlug,
+      targetStoreSlug: ad.targetStoreSlug,
       targetImageKey: ad.targetImageKey,
       creative: ad.creative,
       sponsoredBy: ad.sponsoredBy,
       sponsoredById: ad.sponsoredById,
       cta: ad.cta,
     }));
+  }
+
+  @Get('trending/stores')
+  async getTrendingStores(
+    @Query('limit', new DefaultValuePipe(6), ParseIntPipe) limit: number,
+  ): Promise<TrendingBoostStoreDto[]> {
+    return this.boostService.getTrendingStores(
+      Math.min(Math.max(limit, 1), 12),
+    );
   }
 
   // Track ad impression (called by frontend when ad is shown)

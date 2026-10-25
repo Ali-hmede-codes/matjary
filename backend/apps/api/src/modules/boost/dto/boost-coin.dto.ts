@@ -462,10 +462,25 @@ export class BoostedContentResponseDto {
   targetId!: string;
   targetName!: string;
   targetSlug!: string;
+  targetStoreSlug?: string;
   targetImageKey?: string;
   creative?: BoostCreativeDto;
   // Ad metadata
   sponsoredBy!: string; // Store/user name
   sponsoredById!: string;
+  cta?: string;
+}
+
+export class TrendingBoostStoreDto {
+  campaignId!: string;
+  id!: string;
+  name!: string;
+  slug!: string;
+  logoKey?: string;
+  brandColor?: string;
+  city?: string;
+  country?: string;
+  headline?: string;
+  sponsoredBy!: string;
   cta?: string;
 }

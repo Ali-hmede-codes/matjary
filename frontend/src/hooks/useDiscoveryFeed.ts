@@ -1,9 +1,11 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
+  getFeedAds,
   getJson,
   registerPostView,
   togglePostLike,
+  type BoostAd,
   type Category,
   type Feed,
   type Post,
@@ -73,6 +75,13 @@ export function useDiscoveryFeed() {
       getJson<Category[]>('feed/explore/categories', signal),
     enabled: !demo,
   });
+  const adsQuery = useQuery({
+    queryKey: ['boost', 'feed-ads'],
+    queryFn: ({ signal }) => getFeedAds(signal),
+    enabled: !demo,
+    staleTime: 120_000,
+    retry: 0,
+  });
   const feed = useInfiniteQuery({
     queryKey: ['explore', algorithm, category, store?.slug],
     initialPageParam: '',
@@ -90,6 +99,7 @@ export function useDiscoveryFeed() {
   });
   const stores = demo ? demoStores : (storesQuery.data?.items ?? []);
   const categories = demo ? sampleCategories : (categoriesQuery.data ?? []);
+  const ads: BoostAd[] = demo ? [] : (adsQuery.data ?? []);
   const source = demo
     ? demoPosts.filter(
         (post) =>
@@ -232,6 +242,7 @@ export function useDiscoveryFeed() {
     feed,
     stores,
     categories,
+    ads,
     source,
     posts,
     isLoading,

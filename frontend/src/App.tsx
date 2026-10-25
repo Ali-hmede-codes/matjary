@@ -7,6 +7,7 @@ import { PostDialog } from './components/PostDialog';
 import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
 import { StoreStrip } from './components/StoreStrip';
+import { TrendingStores } from './components/TrendingStores';
 import { StorePage } from './components/StorePage';
 import { PricingPage } from './components/PricingPage';
 import { storeSlugFromPath } from './lib/storefront';
@@ -150,6 +151,7 @@ function DiscoveryPage() {
                 Stores couldn’t load right now.
               </StatusBanner>
             )}
+            {!demo && view === 'trending' && <TrendingStores />}
             <section
               id="discover-feed"
               className="discover-feed"

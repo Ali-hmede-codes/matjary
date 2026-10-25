@@ -104,6 +104,116 @@ export interface Category {
   count: number;
 }
 
+export type AdCallToAction =
+  'shop_now' | 'learn_more' | 'visit_store' | 'contact' | 'book_now';
+
+export interface BoostAd {
+  id: string;
+  type: 'ad';
+  targetType: 'showcase' | 'store';
+  targetId: string;
+  targetName: string;
+  targetSlug: string;
+  targetStoreSlug?: string;
+  targetImageKey?: string;
+  creative?: {
+    headline?: string;
+    description?: string;
+    callToAction?: AdCallToAction;
+  };
+  sponsoredBy: string;
+  sponsoredById: string;
+  cta?: string;
+}
+
+export interface TrendingBoostStore {
+  campaignId: string;
+  id: string;
+  name: string;
+  slug: string;
+  logoKey?: string;
+  brandColor?: string;
+  city?: string;
+  country?: string;
+  headline?: string;
+  sponsoredBy: string;
+  cta?: string;
+}
+
+export interface BoostBalance {
+  balance: string;
+  balanceNumber: number;
+  pendingSpend: string;
+  availableBalance: string;
+  availableBalanceNumber: number;
+}
+
+export interface BoostTransaction {
+  id: string;
+  type: string;
+  amount: string;
+  amountNumber: number;
+  balanceBefore: string;
+  balanceAfter: string;
+  referenceId?: string;
+  referenceType?: string;
+  description?: string;
+  createdAt: string;
+}
+
+export interface BoostCampaign {
+  id: string;
+  userId: string;
+  name: string;
+  targetType: 'showcase' | 'store';
+  targetId: string;
+  targetName?: string;
+  targetSlug?: string;
+  targetImageKey?: string;
+  status:
+    | 'draft'
+    | 'pending_review'
+    | 'active'
+    | 'paused'
+    | 'completed'
+    | 'rejected'
+    | 'cancelled';
+  budgetCoins: string;
+  spentCoins: string;
+  remainingCoins: string;
+  dailyBudgetCoins?: string;
+  bidStrategy: 'cpc' | 'cpm' | 'auto';
+  bidAmountCoins?: string;
+  creative?: {
+    headline?: string;
+    description?: string;
+    callToAction?: AdCallToAction;
+  };
+  startAt?: string;
+  endAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+}
+
+export interface BoostCampaignStats {
+  campaignId: string;
+  totalImpressions: number;
+  totalClicks: number;
+  totalSpendCoins: number;
+  avgCtr: number;
+  avgCpcCoins: number;
+}
+
+export interface BoostPublicSettings {
+  coinPriceCents: number;
+  minPurchaseCoins: number;
+  maxPurchaseCoins: number;
+  minCampaignBudgetCoins: number;
+  maxCampaignDurationDays: number;
+  cpcMinBidCoins: number;
+  cpmMinBidCoins: number;
+}
+
 export const loginUrl = '/login';
 export const assetUrl = (value: string | null | undefined) =>
   mediaUrl(value, __DEV_BACKEND_ORIGIN__);
@@ -191,4 +301,37 @@ export async function getJson<T>(
   // Never display driver errors, response bodies, or credentials in the UI.
   if (!response.ok) throw await toApiError(response);
   return response.json() as Promise<T>;
+}
+
+export function getFeedAds(signal?: AbortSignal) {
+  return getJson<BoostAd[]>('boost/feed/ads?limit=6', signal);
+}
+
+export function getTrendingBoostStores(signal?: AbortSignal) {
+  return getJson<TrendingBoostStore[]>('boost/trending/stores?limit=6', signal);
+}
+
+// Ad telemetry is best effort: a tracking failure must never block the click
+// or interrupt someone browsing the feed.
+export async function trackAdEvent(
+  campaignId: string,
+  event: 'impression' | 'click',
+): Promise<void> {
+  try {
+    await fetch(
+      `/api/v1/boost/ads/${encodeURIComponent(campaignId)}/${event}`,
+      {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+  } catch {
+    /* Delivery telemetry is optional. */
+  }
 }

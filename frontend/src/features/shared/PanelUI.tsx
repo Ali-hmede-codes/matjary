@@ -38,6 +38,7 @@ export function PanelShell({
         ['/users', 'Users'],
         ['/stores', 'Stores'],
         ['/content', 'Content'],
+        ['/boost', 'Boost'],
         ['/subscriptions', 'Subscriptions'],
         ['/subscriptions/plans', 'Plans'],
         ['/verification', 'Verification'],
@@ -48,6 +49,7 @@ export function PanelShell({
         ['/store', 'Store editor'],
         ['/products', 'Products / menu'],
         ['/posts', 'Posts'],
+        ['/boost', 'Boost'],
         ['/plan', 'My plan'],
       ];
   async function logout() {

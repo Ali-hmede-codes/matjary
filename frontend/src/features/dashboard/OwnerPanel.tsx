@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   BadgeCheck,
   ImagePlus,
+  Megaphone,
   Package,
   Palette,
   Plus,
@@ -39,6 +40,7 @@ import {
 } from '../shared/PanelUI';
 import { StoreEditor } from './StoreEditor.tsx';
 import { OwnerContent } from './OwnerContent.tsx';
+import { OwnerBoost } from './OwnerBoost';
 import { StoreManager } from './StoreManager';
 
 export interface OwnerStore extends Store {
@@ -292,6 +294,10 @@ export default function OwnerPanel({ session }: { session: Session }) {
               }
             />
             <Route path="plan" element={<OwnerPlan />} />
+            <Route
+              path="boost"
+              element={store ? <OwnerBoost key={store.id} /> : <NoStore />}
+            />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </OwnerContext.Provider>
@@ -437,6 +443,12 @@ function OwnerHome() {
           <Palette />
           <strong>Refresh your look</strong>
           <span>Pick colors and upload your branding.</span>
+          <ArrowUpRight />
+        </Link>
+        <Link to="/dashboard/boost">
+          <Megaphone />
+          <strong>Boost a post</strong>
+          <span>Use coins to reach more people.</span>
           <ArrowUpRight />
         </Link>
       </div>

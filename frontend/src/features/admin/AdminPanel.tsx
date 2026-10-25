@@ -4,6 +4,7 @@ import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import {
   ArrowUpRight,
   BadgeCheck,
+  Coins,
   CreditCard,
   Plus,
   Search,
@@ -39,6 +40,7 @@ import {
   isStoreVerified,
 } from '../../lib/storefront';
 import { BILLING_LABELS, PlanEditor, planSummary } from './PlanEditor';
+import { AdminBoost } from './AdminBoost';
 
 type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
 export default function AdminPanel({ session }: { session: Session }) {
@@ -88,6 +90,7 @@ export default function AdminPanel({ session }: { session: Session }) {
           path="subscriptions/plans"
           element={<AdminPlans id={session.user.id} />}
         />
+        <Route path="boost" element={<AdminBoost id={session.user.id} />} />
         <Route
           path="verification"
           element={
@@ -115,6 +118,13 @@ function Overview({ id }: { id: string }) {
     { label: 'Stores', key: 'stores', href: 'stores', icon: Store },
     { label: 'Products', key: 'products', href: 'content', icon: Package },
     { label: 'Posts', key: 'posts', href: 'content/posts', icon: Images },
+    { label: 'Boost wallets', key: 'wallets', href: 'boost', icon: Coins },
+    {
+      label: 'Active ads',
+      key: 'activeCampaigns',
+      href: 'boost',
+      icon: Coins,
+    },
   ];
   return (
     <>

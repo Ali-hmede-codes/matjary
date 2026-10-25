@@ -3,8 +3,6 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -14,8 +12,6 @@ import {
   DataSource,
   In,
   Between,
-  LessThanOrEqual,
-  MoreThanOrEqual,
   type EntityManager,
 } from 'typeorm';
 import { randomUUID as uuidv4 } from 'node:crypto';
@@ -48,7 +44,11 @@ import {
   User,
   Showcase,
   Store,
+  MediaAsset,
+  MediaStatus,
+  MediaVariant,
   publicWhere,
+  publicVisibilitySql,
   assertContentAvailable,
   assertSubscriptionActive,
   requireAdmin,
@@ -57,6 +57,29 @@ import {
   actorContext,
   type AdminActor,
 } from '@app/database';
+
+// Campaign delivery is billed in whole coins so balances never drift into
+// fractions. CPM bids are per 1,000 impressions and are charged once per
+// completed block; CPC and AUTO campaigns pay per click.
+export function billableDeliveryCoins(
+  strategy: BoostBidStrategy,
+  bidAmountCoins: string | null,
+  fallbackCpcCoins: number,
+  metric: 'impressions' | 'clicks',
+  dailyImpressions: bigint,
+): bigint {
+  if (metric === 'clicks') {
+    if (strategy === BoostBidStrategy.CPC)
+      return bidAmountCoins ? coinAmount(bidAmountCoins) : 0n;
+    if (strategy === BoostBidStrategy.AUTO)
+      return BigInt(Math.max(0, Math.trunc(fallbackCpcCoins)));
+    return 0n;
+  }
+  if (strategy !== BoostBidStrategy.CPM || !bidAmountCoins) return 0n;
+  return dailyImpressions > 0n && dailyImpressions % 1000n === 0n
+    ? coinAmount(bidAmountCoins)
+    : 0n;
+}
 
 @Injectable()
 export class BoostService {
@@ -271,11 +294,19 @@ export class BoostService {
     coinPriceCents: number;
     minPurchaseCoins: number;
     maxPurchaseCoins: number;
+    minCampaignBudgetCoins: number;
+    maxCampaignDurationDays: number;
+    cpcMinBidCoins: number;
+    cpmMinBidCoins: number;
   }> {
     return {
       coinPriceCents: await this.getCoinPriceCents(),
       minPurchaseCoins: await this.getMinPurchaseCoins(),
       maxPurchaseCoins: await this.getMaxPurchaseCoins(),
+      minCampaignBudgetCoins: await this.getMinCampaignBudgetCoins(),
+      maxCampaignDurationDays: await this.getMaxCampaignDurationDays(),
+      cpcMinBidCoins: await this.getCpcMinBidCoins(),
+      cpmMinBidCoins: await this.getCpmMinBidCoins(),
     };
   }
 
@@ -377,11 +408,16 @@ export class BoostService {
         ]),
       },
     });
+    const now = Date.now();
     return campaigns.reduce(
       (sum, campaign) =>
-        sum +
-        coinAmount(campaign.budgetCoins) -
-        coinAmount(campaign.spentCoins),
+        // A campaign whose schedule has passed cannot serve again, so its
+        // remaining budget is released without waiting for a status write.
+        campaign.endAt && campaign.endAt.getTime() <= now
+          ? sum
+          : sum +
+            coinAmount(campaign.budgetCoins) -
+            coinAmount(campaign.spentCoins),
       0n,
     );
   }
@@ -569,9 +605,9 @@ export class BoostService {
       if (!showcase) throw new NotFoundException('Showcase not found');
       if (showcase.ownerId !== userId)
         throw new ForbiddenException('You can only boost your own showcases');
-      if (showcase.status !== 'published')
+      if (showcase.status !== 'published' || !showcase.storeId)
         throw new BadRequestException(
-          'Only published showcases can be boosted',
+          'Only posts published to a shop can be boosted',
         );
       return {
         name: showcase.title,
@@ -593,6 +629,24 @@ export class BoostService {
     }
   }
 
+  private async postPreviewKey(
+    showcaseId: string,
+  ): Promise<string | undefined> {
+    const asset = await this.showcaseRepo.manager.findOne(MediaAsset, {
+      where: {
+        showcaseId,
+        status: MediaStatus.READY,
+        ...publicWhere('media'),
+      },
+      order: { position: 'ASC' },
+    });
+    if (!asset) return undefined;
+    const variant = await this.showcaseRepo.manager.findOne(MediaVariant, {
+      where: { assetId: asset.id, label: 'webp-480' },
+    });
+    return variant?.storageKey ?? asset.originalKey ?? undefined;
+  }
+
   async getCampaignTargetInfo(
     targetType: BoostTargetType,
     targetId: string,
@@ -605,7 +659,7 @@ export class BoostService {
         return {
           name: showcase.title,
           slug: showcase.slug,
-          imageKey: undefined,
+          imageKey: await this.postPreviewKey(showcase.id),
         };
       }
     } else {
@@ -983,16 +1037,87 @@ export class BoostService {
     metric: 'clicks' | 'impressions',
     date: Date,
   ): Promise<void> {
+    // Read the cached setting before locking the campaign and wallet.
+    const fallbackCpcCoins = await this.getCpcMinBidCoins();
     await this.mutateCampaign(
       campaignId,
       undefined,
-      async (campaign, _wallet, manager) => {
+      async (campaign, wallet, manager) => {
         this.assertActive(campaign, date);
         await this.visibleCampaign(manager, campaign);
-        await manager.query(
-          `INSERT INTO boost_campaign_performance (campaign_id, date, ${metric}) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE ${metric} = ${metric} + 1`,
-          [campaignId, date.toISOString().slice(0, 10)],
+        const dateStr = date.toISOString().slice(0, 10);
+        const daily =
+          (await manager.findOneBy(BoostCampaignPerformance, {
+            campaignId,
+            date: dateStr,
+          })) ??
+          manager.create(BoostCampaignPerformance, {
+            campaignId,
+            date: dateStr,
+            impressions: '0',
+            clicks: '0',
+            spendCoins: '0',
+          });
+
+        if (metric === 'impressions')
+          daily.impressions = String(coinAmount(daily.impressions) + 1n);
+        else daily.clicks = String(coinAmount(daily.clicks) + 1n);
+
+        // Delivery charges are derived from the stored counters, so a retried
+        // tracking request can never bill the same block twice.
+        const charge = billableDeliveryCoins(
+          campaign.bidStrategy,
+          campaign.bidAmountCoins,
+          fallbackCpcCoins,
+          metric,
+          coinAmount(daily.impressions),
         );
+        const budget = coinAmount(campaign.budgetCoins);
+        let spent = coinAmount(campaign.spentCoins);
+        const today = coinAmount(daily.spendCoins);
+        const balance = coinAmount(wallet.balance);
+        const withinTotalBudget = spent + charge <= budget;
+        const withinDailyBudget =
+          !campaign.dailyBudgetCoins ||
+          today + charge <= coinAmount(campaign.dailyBudgetCoins);
+        const affordable =
+          charge > 0n && withinTotalBudget && withinDailyBudget;
+
+        if (affordable && balance >= charge) {
+          wallet.balance = String(balance - charge);
+          spent += charge;
+          daily.spendCoins = String(today + charge);
+          await manager.save(wallet);
+          await manager.insert(BoostTransaction, {
+            id: uuidv4(),
+            operationId: `ad-${metric === 'clicks' ? 'click' : 'imp'}-${campaignId}-${dateStr}-${metric === 'clicks' ? daily.clicks : daily.impressions}`,
+            userId: campaign.userId,
+            type: BoostTransactionType.CAMPAIGN_SPEND,
+            amount: String(-charge),
+            balanceBefore: String(balance),
+            balanceAfter: wallet.balance,
+            referenceId: campaignId,
+            referenceType: BoostTransactionReferenceType.CAMPAIGN,
+            description:
+              metric === 'clicks' ? 'Campaign click' : 'Campaign impressions',
+            metadata: { date: dateStr, metric },
+          });
+          campaign.spentCoins = String(spent);
+        }
+
+        // A reserved wallet is how campaigns fail safely: when the reservation
+        // can no longer cover delivery, stop serving instead of going negative.
+        if (charge > 0n && balance < charge) {
+          campaign.status = BoostCampaignStatus.PAUSED;
+          campaign.pausedAt = new Date();
+        }
+        if (spent >= budget) {
+          campaign.status = BoostCampaignStatus.COMPLETED;
+          campaign.completedAt = new Date();
+        }
+
+        await manager.save(campaign);
+        await manager.save(daily);
       },
     );
   }
@@ -1184,6 +1309,7 @@ export class BoostService {
       targetId: string;
       targetName: string;
       targetSlug: string;
+      targetStoreSlug?: string;
       targetImageKey?: string;
       creative?: BoostCreative;
       sponsoredBy: string;
@@ -1269,27 +1395,29 @@ export class BoostService {
     for (const campaign of campaigns) {
       let targetName = '';
       let targetSlug = '';
+      let targetStoreSlug: string | undefined;
       let targetImageKey: string | undefined;
 
       if (campaign.targetType === BoostTargetType.SHOWCASE) {
         const showcase = await this.showcaseRepo.findOne({
           where: { id: campaign.targetId, ...publicWhere('post') },
+          relations: ['store'],
         });
-        if (!showcase || showcase.status !== 'published') continue;
-        if (showcase) {
-          targetName = showcase.title;
-          targetSlug = showcase.slug;
-        }
+        if (!showcase || showcase.status !== 'published' || !showcase.storeId)
+          continue;
+        targetName = showcase.title;
+        targetSlug = showcase.slug;
+        targetStoreSlug = showcase.store?.slug;
+        targetImageKey = await this.postPreviewKey(showcase.id);
       } else {
         const store = await this.storeRepo.findOne({
           where: { id: campaign.targetId, ...publicWhere('store') },
         });
         if (!store) continue;
-        if (store) {
-          targetName = store.name;
-          targetSlug = store.slug;
-          targetImageKey = store.logoKey || undefined;
-        }
+        targetName = store.name;
+        targetSlug = store.slug;
+        targetStoreSlug = store.slug;
+        targetImageKey = store.logoKey || undefined;
       }
 
       results.push({
@@ -1298,15 +1426,92 @@ export class BoostService {
         targetId: campaign.targetId,
         targetName,
         targetSlug,
+        targetStoreSlug,
         targetImageKey,
         creative: campaign.creative as BoostCreative | undefined,
         sponsoredBy: campaign.user?.displayName || 'Unknown',
         sponsoredById: campaign.userId,
-        cta: campaign.creative?.callToAction || 'shop_now',
+        cta: campaign.creative?.callToAction || 'visit_store',
       });
     }
 
     return results;
+  }
+
+  // ============================================
+  // Feed Integration: Trending boosted shops
+  // ============================================
+
+  async getTrendingStores(limit = 6): Promise<
+    Array<{
+      campaignId: string;
+      id: string;
+      name: string;
+      slug: string;
+      logoKey?: string;
+      brandColor?: string;
+      city?: string;
+      country?: string;
+      headline?: string;
+      sponsoredBy: string;
+      cta?: string;
+    }>
+  > {
+    const now = new Date();
+    const campaigns = await this.boostCampaignRepo
+      .createQueryBuilder('campaign')
+      .innerJoinAndSelect('campaign.targetStore', 'store')
+      .where('campaign.targetType = :targetType', {
+        targetType: BoostTargetType.STORE,
+      })
+      .andWhere('campaign.status = :status', {
+        status: BoostCampaignStatus.ACTIVE,
+      })
+      .andWhere('campaign.startAt <= :now', { now })
+      .andWhere('(campaign.endAt IS NULL OR campaign.endAt > :now)', { now })
+      .andWhere(
+        'CAST(campaign.spent_coins AS UNSIGNED) < CAST(campaign.budget_coins AS UNSIGNED)',
+      )
+      .andWhere(publicVisibilitySql('store', 'store'))
+      .orderBy('CAST(campaign.bid_amount_coins AS UNSIGNED)', 'DESC')
+      .addOrderBy('campaign.createdAt', 'DESC')
+      .take(Math.min(Math.max(limit * 4, limit), 50))
+      .getMany();
+
+    const stores: Array<{
+      campaignId: string;
+      id: string;
+      name: string;
+      slug: string;
+      logoKey?: string;
+      brandColor?: string;
+      city?: string;
+      country?: string;
+      headline?: string;
+      sponsoredBy: string;
+      cta?: string;
+    }> = [];
+    const seen = new Set<string>();
+    for (const campaign of campaigns) {
+      const store = campaign.targetStore;
+      if (!store || seen.has(store.id)) continue;
+      seen.add(store.id);
+      stores.push({
+        campaignId: campaign.id,
+        id: store.id,
+        name: store.name,
+        slug: store.slug,
+        logoKey: store.logoKey ?? undefined,
+        brandColor: store.brandColor ?? undefined,
+        city: store.city ?? undefined,
+        country: store.country ?? undefined,
+        headline: campaign.creative?.headline,
+        sponsoredBy: store.name,
+        cta: campaign.creative?.callToAction || 'visit_store',
+      });
+      if (stores.length >= limit) break;
+    }
+    return stores;
   }
 
   // ============================================
@@ -1348,6 +1553,8 @@ export class BoostService {
           this.config.get('ADMIN_EMAILS', { infer: true }),
         );
         if (action === 'approve') {
+          if (campaign.endAt && campaign.endAt <= new Date())
+            throw new BadRequestException('Campaign has expired');
           await this.visibleCampaign(manager, campaign);
           campaign.status = BoostCampaignStatus.ACTIVE;
         } else {

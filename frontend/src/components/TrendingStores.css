@@ -1,0 +1,84 @@
+.trending-boosts {
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--post-radius);
+  background: color-mix(in srgb, var(--secondary) 6%, var(--surface));
+  animation: reveal-in 320ms ease-out backwards;
+}
+.trending-boosts-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.trending-boosts-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+}
+.trending-boosts-heading h2 svg {
+  color: var(--secondary);
+}
+.trending-boosts-heading > span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.trending-boosts-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.trending-boost {
+  flex: 1 0 190px;
+  max-width: 260px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  transition:
+    border-color 180ms,
+    transform 180ms;
+}
+.trending-boost:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  transform: translateY(-1px);
+}
+.trending-boost > span:not(.store-avatar) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.trending-boost strong {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trending-boost small {
+  font-size: 10.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trending-boost > svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .trending-boosts {
+    margin-inline: 16px;
+  }
+}
