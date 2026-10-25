@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import {
   Store,
+  StoreBranch,
   Product,
   ProductStatus,
   Cart,
@@ -40,6 +41,8 @@ export class CartsService {
     private readonly carts: Repository<Cart>,
     @InjectRepository(CartItem)
     private readonly cartItems: Repository<CartItem>,
+    @InjectRepository(StoreBranch)
+    private readonly branches: Repository<StoreBranch>,
   ) {}
 
   private sanitize(error: unknown): never {
@@ -463,9 +466,34 @@ export class CartsService {
       }
 
       const storeWhatsApp = store.socialMediaLinks?.whatsapp;
-      if (!storeWhatsApp) {
+
+      // A branch-specific number takes priority so each location receives its
+      // own orders. Without branches the shop-level WhatsApp remains the owner.
+      let branch: StoreBranch | null = null;
+      if (dto.branchId) {
+        branch = await this.branches.findOneBy({
+          id: dto.branchId,
+          storeId: store.id,
+        });
+        if (!branch)
+          throw new BadRequestException('The selected branch is unavailable');
+      } else {
+        branch = await this.branches.findOne({
+          where: { storeId: store.id },
+          order: { isPrimary: 'DESC', sortOrder: 'ASC' },
+        });
+      }
+
+      const orderWhatsApp = branch?.whatsapp || storeWhatsApp;
+      if (!orderWhatsApp) {
         throw new BadRequestException(
           'Store does not have a WhatsApp number configured for orders',
+        );
+      }
+      const whatsappNumber = this.normalizePhoneNumber(orderWhatsApp);
+      if (!/^\d{7,15}$/u.test(whatsappNumber)) {
+        throw new BadRequestException(
+          'Store WhatsApp number is not valid for orders',
         );
       }
 
@@ -487,10 +515,11 @@ export class CartsService {
         dto.customerNotes ?? '',
         dto.customerName ?? '',
         dto.customerPhone ?? '',
+        branch,
       );
 
       // Generate WhatsApp URL
-      const whatsappUrl = `https://wa.me/${this.normalizePhoneNumber(storeWhatsApp)}?text=${encodeURIComponent(message)}`;
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
       // Mark cart as checked out
       await this.carts.update(cart.id, {
@@ -503,6 +532,8 @@ export class CartsService {
         message,
         totalCents,
         currency,
+        branchId: branch?.id ?? null,
+        branchName: branch?.name ?? null,
       };
     } catch (error) {
       if (
@@ -518,14 +549,17 @@ export class CartsService {
   }
 
   private normalizePhoneNumber(phone: string): string {
-    // Remove all non-digit characters except +
-    let normalized = phone.replace(/[^\d+]/g, '');
-    // Ensure it starts with + or country code
-    if (!normalized.startsWith('+')) {
-      // Assume it's a valid international format, just add + if missing
-      normalized = '+' + normalized;
+    // A saved shop link may carry a prefilled message; never let digits from
+    // the query string become part of the destination number.
+    try {
+      const url = new URL(phone);
+      if (url.protocol === 'https:' && url.hostname === 'wa.me')
+        return url.pathname.replace(/\D/gu, '');
+    } catch {
+      /* Not a URL: treat the value as a phone number. */
     }
-    return normalized;
+    // wa.me expects digits only, without spaces, dashes, or a leading plus.
+    return phone.replace(/\D/gu, '');
   }
 
   private buildWhatsAppMessage(
@@ -536,10 +570,20 @@ export class CartsService {
     customerNotes: string,
     customerName: string,
     customerPhone: string,
+    branch: StoreBranch | null,
   ): string {
     const lines: string[] = [];
     lines.push(`*New Order from ${storeName}*`);
     lines.push('');
+
+    if (branch) {
+      lines.push(`*Branch:* ${branch.name}`);
+      const address = [branch.address, branch.city, branch.country]
+        .filter((value) => value?.trim())
+        .join(', ');
+      if (address) lines.push(`*Location:* ${address}`);
+      lines.push('');
+    }
 
     if (customerName) {
       lines.push(`*Customer:* ${customerName}`);

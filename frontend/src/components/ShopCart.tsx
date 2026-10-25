@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   Check,
   LoaderCircle,
+  MapPin,
   MessageCircle,
   Minus,
   Package,
@@ -13,6 +14,11 @@ import {
 } from 'lucide-react';
 import { assetUrl, type Product, type Store } from '../lib/api';
 import { formatProductPrice, storeMediaUrl } from '../lib/storefront';
+import {
+  branchAddress,
+  branchWhatsAppHref,
+  primaryBranch,
+} from '../lib/branches';
 import { productCartLimit } from '../lib/cart';
 import type { ShopCartController } from '../hooks/useShopCart';
 import './ShopCart.css';
@@ -47,11 +53,31 @@ export function ShopCart({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const { cart, busy, disabled, loading, error, failed, checkout } = controller;
+  const branches = useMemo(() => store.branches ?? [], [store.branches]);
+  const [branchId, setBranchId] = useState(
+    () => primaryBranch(branches)?.id ?? '',
+  );
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const close = () => controller.setOpen(false);
+  const selectedBranch = branches.find((branch) => branch.id === branchId);
+  const selectedBranchWhatsApp = selectedBranch
+    ? branchWhatsAppHref(selectedBranch)
+    : undefined;
+  const orderWhatsApp = branches.length
+    ? selectedBranchWhatsApp || cart?.storeWhatsApp
+    : cart?.storeWhatsApp;
+
+  useEffect(() => {
+    if (!branches.length) {
+      if (branchId) setBranchId('');
+      return;
+    }
+    if (!branches.some((branch) => branch.id === branchId))
+      setBranchId(primaryBranch(branches)?.id ?? branches[0]?.id ?? '');
+  }, [branches, branchId]);
 
   useEffect(() => {
     const element = dialog.current;
@@ -142,6 +168,12 @@ export function ShopCart({
               <strong>
                 {formatProductPrice(checkout.totalCents, checkout.currency)}
               </strong>
+              {checkout.branchName && (
+                <p className="shop-cart-branch-confirm">
+                  <MapPin size={15} aria-hidden="true" />
+                  Order for <strong>{checkout.branchName}</strong>
+                </p>
+              )}
               {checkout.whatsappUrl ? (
                 <a
                   className="primary-button"
@@ -293,12 +325,58 @@ export function ShopCart({
                     customerName: name.trim(),
                     customerPhone: phone.trim(),
                     customerNotes: notes.trim(),
+                    ...(branchId ? { branchId } : {}),
                   });
                 }}
               >
                 <h3>
                   Order details <span>(optional)</span>
                 </h3>
+                {branches.length > 0 && (
+                  <fieldset className="shop-cart-branches">
+                    <legend>
+                      <MapPin size={15} aria-hidden="true" /> Order from
+                    </legend>
+                    <div className="shop-cart-branch-options">
+                      {branches.map((branch) => {
+                        const href = branchWhatsAppHref(branch);
+                        return (
+                          <label
+                            className={`shop-cart-branch ${branchId === branch.id ? 'is-selected' : ''}`}
+                            key={branch.id}
+                          >
+                            <input
+                              type="radio"
+                              name="shop-cart-branch"
+                              value={branch.id}
+                              checked={branchId === branch.id}
+                              onChange={() => setBranchId(branch.id)}
+                              disabled={busy}
+                            />
+                            <span className="shop-cart-branch-copy">
+                              <strong>
+                                {branch.name}
+                                {branch.isPrimary && <em>Main</em>}
+                              </strong>
+                              <small>
+                                {branchAddress(branch) ||
+                                  'Ask the shop for the exact address'}
+                              </small>
+                              {!href && !cart?.storeWhatsApp && (
+                                <span className="shop-cart-branch-warning">
+                                  No WhatsApp number for this branch yet
+                                </span>
+                              )}
+                            </span>
+                            {branchId === branch.id && (
+                              <Check size={18} aria-hidden="true" />
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                )}
                 <div className="shop-cart-fields">
                   <label className="shop-cart-field">
                     Your name
@@ -376,11 +454,17 @@ export function ShopCart({
             <p>
               Delivery and any additional charges are confirmed with the shop.
             </p>
+            {selectedBranch && (
+              <p className="shop-cart-branch-note">
+                <MapPin size={13} aria-hidden="true" /> Your order will be
+                prepared by <strong>{selectedBranch.name}</strong>.
+              </p>
+            )}
             <button
               className="primary-button"
               type="submit"
               form="shop-cart-checkout"
-              disabled={disabled || demo || !cart?.storeWhatsApp}
+              disabled={disabled || demo || !orderWhatsApp}
             >
               {busy ? (
                 <LoaderCircle className="spin" size={18} />
@@ -391,9 +475,11 @@ export function ShopCart({
                 ? 'Checkout unavailable in preview'
                 : 'Prepare WhatsApp order'}
             </button>
-            {!demo && !cart?.storeWhatsApp && (
+            {!demo && !orderWhatsApp && (
               <p>
-                This shop hasn’t set up WhatsApp orders yet.{' '}
+                {branches.length > 0
+                  ? 'This branch hasn’t set a WhatsApp number yet. Choose another branch or contact the shop.'
+                  : 'This shop hasn’t set up WhatsApp orders yet.'}{' '}
                 <button
                   type="button"
                   className="text-button"

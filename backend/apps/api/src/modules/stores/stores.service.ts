@@ -9,9 +9,10 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError, Not } from 'typeorm';
+import { Repository, QueryFailedError, Not, EntityManager } from 'typeorm';
 import {
   Store,
+  StoreBranch,
   StoreSubscriptionTier,
   StoreType,
   Product,
@@ -39,6 +40,7 @@ import {
 import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
 import { UpdateStoreDto, UpdateStoreLocationDto } from './dto/update-store.dto';
+import { StoreBranchDto } from './dto/store-branch.dto';
 import { StoreResponseDto, toStoreResponseDto } from './dto/store-response.dto';
 import {
   LocationService,
@@ -47,6 +49,27 @@ import {
 import { SeoService } from '../seo/seo.service';
 import { AdminGuard } from '../auth/guards/auth.guards';
 import { deleteStoreObjects } from './store-media-cleanup';
+
+const MAX_BRANCHES = 10;
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+const DAY_ALIASES: Record<string, string> = {
+  mon: 'mon',
+  monday: 'mon',
+  tue: 'tue',
+  tuesday: 'tue',
+  wed: 'wed',
+  wednesday: 'wed',
+  thu: 'thu',
+  thursday: 'thu',
+  fri: 'fri',
+  friday: 'fri',
+  sat: 'sat',
+  saturday: 'sat',
+  sun: 'sun',
+  sunday: 'sun',
+};
+const TIME_RANGE =
+  /^([01]\d|2[0-3]):([0-5]\d)\s*[-–]\s*([01]\d|2[0-3]):([0-5]\d)$/u;
 
 @Injectable()
 export class StoresService {
@@ -88,6 +111,7 @@ export class StoresService {
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
+        relations: { branches: true },
       });
 
       // Get counts for each store
@@ -118,9 +142,9 @@ export class StoresService {
     userId: string | undefined,
   ): Promise<StoreResponseDto> {
     try {
-      const store = await this.stores.findOneBy({
-        slug,
-        ...publicWhere('store'),
+      const store = await this.stores.findOne({
+        where: { slug, ...publicWhere('store') },
+        relations: { branches: true },
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -146,9 +170,9 @@ export class StoresService {
     userId: string | undefined,
   ): Promise<StoreResponseDto> {
     try {
-      const store = await this.stores.findOneBy({
-        id,
-        ...publicWhere('store'),
+      const store = await this.stores.findOne({
+        where: { id, ...publicWhere('store') },
+        relations: { branches: true },
       });
       if (!store) {
         throw new NotFoundException('Store not found');
@@ -258,7 +282,15 @@ export class StoresService {
           where: { ownerId, status: Not(StoreStatus.TRASHED) },
         });
         assertQuota(count, limits.maxShops, 'Store');
-        return manager.save(store);
+        const created = await manager.save(store);
+        if (dto.branches?.length) {
+          await this.replaceBranches(manager, created, dto.branches);
+          await manager.save(created);
+        }
+        return manager.findOneOrFail(Store, {
+          where: { id: created.id },
+          relations: { branches: true },
+        });
       });
 
       // Auto-generate SEO for the new store
@@ -402,7 +434,16 @@ export class StoresService {
         );
         store.status = current.status;
         store.trashedAt = current.trashedAt;
-        return manager.save(store);
+        const persisted = await manager.save(store);
+        if (dto.branches !== undefined) {
+          await this.replaceBranches(manager, persisted, dto.branches);
+          await manager.save(persisted);
+          persisted.branches = await manager.find(StoreBranch, {
+            where: { storeId: persisted.id },
+            order: { sortOrder: 'ASC', createdAt: 'ASC' },
+          });
+        }
+        return persisted;
       });
 
       // Auto-regenerate SEO if content changed
@@ -489,6 +530,143 @@ export class StoresService {
     }
 
     return result;
+  }
+
+  // Branches are saved as a complete ordered list. The first branch flagged as
+  // primary becomes the shop's legacy location, keeping nearby search and SEO
+  // on the same address as the storefront's main branch.
+  private async replaceBranches(
+    manager: EntityManager,
+    store: Store,
+    inputs: StoreBranchDto[],
+  ): Promise<StoreBranch[]> {
+    if (inputs.length > MAX_BRANCHES)
+      throw new BadRequestException(
+        `A shop can have up to ${MAX_BRANCHES} branches`,
+      );
+    const existing = await manager.find(StoreBranch, {
+      where: { storeId: store.id },
+    });
+    const existingById = new Map(existing.map((branch) => [branch.id, branch]));
+    const retained = new Set<string>();
+    for (const input of inputs) {
+      if (!input.id) continue;
+      if (!existingById.has(input.id))
+        throw new BadRequestException(
+          'A branch is no longer available. Refresh and try again.',
+        );
+      retained.add(input.id);
+    }
+    for (const branch of existing) {
+      if (!retained.has(branch.id))
+        await manager.delete(StoreBranch, branch.id);
+    }
+
+    const primaryIndex = Math.max(
+      0,
+      inputs.findIndex((input) => input.isPrimary),
+    );
+    const rows: StoreBranch[] = [];
+    for (const [index, input] of inputs.entries()) {
+      const branch =
+        (input.id ? existingById.get(input.id) : undefined) ??
+        manager.create(StoreBranch, { storeId: store.id });
+      Object.assign(branch, this.branchData(input), {
+        isPrimary: index === primaryIndex,
+        sortOrder: index,
+      });
+      rows.push(await manager.save(branch));
+    }
+
+    const primary = rows[primaryIndex];
+    if (primary) {
+      store.latitude = primary.latitude;
+      store.longitude = primary.longitude;
+      store.address = primary.address;
+      store.city = primary.city;
+      store.country = primary.country;
+      store.postalCode = primary.postalCode;
+      store.locationName = primary.name;
+      store.phone = primary.phone;
+      store.openingHours = primary.openingHours;
+    } else {
+      store.latitude = null;
+      store.longitude = null;
+      store.address = null;
+      store.city = null;
+      store.country = null;
+      store.postalCode = null;
+      store.locationName = null;
+      store.phone = null;
+      store.openingHours = null;
+    }
+    return rows;
+  }
+
+  private branchData(input: StoreBranchDto): Partial<StoreBranch> {
+    const name = input.name.trim();
+    if (!name) throw new BadRequestException('A branch name is required');
+    const latitude =
+      typeof input.latitude === 'number' && Number.isFinite(input.latitude)
+        ? input.latitude
+        : null;
+    const longitude =
+      typeof input.longitude === 'number' && Number.isFinite(input.longitude)
+        ? input.longitude
+        : null;
+    if (latitude !== null && (latitude < -90 || latitude > 90))
+      throw new BadRequestException('Branch latitude is out of range');
+    if (longitude !== null && (longitude < -180 || longitude > 180))
+      throw new BadRequestException('Branch longitude is out of range');
+    return {
+      name: name.slice(0, 120),
+      address: this.optionalText(input.address, 500),
+      city: this.optionalText(input.city, 100),
+      country: this.optionalText(input.country, 100),
+      postalCode: this.optionalText(input.postalCode, 20),
+      latitude: latitude !== null && longitude !== null ? latitude : null,
+      longitude: latitude !== null && longitude !== null ? longitude : null,
+      phone: this.optionalText(input.phone, 30),
+      whatsapp: this.normalizeWhatsApp(input.whatsapp),
+      openingHours: this.normalizeOpeningHours(input.openingHours),
+      googleMapsUrl: this.locationService.normalizeGoogleMapsUrl(
+        input.googleMapsUrl,
+      ),
+    };
+  }
+
+  private optionalText(
+    value: string | null | undefined,
+    maxLength: number,
+  ): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed.slice(0, maxLength) : null;
+  }
+
+  private normalizeWhatsApp(value: string | null | undefined): string | null {
+    const digits = value?.replace(/\D/gu, '') ?? '';
+    return /^\d{7,15}$/u.test(digits) ? digits : null;
+  }
+
+  private normalizeOpeningHours(
+    value: Record<string, string | null> | null | undefined,
+  ): Record<string, string> | null {
+    if (!value) return null;
+    const hours: Record<string, string> = {};
+    for (const day of WEEKDAYS) hours[day] = '';
+    let hasHours = false;
+    for (const [rawDay, rawRange] of Object.entries(value)) {
+      const day = DAY_ALIASES[rawDay.trim().toLowerCase()];
+      if (!day || typeof rawRange !== 'string') continue;
+      const normalized = rawRange.trim().replace(/\s*[–]\s*/gu, '-');
+      if (!TIME_RANGE.test(normalized)) continue;
+      hours[day] = normalized.replace(/\s+/gu, '');
+      hasHours = true;
+    }
+    if (!hasHours) return null;
+    return Object.fromEntries(
+      Object.entries(hours).filter(([, range]) => Boolean(range)),
+    );
   }
 
   async setStatus(
@@ -609,9 +787,12 @@ export class StoresService {
     includeTrashed = false,
   ): Promise<StoreResponseDto[]> {
     try {
-      const stores = await this.stores.findBy({
-        ownerId: userId,
-        ...(includeTrashed ? {} : { status: Not(StoreStatus.TRASHED) }),
+      const stores = await this.stores.find({
+        where: {
+          ownerId: userId,
+          ...(includeTrashed ? {} : { status: Not(StoreStatus.TRASHED) }),
+        },
+        relations: { branches: true },
       });
       const storeIds = stores.map((s) => s.id);
       const [postsCounts, productsCounts] = await Promise.all([
@@ -722,6 +903,7 @@ export class StoresService {
       // First, find stores within the bounding box
       const stores = await this.stores
         .createQueryBuilder('store')
+        .leftJoinAndSelect('store.branches', 'branch')
         .where('store.latitude IS NOT NULL')
         .andWhere(publicVisibilitySql('store', 'store'))
         .andWhere('store.longitude IS NOT NULL')
@@ -789,6 +971,7 @@ export class StoresService {
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
+        relations: { branches: true },
       });
 
       const storeIds = items.map((s) => s.id);
@@ -827,6 +1010,7 @@ export class StoresService {
         order: { createdAt: 'DESC' },
         take: limit,
         skip: offset,
+        relations: { branches: true },
       });
 
       const storeIds = items.map((s) => s.id);
@@ -919,6 +1103,17 @@ export class StoresService {
         isInLebanon: validation.isInLebanon,
       },
     };
+  }
+
+  async resolveGoogleMapsLink(url: string) {
+    const result = await this.locationService.resolveGoogleMapsLink(url);
+    if (!result) {
+      return {
+        success: false,
+        error: 'Could not find a location in that Google Maps link',
+      };
+    }
+    return { success: true, data: result };
   }
 
   // ============================================

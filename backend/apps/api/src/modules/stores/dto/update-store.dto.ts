@@ -1,6 +1,7 @@
 import {
   IsString,
   Length,
+  Matches,
   IsOptional,
   IsHexColor,
   IsObject,
@@ -9,51 +10,64 @@ import {
   IsEnum,
   IsNumber,
   IsBoolean,
+  IsArray,
+  ArrayMaxSize,
   Min,
   Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SocialMediaLinks, StoreType } from '@app/database';
+import { StoreBranchDto } from './store-branch.dto';
+
+const HTTP_URL = /^https?:\/\//iu;
 
 export class UpdateSocialMediaLinksDto implements SocialMediaLinks {
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   instagram?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   facebook?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   twitter?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   tiktok?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   youtube?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   website?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   whatsapp?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   telegram?: string;
 }
 
@@ -148,6 +162,15 @@ export class UpdateStoreDto {
   @ValidateNested()
   @Type(() => UpdateStoreLocationDto)
   location?: UpdateStoreLocationDto | null;
+
+  // The complete branch list, in display order. Omitted ids are deleted and
+  // new entries are created inside the same locked store transaction.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => StoreBranchDto)
+  branches?: StoreBranchDto[];
 
   @IsOptional()
   @IsString()

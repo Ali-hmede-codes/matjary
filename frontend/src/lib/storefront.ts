@@ -131,12 +131,20 @@ const socialLabels = {
   website: 'Website',
 };
 
-export function storeSocialLinks(store?: Pick<Store, 'socialMediaLinks'>) {
-  return Object.entries(socialLabels).flatMap(([network, label]) => {
+export function storeSocialLinks(
+  store?: Pick<Store, 'socialMediaLinks' | 'location'>,
+) {
+  const links = Object.entries(socialLabels).flatMap(([network, label]) => {
     const value = store?.socialMediaLinks?.[network];
     const href = typeof value === 'string' ? safeUrl(value.trim()) : undefined;
     return href ? [{ network, label, href }] : [];
   });
+  // Shops saved before the social editor may only have a legacy website.
+  if (!links.some((link) => link.network === 'website')) {
+    const href = safeUrl(store?.location?.website ?? '');
+    if (href) links.push({ network: 'website', label: 'Website', href });
+  }
+  return links;
 }
 
 export function storeMap(location: Store['location']) {

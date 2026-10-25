@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --experimental-strip-types --test src/lib/website.test.ts src/lib/storefront.test.ts src/lib/pricing.test.ts src/lib/cart.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/website.test.ts src/lib/storefront.test.ts src/lib/branches.test.ts src/lib/pricing.test.ts src/lib/cart.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

@@ -55,6 +55,7 @@ import {
 import {
   User,
   Store,
+  StoreBranch,
   Product,
   Showcase,
   ProductStatus,
@@ -65,6 +66,7 @@ import {
 import { StorageService } from '../../libs/storage/src/storage.service';
 import { toStoreResponseDto } from '../../apps/api/src/modules/stores/dto/store-response.dto';
 import { StoresService } from '../../apps/api/src/modules/stores/stores.service';
+import { LocationService } from '../../apps/api/src/modules/stores/services/location.service';
 
 test('public shop badges disappear after expiration or revocation', (t) => {
   const now = new Date('2026-10-24T12:00:00Z');
@@ -187,6 +189,59 @@ test('shop verification requires administrators even with an eligible subscripti
   assert.equal(store.verificationBadgeExpiresAt, null);
   assert.equal(store.verificationBadgeGrantedBy, 'admin');
   assert.equal(audits.length, 3);
+});
+
+test('public branches are ordered, expose safe contact links, and map decimal coordinates', () => {
+  const store = Object.assign(new Store(), {
+    branches: [
+      Object.assign(new StoreBranch(), {
+        id: 'branch-b',
+        name: 'Seaside',
+        isPrimary: false,
+        sortOrder: 1,
+        latitude: '33.90000000',
+        longitude: '35.48000000',
+        whatsapp: '96170987654',
+        openingHours: { mon: '10:00-20:00' },
+        googleMapsUrl: 'https://maps.app.goo.gl/sample',
+        createdAt: new Date('2026-01-02T00:00:00Z'),
+      }),
+      Object.assign(new StoreBranch(), {
+        id: 'branch-a',
+        name: 'Main store',
+        isPrimary: true,
+        sortOrder: 0,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      }),
+    ],
+  });
+  const branches = toStoreResponseDto(store).branches;
+  assert.deepEqual(
+    branches?.map((branch) => branch.id),
+    ['branch-a', 'branch-b'],
+  );
+  assert.equal(branches?.[1]?.whatsappUrl, 'https://wa.me/96170987654');
+  assert.equal(branches?.[1]?.googleMapsUrl, 'https://maps.app.goo.gl/sample');
+  assert.equal(branches?.[1]?.hasCoordinates, true);
+  assert.match(branches?.[1]?.mapUrl ?? '', /mlat=33\.9&mlon=35\.48/u);
+});
+
+test('Google Maps links are restricted to Google hosts and expose their pin', async () => {
+  const location = new LocationService(config() as never);
+  assert.equal(
+    location.normalizeGoogleMapsUrl('https://maps.app.goo.gl/sample'),
+    'https://maps.app.goo.gl/sample',
+  );
+  assert.equal(
+    location.normalizeGoogleMapsUrl('https://example.test/maps/place/shop'),
+    null,
+  );
+  assert.equal(location.normalizeGoogleMapsUrl('javascript:alert(1)'), null);
+  const resolved = await location.resolveGoogleMapsLink(
+    'https://www.google.com/maps/place/Shop/@33.8938,35.5018,17z/data=!3m1!4b1!4m6!3m5!1sabc!8m2!3d33.8940!4d35.5020',
+  );
+  assert.equal(resolved?.latitude, 33.894);
+  assert.equal(resolved?.longitude, 35.502);
 });
 
 test('storefront contact details do not require map coordinates', () => {

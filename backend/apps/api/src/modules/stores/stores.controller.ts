@@ -19,6 +19,7 @@ import { StoresService } from './stores.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { MyStoresQueryDto, StoreStatusDto } from './dto/store-lifecycle.dto';
+import { ResolveGoogleMapsDto } from './dto/resolve-google-maps.dto';
 import {
   StoreResponseDto,
   StoreListResponseDto,
@@ -198,6 +199,13 @@ export class StoresController {
     @Query('lon', ParseFloatPipe) longitude: number,
   ) {
     return this.stores.reverseGeocode(latitude, longitude);
+  }
+
+  @Post('location/google-maps')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SessionGuard, AuthOriginGuard, AuthRateLimitGuard)
+  async resolveGoogleMapsLink(@Body() dto: ResolveGoogleMapsDto) {
+    return this.stores.resolveGoogleMapsLink(dto.url);
   }
 
   // ============================================

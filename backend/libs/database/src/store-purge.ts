@@ -95,6 +95,9 @@ export async function purgeStoreRecords(
   await manager.query('DELETE FROM store_categories WHERE store_id = ?', [
     storeId,
   ]);
+  await manager.query('DELETE FROM store_branches WHERE store_id = ?', [
+    storeId,
+  ]);
   await manager.query('DELETE FROM stores WHERE id = ?', [storeId]);
 
   return keys;

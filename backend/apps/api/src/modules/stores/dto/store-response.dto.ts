@@ -1,10 +1,82 @@
 import {
   Store,
+  StoreBranch,
   StoreStatus,
   StoreSubscriptionTier,
   StoreType,
   SocialMediaLinks,
 } from '@app/database';
+
+function coordinateValue(value: number | string | null | undefined) {
+  // MySQL DECIMAL columns can surface as strings; empty values are not zero.
+  if (typeof value === 'string' && /^[+-]?\d+(?:\.\d+)?$/u.test(value.trim()))
+    value = Number(value);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function mapUrlFor(latitude: number | null, longitude: number | null) {
+  return latitude !== null && longitude !== null
+    ? `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`
+    : null;
+}
+
+function whatsAppUrlFor(value: string | null | undefined) {
+  const digits = value?.replace(/\D/gu, '') ?? '';
+  return /^\d{7,15}$/u.test(digits) ? `https://wa.me/${digits}` : null;
+}
+
+export class StoreBranchResponseDto {
+  id!: string;
+  name!: string;
+  address!: string | null;
+  city!: string | null;
+  country!: string | null;
+  postalCode!: string | null;
+  latitude!: number | null;
+  longitude!: number | null;
+  phone!: string | null;
+  whatsapp!: string | null;
+  whatsappUrl!: string | null;
+  openingHours!: Record<string, string> | null;
+  googleMapsUrl!: string | null;
+  isPrimary!: boolean;
+  hasCoordinates!: boolean;
+  mapUrl!: string | null;
+}
+
+export function toStoreBranchResponseDto(
+  branch: StoreBranch,
+): StoreBranchResponseDto {
+  const latitude = coordinateValue(branch.latitude);
+  const longitude = coordinateValue(branch.longitude);
+  return {
+    id: branch.id,
+    name: branch.name,
+    address: branch.address,
+    city: branch.city,
+    country: branch.country,
+    postalCode: branch.postalCode,
+    latitude,
+    longitude,
+    phone: branch.phone,
+    whatsapp: branch.whatsapp,
+    whatsappUrl: whatsAppUrlFor(branch.whatsapp),
+    openingHours: branch.openingHours,
+    googleMapsUrl: branch.googleMapsUrl ?? null,
+    isPrimary: branch.isPrimary,
+    hasCoordinates: latitude !== null && longitude !== null,
+    mapUrl: mapUrlFor(latitude, longitude),
+  };
+}
+
+export function sortedBranches(store: Store): StoreBranch[] {
+  return [...(store.branches ?? [])].sort(
+    (a, b) =>
+      Number(b.isPrimary) - Number(a.isPrimary) ||
+      a.sortOrder - b.sortOrder ||
+      a.createdAt.getTime() - b.createdAt.getTime(),
+  );
+}
 
 export class StoreLocationResponseDto {
   latitude!: number | null;
@@ -52,6 +124,11 @@ export class StoreResponseDto {
 
   // Location fields
   location!: StoreLocationResponseDto | null;
+
+  // Public branch list in display order. Omitted when the caller supplied an
+  // entity that was not loaded with the relation (e.g. lifecycle updates), so
+  // cached branch details are never silently erased.
+  branches?: StoreBranchResponseDto[];
 
   // Optional: include posts/products count
   postsCount?: number;
@@ -130,6 +207,9 @@ export function toStoreResponseDto(
           mapUrl,
         }
       : null,
+    ...(Array.isArray(store.branches)
+      ? { branches: sortedBranches(store).map(toStoreBranchResponseDto) }
+      : {}),
     postsCount,
     productsCount,
   };

@@ -36,6 +36,8 @@ export class CheckoutResponseDto {
   message!: string;
   totalCents!: string;
   currency!: string;
+  branchId!: string | null;
+  branchName!: string | null;
 }
 
 export function toCartItemResponseDto(item: CartItem): CartItemResponseDto {

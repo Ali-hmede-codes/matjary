@@ -143,6 +143,11 @@ function lifecycleFixture() {
         ? [store]
         : [];
     },
+    async find(options: {
+      where: { ownerId: string; status?: { value: StoreStatus } };
+    }) {
+      return this.findBy(options.where);
+    },
   };
   const service = new StoresService(
     repository as never,

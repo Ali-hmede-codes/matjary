@@ -1,5 +1,24 @@
 import { mediaUrl, parseLikeResponse, parseViewResponse } from './website';
 
+export interface StoreBranch {
+  id: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  phone?: string | null;
+  whatsapp?: string | null;
+  whatsappUrl?: string | null;
+  openingHours?: Record<string, string | null> | null;
+  googleMapsUrl?: string | null;
+  isPrimary?: boolean;
+  hasCoordinates?: boolean;
+  mapUrl?: string | null;
+}
+
 export interface Store {
   id: string;
   name: string;
@@ -12,6 +31,7 @@ export interface Store {
   logoKey?: string | null;
   bannerKey?: string | null;
   socialMediaLinks?: Record<string, string> | null;
+  branches?: StoreBranch[] | null;
   location?: {
     latitude?: number | string | null;
     longitude?: number | string | null;

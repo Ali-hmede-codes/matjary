@@ -542,6 +542,76 @@ export class Store extends BaseEntity {
 
   @OneToMany(() => Product, (product) => product.store)
   products!: Relation<Product[]>;
+
+  @OneToMany(() => StoreBranch, (branch) => branch.store)
+  branches!: Relation<StoreBranch[]>;
+}
+
+// Branch hours are keyed by the canonical weekday (mon..sun). A missing day or
+// an empty value means the branch is closed that day.
+export type StoreOpeningHours = Record<string, string>;
+
+@Entity({ name: 'store_branches', engine: 'InnoDB' })
+@Index('idx_store_branches_store', ['storeId'])
+@Index('idx_store_branches_order', ['storeId', 'sortOrder'])
+export class StoreBranch extends BaseEntity {
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, (store) => store.branches, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_store_branches_store',
+  })
+  store!: Relation<Store>;
+
+  @Column({ type: 'varchar', length: 120 })
+  name!: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  address!: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  city!: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  country!: string | null;
+
+  @Column({ name: 'postal_code', type: 'varchar', length: 20, nullable: true })
+  postalCode!: string | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true })
+  latitude!: number | null;
+
+  @Column({ type: 'decimal', precision: 11, scale: 8, nullable: true })
+  longitude!: number | null;
+
+  // Customer-facing call number. WhatsApp is stored as digits only because it
+  // is turned into a wa.me link during checkout.
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  phone!: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  whatsapp!: string | null;
+
+  @Column({ name: 'opening_hours', type: 'json', nullable: true })
+  openingHours!: StoreOpeningHours | null;
+
+  // Validated Google Maps share link supplied by the owner. It is used for the
+  // storefront directions action; the embedded map still uses coordinates.
+  @Column({
+    name: 'google_maps_url',
+    type: 'varchar',
+    length: 1000,
+    nullable: true,
+  })
+  googleMapsUrl!: string | null;
+
+  @Column({ name: 'is_primary', type: 'boolean', default: false })
+  isPrimary!: boolean;
+
+  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  sortOrder!: number;
 }
 
 export interface DesignSettings {
@@ -1666,6 +1736,7 @@ export const databaseEntities = [
   User,
   Showcase,
   Store,
+  StoreBranch,
   StoreCategory,
   Product,
   Cart,

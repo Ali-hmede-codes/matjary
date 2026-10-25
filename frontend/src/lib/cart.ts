@@ -27,6 +27,7 @@ export interface CheckoutDetails {
   customerName: string;
   customerPhone: string;
   customerNotes: string;
+  branchId?: string;
 }
 
 export interface CartCheckout {
@@ -34,6 +35,8 @@ export interface CartCheckout {
   message: string;
   totalCents: string;
   currency: string;
+  branchId?: string | null;
+  branchName?: string | null;
 }
 
 export const MAX_CART_QUANTITY = 99;

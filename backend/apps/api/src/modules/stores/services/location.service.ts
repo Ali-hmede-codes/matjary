@@ -81,6 +81,16 @@ export interface GeocodeResult {
   postalCode?: string;
 }
 
+export interface GoogleMapsResolution {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  city?: string;
+  country?: string;
+  postalCode?: string;
+  placeName?: string;
+}
+
 export interface LocationValidationResult {
   isValid: boolean;
   isInLebanon: boolean;
@@ -243,6 +253,154 @@ export class LocationService {
       );
       return null;
     }
+  }
+
+  /**
+   * Validate and normalize a Google Maps share link. Only HTTPS Google Maps
+   * hosts are accepted; everything else is discarded before it reaches storage.
+   */
+  normalizeGoogleMapsUrl(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+    if (!trimmed || trimmed.length > 1000) return null;
+    try {
+      const url = new URL(trimmed);
+      return this.isAllowedGoogleMapsUrl(url) ? url.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Turn a Google Maps share link into coordinates. Long place links are parsed
+   * directly; short links are followed server-side because browsers cannot
+   * read their redirects. A named place without coordinates is geocoded.
+   */
+  async resolveGoogleMapsLink(
+    value: string,
+  ): Promise<GoogleMapsResolution | null> {
+    const normalized = this.normalizeGoogleMapsUrl(value);
+    if (!normalized) return null;
+    let current = new URL(normalized);
+    try {
+      if (this.isShortGoogleMapsUrl(current)) {
+        let resolved: URL | null = null;
+        for (let hop = 0; hop < 5; hop += 1) {
+          const response = await fetch(current.toString(), {
+            method: 'GET',
+            redirect: 'manual',
+            headers: {
+              'User-Agent': this.userAgent,
+              Accept: 'text/html,application/xhtml+xml',
+            },
+            signal: AbortSignal.timeout(8000),
+          });
+          const location = response.headers.get('location');
+          await response.body?.cancel();
+          if (!location) break;
+          const next = new URL(location, current);
+          if (!this.isAllowedGoogleMapsUrl(next)) return null;
+          current = next;
+          if (!this.isShortGoogleMapsUrl(current)) {
+            resolved = current;
+            break;
+          }
+        }
+        if (!resolved) return null;
+        current = resolved;
+      }
+
+      const coordinates = this.mapsCoordinates(current);
+      if (coordinates) {
+        const placeName = this.mapsPlaceName(current);
+        return { ...coordinates, ...(placeName ? { placeName } : {}) };
+      }
+
+      const placeName = this.mapsPlaceName(current);
+      if (!placeName) return null;
+      const geocoded = await this.geocodeAddress(placeName);
+      if (!geocoded) return null;
+      return {
+        latitude: geocoded.latitude,
+        longitude: geocoded.longitude,
+        address: geocoded.address,
+        city: geocoded.city,
+        country: geocoded.country,
+        postalCode: geocoded.postalCode,
+        placeName,
+      };
+    } catch {
+      // Never log the owner-supplied link; return a sanitized failure.
+      this.logger.warn('Could not resolve a Google Maps link');
+      return null;
+    }
+  }
+
+  private isAllowedGoogleMapsUrl(url: URL): boolean {
+    if (url.protocol !== 'https:' || url.username || url.password) return false;
+    const host = url.hostname.toLowerCase();
+    if (host === 'maps.app.goo.gl') return true;
+    if (host === 'goo.gl') return url.pathname.startsWith('/maps');
+    if (/^maps\.google\.[a-z]{2,3}(?:\.[a-z]{2})?$/u.test(host)) return true;
+    if (/^(?:www\.)?google\.[a-z]{2,3}(?:\.[a-z]{2})?$/u.test(host))
+      return url.pathname.startsWith('/maps');
+    return false;
+  }
+
+  private isShortGoogleMapsUrl(url: URL): boolean {
+    const host = url.hostname.toLowerCase();
+    return (
+      host === 'maps.app.goo.gl' ||
+      (host === 'goo.gl' && url.pathname.startsWith('/maps'))
+    );
+  }
+
+  private mapsCoordinates(
+    url: URL,
+  ): { latitude: number; longitude: number } | null {
+    let text = url.toString();
+    try {
+      text = decodeURIComponent(text);
+    } catch {
+      // Keep the encoded value; the usable patterns are usually plain ASCII.
+    }
+    const patterns = [
+      /!3d(-?\d{1,3}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/u,
+      /@(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/u,
+      /[?&](?:q|query|ll|destination|center|viewpoint)=(?:loc:)?(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/u,
+      /\/place\/(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/u,
+    ];
+    for (const pattern of patterns) {
+      const match = pattern.exec(text);
+      if (!match) continue;
+      const latitude = Number(match[1]);
+      const longitude = Number(match[2]);
+      if (
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude) &&
+        Math.abs(latitude) <= 90 &&
+        Math.abs(longitude) <= 180
+      )
+        return { latitude, longitude };
+    }
+    return null;
+  }
+
+  private mapsPlaceName(url: URL): string | undefined {
+    if (this.mapsCoordinates(url)) return undefined;
+    const match = /\/maps\/place\/([^/]+)/u.exec(url.pathname);
+    const raw = match?.[1];
+    if (raw) {
+      let value = raw.replace(/\+/gu, ' ');
+      try {
+        value = decodeURIComponent(value);
+      } catch {
+        // Keep the undecoded segment when it contains a stray percent sign.
+      }
+      const trimmed = value.trim();
+      if (trimmed) return trimmed.slice(0, 200);
+    }
+    const query = url.searchParams.get('q') ?? url.searchParams.get('query');
+    return query?.trim() ? query.trim().slice(0, 200) : undefined;
   }
 
   /**

@@ -1,16 +1,36 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Check, Coffee, Store as StoreIcon } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Check,
+  Coffee,
+  MapPin,
+  Store as StoreIcon,
+} from 'lucide-react';
 import {
   storeMediaUrl,
   storePresentation,
   storeStatusLabel,
 } from '../../lib/storefront';
+import {
+  isGoogleMapsUrl,
+  timeInputToMinutes,
+  weekDays,
+} from '../../lib/branches';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
+import { SocialIcon, socialNetworks } from '../../components/SocialIcon';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 import { StoreLifecycleControls } from './StoreManager';
+import {
+  StoreBranchesEditor,
+  branchPayload,
+  branchWhatsAppDigits,
+  emptyBranchDraft,
+  toBranchDraft,
+  type BranchDraft,
+} from './StoreBranchesEditor';
 
 const presets = [
   ['Forest', '#254e40'],
@@ -20,6 +40,75 @@ const presets = [
   ['Rose', '#a13d63'],
   ['Charcoal', '#30363b'],
 ] as const;
+
+const socialHosts: Record<string, string> = {
+  instagram: 'instagram.com',
+  facebook: 'facebook.com',
+  twitter: 'x.com',
+  tiktok: 'tiktok.com',
+  youtube: 'youtube.com',
+  telegram: 't.me',
+};
+
+function initialSocials(store?: OwnerStore): Record<string, string> {
+  const saved = store?.socialMediaLinks ?? {};
+  return Object.fromEntries(
+    socialNetworks.map(({ network }) => [
+      network,
+      typeof saved[network] === 'string' ? saved[network] : '',
+    ]),
+  );
+}
+
+function legacyBranch(store: OwnerStore): BranchDraft | undefined {
+  const location = store.location;
+  if (!location) return undefined;
+  const whatsapp = store.socialMediaLinks?.whatsapp?.replace(/\D/gu, '') ?? '';
+  const draft = toBranchDraft({
+    id: '',
+    name:
+      location.locationName ||
+      location.city ||
+      location.address ||
+      'Main location',
+    address: location.address ?? null,
+    city: location.city ?? null,
+    country: location.country ?? null,
+    postalCode: null,
+    latitude: location.latitude ?? null,
+    longitude: location.longitude ?? null,
+    phone: location.phone ?? null,
+    whatsapp: /^\d{7,15}$/u.test(whatsapp) ? whatsapp : null,
+    openingHours: location.openingHours ?? null,
+    isPrimary: true,
+  });
+  return { ...draft, key: 'legacy-branch' };
+}
+
+function initialBranches(store?: OwnerStore): BranchDraft[] {
+  if (store?.branches?.length) return store.branches.map(toBranchDraft);
+  const legacy = store ? legacyBranch(store) : undefined;
+  if (legacy) return [legacy];
+  // New shops start with one friendly draft; existing shops can add branches.
+  return store ? [] : [emptyBranchDraft(true)];
+}
+
+function normalizeSocialUrl(network: string, raw: string): string | undefined {
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (network === 'whatsapp' && /^[+\d\s().-]+$/u.test(value)) {
+    const digits = value.replace(/\D/gu, '');
+    return /^\d{7,15}$/u.test(digits) ? `https://wa.me/${digits}` : undefined;
+  }
+  if (/^https?:\/\//iu.test(value)) return value;
+  if (network === 'website' || value.includes('.'))
+    return `https://${value.replace(/^\/+/u, '')}`;
+  const host = socialHosts[network];
+  if (!host) return undefined;
+  const handle = value.replace(/^@/u, '').replace(/^\/+/u, '');
+  return handle ? `https://${host}/${handle}` : undefined;
+}
+
 export function StoreEditor({ store }: { store?: OwnerStore }) {
   const { summary, savedStore } = useOwner();
   const navigate = useNavigate();
@@ -31,10 +120,12 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
   const [description, setDescription] = useState(store?.description || '');
   const [logo, setLogo] = useState(store?.logoKey || '');
   const [banner, setBanner] = useState(store?.bannerKey || '');
-  const [phone, setPhone] = useState(store?.location?.phone || '');
-  const [city, setCity] = useState(store?.location?.city || '');
-  const [country, setCountry] = useState(store?.location?.country || '');
-  const [address, setAddress] = useState(store?.location?.address || '');
+  const [socials, setSocials] = useState<Record<string, string>>(() =>
+    initialSocials(store),
+  );
+  const [branches, setBranches] = useState<BranchDraft[]>(() =>
+    initialBranches(store),
+  );
   const [cart, setCart] = useState(
     Boolean(store?.enableCart && summary.limits.enableCart),
   );
@@ -49,6 +140,17 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const branchDrafts = branches.filter(
+    (branch) =>
+      branch.name.trim() ||
+      branch.address.trim() ||
+      branch.city.trim() ||
+      branch.phone.trim() ||
+      branch.whatsapp.trim() ||
+      branch.googleMapsUrl.trim() ||
+      branch.latitude !== null ||
+      branch.longitude !== null,
+  );
   const snapshot = JSON.stringify({
     name,
     type,
@@ -56,10 +158,8 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     description,
     logo,
     banner,
-    phone,
-    city,
-    country,
-    address,
+    socials,
+    branches: branchDrafts.map((branch) => branchPayload(branch)),
     cart,
     whatsapp,
   });
@@ -70,6 +170,21 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     storeType: type,
     brandColor: color,
   });
+  const socialEntries = socialNetworks.map((entry) => ({
+    ...entry,
+    value: socials[entry.network] ?? '',
+  }));
+  const storeOrderWhatsApp = normalizeSocialUrl(
+    'whatsapp',
+    socials.whatsapp ?? '',
+  );
+  const branchWhatsAppMissing =
+    whatsapp &&
+    !storeOrderWhatsApp &&
+    !branchDrafts.some((branch) =>
+      /^\d{7,15}$/u.test(branchWhatsAppDigits(branch.whatsapp)),
+    );
+
   async function save(e: FormEvent) {
     e.preventDefault();
     if (busy || lifecycleBusy || uploading || processing) return;
@@ -77,10 +192,72 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       setError('Please enter a store name.');
       return;
     }
-    const phoneDigits = phone.replace(/\D/g, '');
-    if (store && whatsapp && !/^\d{7,15}$/.test(phoneDigits)) {
+    for (const [index, branch] of branchDrafts.entries()) {
+      if (!branch.name.trim()) {
+        setError(`Branch ${index + 1} needs a name.`);
+        return;
+      }
+      if (
+        branch.whatsapp.trim() &&
+        (!/^[+\d\s().-]+$/u.test(branch.whatsapp.trim()) ||
+          !/^\d{7,15}$/u.test(branchWhatsAppDigits(branch.whatsapp)))
+      ) {
+        setError(
+          `Branch ${index + 1}: add a WhatsApp number with its country code, or leave it empty.`,
+        );
+        return;
+      }
+      if (
+        branch.phone.trim() &&
+        !/^[+\d\s().-]{7,30}$/u.test(branch.phone.trim())
+      ) {
+        setError(`Branch ${index + 1}: check the phone number.`);
+        return;
+      }
+      const mapsLink = branch.googleMapsUrl.trim();
+      if (mapsLink && !isGoogleMapsUrl(mapsLink)) {
+        setError(
+          `Branch ${index + 1}: enter a valid Google Maps link, or clear it.`,
+        );
+        return;
+      }
+      if (
+        mapsLink &&
+        branch.latitude === null &&
+        !branch.address.trim() &&
+        !branch.city.trim()
+      ) {
+        setError(
+          `Branch ${index + 1}: use the Google Maps link to set the pin, or add the address.`,
+        );
+        return;
+      }
+      for (const day of weekDays) {
+        const hours = branch.hours[day.key];
+        if (
+          hours.open &&
+          (timeInputToMinutes(hours.from) === null ||
+            timeInputToMinutes(hours.to) === null)
+        ) {
+          setError(
+            `Branch ${index + 1}: add valid ${day.label.toLowerCase()} hours, or mark the day closed.`,
+          );
+          return;
+        }
+      }
+    }
+    const socialMediaLinks: Record<string, string> = {};
+    for (const entry of socialEntries) {
+      const href = normalizeSocialUrl(entry.network, entry.value);
+      if (entry.value.trim() && !href) {
+        setError(`Enter a valid link for ${entry.label}.`);
+        return;
+      }
+      if (href) socialMediaLinks[entry.network] = href;
+    }
+    if (whatsapp && branchWhatsAppMissing) {
       setError(
-        'Add a WhatsApp phone number with its country code, or turn off WhatsApp checkout.',
+        'Add a WhatsApp number to a branch, or set the order WhatsApp link under Social links, so customers can send orders.',
       );
       return;
     }
@@ -88,33 +265,22 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     setError('');
     setNotice('');
     try {
+      const branchBodies = branchDrafts.map((branch) => branchPayload(branch));
       const body = {
         name: name.trim(),
         storeType: type,
         brandColor: color,
+        description: description.trim() || null,
+        socialMediaLinks,
         ...(store
           ? {
-              description: description.trim() || null,
               logoKey: logo || null,
               bannerKey: banner || null,
               enableCart: cart,
               enableWhatsAppCheckout: whatsapp,
-              ...(phoneDigits
-                ? {
-                    socialMediaLinks: {
-                      ...store.socialMediaLinks,
-                      whatsapp: `https://wa.me/${phoneDigits}`,
-                    },
-                  }
-                : {}),
-              location: {
-                phone: phone.trim() || null,
-                city: city.trim() || null,
-                country: country.trim() || null,
-                address: address.trim() || null,
-              },
             }
           : {}),
+        ...(store || branchBodies.length ? { branches: branchBodies } : {}),
       };
       const updated = await mutate<OwnerStore>(
         store ? `stores/${encodeURIComponent(store.slug)}` : 'stores',
@@ -131,6 +297,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       setBusy(false);
     }
   }
+
   return (
     <>
       <PageTitle
@@ -258,132 +425,148 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
             </label>
           </section>
           {store && (
-            <>
-              <section className="panel-card">
-                <h2>Give your store a face</h2>
+            <section className="panel-card">
+              <h2>Give your store a face</h2>
+              <p className="panel-muted">
+                Optional. Your initials and chosen color look great too.
+              </p>
+              <MediaUpload
+                targetId={store.id}
+                purpose="store_logo"
+                label="Store logo"
+                keys={logo ? [logo] : []}
+                onChange={(keys) => setLogo(keys[0] || '')}
+                onBusy={setUploading}
+                onPending={setProcessing}
+                disabled={busy || lifecycleBusy || uploading || processing}
+                maxImageBytes={
+                  typeof summary.limits.maxImageSizeBytes === 'number'
+                    ? summary.limits.maxImageSizeBytes
+                    : undefined
+                }
+              />
+              <MediaUpload
+                targetId={store.id}
+                purpose="store_banner"
+                label="Cover photo"
+                keys={banner ? [banner] : []}
+                onChange={(keys) => setBanner(keys[0] || '')}
+                onBusy={setUploading}
+                onPending={setProcessing}
+                disabled={busy || lifecycleBusy || uploading || processing}
+                maxImageBytes={
+                  typeof summary.limits.maxImageSizeBytes === 'number'
+                    ? summary.limits.maxImageSizeBytes
+                    : undefined
+                }
+              />
+            </section>
+          )}
+          <section className="panel-card panel-optional store-description-card">
+            <h2>About your store</h2>
+            <label>
+              A little about your store
+              <textarea
+                maxLength={3000}
+                rows={3}
+                value={description}
+                placeholder="What makes your business special?"
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
+          </section>
+          <StoreBranchesEditor
+            branches={branches}
+            onChange={setBranches}
+            disabled={busy || lifecycleBusy || uploading || processing}
+          />
+          <section className="panel-card store-socials-card">
+            <div className="store-socials-heading">
+              <div>
+                <h2>Social links</h2>
                 <p className="panel-muted">
-                  Optional. Your initials and chosen color look great too.
+                  These icons appear on your shop page. Use full links or just
+                  your handle.
                 </p>
-                <MediaUpload
-                  targetId={store.id}
-                  purpose="store_logo"
-                  label="Store logo"
-                  keys={logo ? [logo] : []}
-                  onChange={(keys) => setLogo(keys[0] || '')}
-                  onBusy={setUploading}
-                  onPending={setProcessing}
-                  disabled={busy || lifecycleBusy || uploading || processing}
-                  maxImageBytes={
-                    typeof summary.limits.maxImageSizeBytes === 'number'
-                      ? summary.limits.maxImageSizeBytes
-                      : undefined
-                  }
+              </div>
+              <div className="store-socials-preview" aria-hidden="true">
+                {socialEntries
+                  .filter((entry) => entry.value.trim())
+                  .map((entry) => (
+                    <span key={entry.network} title={entry.label}>
+                      <SocialIcon network={entry.network} size={16} />
+                    </span>
+                  ))}
+              </div>
+            </div>
+            <div className="store-socials-fields">
+              {socialEntries.map((entry) => (
+                <label key={entry.network}>
+                  <span>
+                    <SocialIcon network={entry.network} size={15} />
+                    {entry.label}
+                  </span>
+                  <input
+                    type="text"
+                    value={entry.value}
+                    placeholder={entry.placeholder}
+                    inputMode={entry.network === 'whatsapp' ? 'tel' : 'url'}
+                    autoComplete="url"
+                    onChange={(event) =>
+                      setSocials((current) => ({
+                        ...current,
+                        [entry.network]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <p className="panel-muted store-socials-hint">
+              <MapPin size={14} /> Tip: if no branch has a WhatsApp number, the
+              order WhatsApp link here receives checkout messages.
+            </p>
+          </section>
+          {store && (
+            <details className="panel-card panel-optional">
+              <summary>
+                Shopping options <span>Optional</span>
+              </summary>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={cart}
+                  disabled={!summary.limits.enableCart}
+                  onChange={(e) => setCart(e.target.checked)}
                 />
-                <MediaUpload
-                  targetId={store.id}
-                  purpose="store_banner"
-                  label="Cover photo"
-                  keys={banner ? [banner] : []}
-                  onChange={(keys) => setBanner(keys[0] || '')}
-                  onBusy={setUploading}
-                  onPending={setProcessing}
-                  disabled={busy || lifecycleBusy || uploading || processing}
-                  maxImageBytes={
-                    typeof summary.limits.maxImageSizeBytes === 'number'
-                      ? summary.limits.maxImageSizeBytes
-                      : undefined
-                  }
+                Enable shopping cart{' '}
+                <small>
+                  {summary.limits.enableCart
+                    ? 'Let visitors collect their favorite items.'
+                    : 'Not included in your current plan.'}
+                </small>
+              </label>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={whatsapp}
+                  disabled={!summary.limits.enableWhatsAppCheckout}
+                  onChange={(e) => setWhatsapp(e.target.checked)}
                 />
-              </section>
-              <details className="panel-card panel-optional">
-                <summary>
-                  About & contact <span>Optional</span>
-                </summary>
-                <label>
-                  A little about your store
-                  <textarea
-                    maxLength={3000}
-                    rows={3}
-                    value={description}
-                    placeholder="What makes your business special?"
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Phone / WhatsApp number
-                  <input
-                    type="tel"
-                    maxLength={30}
-                    value={phone}
-                    placeholder="Include your country code"
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                  />
-                </label>
-                <div className="panel-two-fields">
-                  <label>
-                    City
-                    <input
-                      maxLength={100}
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      autoComplete="address-level2"
-                    />
-                  </label>
-                  <label>
-                    Country
-                    <input
-                      maxLength={100}
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      autoComplete="country-name"
-                    />
-                  </label>
-                </div>
-                <label>
-                  Address
-                  <input
-                    maxLength={500}
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    autoComplete="street-address"
-                  />
-                </label>
-              </details>
-              <details className="panel-card panel-optional">
-                <summary>
-                  Shopping options <span>Optional</span>
-                </summary>
-                <label className="panel-toggle">
-                  <input
-                    type="checkbox"
-                    checked={cart}
-                    disabled={!summary.limits.enableCart}
-                    onChange={(e) => setCart(e.target.checked)}
-                  />
-                  Enable shopping cart{' '}
-                  <small>
-                    {summary.limits.enableCart
-                      ? 'Let visitors collect their favorite items.'
-                      : 'Not included in your current plan.'}
-                  </small>
-                </label>
-                <label className="panel-toggle">
-                  <input
-                    type="checkbox"
-                    checked={whatsapp}
-                    disabled={!summary.limits.enableWhatsAppCheckout}
-                    onChange={(e) => setWhatsapp(e.target.checked)}
-                  />
-                  Enable WhatsApp checkout{' '}
-                  <small>
-                    {summary.limits.enableWhatsAppCheckout
-                      ? 'Add your phone number above so customers can reach you.'
-                      : 'Available with an eligible subscription.'}
-                  </small>
-                </label>
-              </details>
-            </>
+                Enable WhatsApp checkout{' '}
+                <small>
+                  {summary.limits.enableWhatsAppCheckout
+                    ? 'Each order goes to the branch your customer chooses.'
+                    : 'Available with an eligible subscription.'}
+                </small>
+              </label>
+              {whatsapp && branchWhatsAppMissing && (
+                <p className="panel-field-error">
+                  Add a WhatsApp number to at least one branch, or set the order
+                  WhatsApp link above, before customers can check out.
+                </p>
+              )}
+            </details>
           )}
           {error && <Notice error>{error}</Notice>}
           {notice && <Notice>{notice}</Notice>}
@@ -395,7 +578,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                   ? 'You have unsaved changes'
                   : store
                     ? 'Everything is up to date'
-                    : 'Your address is generated automatically'}
+                    : 'You can add branches and social links anytime'}
             </span>
             <button
               className="panel-primary"
@@ -434,6 +617,13 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               <small>{presentation.label}</small>
               <h2>{name || 'Your store name'}</h2>
               <p>{description || 'A little home for what you do best.'}</p>
+              {branchDrafts.length > 0 && (
+                <span className="panel-preview-branches">
+                  <MapPin size={12} />
+                  {branchDrafts.length}{' '}
+                  {branchDrafts.length === 1 ? 'branch' : 'branches'}
+                </span>
+              )}
               <span className="panel-preview-button">
                 {presentation.catalogAction}
               </span>

@@ -9,6 +9,8 @@ import {
   IsUrl,
   IsEnum,
   IsNumber,
+  IsArray,
+  ArrayMaxSize,
   Min,
   Max,
   IsLatitude,
@@ -16,46 +18,57 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SocialMediaLinks, StoreType } from '@app/database';
+import { StoreBranchDto } from './store-branch.dto';
+
+const HTTP_URL = /^https?:\/\//iu;
 
 export class CreateSocialMediaLinksDto implements SocialMediaLinks {
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   instagram?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   facebook?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   twitter?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   tiktok?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   youtube?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   website?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   whatsapp?: string;
 
   @IsOptional()
   @IsString()
   @IsUrl()
+  @Matches(HTTP_URL)
   telegram?: string;
 }
 
@@ -147,6 +160,15 @@ export class CreateStoreDto {
   @ValidateNested()
   @Type(() => CreateStoreLocationDto)
   location?: CreateStoreLocationDto | null;
+
+  // Branches can be added right away, so a new shop can publish its address,
+  // phone numbers, and hours in the same request.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => StoreBranchDto)
+  branches?: StoreBranchDto[];
 
   // logoKey and bannerKey are set via media upload, not directly in create
 }
