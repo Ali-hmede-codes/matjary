@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Expand,
   Images,
-  Info,
   Layers,
   LoaderCircle,
   MapPin,
@@ -179,7 +178,6 @@ function ShopPageLoading() {
           <div className="shop-skeleton shop-skeleton-line" />
           <div className="shop-skeleton shop-skeleton-short" />
         </div>
-        <div className="shop-actions shop-skeleton shop-skeleton-button" />
       </div>
       <div className="shop-loading-content">
         <ShopCardsLoading posts label="Loading posts…" />
@@ -626,27 +624,6 @@ export function StorePage({ slug }: { slug: string | null }) {
                       )}
                     </div>
                   )}
-                </div>
-                <div className="shop-actions">
-                  <button
-                    type="button"
-                    className="secondary-button shop-glass"
-                    aria-expanded={contactOpen}
-                    aria-controls="shop-contact-details"
-                    onClick={() =>
-                      contactOpen ? setContactOpen(false) : openContactDetails()
-                    }
-                  >
-                    {presentation.restaurant ? (
-                      <MapPin size={16} aria-hidden="true" />
-                    ) : (
-                      <Info size={16} aria-hidden="true" />
-                    )}
-                    {presentation.restaurant
-                      ? 'Plan your visit'
-                      : 'Visit & contact'}
-                    <ChevronDown size={15} aria-hidden="true" />
-                  </button>
                 </div>
                 <ShopBranches
                   store={store}

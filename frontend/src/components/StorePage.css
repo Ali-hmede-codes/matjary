@@ -219,7 +219,7 @@
   width: calc(100% - var(--shop-gutter) * 2);
   margin: 0 auto 30px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 22px;
 }
@@ -350,16 +350,6 @@
   color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-.shop-actions {
-  padding-top: 20px;
-}
-.shop-actions button {
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.shop-actions button[aria-expanded='true'] > svg:last-child {
-  transform: rotate(180deg);
 }
 .shop-nav {
   position: sticky;
@@ -698,10 +688,6 @@
 .shop-skeleton-short {
   width: 45%;
   height: 14px;
-}
-.shop-skeleton-button {
-  width: min(190px, 100%);
-  height: 46px;
 }
 .shop-state {
   min-height: 65vh;
@@ -1115,17 +1101,6 @@
   }
   .shop-map-panel iframe {
     height: 260px;
-  }
-  .shop-actions {
-    grid-column: 1;
-    padding-top: 16px;
-  }
-  .shop-actions button {
-    min-height: 44px;
-    padding: 10px 16px;
-    gap: 8px;
-    font-size: 12px;
-    white-space: normal;
   }
   .shop-nav {
     gap: 26px;

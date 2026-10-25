@@ -27,6 +27,7 @@ import {
   dayKeyFor,
   formatDistance,
   hoursLabel,
+  primaryBranch,
   sortBranchesByDistance,
   storeBranches,
 } from '../lib/branches';
@@ -74,12 +75,14 @@ function BranchCard({
   branch,
   position,
   openMap,
+  active,
   onToggleMap,
 }: {
   storeName: string;
   branch: StoreBranch;
   position: VisitorPosition | null;
   openMap: boolean;
+  active: boolean;
   onToggleMap: () => void;
 }) {
   const address = branchAddress(branch);
@@ -95,7 +98,7 @@ function BranchCard({
   );
 
   return (
-    <article className="shop-branch-card">
+    <article className={`shop-branch-card ${active ? 'is-active' : ''}`}>
       <header className="shop-branch-head">
         <div>
           <h3>
@@ -227,7 +230,12 @@ export function ShopBranches({
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState('');
   const [openMap, setOpenMap] = useState<string | null>(null);
+  const [selectedBranchId, setSelectedBranchId] = useState(
+    () => primaryBranch(branches)?.id ?? '',
+  );
   const ordered = sortBranchesByDistance(branches, position);
+  const selectedBranch =
+    ordered.find((branch) => branch.id === selectedBranchId) ?? ordered[0];
   const mapped = branches.filter((branch) => branchMap(branch)).length;
 
   function locate() {
@@ -239,10 +247,14 @@ export function ShopBranches({
     setGeoError('');
     navigator.geolocation.getCurrentPosition(
       (result) => {
-        setPosition({
+        const nextPosition = {
           latitude: result.coords.latitude,
           longitude: result.coords.longitude,
-        });
+        };
+        setPosition(nextPosition);
+        const nearest = sortBranchesByDistance(branches, nextPosition)[0];
+        if (nearest) setSelectedBranchId(nearest.id);
+        setOpenMap(null);
         setLocating(false);
       },
       (error) => {
@@ -323,6 +335,35 @@ export function ShopBranches({
         </p>
       )}
 
+      {ordered.length > 1 && (
+        <div className="shop-branch-picker">
+          <label>
+            <span>
+              <MapPin size={14} aria-hidden="true" /> Choose a branch
+            </span>
+            <div className="shop-branch-select">
+              <select
+                value={selectedBranch?.id ?? ''}
+                onChange={(event) => {
+                  setSelectedBranchId(event.target.value);
+                  setOpenMap(null);
+                }}
+              >
+                {ordered.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                    {branch.isPrimary ? ' · Main' : ''}
+                    {branch.city ? ` · ${branch.city}` : ''}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={16} aria-hidden="true" />
+            </div>
+          </label>
+          <small>{ordered.length} branches · one shown at a time</small>
+        </div>
+      )}
+
       {ordered.length > 0 ? (
         <div
           className={`shop-branch-grid ${ordered.length === 1 ? 'is-single' : ''}`}
@@ -333,6 +374,7 @@ export function ShopBranches({
               storeName={store.name}
               branch={branch}
               position={position}
+              active={branch.id === selectedBranch?.id}
               openMap={openMap === branch.id}
               onToggleMap={() =>
                 setOpenMap((current) =>

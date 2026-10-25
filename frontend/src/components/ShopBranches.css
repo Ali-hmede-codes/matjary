@@ -99,6 +99,56 @@
   gap: 16px;
   padding: 20px 26px 26px;
 }
+.shop-branch-picker {
+  display: none;
+  margin: 16px 26px 0;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--ink) 9%, var(--surface));
+  border-radius: 16px;
+  background: var(--surface);
+}
+.shop-branch-picker label {
+  display: grid;
+  gap: 7px;
+}
+.shop-branch-picker label > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.shop-branch-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.shop-branch-select select {
+  appearance: none;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 42px 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--wash);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+}
+.shop-branch-select svg {
+  position: absolute;
+  right: 13px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.shop-branch-picker small {
+  color: var(--muted);
+  font-size: 10px;
+}
 .shop-branch-grid.is-single {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -405,8 +455,35 @@
   .shop-branch-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+  .shop-branch-picker {
+    display: grid;
+    gap: 6px;
+  }
+  .shop-branch-card {
+    display: none;
+  }
+  .shop-branch-card.is-active {
+    display: flex;
+  }
+  .shop-branches-panel:not([hidden]) {
+    animation: shop-branches-tap-in 0.22s ease-out;
+  }
+}
+@keyframes shop-branches-tap-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @media (max-width: 700px) {
+  .shop-branch-picker {
+    margin: 14px 18px 0;
+    padding: 12px;
+  }
   .shop-branches-head {
     flex-direction: column;
     gap: 14px;
@@ -446,6 +523,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .shop-branches-panel {
+    animation: none;
+  }
   .shop-branch-hours .shop-branch-chevron,
   .shop-branch-map-toggle svg:last-child {
     transition: none;
