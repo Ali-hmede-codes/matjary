@@ -13,7 +13,7 @@ import {
   HttpStatus,
   HttpCode,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -214,12 +214,18 @@ export class SeoController {
   })
   async getSharePage(
     @Param('path') path: string | string[],
+    @Req() request: Request,
     @Res() res: Response,
   ): Promise<void> {
     const target = Array.isArray(path) ? path.join('/') : (path ?? '');
-    const html = await this.seoService.renderShareHtml(target);
+    const html = await this.seoService.renderShareHtml(
+      target,
+      request.headers['user-agent'],
+    );
     res.set('Content-Type', 'text/html; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=300');
+    // The preview URL is a sharing device; the clean storefront URL is canonical.
+    res.set('X-Robots-Tag', 'noindex');
     res.send(html);
   }
 

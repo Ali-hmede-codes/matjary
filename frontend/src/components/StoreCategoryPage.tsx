@@ -15,6 +15,7 @@ import {
   menuCategoryGroups,
   categoryIndexGroups,
   productCategoryKey,
+  sharePreviewPath,
   storeCategoryPath,
   storeMediaUrl,
   storeMenuPath,
@@ -180,7 +181,9 @@ export function StoreCategoryPage({
     );
 
   const presentation = storePresentation(store);
-  const shareUrl = `${window.location.origin}${storeCategoryPath(shopSlug, categoryParam, demo)}`;
+  // Preview the API's OG document; it forwards visitors to this page.
+  const sharePath = storeCategoryPath(shopSlug, categoryParam, demo);
+  const shareUrl = `${window.location.origin}${demo ? sharePath : sharePreviewPath(sharePath)}`;
   return (
     <StoreDetailShell
       store={store}

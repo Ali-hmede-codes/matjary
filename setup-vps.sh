@@ -208,7 +208,7 @@ location = /index.html {
 # and images; browsers and search engine renderers keep the React app.
 location ^~ /stores/ {
     error_page 418 = @matjary_share;
-    if (\$http_user_agent ~* "(facebookexternalhit|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly)") {
+    if (\$http_user_agent ~* "(facebookexternalhit|facebookbot|meta-externalagent|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly|redditbot|Mastodon|Misskey)") {
         return 418;
     }
     try_files \$uri \$uri/ /index.html;
@@ -617,6 +617,10 @@ printf 'Open %s > Vhost. In the HTTPS server block, apply the following location
 printf 'Add/replace locations without duplicates; keep SSL/ACME/root/security settings. Save through CloudPanel.\n'
 printf 'If these matching locations are already installed, no Vhost change is necessary.\n\n'
 cat "$STATE/cloudpanel.locations.conf"
+printf '\nVerify social previews with a crawler user agent (use a real shop slug):\n'
+printf '  curl -s -A "WhatsApp/2.0" https://%s/stores/YOUR-SHOP-SLUG | grep -E "og:title|og:image"\n' "$DOMAIN"
+printf 'A shop title means the crawler locations are active. If the site HTML comes back, the locations above are missing.\n'
+printf 'WhatsApp and Facebook cache previews, so re-share with a changed query (?v=2) or use their sharing debugger after fixing the Vhost.\n'
 printf '\nThen verify:\n  https://%s/api/v1/health/ready\n  https://%s/\n  https://%s/api/v1/auth/login\n  https://%s/api/v1/admin\n' "$DOMAIN" "$DOMAIN" "$DOMAIN" "$DOMAIN"
 printf '\nCredentials remain private in %s; never paste that file or expanded Compose configuration.\n' "$ENV_FILE"
 printf 'Persistent volumes: %s_mysql-data, %s_redis-data, %s_media-data. Back them up.\n' "$PROJECT" "$PROJECT" "$PROJECT"

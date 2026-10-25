@@ -21,6 +21,7 @@ import {
   UpdateRedirectDto,
   IndexNowDto,
 } from './seo.dto';
+import { isShareCrawler, renderShareDocument } from './share-document';
 
 type SeoKind = 'store' | 'product' | 'showcase';
 import { ConfigService } from '@nestjs/config';
@@ -450,12 +451,12 @@ export class SeoService {
   }
 
   /**
-   * Minimal server-rendered page for social crawlers (WhatsApp, Facebook,
-   * Telegram, Slack, X, LinkedIn) that never execute the SPA. A reverse proxy
-   * forwards only those user agents for /stores/... paths; people still get
-   * the React app.
+   * Minimal server-rendered page for shared links. With the Vhost crawler rule
+   * this answers bots at the clean /stores/... URL; the app's share buttons
+   * call the endpoint directly when that rule is not installed. Crawlers read
+   * the tags; every other client is forwarded to the SPA page.
    */
-  async renderShareHtml(path: string): Promise<string> {
+  async renderShareHtml(path: string, userAgent?: string): Promise<string> {
     const target = path.replace(/[?#].*$/u, '').replace(/^\/+|\/+$/gu, '');
     const route =
       /^stores\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([cp])\/([a-z0-9]+(?:-[a-z0-9]+)*))?$/u.exec(
@@ -468,7 +469,10 @@ export class SeoService {
     });
     if (!store) throw new NotFoundException('Page not found');
     const meta = await this.shareMetaFor(store, route[2], route[3]);
-    return this.renderSharePage(meta);
+    return renderShareDocument(
+      meta,
+      isShareCrawler(userAgent) ? undefined : meta.canonical,
+    );
   }
 
   private async shareMetaFor(
@@ -582,45 +586,6 @@ export class SeoService {
       hash = Math.imul(hash, 16777619);
     }
     return `category-${(hash >>> 0).toString(36).padStart(6, '0').slice(0, 6)}`;
-  }
-
-  private renderSharePage(meta: MetaTags): string {
-    const escape = (value: string) => this.escapeXml(value);
-    const tags = [
-      `<title>${escape(meta.title)}</title>`,
-      `<meta name="description" content="${escape(meta.description)}">`,
-      `<meta name="robots" content="${escape(meta.robots)}">`,
-      `<link rel="canonical" href="${escape(meta.canonical)}">`,
-      `<meta property="og:type" content="${escape(meta.og.type)}">`,
-      `<meta property="og:title" content="${escape(meta.og.title)}">`,
-      `<meta property="og:description" content="${escape(meta.og.description)}">`,
-      `<meta property="og:url" content="${escape(meta.og.url)}">`,
-      `<meta property="og:site_name" content="${escape(meta.og.siteName ?? 'Matjary')}">`,
-      meta.og.image
-        ? `<meta property="og:image" content="${escape(meta.og.image)}">`
-        : '',
-      `<meta name="twitter:card" content="${escape(meta.twitter.card)}">`,
-      `<meta name="twitter:title" content="${escape(meta.twitter.title)}">`,
-      `<meta name="twitter:description" content="${escape(meta.twitter.description)}">`,
-      meta.twitter.image
-        ? `<meta name="twitter:image" content="${escape(meta.twitter.image)}">`
-        : '',
-    ];
-    return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-${tags.filter(Boolean).join('\n')}
-</head>
-<body>
-<main>
-<h1>${escape(meta.title)}</h1>
-<p>${escape(meta.description)}</p>
-<p><a href="${escape(meta.canonical)}">Open this page</a></p>
-</main>
-</body>
-</html>`;
   }
 
   private assertSiteUrl(value: string): void {

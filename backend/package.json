@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write \"{apps,libs,test,scripts}/**/*.{ts,json,cjs}\" \"*.json\" \"infra/**/*.yaml\"",
     "format:check": "prettier --check \"{apps,libs,test,scripts}/**/*.{ts,json,cjs}\" \"*.json\" \"infra/**/*.yaml\"",
-    "test": "node -r ./test/setup-unit.cjs -r ts-node/register -r tsconfig-paths/register --test test/unit/environment.test.ts test/unit/database.test.ts test/unit/health.test.ts test/unit/auth.test.ts test/unit/authorization.test.ts test/unit/subscription-trial.test.ts test/unit/showcases.test.ts test/unit/engagement.test.ts test/unit/media.test.ts test/unit/admin.test.ts test/unit/boost.test.ts test/unit/monitoring.test.ts test/unit/website-settings.test.ts test/unit/user-dashboard.test.ts",
+    "test": "node -r ./test/setup-unit.cjs -r ts-node/register -r tsconfig-paths/register --test test/unit/environment.test.ts test/unit/database.test.ts test/unit/health.test.ts test/unit/auth.test.ts test/unit/authorization.test.ts test/unit/subscription-trial.test.ts test/unit/showcases.test.ts test/unit/engagement.test.ts test/unit/media.test.ts test/unit/admin.test.ts test/unit/boost.test.ts test/unit/monitoring.test.ts test/unit/website-settings.test.ts test/unit/user-dashboard.test.ts test/unit/seo-share.test.ts",
     "test:integration": "node -r ts-node/register -r tsconfig-paths/register --test test/integration/database.test.ts",
     "env:init": "node scripts/init-env.cjs",
     "monitoring:init": "node scripts/init-monitoring.cjs",
