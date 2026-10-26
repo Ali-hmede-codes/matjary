@@ -5,12 +5,10 @@ import { assetUrl, type Media } from '../lib/api';
 export function MediaView({
   media,
   title,
-  playing = false,
   eager = false,
 }: {
   media?: Media;
   title: string;
-  playing?: boolean;
   eager?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
@@ -23,20 +21,6 @@ export function MediaView({
       </div>
     );
   const src = assetUrl(media.primaryUrl);
-  if (media.kind === 'video' && playing && src) {
-    return (
-      <video
-        src={src}
-        poster={assetUrl(media.posterUrl)}
-        controls
-        autoPlay
-        playsInline
-        preload="metadata"
-        aria-label={title}
-        onError={() => setFailed(true)}
-      />
-    );
-  }
   const preview = media.kind === 'video' ? assetUrl(media.posterUrl) : src;
   if (!preview)
     return (

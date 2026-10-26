@@ -53,7 +53,8 @@
 .post-media {
   position: relative;
 }
-.post-image {
+.post-image,
+.post-video {
   width: 100%;
   margin: 0;
   aspect-ratio: 4 / 3;
@@ -69,6 +70,14 @@
   height: 100%;
   object-fit: cover;
 }
+/* A video that cannot play falls back to its poster through MediaView. */
+.post-video .media-preview,
+.post-video .media-preview img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
 .post-image .media-preview img {
   transition:
     transform 0.4s ease,
@@ -77,19 +86,8 @@
 .post-image:hover img {
   transform: scale(1.035);
 }
-.inline-player {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  background: #111;
-}
-.inline-player video {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
 .video-feed .post-image,
-.video-feed .inline-player {
+.video-feed .post-video {
   aspect-ratio: 3 / 4;
 }
 .media-previous,
@@ -145,25 +143,12 @@
   align-items: center;
   gap: 5px;
 }
-.play-badge {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: #17231ebf;
-  color: #fff;
-}
 .post-expand {
   margin-left: auto;
   color: var(--muted);
 }
 .compact-grid .post-image,
-.compact-grid .inline-player {
+.compact-grid .post-video {
   aspect-ratio: 1;
 }
 .compact-grid .post-caption,
@@ -171,6 +156,10 @@
 .compact-grid .post-expand,
 .compact-grid .store-identity small {
   display: none;
+}
+/* Videos autoplay inside the tile, so keep a details affordance visible. */
+.compact-grid .post-expand-video {
+  display: inline-flex;
 }
 .compact-grid .post-header {
   min-height: 50px;
@@ -204,7 +193,8 @@
     border-inline: 0;
     border-top: 0;
   }
-  .post-image {
+  .post-image,
+  .post-video {
     aspect-ratio: 1;
   }
   .compact-grid .post-card {

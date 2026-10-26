@@ -1,0 +1,94 @@
+/* Muted, looping playback with Instagram-style overlays. The whole frame is a
+   play/pause button; the sound pill sits above it so muting stays one tap. */
+.auto-video {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0b1411;
+}
+.auto-video-el {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.auto-video-contain .auto-video-el {
+  object-fit: contain;
+}
+.auto-video-toggle {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.auto-video-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -4px;
+}
+.auto-video-toggle svg {
+  box-sizing: content-box;
+  padding: 13px;
+  border-radius: 50%;
+  background: #0b1a15c2;
+  filter: drop-shadow(0 4px 14px #0006);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+.auto-video:hover .auto-video-toggle svg,
+.auto-video-toggle:focus-visible svg,
+.auto-video.is-paused .auto-video-toggle svg {
+  opacity: 1;
+  transform: scale(1);
+}
+.auto-video-sound {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #ffffff30;
+  background: #0b1a15b8;
+  backdrop-filter: blur(5px);
+  color: #fff;
+}
+.auto-video-sound:hover {
+  background: #0b1a15e6;
+}
+.auto-video-buffering {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  pointer-events: none;
+}
+.auto-video-progress {
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: #ffffff26;
+  pointer-events: none;
+}
+.auto-video-progress i {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transform: scaleX(0);
+  transform-origin: left center;
+}

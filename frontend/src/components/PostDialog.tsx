@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowUpRight, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
 import { storePath } from '../lib/storefront';
 import type { Post } from '../lib/api';
+import { resumeFeedPlayback, suspendFeedPlayback } from '../lib/video-playback';
 import { PostActions, type PostActionProps } from './PostActions';
 import { StoreAvatar } from './StoreAvatar';
 
@@ -28,7 +30,9 @@ export function PostDialog(props: PostDialogProps) {
   const { post, initialIndex, notice, demo, onClose } = props;
   const dialog = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState(initialIndex);
-  useEffect(() => {
+  // Layout effect so the dialog enters the top layer before the autoplaying
+  // video under it runs play() on its first passive effect.
+  useLayoutEffect(() => {
     const element = dialog.current;
     const trigger = document.activeElement;
     const previousOverflow = document.body.style.overflow;
@@ -45,6 +49,12 @@ export function PostDialog(props: PostDialogProps) {
       if (trigger instanceof HTMLElement && trigger.isConnected)
         trigger.focus({ preventScroll: true });
     };
+  }, []);
+  // The feed keeps rendering behind the modal; stop its autoplaying clips so
+  // only the media being read keeps moving (and keeps its sound).
+  useEffect(() => {
+    suspendFeedPlayback();
+    return () => resumeFeedPlayback();
   }, []);
   const media = post.media[index];
   const multiple = post.media.length > 1;
@@ -66,8 +76,6 @@ export function PostDialog(props: PostDialogProps) {
         if (event.target === event.currentTarget) onClose();
       }}
       onKeyDown={(event) => {
-        // Leave arrow keys alone while a video's native controls have focus.
-        if ((event.target as HTMLElement).tagName === 'VIDEO') return;
         if (event.key === 'ArrowLeft') step(index - 1);
         else if (event.key === 'ArrowRight') step(index + 1);
         else return;
@@ -77,12 +85,17 @@ export function PostDialog(props: PostDialogProps) {
       <div className="post-viewer">
         <section className="post-viewer-media" aria-label="Post media">
           <div className="post-viewer-stage">
-            <MediaView
-              key={media?.id}
-              media={media}
-              title={post.title}
-              playing
-            />
+            {media?.kind === 'video' ? (
+              <AutoplayVideo
+                key={media.id}
+                media={media}
+                title={post.title}
+                eager
+                fit="contain"
+              />
+            ) : (
+              <MediaView key={media?.id} media={media} title={post.title} />
+            )}
           </div>
           <div className="post-viewer-top">
             {multiple && (

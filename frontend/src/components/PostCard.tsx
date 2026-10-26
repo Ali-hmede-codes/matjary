@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Expand, Layers, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Expand, Layers } from 'lucide-react';
 import { storePath } from '../lib/storefront';
+import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
 import { PostActions, type PostActionProps } from './PostActions';
 import { StoreAvatar } from './StoreAvatar';
@@ -30,12 +31,7 @@ export function PostCard({
         )
       : 0,
   );
-  const [playing, setPlaying] = useState(false);
   const media = post.media[mediaIndex];
-  function changeMedia(next: number) {
-    setPlaying(false);
-    setMediaIndex(next);
-  }
   return (
     <article
       className="post-card"
@@ -58,7 +54,7 @@ export function PostCard({
         </a>
         {demo && <span className="sample-label">SAMPLE</span>}
         <button
-          className="icon-button post-expand"
+          className={`icon-button post-expand${media?.kind === 'video' ? ' post-expand-video' : ''}`}
           aria-label={`Open details for ${post.title}`}
           onClick={() => onOpen(mediaIndex)}
         >
@@ -66,22 +62,15 @@ export function PostCard({
         </button>
       </header>
       <div className="post-media">
-        {media?.kind === 'video' && playing ? (
-          <div className="inline-player">
-            <MediaView
-              key={media.id}
-              media={media}
-              title={post.title}
-              playing
-            />
+        {media?.kind === 'video' ? (
+          <div className="post-video">
+            <AutoplayVideo key={media.id} media={media} title={post.title} />
           </div>
         ) : (
           <button
             className="post-image"
-            onClick={() =>
-              media?.kind === 'video' ? setPlaying(true) : onOpen(mediaIndex)
-            }
-            aria-label={`${media?.kind === 'video' ? 'Play' : 'Open'} ${post.title}`}
+            onClick={() => onOpen(mediaIndex)}
+            aria-label={`Open ${post.title}`}
           >
             <MediaView
               key={media?.id}
@@ -89,11 +78,6 @@ export function PostCard({
               title={post.title}
               eager={index === 0}
             />
-            {media?.kind === 'video' && (
-              <span className="play-badge">
-                <Play fill="currentColor" size={25} />
-              </span>
-            )}
           </button>
         )}
         {post.media.length > 1 && (
@@ -106,7 +90,7 @@ export function PostCard({
               className="icon-button media-previous"
               aria-label="Previous photo or video"
               disabled={mediaIndex === 0}
-              onClick={() => changeMedia(mediaIndex - 1)}
+              onClick={() => setMediaIndex(mediaIndex - 1)}
             >
               <ChevronLeft size={20} />
             </button>
@@ -114,7 +98,7 @@ export function PostCard({
               className="icon-button media-next"
               aria-label="Next photo or video"
               disabled={mediaIndex === post.media.length - 1}
-              onClick={() => changeMedia(mediaIndex + 1)}
+              onClick={() => setMediaIndex(mediaIndex + 1)}
             >
               <ChevronRight size={20} />
             </button>

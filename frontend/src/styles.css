@@ -11,6 +11,7 @@
 @import './components/FeedToolbar.css';
 @import './components/FeedPosts.css';
 @import './components/MediaView.css';
+@import './components/AutoplayVideo.css';
 @import './components/PostCard.css';
 @import './components/AdCard.css';
 @import './components/TrendingStores.css';
