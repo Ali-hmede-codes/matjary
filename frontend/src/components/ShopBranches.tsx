@@ -126,8 +126,11 @@ function BranchCard({
               className={`shop-branch-state ${openState.open ? 'is-open' : 'is-closed'}`}
               title={openState.label}
             >
-              <span aria-hidden="true" />
-              {openState.open ? 'Open now' : 'Closed'}
+              <span className="shop-state-dot" aria-hidden="true" />
+              <span className="shop-branch-state-copy">
+                <strong>{openState.open ? 'Open now' : 'Closed'}</strong>
+                {openState.detail && <small>{openState.detail}</small>}
+              </span>
             </span>
           )}
         </div>

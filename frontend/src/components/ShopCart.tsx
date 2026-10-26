@@ -258,6 +258,15 @@ export function ShopCart({
                           )}{' '}
                           each
                         </p>
+                        {item.selectedOptions?.length ? (
+                          <p className="shop-cart-item-options">
+                            {item.selectedOptions.map((option) => (
+                              <span key={`${option.name}:${option.value}`}>
+                                {option.name}: <strong>{option.value}</strong>
+                              </span>
+                            ))}
+                          </p>
+                        ) : null}
                         {item.notes && <p>{item.notes}</p>}
                         <div className="shop-cart-item-actions">
                           <div

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ImagePlus, Package, Plus } from 'lucide-react';
+import { Copy, ImagePlus, Package, Plus, Trash2 } from 'lucide-react';
+import type { ProductOptionGroup } from '../../lib/api';
 import {
   getJson,
   mutate,
@@ -23,7 +24,9 @@ import {
 import { MediaUpload } from '../shared/MediaUpload';
 import {
   formatProductPrice,
+  normalizeSlug,
   productCategoryLabel,
+  slugDraft,
   storeMediaUrl,
 } from '../../lib/storefront';
 import { useOwner } from './OwnerPanel';
@@ -42,6 +45,7 @@ interface Content {
   categoryName?: string | null;
   stockQuantity?: number | null;
   imageKeys?: string[] | null;
+  options?: ProductOptionGroup[] | null;
   // Posts carry their first ready media variant here; products use imageKeys.
   thumbnailKey?: string | null;
 }
@@ -185,6 +189,18 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                           )
                         : item.description || 'Your next story.'}
                     </p>
+                    {product && item.options?.length ? (
+                      <p className="panel-muted panel-content-options">
+                        {item.options.length}{' '}
+                        {item.options.length === 1 ? 'option' : 'options'} ·{' '}
+                        {item.options.map((option) => option.name).join(', ')}
+                      </p>
+                    ) : null}
+                    {product && item.slug ? (
+                      <small className="panel-content-slug">
+                        /p/{item.slug}
+                      </small>
+                    ) : null}
                     <button onClick={() => setEditor(item)}>
                       Edit {label}
                     </button>
@@ -254,13 +270,36 @@ function ContentEditor({
   );
   const [description, setDescription] = useState(item?.description || '');
   const [keys, setKeys] = useState(item?.imageKeys || []);
+  const [slug, setSlug] = useState(item?.slug || '');
+  const [slugTouched, setSlugTouched] = useState(Boolean(item));
+  const [options, setOptions] = useState<ProductOptionGroup[]>(() =>
+    (item?.options ?? []).map((group) => ({
+      name: group.name,
+      values: [...group.values],
+    })),
+  );
+  const [optionsTouched, setOptionsTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [priceError, setPriceError] = useState('');
-  const snapshot = JSON.stringify({
+  const [slugError, setSlugError] = useState('');
+  const [optionsError, setOptionsError] = useState('');
+  const cleanSlug = normalizeSlug(slug);
+  const snapshotOf = (values: {
+    name: string;
+    price: string;
+    currency: string;
+    categoryId: string;
+    stock: string;
+    description: string;
+    keys: string[];
+    slug: string;
+    options: ProductOptionGroup[];
+  }) => JSON.stringify(values);
+  const snapshot = snapshotOf({
     name,
     price,
     currency,
@@ -268,6 +307,8 @@ function ContentEditor({
     stock,
     description,
     keys,
+    slug,
+    options,
   });
   const [baseline, setBaseline] = useState(snapshot);
   const dirty = snapshot !== baseline;
@@ -289,6 +330,18 @@ function ContentEditor({
       ),
     enabled: product,
   });
+  // Other products owned by this account are the source for copied options.
+  // One query covers every store, so a shop can reuse a size chart or color
+  // list from a sibling shop without retyping it.
+  const optionSources = useQuery({
+    queryKey: ['panel', session.user.id, 'product-option-sources'],
+    queryFn: ({ signal }) =>
+      getJson<Page<Content>>('dashboard/products?limit=100', signal),
+    enabled: product,
+  });
+  const sourceProducts = (optionSources.data?.items ?? []).filter(
+    (entry) => entry.id !== record?.id && Boolean(entry.options?.length),
+  );
   const existingPending =
     !product &&
     media.data?.some(
@@ -296,6 +349,103 @@ function ContentEditor({
     );
   const existingFailed =
     !product && media.data?.some((a) => a.status === 'failed');
+  function changeName(value: string) {
+    setName(value);
+    setSlugError('');
+    // A new product gets a readable address while the owner types the name;
+    // editing the address manually opts out of automatic updates.
+    if (product && !slugTouched) setSlug(slugDraft(value));
+  }
+  function changeSlug(value: string) {
+    setSlug(slugDraft(value));
+    setSlugTouched(true);
+    setSlugError('');
+  }
+  function updateOption(index: number, next: ProductOptionGroup) {
+    setOptions((current) =>
+      current.map((group, position) => (position === index ? next : group)),
+    );
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function removeOption(index: number) {
+    setOptions((current) =>
+      current.filter((_, position) => position !== index),
+    );
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function addOption() {
+    if (options.length >= 10) return;
+    setOptions((current) => [...current, { name: '', values: [] }]);
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function copyOptions(sourceId: string) {
+    const source = optionSources.data?.items.find(
+      (entry) => entry.id === sourceId,
+    );
+    if (!source?.options?.length) return;
+    setOptions(
+      source.options.map((group) => ({
+        name: group.name,
+        values: [...group.values],
+      })),
+    );
+    setOptionsTouched(true);
+    setOptionsError('');
+    setNotice(
+      `Options copied from ${source.name}. Adjust the names or values, then save.`,
+    );
+  }
+  function validateOptions(): {
+    groups: ProductOptionGroup[] | null;
+    error: string;
+  } {
+    const groups: ProductOptionGroup[] = [];
+    const names = new Set<string>();
+    for (const group of options) {
+      const optionName = group.name.trim();
+      const values: string[] = [];
+      const seen = new Set<string>();
+      for (const raw of group.values) {
+        const value = raw.trim();
+        if (!value) continue;
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        values.push(value);
+      }
+      // An option row that was added and left blank is simply ignored.
+      if (!optionName && !values.length) continue;
+      if (!optionName)
+        return {
+          groups: null,
+          error: 'Give each option a name, such as Size or Color.',
+        };
+      if (!values.length)
+        return {
+          groups: null,
+          error: `Add at least one value for “${optionName}”.`,
+        };
+      if (values.length > 25)
+        return {
+          groups: null,
+          error: `“${optionName}” can have at most 25 values.`,
+        };
+      const nameKey = optionName.toLowerCase();
+      if (names.has(nameKey))
+        return { groups: null, error: 'Option names must be unique.' };
+      names.add(nameKey);
+      groups.push({ name: optionName, values });
+    }
+    if (groups.length > 10)
+      return {
+        groups: null,
+        error: 'A product can have at most 10 options.',
+      };
+    return { groups: groups.length ? groups : null, error: '' };
+  }
   function onClose() {
     if (busy || uploading) return;
     if (
@@ -306,7 +456,8 @@ function ContentEditor({
   }
   async function save(status: string, stay = false) {
     if (busy || uploading || processing) return;
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    if (!cleanName) {
       setError(product ? 'Enter an item name.' : 'Enter a post title.');
       return;
     }
@@ -315,29 +466,50 @@ function ContentEditor({
       setPriceError('Use a price such as 12.50, with at most two decimals.');
       return;
     }
+    if (product && slug && !cleanSlug) {
+      setSlugError('Use letters, numbers, and dashes for the web address.');
+      return;
+    }
+    const shouldSaveOptions = product && (optionsTouched || !record);
+    const validated = shouldSaveOptions
+      ? validateOptions()
+      : { groups: null, error: '' };
+    if (validated.error) {
+      setOptionsError(validated.error);
+      return;
+    }
     setBusy(true);
     setError('');
     setPriceError('');
+    setSlugError('');
+    setOptionsError('');
     setNotice('');
+    const cleanDescription = description.trim();
     try {
       const base = product
         ? `stores/${encodeURIComponent(store!.slug)}/products`
         : 'posts';
+      // A new product always gets a readable address; an existing product
+      // keeps its current slug unless the owner edited the field.
+      const finalSlug =
+        cleanSlug || (!record && product ? normalizeSlug(cleanName) : '');
       const body = {
         ...(product
           ? {
-              name: name.trim(),
+              name: cleanName,
+              ...(finalSlug ? { slug: finalSlug } : {}),
               priceCents: cents,
               currency,
               categoryId: categoryId || null,
               stockQuantity: stock === '' ? null : Number(stock),
+              ...(shouldSaveOptions ? { options: validated.groups } : {}),
               ...(record ? { imageKeys: keys } : {}),
               ...(!record
                 ? { requiresShipping: store?.storeType !== 'restaurant_menu' }
                 : {}),
             }
-          : { title: name.trim(), ...(!record ? { storeId: store!.id } : {}) }),
-        description: description.trim() || null,
+          : { title: cleanName, ...(!record ? { storeId: store!.id } : {}) }),
+        description: cleanDescription || null,
         status,
       };
       const saved = await mutate<Content>(
@@ -345,13 +517,44 @@ function ContentEditor({
         body,
         record ? 'PATCH' : 'POST',
       );
+      const savedSlug = saved.slug || finalSlug;
+      const savedOptions =
+        saved.options ??
+        (shouldSaveOptions ? validated.groups : options) ??
+        null;
       setRecord(saved);
-      setBaseline(snapshot);
+      setName(cleanName);
+      setDescription(cleanDescription);
+      setSlug(savedSlug);
+      setSlugTouched(true);
+      setOptionsTouched(false);
+      setOptions(
+        (savedOptions ?? []).map((group) => ({
+          name: group.name,
+          values: [...group.values],
+        })),
+      );
+      setBaseline(
+        snapshotOf({
+          name: cleanName,
+          price,
+          currency,
+          categoryId,
+          stock,
+          description: cleanDescription,
+          keys,
+          slug: savedSlug,
+          options: savedOptions ?? [],
+        }),
+      );
       await client.invalidateQueries({
         queryKey: ['panel', session.user.id, kind],
       });
       await client.invalidateQueries({
         queryKey: ['panel', session.user.id, 'summary'],
+      });
+      await client.invalidateQueries({
+        queryKey: ['panel', session.user.id, 'product-option-sources'],
       });
       if (stay)
         setNotice(
@@ -405,7 +608,7 @@ function ContentEditor({
             required
             maxLength={200}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => changeName(e.target.value)}
             placeholder={
               product
                 ? 'e.g. Handmade ceramic mug'
@@ -413,6 +616,37 @@ function ContentEditor({
             }
           />
         </label>
+        {product && (
+          <label>
+            Product web address
+            <div className="panel-slug-field">
+              <span>/stores/{store!.slug}/p/</span>
+              <input
+                value={slug}
+                onChange={(e) => changeSlug(e.target.value)}
+                placeholder="handmade-ceramic-mug"
+                maxLength={191}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={Boolean(slugError)}
+              />
+            </div>
+            {slugError ? (
+              <p className="panel-field-error" role="alert">
+                {slugError}
+              </p>
+            ) : (
+              <small>
+                {cleanSlug
+                  ? `Shoppers will open /stores/${store!.slug}/p/${cleanSlug}.`
+                  : record
+                    ? 'Leave this blank to keep the current address.'
+                    : 'Leave blank to generate an address from the item name.'}
+              </small>
+            )}
+          </label>
+        )}
         {product && (
           <>
             <div className="panel-two-fields">
@@ -478,6 +712,112 @@ function ContentEditor({
                   : 'Categories are managed per shop and count toward your plan.'}
               </small>
             </label>
+            <fieldset className="panel-option-editor">
+              <legend>
+                Options <span>Optional</span>
+              </legend>
+              <p className="panel-muted">
+                Add choices such as Size or Color. Shoppers must pick one value
+                from each option before adding this item to the cart.
+              </p>
+              {options.map((group, index) => (
+                <div className="panel-option-group" key={index}>
+                  <div className="panel-option-group-head">
+                    <label>
+                      Option name
+                      <input
+                        maxLength={60}
+                        value={group.name}
+                        onChange={(e) =>
+                          updateOption(index, {
+                            ...group,
+                            name: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. Size"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="panel-option-remove"
+                      aria-label={`Remove ${group.name || 'option'}`}
+                      title="Remove option"
+                      onClick={() => removeOption(index)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <label>
+                    Values
+                    <input
+                      value={group.values.join(', ')}
+                      onChange={(e) =>
+                        updateOption(index, {
+                          ...group,
+                          values: e.target.value
+                            .split(',')
+                            .map((value) => value.trimStart()),
+                        })
+                      }
+                      placeholder="e.g. Small, Medium, Large"
+                    />
+                  </label>
+                  {group.values.some((value) => value.trim()) && (
+                    <div className="panel-option-preview" aria-hidden="true">
+                      {group.values.map((value, valueIndex) =>
+                        value.trim() ? (
+                          <span key={`${value}-${valueIndex}`}>
+                            {value.trim()}
+                          </span>
+                        ) : null,
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="panel-option-tools">
+                <button
+                  type="button"
+                  onClick={addOption}
+                  disabled={options.length >= 10}
+                >
+                  <Plus size={16} /> Add option
+                </button>
+                {sourceProducts.length > 0 && (
+                  <label className="panel-option-copy">
+                    <span>
+                      <Copy size={15} /> Copy from another product
+                    </span>
+                    <select
+                      value=""
+                      onChange={(e) => copyOptions(e.target.value)}
+                    >
+                      <option value="">Choose a product…</option>
+                      {sourceProducts.map((source) => (
+                        <option key={source.id} value={source.id}>
+                          {source.name || 'Untitled'} ·{' '}
+                          {source.options?.length ?? 0}{' '}
+                          {(source.options?.length ?? 0) === 1
+                            ? 'option'
+                            : 'options'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              {optionSources.isError && (
+                <small>
+                  The products you can copy from could not load. You can still
+                  add options manually.
+                </small>
+              )}
+              {optionsError && (
+                <p className="panel-field-error" role="alert">
+                  {optionsError}
+                </p>
+              )}
+            </fieldset>
           </>
         )}
         <details className="panel-optional">

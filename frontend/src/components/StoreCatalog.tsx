@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Check, Minus, Package, Plus } from 'lucide-react';
-import { assetUrl, type Product } from '../lib/api';
+import { assetUrl, type Product, type SelectedProductOption } from '../lib/api';
 import {
   formatProductPrice,
+  productHasOptions,
+  selectedOptionsKey,
   storeMediaUrl,
   storeProductPath,
   type CatalogLayout,
@@ -80,12 +82,25 @@ export function ShopImage({
 export function AddToCart({
   product,
   cart,
+  selectedOptions = null,
+  chooseHref,
 }: {
   product: Product;
   cart: ShopCartController;
+  selectedOptions?: SelectedProductOption[] | null;
+  chooseHref?: string;
 }) {
-  const item = cart.cart?.items.find((entry) => entry.productId === product.id);
+  const optionKey = selectedOptionsKey(selectedOptions);
+  const item = cart.cart?.items.find(
+    (entry) =>
+      entry.productId === product.id &&
+      selectedOptionsKey(entry.selectedOptions) === optionKey,
+  );
   const quantity = item?.quantity ?? 0;
+  const productQuantity =
+    cart.cart?.items
+      .filter((entry) => entry.productId === product.id)
+      .reduce((sum, entry) => sum + entry.quantity, 0) ?? 0;
   const limit = productCartLimit(product);
   const blocked = cart.busy || cart.loading;
   if (limit === 0)
@@ -99,6 +114,29 @@ export function AddToCart({
         Sold out
       </button>
     );
+  // Products with choices open their page first: adding the base product
+  // without a size or color would create an order the shop cannot fulfill.
+  if (productHasOptions(product) && chooseHref)
+    return (
+      <a
+        className="shop-add-to-cart"
+        href={chooseHref}
+        aria-label={`Choose options for ${product.name}`}
+      >
+        Choose
+      </a>
+    );
+  if (productHasOptions(product) && !selectedOptions?.length)
+    return (
+      <button
+        type="button"
+        className="shop-add-to-cart"
+        disabled
+        title="Choose a value for each option first"
+      >
+        Choose options
+      </button>
+    );
   // The cart never opens on add; the quantity control and toast confirm it.
   if (!item)
     return (
@@ -108,7 +146,7 @@ export function AddToCart({
         disabled={blocked}
         aria-label={`Add ${product.name} to cart`}
         title={`Add ${product.name} to cart`}
-        onClick={() => cart.add(product)}
+        onClick={() => cart.add(product, selectedOptions)}
       >
         <Plus size={17} aria-hidden="true" />
         Add
@@ -135,7 +173,7 @@ export function AddToCart({
       <output aria-live="polite">{quantity}</output>
       <button
         type="button"
-        disabled={blocked || quantity >= limit}
+        disabled={blocked || productQuantity >= limit}
         aria-label={`Add another ${product.name} to cart`}
         onClick={() => cart.update(item, quantity + 1)}
       >
@@ -198,7 +236,7 @@ function ListItem({
           <strong>
             {formatProductPrice(product.priceCents, product.currency)}
           </strong>
-          <AddToCart product={product} cart={cart} />
+          <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
     </article>
@@ -239,7 +277,7 @@ function PhotoCard({
           <strong>
             {formatProductPrice(product.priceCents, product.currency)}
           </strong>
-          <AddToCart product={product} cart={cart} />
+          <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
     </article>
@@ -273,7 +311,7 @@ function PriceRow({
       <strong className="shop-price-row-price">
         {formatProductPrice(product.priceCents, product.currency)}
       </strong>
-      <AddToCart product={product} cart={cart} />
+      <AddToCart product={product} cart={cart} chooseHref={href} />
     </article>
   );
 }

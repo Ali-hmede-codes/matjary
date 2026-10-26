@@ -28,6 +28,10 @@ import {
   type ProcessingLimits,
 } from './durability.entities';
 import { DEFAULT_BUSINESS_CATEGORY } from './business-categories';
+import type {
+  ProductOptionGroup,
+  SelectedProductOption,
+} from './product-options';
 
 abstract class TimestampedEntity {
   @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
@@ -891,6 +895,10 @@ export class Product extends BaseEntity {
   @Column({ type: 'json', nullable: true })
   tags!: string[] | null;
 
+  // Owner-defined choices (size, color, ...) shown before adding to cart.
+  @Column({ type: 'json', nullable: true })
+  options!: ProductOptionGroup[] | null;
+
   // Sort order within store
   @Column({ name: 'sort_order', type: 'int', unsigned: true, default: 0 })
   sortOrder!: number;
@@ -992,6 +1000,11 @@ export class CartItem extends BaseEntity {
 
   @Column({ name: 'notes', type: 'text', nullable: true })
   notes!: string | null;
+
+  // Snapshot of the chosen values at add-to-cart time. Renaming a product
+  // option later must not rewrite lines that are already in a cart.
+  @Column({ name: 'selected_options', type: 'json', nullable: true })
+  selectedOptions!: SelectedProductOption[] | null;
 }
 
 @Entity({ name: 'media_assets', engine: 'InnoDB' })

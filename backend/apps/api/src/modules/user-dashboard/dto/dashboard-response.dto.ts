@@ -5,6 +5,7 @@ import {
   Product,
   UserSubscription,
   SubscriptionLimits,
+  ProductOptionGroup,
 } from '@app/database';
 
 export class UserStoreSummaryDto {
@@ -119,6 +120,7 @@ export class UserProductSummaryDto {
   status!: 'draft' | 'active' | 'archived' | 'out_of_stock';
   stockQuantity!: number | null;
   imageKeys!: string[] | null;
+  options!: ProductOptionGroup[] | null;
   storeId!: string;
   storeSlug!: string;
   sortOrder!: number;
@@ -142,6 +144,7 @@ export class UserProductSummaryDto {
     dto.status = product.status;
     dto.stockQuantity = product.stockQuantity;
     dto.imageKeys = product.imageKeys;
+    dto.options = product.options ?? null;
     dto.storeId = product.storeId;
     dto.storeSlug = storeSlug;
     dto.sortOrder = product.sortOrder;

@@ -16,7 +16,10 @@ import {
   decimalPrice,
   isStoreVerified,
   menuCategoryGroups,
+  normalizeSlug,
   productCategoryKey,
+  productOptionSelection,
+  slugDraft,
   storeCategoryPath,
   storeMenuPath,
   storefrontRouteFromPath,
@@ -479,4 +482,36 @@ test('catalog prices preserve cents even above safe integer limits', () => {
   );
   assert.equal(formatProductPrice('-1', 'USD'), 'Contact for price');
   assert.equal(formatProductPrice('100', 'invalid'), 'Contact for price');
+});
+
+test('product slugs keep readable URLs while typing and trim on save', () => {
+  assert.equal(normalizeSlug('  Crème Brûlée Mug! '), 'creme-brulee-mug');
+  assert.equal(
+    normalizeSlug('Handmade  Ceramic -- Mug'),
+    'handmade-ceramic-mug',
+  );
+  assert.equal(slugDraft('My-'), 'my-');
+  assert.equal(normalizeSlug('My-'), 'my');
+  assert.equal(normalizeSlug('!!!'), '');
+});
+
+test('product option selection stays complete and in product order', () => {
+  const product = {
+    options: [
+      { name: 'Size', values: ['S', 'M'] },
+      { name: 'Color', values: ['Red', 'Blue'] },
+    ],
+  };
+  assert.equal(productOptionSelection(product, {}), null);
+  assert.equal(
+    productOptionSelection(product, { Size: 'M', Color: 'Green' }),
+    null,
+  );
+  assert.deepEqual(
+    productOptionSelection(product, { Color: 'Blue', Size: 'M' }),
+    [
+      { name: 'Size', value: 'M' },
+      { name: 'Color', value: 'Blue' },
+    ],
+  );
 });

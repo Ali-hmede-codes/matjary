@@ -1,4 +1,9 @@
-import { Cart, CartItem, CartStatus } from '@app/database';
+import {
+  Cart,
+  CartItem,
+  CartStatus,
+  type SelectedProductOption,
+} from '@app/database';
 
 export class CartItemResponseDto {
   id!: string;
@@ -9,6 +14,7 @@ export class CartItemResponseDto {
   unitPriceCents!: string; // BIGINT stays as string
   currency!: string;
   notes!: string | null;
+  selectedOptions!: SelectedProductOption[] | null;
   lineTotalCents!: string; // quantity * unitPriceCents
   createdAt!: Date;
   updatedAt!: Date;
@@ -52,6 +58,7 @@ export function toCartItemResponseDto(item: CartItem): CartItemResponseDto {
     unitPriceCents: item.unitPriceCents,
     currency: item.cart?.currency ?? 'USD',
     notes: item.notes,
+    selectedOptions: item.selectedOptions ?? null,
     lineTotalCents: lineTotal.toString(),
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,

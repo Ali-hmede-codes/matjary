@@ -160,6 +160,15 @@ export const demoProducts: Product[] = examples.flatMap(
         `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=600&q=85`,
       ],
       tags: null,
+      options:
+        storeIndex === 0 && index === 0
+          ? [
+              { name: 'Color', values: ['Sand', 'Forest', 'Terracotta'] },
+              { name: 'Size', values: ['250 ml', '400 ml'] },
+            ]
+          : storeIndex === 1
+            ? [{ name: 'Size', values: ['Small', 'Medium', 'Large'] }]
+            : null,
     })),
 );
 

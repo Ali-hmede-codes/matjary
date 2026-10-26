@@ -1,4 +1,9 @@
-import type { Product, Store } from './api';
+import type { Product, SelectedProductOption, Store } from './api';
+import {
+  productHasOptions,
+  productOptionSelection,
+  selectedOptionsKey,
+} from './storefront.ts';
 
 export interface CartItem {
   id: string;
@@ -9,6 +14,7 @@ export interface CartItem {
   unitPriceCents: string;
   lineTotalCents: string;
   notes: string | null;
+  selectedOptions?: SelectedProductOption[] | null;
 }
 
 export interface ShopCart {
@@ -113,8 +119,16 @@ async function requestCart<T>(
 export const cartApi = {
   get: (slug: string, signal?: AbortSignal) =>
     requestCart<ShopCart>(slug, '', 'GET', undefined, signal),
-  add: (slug: string, productId: string) =>
-    requestCart<ShopCart>(slug, '/items', 'POST', { productId, quantity: 1 }),
+  add: (
+    slug: string,
+    productId: string,
+    selectedOptions?: readonly SelectedProductOption[] | null,
+  ) =>
+    requestCart<ShopCart>(slug, '/items', 'POST', {
+      productId,
+      quantity: 1,
+      ...(selectedOptions?.length ? { selectedOptions } : {}),
+    }),
   update: (slug: string, itemId: string, quantity: number) =>
     requestCart<ShopCart>(
       slug,
@@ -165,19 +179,35 @@ export function updateDemoCart(
   cart: ShopCart,
   product: Product,
   quantity: number,
+  selectedOptions?: readonly SelectedProductOption[] | null,
 ): ShopCart {
+  const selection = productHasOptions(product)
+    ? productOptionSelection(
+        product,
+        Object.fromEntries(
+          (selectedOptions ?? []).map((option) => [option.name, option.value]),
+        ),
+      )
+    : null;
+  if (productHasOptions(product) && !selection) throw new CartRequestError(400);
+  const optionKey = selectedOptionsKey(selection);
+  const lineId = selection?.length ? `${product.id}::${optionKey}` : product.id;
+  const limit = productCartLimit(product);
+  const otherQuantity = cart.items
+    .filter((entry) => entry.id !== lineId && entry.productId === product.id)
+    .reduce((sum, entry) => sum + entry.quantity, 0);
+  const previous = cart.items.find((entry) => entry.id === lineId);
   if (
     product.storeId !== cart.storeId ||
     !Number.isInteger(quantity) ||
     quantity < 0 ||
-    quantity > productCartLimit(product)
+    quantity + otherQuantity > limit
   )
     throw new CartRequestError(409);
   if (product.currency !== cart.currency || !/^\d+$/u.test(product.priceCents))
     throw new CartRequestError(400);
-  const previous = cart.items.find((item) => item.productId === product.id);
   const item: CartItem = {
-    id: product.id,
+    id: lineId,
     productId: product.id,
     productSlug: product.slug,
     productName: product.name,
@@ -185,14 +215,13 @@ export function updateDemoCart(
     unitPriceCents: product.priceCents,
     lineTotalCents: (BigInt(product.priceCents) * BigInt(quantity)).toString(),
     notes: null,
+    selectedOptions: selection,
   };
   const items =
     quantity === 0
-      ? cart.items.filter((entry) => entry.productId !== product.id)
+      ? cart.items.filter((entry) => entry.id !== lineId)
       : previous
-        ? cart.items.map((entry) =>
-            entry.productId === product.id ? item : entry,
-          )
+        ? cart.items.map((entry) => (entry.id === lineId ? item : entry))
         : [...cart.items, item];
   return {
     ...cart,
@@ -208,8 +237,27 @@ export const demoCartKey = (slug: string) =>
   `matjary:demo-cart:${encodeURIComponent(slug)}`;
 export const serializeDemoCart = (cart: ShopCart) =>
   JSON.stringify(
-    cart.items.map(({ productId, quantity }) => ({ productId, quantity })),
+    cart.items.map(({ productId, quantity, selectedOptions }) =>
+      selectedOptions?.length
+        ? { productId, quantity, selectedOptions }
+        : { productId, quantity },
+    ),
   );
+
+function storedOptions(value: unknown): SelectedProductOption[] | null {
+  if (!Array.isArray(value)) return null;
+  const options: SelectedProductOption[] = [];
+  for (const entry of value.slice(0, 10)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { name, value: optionValue } = entry as {
+      name?: unknown;
+      value?: unknown;
+    };
+    if (typeof name !== 'string' || typeof optionValue !== 'string') continue;
+    options.push({ name, value: optionValue });
+  }
+  return options.length ? options : null;
+}
 
 export function restoreDemoCart(
   store: Store,
@@ -224,12 +272,17 @@ export function restoreDemoCart(
       if (
         !entry ||
         typeof entry !== 'object' ||
-        !Number.isInteger(entry.quantity) ||
-        entry.quantity < 1
+        !Number.isInteger((entry as { quantity?: unknown }).quantity) ||
+        ((entry as { quantity: number }).quantity ?? 0) < 1
       )
         continue;
+      const record = entry as {
+        productId?: unknown;
+        quantity: number;
+        selectedOptions?: unknown;
+      };
       const product = products.find(
-        (item) => item.id === entry.productId && item.storeId === store.id,
+        (item) => item.id === record.productId && item.storeId === store.id,
       );
       if (
         !product ||
@@ -237,11 +290,17 @@ export function restoreDemoCart(
         !/^\d+$/u.test(product.priceCents)
       )
         continue;
-      cart = updateDemoCart(
-        cart,
-        product,
-        Math.min(entry.quantity, productCartLimit(product)),
-      );
+      const selection = storedOptions(record.selectedOptions);
+      try {
+        cart = updateDemoCart(
+          cart,
+          product,
+          Math.min(record.quantity, productCartLimit(product)),
+          selection,
+        );
+      } catch {
+        // A combination that no longer exists is dropped during restore.
+      }
     }
   } catch {
     // Stale or malformed preview storage must not break a storefront.

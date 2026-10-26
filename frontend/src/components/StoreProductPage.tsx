@@ -17,6 +17,7 @@ import {
   formatProductPrice,
   menuCategoryGroups,
   productCategoryKey,
+  productOptionSelection,
   storeCategoryPath,
   storeMediaUrl,
   storePath,
@@ -51,6 +52,9 @@ export function StoreProductPage({
 }) {
   const { settings } = useWebsiteSettings(false, !demo);
   const [imageIndex, setImageIndex] = useState(0);
+  const [chosenOptions, setChosenOptions] = useState<Record<string, string>>(
+    {},
+  );
   const storeQuery = useQuery({
     queryKey: ['storefront', shopSlug],
     queryFn: ({ signal }) =>
@@ -191,6 +195,10 @@ export function StoreProductPage({
 
   const presentation = storePresentation(store);
   const limit = productCartLimit(product);
+  const optionGroups = product.options ?? [];
+  const selectedOptions = optionGroups.length
+    ? productOptionSelection(product, chosenOptions)
+    : null;
   return (
     <StoreDetailShell
       store={store}
@@ -259,6 +267,47 @@ export function StoreProductPage({
               {product.description}
             </p>
           )}
+          {optionGroups.length > 0 && (
+            <div className="shop-product-options">
+              {optionGroups.map((group) => (
+                <fieldset
+                  className="shop-product-option-group"
+                  key={group.name}
+                >
+                  <legend>
+                    {group.name}
+                    <span>Required</span>
+                  </legend>
+                  <div className="shop-product-option-values">
+                    {group.values.map((value) => {
+                      const selected = chosenOptions[group.name] === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          className={selected ? 'is-selected' : undefined}
+                          aria-pressed={selected}
+                          onClick={() =>
+                            setChosenOptions((current) => ({
+                              ...current,
+                              [group.name]: value,
+                            }))
+                          }
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ))}
+              {!selectedOptions && (
+                <p className="shop-product-option-hint">
+                  Choose one value in each option to add this item.
+                </p>
+              )}
+            </div>
+          )}
           {limit === 0 ? (
             <p className="shop-product-stock is-sold-out">
               Sold out right now. Ask the shop when it returns.
@@ -270,7 +319,11 @@ export function StoreProductPage({
             </p>
           ) : null}
           <div className="shop-product-actions">
-            <AddToCart product={product} cart={cart} />
+            <AddToCart
+              product={product}
+              cart={cart}
+              selectedOptions={selectedOptions}
+            />
             <button
               type="button"
               className="secondary-button"

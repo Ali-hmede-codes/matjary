@@ -30,6 +30,7 @@
   color: var(--on-primary);
   font-size: 13px;
   font-weight: 700;
+  text-decoration: none;
   box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 .shop-add-to-cart:hover:not(:disabled) {
@@ -226,6 +227,16 @@
   font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
+}
+.shop-cart-item-copy .shop-cart-item-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  color: var(--ink);
+  font-size: 11px;
+}
+.shop-cart-item-options strong {
+  font-weight: 650;
 }
 .shop-cart-item-actions {
   display: flex;

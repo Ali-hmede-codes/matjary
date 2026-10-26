@@ -1,6 +1,7 @@
 import {
   IsString,
   Length,
+  Matches,
   IsOptional,
   IsInt,
   Max,
@@ -9,12 +10,20 @@ import {
   Min,
   IsEnum,
   IsArray,
-  IsUrl,
   IsUUID,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ProductCategory, ProductStatus } from '@app/database';
+import { ProductOptionGroupDto } from './product-option.dto';
 
 export class UpdateProductDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 191)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  slug?: string;
+
   @IsOptional()
   @IsString()
   @Length(1, 200)
@@ -79,6 +88,13 @@ export class UpdateProductDto {
   @ArrayMaxSize(20)
   @Length(1, 100, { each: true })
   tags?: string[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => ProductOptionGroupDto)
+  options?: ProductOptionGroupDto[] | null;
 
   @IsOptional()
   @IsInt()

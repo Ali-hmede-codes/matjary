@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Product, Store } from '../lib/api';
+import type { Product, SelectedProductOption, Store } from '../lib/api';
 import { demoProducts } from '../lib/demo';
+import { productHasOptions, selectedOptionsKey } from '../lib/storefront';
 import {
   cartApi,
   cartErrorMessage,
@@ -111,13 +112,29 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
     return saved;
   }
 
-  function add(product: Product) {
+  function add(
+    product: Product,
+    selectedOptions: SelectedProductOption[] | null = null,
+  ) {
     setCheckout(undefined);
     if (!store || product.storeId !== store.id) return;
-    const quantity =
-      (cart?.items.find((item) => item.productId === product.id)?.quantity ??
-        0) + 1;
-    if (quantity > productCartLimit(product)) {
+    if (productHasOptions(product) && !selectedOptions?.length) {
+      const failure = 'Choose a value for each option before adding this item.';
+      setMessage(failure);
+      notify('error', failure);
+      return;
+    }
+    const optionKey = selectedOptionsKey(selectedOptions);
+    const line = cart?.items.find(
+      (item) =>
+        item.productId === product.id &&
+        selectedOptionsKey(item.selectedOptions) === optionKey,
+    );
+    const productQuantity =
+      cart?.items
+        .filter((item) => item.productId === product.id)
+        .reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+    if (productQuantity + 1 > productCartLimit(product)) {
       setMessage('You’ve reached the available quantity for this item.');
       notify('error', 'You’ve reached the available quantity for this item.');
       return;
@@ -132,8 +149,13 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
     }
     void change(async (current) =>
       demo
-        ? updateDemoCart(current, product, quantity)
-        : cartApi.add(store.slug, product.id),
+        ? updateDemoCart(
+            current,
+            product,
+            (line?.quantity ?? 0) + 1,
+            selectedOptions,
+          )
+        : cartApi.add(store.slug, product.id, selectedOptions),
     ).then((ok) => {
       if (ok) notify('success', `${product.name} added to cart`);
     });
@@ -146,7 +168,7 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
     void change(async (current) => {
       if (demo) {
         if (!product) return current;
-        return updateDemoCart(current, product, quantity);
+        return updateDemoCart(current, product, quantity, item.selectedOptions);
       }
       if (quantity > 0) return cartApi.update(store.slug, item.id, quantity);
       await cartApi.remove(store.slug, item.id);

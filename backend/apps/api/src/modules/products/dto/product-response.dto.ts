@@ -1,4 +1,9 @@
-import { Product, ProductStatus, ProductCategory } from '@app/database';
+import {
+  Product,
+  ProductStatus,
+  ProductCategory,
+  type ProductOptionGroup,
+} from '@app/database';
 
 export class ProductResponseDto {
   id!: string;
@@ -17,6 +22,7 @@ export class ProductResponseDto {
   weightGrams!: number | null;
   imageKeys!: string[] | null;
   tags!: string[] | null;
+  options!: ProductOptionGroup[] | null;
   sortOrder!: number;
   requiresShipping!: boolean;
   createdAt!: Date;
@@ -49,6 +55,7 @@ export function toProductResponseDto(
     weightGrams: product.weightGrams,
     imageKeys: product.imageKeys,
     tags: product.tags,
+    options: product.options ?? null,
     sortOrder: product.sortOrder,
     requiresShipping: product.requiresShipping,
     createdAt: product.createdAt,

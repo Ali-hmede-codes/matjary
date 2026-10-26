@@ -19,6 +19,8 @@ import {
   CartStatus,
   effectiveLimits,
   publicWhere,
+  normalizeSelectedOptions,
+  selectedOptionsKey,
 } from '@app/database';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -216,38 +218,45 @@ export class CartsService {
       if (product.status !== ProductStatus.ACTIVE) {
         throw new BadRequestException('Product is not available');
       }
-      // Check stock if tracking is enabled
+
+      // Product options are required exactly when the product declares them.
+      // The canonical selection is snapshotted on the cart line so a later
+      // option edit does not rewrite an order that is already in progress.
+      const selectedOptions = normalizeSelectedOptions(
+        product.options,
+        dto.selectedOptions,
+      );
+      const optionKey = selectedOptionsKey(selectedOptions);
+
+      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
+
+      const matchingItems = await this.cartItems.find({
+        where: { cartId: cart.id, productId: dto.productId },
+      });
+      const existingQuantity = matchingItems.reduce(
+        (sum, item) => sum + item.quantity,
+        0,
+      );
+      // Stock applies to the product as a whole, across every option
+      // combination, not just the line that is being changed.
       if (
         product.stockQuantity !== null &&
-        product.stockQuantity < dto.quantity
+        product.stockQuantity < existingQuantity + dto.quantity
       ) {
         throw new ConflictException(
           `Only ${product.stockQuantity} items available in stock`,
         );
       }
 
-      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
-
-      // Check if item already exists in cart
-      let cartItem = await this.cartItems.findOne({
-        where: { cartId: cart.id, productId: dto.productId },
-      });
-
+      let cartItem = matchingItems.find(
+        (item) => selectedOptionsKey(item.selectedOptions) === optionKey,
+      );
       if (cartItem) {
-        // Update quantity
-        const newQuantity = cartItem.quantity + dto.quantity;
-        if (
-          product.stockQuantity !== null &&
-          product.stockQuantity < newQuantity
-        ) {
-          throw new ConflictException(
-            `Only ${product.stockQuantity} items available in stock`,
-          );
-        }
-        cartItem.quantity = newQuantity;
+        cartItem.quantity += dto.quantity;
         if (dto.notes !== undefined) cartItem.notes = dto.notes;
       } else {
-        // Create new cart item
+        // Create a separate line for each option combination so the shop can
+        // see which size or color belongs to each ordered item.
         cartItem = this.cartItems.create({
           cartId: cart.id,
           productId: product.id,
@@ -256,6 +265,7 @@ export class CartsService {
           productName: product.name,
           productSlug: product.slug,
           notes: dto.notes ?? null,
+          selectedOptions,
         });
       }
 
@@ -315,13 +325,18 @@ export class CartsService {
       }
 
       if (dto.quantity !== undefined) {
-        if (
-          product.stockQuantity !== null &&
-          product.stockQuantity < dto.quantity
-        ) {
-          throw new ConflictException(
-            `Only ${product.stockQuantity} items available in stock`,
-          );
+        if (product.stockQuantity !== null) {
+          const siblingItems = await this.cartItems.find({
+            where: { cartId: cart.id, productId: cartItem.productId },
+          });
+          const otherQuantity = siblingItems
+            .filter((item) => item.id !== cartItem.id)
+            .reduce((sum, item) => sum + item.quantity, 0);
+          if (product.stockQuantity < otherQuantity + dto.quantity) {
+            throw new ConflictException(
+              `Only ${product.stockQuantity} items available in stock`,
+            );
+          }
         }
         cartItem.quantity = dto.quantity;
       }
@@ -439,7 +454,16 @@ export class CartsService {
         throw new BadRequestException('Cart is empty');
       }
 
-      // Verify all products are still available and in stock
+      // Verify all products are still available and in stock. Option
+      // combinations are separate cart lines, so quantities are summed per
+      // product before comparing against the shared stock count.
+      const quantitiesByProduct = new Map<string, number>();
+      for (const item of items) {
+        quantitiesByProduct.set(
+          item.productId,
+          (quantitiesByProduct.get(item.productId) ?? 0) + item.quantity,
+        );
+      }
       for (const item of items) {
         const product = await this.products.findOneBy({
           id: item.productId,
@@ -457,7 +481,8 @@ export class CartsService {
         }
         if (
           product.stockQuantity !== null &&
-          product.stockQuantity < item.quantity
+          product.stockQuantity <
+            (quantitiesByProduct.get(product.id) ?? item.quantity)
         ) {
           throw new ConflictException(
             `Only ${product.stockQuantity} of "${item.productName}" available`,
@@ -600,6 +625,13 @@ export class CartsService {
       lines.push(
         `• ${item.productName} x${item.quantity} = ${formattedLineTotal}`,
       );
+      if (item.selectedOptions?.length) {
+        lines.push(
+          `  ${item.selectedOptions
+            .map((option) => `${option.name}: ${option.value}`)
+            .join(' · ')}`,
+        );
+      }
       if (item.notes) {
         lines.push(`  Note: ${item.notes}`);
       }

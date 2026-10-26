@@ -100,6 +100,10 @@ export function panelError(error: unknown): string {
       return 'Your free trial has ended. Choose a paid plan to keep creating. Your published content stays online.';
     if (error.code === 'FREE_TRIAL_CAP')
       return 'Free-plan assignments are limited to the trial length. Assign a paid plan for longer access.';
+    if (error.code === 'PRODUCT_SLUG_TAKEN')
+      return 'That web address is already used by another product. Choose a different one.';
+    if (error.code === 'PRODUCT_OPTIONS_INVALID')
+      return 'Check the options: every option needs a name and at least one value, and names must be unique.';
     if (error.status === 401)
       return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'Your account cannot perform this action.';

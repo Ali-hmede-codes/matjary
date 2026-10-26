@@ -48,6 +48,16 @@ export interface Store {
   } | null;
 }
 
+export interface ProductOptionGroup {
+  name: string;
+  values: string[];
+}
+
+export interface SelectedProductOption {
+  name: string;
+  value: string;
+}
+
 export interface Product {
   id: string;
   storeId: string;
@@ -62,6 +72,7 @@ export interface Product {
   stockQuantity: number | null;
   imageKeys: string[] | null;
   tags: string[] | null;
+  options?: ProductOptionGroup[] | null;
 }
 
 export interface ProductList {

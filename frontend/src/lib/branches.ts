@@ -111,6 +111,9 @@ function openAtRange(range: ParsedTimeRange, minutes: number): boolean {
 export interface BranchOpenState {
   open: boolean;
   label: string;
+  // Short second line used by the hero chip and branch card on phones, where
+  // a hover-only tooltip cannot show the until/opens time.
+  detail: string;
 }
 
 export function branchOpenState(
@@ -131,13 +134,22 @@ export function branchOpenState(
     return {
       open: true,
       label: `Open now · until ${formatTime(previous.close)}`,
+      detail: `until ${formatTime(previous.close)}`,
     };
   }
   if (today && openAtRange(today, minutes)) {
-    return { open: true, label: `Open now · until ${formatTime(today.close)}` };
+    return {
+      open: true,
+      label: `Open now · until ${formatTime(today.close)}`,
+      detail: `until ${formatTime(today.close)}`,
+    };
   }
   if (today && minutes < today.open) {
-    return { open: false, label: `Closed · opens ${formatTime(today.open)}` };
+    return {
+      open: false,
+      label: `Closed · opens ${formatTime(today.open)}`,
+      detail: `opens ${formatTime(today.open)}`,
+    };
   }
   for (let offset = 1; offset <= weekDays.length; offset += 1) {
     const day = weekDays[(currentIndex + offset) % weekDays.length];
@@ -147,10 +159,11 @@ export function branchOpenState(
       return {
         open: false,
         label: `Closed · opens ${day.short} ${formatTime(range.open)}`,
+        detail: `opens ${day.short} ${formatTime(range.open)}`,
       };
     }
   }
-  return { open: false, label: 'Closed' };
+  return { open: false, label: 'Closed', detail: '' };
 }
 
 export function branchAddress(

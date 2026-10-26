@@ -94,6 +94,61 @@ test('cart enforces whole quantities, stock limits, store isolation, and currenc
   );
 });
 
+test('option combinations become separate cart lines and survive restore', () => {
+  const configurable: Product = {
+    ...product,
+    options: [
+      { name: 'Size', values: ['S', 'M'] },
+      { name: 'Color', values: ['Red', 'Blue'] },
+    ],
+  };
+  const redSmall = [
+    { name: 'Size', value: 'S' },
+    { name: 'Color', value: 'Red' },
+  ];
+  const blueMedium = [
+    { name: 'Size', value: 'M' },
+    { name: 'Color', value: 'Blue' },
+  ];
+  let cart = updateDemoCart(emptyCart(store), configurable, 1, redSmall);
+  cart = updateDemoCart(cart, configurable, 2, blueMedium);
+  assert.equal(cart.items.length, 2);
+  assert.equal(cart.itemCount, 3);
+  assert.equal(cart.subtotalCents, '3750');
+  assert.deepEqual(cart.items[0]?.selectedOptions, redSmall);
+  assert.deepEqual(cart.items[1]?.selectedOptions, blueMedium);
+
+  const raw = serializeDemoCart(cart);
+  assert.deepEqual(JSON.parse(raw), [
+    { productId: product.id, quantity: 1, selectedOptions: redSmall },
+    { productId: product.id, quantity: 2, selectedOptions: blueMedium },
+  ]);
+  assert.deepEqual(restoreDemoCart(store, [configurable], raw), cart);
+
+  const removed = updateDemoCart(cart, configurable, 0, redSmall);
+  assert.equal(removed.items.length, 1);
+  assert.equal(removed.itemCount, 2);
+  assert.deepEqual(removed.items[0]?.selectedOptions, blueMedium);
+});
+
+test('products with options reject an incomplete or stale choice', () => {
+  const configurable: Product = {
+    ...product,
+    options: [{ name: 'Size', values: ['S', 'M'] }],
+  };
+  assert.throws(
+    () => updateDemoCart(emptyCart(store), configurable, 1),
+    CartRequestError,
+  );
+  assert.throws(
+    () =>
+      updateDemoCart(emptyCart(store), configurable, 1, [
+        { name: 'Size', value: 'XL' },
+      ]),
+    CartRequestError,
+  );
+});
+
 test('preview carts persist only quantities and product IDs in separate shop keys', () => {
   const cart = updateDemoCart(emptyCart(store), product, 2);
   const raw = serializeDemoCart(cart);

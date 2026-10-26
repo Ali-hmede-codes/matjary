@@ -1,4 +1,9 @@
-import type { Product, Store, StoreCategory } from './api';
+import type {
+  Product,
+  SelectedProductOption,
+  Store,
+  StoreCategory,
+} from './api';
 import { contrastColor, safeUrl } from './website.ts';
 
 export type StoreLifecycleStatus =
@@ -370,6 +375,50 @@ export function productCategoryKey(
   product: Pick<Product, 'category' | 'categoryId'>,
 ): string {
   return product.categoryId ?? product.category ?? '';
+}
+
+export function productHasOptions(product: Pick<Product, 'options'>): boolean {
+  return Boolean(product.options?.length);
+}
+
+/** Stable signature that separates cart lines sharing a product. */
+export function selectedOptionsKey(
+  options?: readonly SelectedProductOption[] | null,
+): string {
+  return options?.length
+    ? JSON.stringify(options.map((option) => [option.name, option.value]))
+    : '';
+}
+
+/** Returns the chosen values in product order, or null while incomplete. */
+export function productOptionSelection(
+  product: Pick<Product, 'options'>,
+  chosen: Record<string, string | undefined>,
+): SelectedProductOption[] | null {
+  const groups = product.options ?? [];
+  if (!groups.length) return null;
+  const selection: SelectedProductOption[] = [];
+  for (const group of groups) {
+    const value = chosen[group.name];
+    if (!value || !group.values.includes(value)) return null;
+    selection.push({ name: group.name, value });
+  }
+  return selection;
+}
+
+/** Live input helper: keeps a trailing dash while the owner is still typing. */
+export function slugDraft(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/gu, '-')
+    .replace(/-{2,}/gu, '-')
+    .slice(0, 191);
+}
+
+export function normalizeSlug(value: string): string {
+  return slugDraft(value).replace(/^-+|-+$/gu, '');
 }
 
 export function productCategoryName(

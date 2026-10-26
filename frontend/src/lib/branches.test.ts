@@ -37,11 +37,20 @@ test('opening hours parse, format, and detect open and closed states', () => {
     branchOpenState({ mon: '09:00-18:00' }, mondayMorning)?.label,
     'Open now · until 6:00 PM',
   );
+  assert.equal(
+    branchOpenState({ mon: '09:00-18:00' }, mondayMorning)?.detail,
+    'until 6:00 PM',
+  );
   const mondayEvening = new Date('2026-10-26T20:00:00');
   assert.equal(
     branchOpenState({ mon: '09:00-18:00', tue: '10:00-18:00' }, mondayEvening)
       ?.label,
     'Closed · opens Tue 10:00 AM',
+  );
+  assert.equal(
+    branchOpenState({ mon: '09:00-18:00', tue: '10:00-18:00' }, mondayEvening)
+      ?.detail,
+    'opens Tue 10:00 AM',
   );
   assert.equal(branchOpenState({}), null);
 });

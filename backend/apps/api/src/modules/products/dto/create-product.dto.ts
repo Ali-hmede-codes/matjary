@@ -10,12 +10,12 @@ import {
   Min,
   IsEnum,
   IsArray,
-  IsUrl,
   IsUUID,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ProductCategory, ProductStatus } from '@app/database';
+import { ProductOptionGroupDto } from './product-option.dto';
 
 export class CreateProductDto {
   @IsOptional()
@@ -86,6 +86,15 @@ export class CreateProductDto {
   @ArrayMaxSize(20)
   @Length(1, 100, { each: true })
   tags?: string[] | null;
+
+  // Optional choices shown before adding the product to a cart. Sending null
+  // (or an empty list) removes all options on update.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => ProductOptionGroupDto)
+  options?: ProductOptionGroupDto[] | null;
 
   @IsOptional()
   @IsInt()

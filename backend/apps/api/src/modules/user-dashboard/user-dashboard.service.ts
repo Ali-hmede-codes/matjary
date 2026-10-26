@@ -664,6 +664,7 @@ export class UserDashboardService {
           'p.status',
           'p.stockQuantity',
           'p.imageKeys',
+          'p.options',
           'p.storeId',
           'p.sortOrder',
           'p.createdAt',

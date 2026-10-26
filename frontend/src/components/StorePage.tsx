@@ -563,8 +563,15 @@ export function StorePage({ slug }: { slug: string | null }) {
                           className={`shop-hero-open ${mainOpenState.open ? 'is-open' : ''}`}
                           title={mainOpenState.label}
                         >
-                          <span aria-hidden="true" />
-                          {mainOpenState.open ? 'Open now' : 'Closed'}
+                          <span className="shop-state-dot" aria-hidden="true" />
+                          <span className="shop-hero-open-copy">
+                            <strong>
+                              {mainOpenState.open ? 'Open now' : 'Closed'}
+                            </strong>
+                            {mainOpenState.detail && (
+                              <small>{mainOpenState.detail}</small>
+                            )}
+                          </span>
                         </span>
                       )}
                     </div>

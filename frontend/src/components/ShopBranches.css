@@ -165,6 +165,7 @@
 }
 .shop-branch-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -230,19 +231,41 @@
 }
 .shop-branch-state {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
+  max-width: 100%;
   padding: 4px 8px;
   border-radius: 999px;
   font-size: 10px;
   font-weight: 650;
-  white-space: nowrap;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
 }
-.shop-branch-state > span {
+.shop-state-dot {
   width: 6px;
   height: 6px;
+  margin-top: 3px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: currentColor;
+}
+.shop-branch-state-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 5px;
+  min-width: 0;
+}
+.shop-branch-state-copy strong {
+  font-weight: inherit;
+}
+.shop-branch-state-copy small {
+  color: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0.85;
 }
 .shop-branch-state.is-open {
   background: #e9f5ec;
@@ -287,9 +310,11 @@
 .shop-branch-today {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.5;
 }
 .shop-branch-hours {
   border-top: 1px solid color-mix(in srgb, var(--ink) 7%, var(--surface));
@@ -322,13 +347,14 @@
 }
 .shop-branch-hours dl > div {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px 16px;
   padding: 6px 8px;
   border-radius: 7px;
   color: var(--muted);
   font-size: 11px;
+  line-height: 1.5;
 }
 .shop-branch-hours dl > div.is-today {
   background: var(--accent-wash);
@@ -338,6 +364,7 @@
 .shop-branch-hours dt {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .shop-branch-hours dt span {
@@ -353,6 +380,8 @@
 .shop-branch-hours dd {
   margin: 0;
   text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 .shop-branch-map-wrap {
@@ -426,8 +455,9 @@
 }
 .shop-hero-open {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+  max-width: 100%;
   min-height: 30px;
   padding: 5px 10px;
   border-radius: 999px;
@@ -435,13 +465,28 @@
   color: #6d746d;
   font-size: 10px;
   font-weight: 650;
-  white-space: nowrap;
+  line-height: 1.4;
+  white-space: normal;
 }
-.shop-hero-open > span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+.shop-hero-open > .shop-state-dot {
+  margin-top: 3px;
+}
+.shop-hero-open-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 5px;
+  min-width: 0;
+}
+.shop-hero-open-copy strong {
+  font-weight: inherit;
+}
+.shop-hero-open-copy small {
+  color: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0.85;
 }
 .shop-hero-open.is-open {
   background: #e9f5ec;
@@ -514,12 +559,54 @@
   .shop-branch-chips {
     justify-content: flex-start;
   }
+  .shop-branch-today {
+    align-items: flex-start;
+    font-size: 12px;
+  }
+  .shop-branch-state {
+    font-size: 11px;
+  }
+  .shop-branch-state-copy small {
+    font-size: 10px;
+  }
+  .shop-branch-hours dt span {
+    font-size: 9px;
+  }
+  /* Phones get full-width hour rows so a long range never clips against the
+     day label or the rounded card edge. */
+  .shop-branch-hours dl > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px 12px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .shop-hero-open {
+    flex: 1 1 220px;
+    font-size: 11px;
+  }
+  .shop-hero-open-copy small {
+    font-size: 10px;
+  }
   .shop-branch-action {
     flex: 1 1 auto;
     justify-content: center;
   }
   .shop-branches-foot {
     padding-inline: 18px;
+  }
+}
+@media (max-width: 420px) {
+  .shop-branch-hours dl > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shop-branch-hours dd {
+    padding-left: 0;
+    text-align: left;
+  }
+  .shop-hero-open {
+    flex-basis: 100%;
   }
 }
 @media (prefers-reduced-motion: reduce) {

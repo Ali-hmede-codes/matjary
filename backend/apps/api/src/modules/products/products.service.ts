@@ -24,6 +24,8 @@ import {
   lockOwnerContent,
   chooseContentSlug,
   assertMediaAttachment,
+  normalizeProductOptions,
+  PRODUCT_SLUG_TAKEN_CODE,
 } from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -208,9 +210,10 @@ export class ProductsService {
           );
           const existing = await manager.findOneBy(Product, { slug });
           if (existing) {
-            throw new ConflictException(
-              'A product with this slug already exists',
-            );
+            throw new ConflictException({
+              code: PRODUCT_SLUG_TAKEN_CODE,
+              message: 'A product with this slug already exists',
+            });
           }
 
           if (dto.imageKeys?.length)
@@ -231,6 +234,7 @@ export class ProductsService {
             weightGrams: dto.weightGrams ?? null,
             imageKeys: dto.imageKeys ?? null,
             tags: dto.tags ?? null,
+            options: normalizeProductOptions(dto.options),
             sortOrder: dto.sortOrder ?? 0,
             requiresShipping: dto.requiresShipping ?? true,
             storeId,
@@ -262,7 +266,10 @@ export class ProductsService {
         error instanceof QueryFailedError &&
         (error as any).driverError?.code === 'ER_DUP_ENTRY'
       ) {
-        throw new ConflictException('A product with this slug already exists');
+        throw new ConflictException({
+          code: PRODUCT_SLUG_TAKEN_CODE,
+          message: 'A product with this slug already exists',
+        });
       }
       this.sanitize(error);
     }
@@ -299,6 +306,16 @@ export class ProductsService {
         dto.imageKeys ?? [],
         product.imageKeys ?? [],
       );
+      if (dto.slug !== undefined && dto.slug !== product.slug) {
+        const taken = await this.products.findOneBy({ slug: dto.slug });
+        if (taken && taken.id !== product.id) {
+          throw new ConflictException({
+            code: PRODUCT_SLUG_TAKEN_CODE,
+            message: 'A product with this slug already exists',
+          });
+        }
+        product.slug = dto.slug;
+      }
       if (dto.name !== undefined) product.name = dto.name;
       if (dto.description !== undefined) product.description = dto.description;
       if (dto.priceCents !== undefined)
@@ -312,6 +329,8 @@ export class ProductsService {
       if (dto.weightGrams !== undefined) product.weightGrams = dto.weightGrams;
       if (dto.imageKeys !== undefined) product.imageKeys = dto.imageKeys;
       if (dto.tags !== undefined) product.tags = dto.tags;
+      if (dto.options !== undefined)
+        product.options = normalizeProductOptions(dto.options);
       if (dto.sortOrder !== undefined) product.sortOrder = dto.sortOrder;
       if (dto.requiresShipping !== undefined)
         product.requiresShipping = dto.requiresShipping;
@@ -370,7 +389,10 @@ export class ProductsService {
         error instanceof QueryFailedError &&
         (error as any).driverError?.code === 'ER_DUP_ENTRY'
       ) {
-        throw new ConflictException('A product with this slug already exists');
+        throw new ConflictException({
+          code: PRODUCT_SLUG_TAKEN_CODE,
+          message: 'A product with this slug already exists',
+        });
       }
       this.sanitize(error);
     }
