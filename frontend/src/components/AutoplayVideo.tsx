@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { LoaderCircle, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import {
+  Expand,
+  LoaderCircle,
+  Pause,
+  Play,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { assetUrl, type Media } from '../lib/api';
 import {
   isFeedPlaybackSuspended,
@@ -12,6 +19,10 @@ type AutoplayVideoProps = {
   title: string;
   /** The post viewer is on screen by definition; feed cards wait for scroll. */
   eager?: boolean;
+  /** Only the post a viewer is showing may play; hidden slides keep a poster. */
+  active?: boolean;
+  /** When set, a tap opens the post instead of pausing this clip. */
+  onOpen?: () => void;
   fit?: 'cover' | 'contain';
 };
 
@@ -26,6 +37,8 @@ export function AutoplayVideo({
   media,
   title,
   eager = false,
+  active = true,
+  onOpen,
   fit = 'cover',
 }: AutoplayVideoProps) {
   const video = useRef<HTMLVideoElement>(null);
@@ -113,7 +126,7 @@ export function AutoplayVideo({
   useEffect(() => {
     const element = video.current;
     if (!element || !near) return;
-    if (!visible || !pageVisible || suspended) {
+    if (!visible || !pageVisible || suspended || !active) {
       element.pause();
       return;
     }
@@ -121,7 +134,12 @@ export function AutoplayVideo({
     if (reducedMotion || manuallyPaused.current) return;
     // Low-power modes may still refuse; the poster and play control remain.
     void element.play().catch(() => setPaused(true));
-  }, [near, pageVisible, reducedMotion, suspended, visible]);
+  }, [active, near, pageVisible, reducedMotion, suspended, visible]);
+
+  useEffect(() => {
+    // A slide that scrolled away may autoplay again when it returns.
+    if (!active) manuallyPaused.current = false;
+  }, [active]);
 
   useEffect(() => {
     const element = video.current;
@@ -130,14 +148,14 @@ export function AutoplayVideo({
 
   useEffect(() => {
     const element = video.current;
-    if (!element || near) return;
-    // Far-away clips drop their source so decoder memory and in-flight
-    // requests are released; the poster stays up until the card returns.
+    if (!element || (near && active)) return;
+    // Far-away or hidden clips drop their source so decoder memory and
+    // in-flight requests are released; the poster stays up until they return.
     element.pause();
     element.removeAttribute('src');
     element.load();
     setProgress(0);
-  }, [near]);
+  }, [active, near]);
 
   if (!src || failed) return <MediaView media={media} title={title} />;
 
@@ -168,12 +186,12 @@ export function AutoplayVideo({
       <video
         ref={video}
         className="auto-video-el"
-        src={near ? src : undefined}
+        src={near && active ? src : undefined}
         poster={poster ?? undefined}
         muted={muted}
         loop
         playsInline
-        preload={near ? 'auto' : 'none'}
+        preload={near && active ? 'auto' : 'none'}
         aria-label={title}
         onPlay={() => {
           setPaused(false);
@@ -192,10 +210,14 @@ export function AutoplayVideo({
       <button
         type="button"
         className="auto-video-toggle"
-        onClick={togglePlay}
-        aria-label={`${paused ? 'Play' : 'Pause'} ${title}`}
+        onClick={onOpen ?? togglePlay}
+        aria-label={
+          onOpen ? `Open ${title}` : `${paused ? 'Play' : 'Pause'} ${title}`
+        }
       >
-        {paused ? (
+        {onOpen ? (
+          <Expand size={24} />
+        ) : paused ? (
           <Play size={26} fill="currentColor" />
         ) : (
           <Pause size={24} fill="currentColor" />

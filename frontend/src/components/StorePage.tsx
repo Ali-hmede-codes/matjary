@@ -23,7 +23,6 @@ import {
   ApiError,
   assetUrl,
   getJson,
-  registerPostView,
   type Feed,
   type Post,
   type Product,
@@ -48,6 +47,7 @@ import { branchOpenState, primaryBranch, storeBranches } from '../lib/branches';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { useShopCart } from '../hooks/useShopCart';
 import { usePageSeo } from '../hooks/usePageSeo';
+import { usePostEngagement } from '../hooks/usePostEngagement';
 import { useShare } from '../hooks/useShare';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
@@ -115,7 +115,14 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [focusContact, setFocusContact] = useState(false);
   const contactDetails = useRef<HTMLElement>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const viewedPosts = useRef(new Set<string>());
+  const [postNotice, setPostNotice] = useState('');
+  const { saved, liking, likePost, savePost, registerView, withLikes } =
+    usePostEngagement({ demo, onNotice: setPostNotice });
+  useEffect(() => {
+    if (!postNotice) return;
+    const timer = window.setTimeout(() => setPostNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [postNotice]);
   // A restaurant opens on its menu; the choice only sticks once the shopper
   // switches tabs themselves, so a late store response cannot steal the tab.
   const tabChosen = useRef(initialView === 'catalog');
@@ -235,6 +242,9 @@ export function StorePage({ slug }: { slug: string | null }) {
   const posts = demo
     ? demoPosts.filter((item) => item.store?.id === store?.id)
     : (postsQuery.data?.pages.flatMap((page) => page.items) ?? []);
+  // The grid and the viewer page through one de-duplicated list, so the tile a
+  // shopper taps is exactly the post the viewer opens.
+  const shopPosts = [...new Map(posts.map((post) => [post.id, post])).values()];
   // The menu loads its items inline so every section is browsable without a
   // detour. One request covers a typical menu; long catalogues append another
   // page on request, and a section chip filters server-side.
@@ -329,23 +339,6 @@ export function StorePage({ slug }: { slug: string | null }) {
 
   function openStorePost(post: Post) {
     setSelectedPost(post);
-    if (demo || viewedPosts.current.has(post.id)) return;
-    // Opening a post is the view; refresh the dialog counter in place.
-    viewedPosts.current.add(post.id);
-    void registerPostView(post.id)
-      .then(({ views }) =>
-        setSelectedPost((current) =>
-          current?.id === post.id
-            ? {
-                ...current,
-                engagement: { ...current.engagement, views },
-              }
-            : current,
-        ),
-      )
-      .catch(() => {
-        /* Views never block opening a post. */
-      });
   }
 
   const cartItems = cart.cart?.itemCount ?? 0;
@@ -646,11 +639,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       </StatusBanner>
                     )}
                     <div className="shop-post-grid">
-                      {[
-                        ...new Map(
-                          posts.map((post) => [post.id, post]),
-                        ).values(),
-                      ].map((post) => (
+                      {shopPosts.map((post) => (
                         <button
                           className="shop-post-tile"
                           key={post.id}
@@ -971,10 +960,23 @@ export function StorePage({ slug }: { slug: string | null }) {
       {selectedPost && store && activeTab === 'posts' && (
         <PostDialog
           key={selectedPost.id}
-          post={{ ...selectedPost, store: selectedPost.store ?? store }}
-          initialIndex={0}
-          viewOnly
+          posts={shopPosts.map((post) =>
+            withLikes({ ...post, store: post.store ?? store }),
+          )}
+          initialPostId={selectedPost.id}
           demo={demo}
+          notice={postNotice}
+          saved={saved}
+          liking={liking}
+          onLike={(post) => void likePost(post)}
+          onSave={savePost}
+          onNotice={setPostNotice}
+          onActivePost={(post) => void registerView(post)}
+          onNearEnd={() => {
+            // The reel should not stop at the first loaded page of a big shop.
+            if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage)
+              void postsQuery.fetchNextPage();
+          }}
           onClose={() => setSelectedPost(null)}
         />
       )}

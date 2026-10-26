@@ -710,7 +710,8 @@
   display: block;
   width: 100%;
   min-width: 0;
-  aspect-ratio: 1;
+  /* Portrait 3:4 tiles, the same frame photos and videos share on the feed. */
+  aspect-ratio: 3 / 4;
   padding: 0;
   border: 0;
   border-radius: 0;

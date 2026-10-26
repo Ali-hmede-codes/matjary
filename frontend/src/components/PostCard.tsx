@@ -69,7 +69,13 @@ export function PostCard({
       <div className="post-media">
         {media?.kind === 'video' ? (
           <div className="post-video">
-            <AutoplayVideo key={media.id} media={media} title={post.title} />
+            {/* A first tap opens the full-screen viewer; pausing happens there. */}
+            <AutoplayVideo
+              key={media.id}
+              media={media}
+              title={post.title}
+              onOpen={() => onOpen(mediaIndex)}
+            />
           </div>
         ) : (
           <button

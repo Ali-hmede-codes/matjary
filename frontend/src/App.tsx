@@ -93,6 +93,8 @@ function DiscoveryPage() {
     storesQuery,
     store,
     source,
+    posts,
+    feed,
     saved,
     selected,
     selectedIndex,
@@ -102,6 +104,7 @@ function DiscoveryPage() {
     toggleDemo,
     savePost,
     likePost,
+    registerView,
     withLikes,
     setSearch,
     setSearchOpen,
@@ -201,14 +204,22 @@ function DiscoveryPage() {
       {selected && (
         <PostDialog
           key={selected.id}
-          post={withLikes(selected)}
-          initialIndex={selectedIndex}
+          posts={posts.map((post) => withLikes(post))}
+          initialPostId={selected.id}
+          initialMediaIndex={selectedIndex}
           notice={notice}
-          saved={saved.includes(selected.id)}
-          onSave={() => savePost(selected.id)}
+          saved={saved}
           liking={liking}
-          onLike={() => void likePost(selected)}
+          onLike={(post) => void likePost(post)}
+          onSave={savePost}
           onNotice={setNotice}
+          onActivePost={(post) => void registerView(post)}
+          onNearEnd={() => {
+            // Keep the reel ahead of the viewer instead of dead-ending the
+            // feed at the last post of the loaded page.
+            if (feed.hasNextPage && !feed.isFetchingNextPage)
+              void feed.fetchNextPage();
+          }}
           demo={demo}
           onClose={() => setSelected(null)}
         />
