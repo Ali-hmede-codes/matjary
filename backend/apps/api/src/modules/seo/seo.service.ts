@@ -59,6 +59,7 @@ import {
   appendAdminAudit,
   assertSubscriptionActive,
   adminContext,
+  businessCategoryLabel,
   type AdminActor,
 } from '@app/database';
 
@@ -907,6 +908,7 @@ export class SeoService {
     if (!seo.metaKeywords) {
       seo.metaKeywords = this.generateKeywords([
         store.storeType,
+        businessCategoryLabel(store.businessCategory),
         'shop',
         'online store',
         settings.siteName,
@@ -951,6 +953,7 @@ export class SeoService {
       name: store.name,
       description: store.description,
       storeType: store.storeType,
+      businessCategory: store.businessCategory,
       logoKey: store.logoKey,
     });
     seo.contentHash = contentHash;

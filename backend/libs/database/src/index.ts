@@ -9,6 +9,7 @@ export * from './subscription-errors';
 export * from './admin.entities';
 export * from './admin-policy';
 export * from './visibility-policy';
+export * from './business-categories';
 export * from './website-settings.entity';
 export * from './content-input';
 export * from './media-target';

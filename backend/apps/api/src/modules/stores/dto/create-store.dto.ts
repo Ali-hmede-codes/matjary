@@ -149,6 +149,13 @@ export class CreateStoreDto {
   @IsEnum(StoreType)
   storeType?: StoreType;
 
+  // Business taxonomy slug from the shared catalog (restaurant, school, ...).
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  @Matches(/^[a-z0-9_]+$/u)
+  businessCategory?: string;
+
   @IsOptional()
   @IsObject()
   @ValidateNested()

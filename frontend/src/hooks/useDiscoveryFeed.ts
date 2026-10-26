@@ -6,9 +6,9 @@ import {
   registerPostView,
   togglePostLike,
   type BoostAd,
-  type Category,
   type Feed,
   type Post,
+  type ShopCategoryFacet,
   type Store,
 } from '../lib/api';
 import type { Algorithm, FeedLayout, View } from '../lib/feed';
@@ -16,10 +16,49 @@ import { readSavedIds } from '../lib/website';
 import { demoPosts, demoStores } from '../lib/demo';
 import { useWebsiteSettings } from './useWebsiteSettings';
 
-const sampleCategories = [
-  { category: 'merchandise', label: 'Objects & living', count: 4 },
-  { category: 'food', label: 'Food & dining', count: 1 },
-  { category: 'beverage', label: 'Coffee & more', count: 1 },
+const sampleCategories: ShopCategoryFacet[] = [
+  {
+    slug: 'restaurants',
+    label: 'Restaurant',
+    group: 'food_drink',
+    groupLabel: 'Food & drink',
+    count: 1,
+  },
+  {
+    slug: 'cafe',
+    label: 'Café / coffee shop',
+    group: 'food_drink',
+    groupLabel: 'Food & drink',
+    count: 1,
+  },
+  {
+    slug: 'home_furniture',
+    label: 'Furniture',
+    group: 'retail_fashion',
+    groupLabel: 'Retail & fashion',
+    count: 1,
+  },
+  {
+    slug: 'handmade_crafts',
+    label: 'Handmade & crafts',
+    group: 'arts_culture',
+    groupLabel: 'Arts & culture',
+    count: 1,
+  },
+  {
+    slug: 'flower_shop',
+    label: 'Flowers',
+    group: 'retail_fashion',
+    groupLabel: 'Retail & fashion',
+    count: 1,
+  },
+  {
+    slug: 'clothing_store',
+    label: 'Clothing store',
+    group: 'retail_fashion',
+    groupLabel: 'Retail & fashion',
+    count: 1,
+  },
 ];
 
 export function useDiscoveryFeed() {
@@ -34,7 +73,7 @@ export function useDiscoveryFeed() {
   const [algorithm, setAlgorithm] = useState<Algorithm>(
     view === 'trending' ? 'trending' : 'mixed',
   );
-  const [category, setCategory] = useState('');
+  const [categories, setCategories] = useState<string[]>([]);
   const [store, setStore] = useState<Store | null>(null);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
@@ -62,7 +101,7 @@ export function useDiscoveryFeed() {
     }
   });
 
-  const { settingsQuery, settings, theme } = useWebsiteSettings();
+  const { settingsQuery, settings, theme } = useWebsiteSettings(true, !demo);
   const storesQuery = useQuery({
     queryKey: ['stores'],
     queryFn: ({ signal }) =>
@@ -72,8 +111,9 @@ export function useDiscoveryFeed() {
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
     queryFn: ({ signal }) =>
-      getJson<Category[]>('feed/explore/categories', signal),
+      getJson<ShopCategoryFacet[]>('feed/explore/categories', signal),
     enabled: !demo,
+    staleTime: 60_000,
   });
   const adsQuery = useQuery({
     queryKey: ['boost', 'feed-ads'],
@@ -82,13 +122,15 @@ export function useDiscoveryFeed() {
     staleTime: 120_000,
     retry: 0,
   });
+  const categoryKey = [...categories].sort().join(',');
   const feed = useInfiniteQuery({
-    queryKey: ['explore', algorithm, category, store?.slug],
+    queryKey: ['explore', algorithm, categoryKey, store?.slug],
     initialPageParam: '',
     queryFn: ({ signal, pageParam }) => {
       const params = new URLSearchParams({ limit: '12', algorithm });
       if (pageParam) params.set('cursor', pageParam);
-      if (category && !store) params.set('category', category);
+      if (categories.length > 0 && !store)
+        params.set('categories', categories.join(','));
       const endpoint = store
         ? `feed/store/${encodeURIComponent(store.slug)}`
         : 'feed/explore';
@@ -98,12 +140,13 @@ export function useDiscoveryFeed() {
     enabled: !demo,
   });
   const stores = demo ? demoStores : (storesQuery.data?.items ?? []);
-  const categories = demo ? sampleCategories : (categoriesQuery.data ?? []);
+  const categoryFacets = demo ? sampleCategories : (categoriesQuery.data ?? []);
   const ads: BoostAd[] = demo ? [] : (adsQuery.data ?? []);
   const source = demo
     ? demoPosts.filter(
         (post) =>
-          (!category || post.category === category) &&
+          (categories.length === 0 ||
+            categories.includes(post.store?.businessCategory ?? '')) &&
           (!store || post.store?.id === store.id),
       )
     : (feed.data?.pages.flatMap((page) => page.items) ?? []);
@@ -131,10 +174,20 @@ export function useDiscoveryFeed() {
   function navigate(next: View) {
     setView(next);
     setStore(null);
-    setCategory('');
+    setCategories([]);
     setSearch('');
     setAlgorithm(next === 'trending' ? 'trending' : 'mixed');
     window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  function toggleCategory(slug: string) {
+    setCategories((current) =>
+      current.includes(slug)
+        ? current.filter((value) => value !== slug)
+        : [...current, slug],
+    );
+  }
+  function clearCategories() {
+    setCategories([]);
   }
   function toggleDemo() {
     const url = new URL(window.location.href);
@@ -223,7 +276,7 @@ export function useDiscoveryFeed() {
   return {
     view,
     algorithm,
-    category,
+    categories,
     store,
     search,
     demo,
@@ -241,7 +294,7 @@ export function useDiscoveryFeed() {
     storesQuery,
     feed,
     stores,
-    categories,
+    categoryFacets,
     ads,
     source,
     posts,
@@ -249,7 +302,7 @@ export function useDiscoveryFeed() {
     feedTitle,
     setView,
     setAlgorithm,
-    setCategory,
+    setCategories,
     setStore,
     setSearch,
     setSelected,
@@ -258,6 +311,8 @@ export function useDiscoveryFeed() {
     setFiltersOpen,
     setLayout,
     navigate,
+    toggleCategory,
+    clearCategories,
     toggleDemo,
     savePost,
     likePost,

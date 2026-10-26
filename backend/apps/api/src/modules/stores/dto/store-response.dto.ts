@@ -5,6 +5,8 @@ import {
   StoreSubscriptionTier,
   StoreType,
   SocialMediaLinks,
+  businessCategoryDefinition,
+  businessCategoryLabel,
 } from '@app/database';
 
 function coordinateValue(value: number | string | null | undefined) {
@@ -105,6 +107,9 @@ export class StoreResponseDto {
   brandColor!: string | null;
   description!: string | null;
   storeType!: StoreType;
+  // Public business taxonomy shared by shop creation, storefronts and feed filters.
+  businessCategory!: string;
+  businessCategoryLabel!: string;
   enableCart!: boolean;
   enableWhatsAppCheckout!: boolean;
   socialMediaLinks!: SocialMediaLinks | null;
@@ -173,6 +178,8 @@ export function toStoreResponseDto(
     brandColor: store.brandColor,
     description: store.description,
     storeType: store.storeType,
+    businessCategory: businessCategoryDefinition(store.businessCategory).slug,
+    businessCategoryLabel: businessCategoryLabel(store.businessCategory),
     enableCart: store.enableCart,
     enableWhatsAppCheckout: store.enableWhatsAppCheckout,
     socialMediaLinks: store.socialMediaLinks,

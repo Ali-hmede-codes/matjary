@@ -28,6 +28,8 @@ export interface Store {
   hasVerificationBadge?: boolean;
   verificationBadgeExpiresAt?: string | null;
   storeType?: 'ecommerce' | 'restaurant_menu';
+  businessCategory?: string | null;
+  businessCategoryLabel?: string | null;
   logoKey?: string | null;
   bannerKey?: string | null;
   socialMediaLinks?: Record<string, string> | null;
@@ -114,9 +116,26 @@ export interface Feed {
   nextCursor?: string;
 }
 
-export interface Category {
-  category: string;
+export interface ShopCategoryGroup {
+  slug: string;
   label: string;
+}
+
+export interface ShopCategoryDefinition {
+  slug: string;
+  label: string;
+  group: string;
+}
+
+// Full code-owned catalog used by the shop editor. Static and public.
+export interface ShopCategoryCatalog {
+  groups: ShopCategoryGroup[];
+  categories: ShopCategoryDefinition[];
+}
+
+// Public feed facet: a business category that currently has published posts.
+export interface ShopCategoryFacet extends ShopCategoryDefinition {
+  groupLabel: string;
   count: number;
 }
 

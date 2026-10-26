@@ -46,6 +46,20 @@ export class FeedExploreController {
     return this.engagementService.resolveViewer(request);
   }
 
+  private parseCategories(
+    value?: string,
+    single?: string,
+  ): string[] | undefined {
+    const categories = [
+      ...(value?.split(',') ?? []),
+      ...(single ? [single] : []),
+    ]
+      .map((category) => category.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    return categories.length > 0 ? categories : undefined;
+  }
+
   // ============================================
   // PERSONALIZED FEED (Authenticated users)
   // ============================================
@@ -134,7 +148,19 @@ export class FeedExploreController {
     name: 'category',
     required: false,
     type: String,
-    description: 'Filter by product category',
+    description: 'Filter by one business category slug (legacy)',
+  })
+  @ApiQuery({
+    name: 'categories',
+    required: false,
+    type: String,
+    description: 'Comma-separated business category slugs',
+  })
+  @ApiQuery({
+    name: 'timeWindowHours',
+    required: false,
+    type: Number,
+    description: 'Trending window in hours (default 24)',
   })
   @ApiQuery({
     name: 'city',
@@ -159,6 +185,8 @@ export class FeedExploreController {
     @Query('lon') lon?: number,
     @Query('radiusKm') radiusKm?: number,
     @Query('category') category?: string,
+    @Query('categories') categories?: string,
+    @Query('timeWindowHours') timeWindowHours?: number,
     @Query('city') city?: string,
     @Query('country') country?: string,
   ): Promise<FeedResponse> {
@@ -169,12 +197,14 @@ export class FeedExploreController {
       latitude: lat,
       longitude: lon,
       radiusKm,
+      categories: this.parseCategories(categories, category),
       category,
       city,
       country,
       limit: safeLimit,
       cursor,
       algorithm: algorithm || 'mixed',
+      timeWindowHours,
     };
 
     return this.feedExploreService.getExploreFeed(params, viewer);
@@ -204,12 +234,20 @@ export class FeedExploreController {
     type: Number,
     description: 'Time window in hours (default 24)',
   })
+  @ApiQuery({
+    name: 'categories',
+    required: false,
+    type: String,
+    description: 'Comma-separated business category slugs',
+  })
   @ApiResponse({ status: 200, description: 'Trending posts' })
   async getTrendingPosts(
     @Req() request: Request,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Query('cursor') cursor: string | undefined,
     @Query('timeWindowHours') timeWindowHours?: number,
+    @Query('categories') categories?: string,
+    @Query('category') category?: string,
   ): Promise<FeedResponse> {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
     const viewer = await this.resolveViewer(request);
@@ -219,6 +257,7 @@ export class FeedExploreController {
       cursor,
       algorithm: 'trending',
       timeWindowHours: timeWindowHours ?? 24,
+      categories: this.parseCategories(categories, category),
     };
 
     return this.feedExploreService.getExploreFeed(params, viewer);
@@ -323,6 +362,7 @@ export class FeedExploreController {
     @Query('lon') lon?: number,
     @Query('radiusKm') radiusKm?: number,
     @Query('category') category?: string,
+    @Query('categories') categories?: string,
     @Query('city') city?: string,
     @Query('country') country?: string,
   ): Promise<FeedResponse> {
@@ -337,7 +377,7 @@ export class FeedExploreController {
         latitude: lat,
         longitude: lon,
         radiusKm,
-        category,
+        categories: this.parseCategories(categories, category),
         city,
         country,
       },

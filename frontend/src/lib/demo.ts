@@ -48,72 +48,91 @@ const examples = [
   ],
 ] as const;
 
+const demoBusinessCategories = [
+  ['handmade_crafts', 'Handmade & crafts', 'ecommerce'],
+  ['cafe', 'Café / coffee shop', 'restaurant_menu'],
+  ['home_furniture', 'Furniture', 'ecommerce'],
+  ['restaurants', 'Restaurant', 'restaurant_menu'],
+  ['flower_shop', 'Flowers', 'ecommerce'],
+  ['clothing_store', 'Clothing store', 'ecommerce'],
+] as const;
+
 export const demoStores: Store[] = examples.map(
-  ([name, , description, photo, category], index) => ({
-    id: `demo-store-${index}`,
-    slug: `demo-store-${index}`,
-    name,
-    hasVerificationBadge: index === 0 || index === 1 || index === 3,
-    verificationBadgeExpiresAt: index === 3 ? '2020-01-01T00:00:00Z' : null,
-    brandColor:
-      ['#75604b', '#88452c', '#384e60', '#637348', '#426751', '#91614c'][
-        index
-      ] ?? null,
-    storeType: category === 'merchandise' ? 'ecommerce' : 'restaurant_menu',
-    description,
-    bannerKey: `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1600&q=85`,
-    socialMediaLinks: {
-      instagram: 'https://instagram.com/matjary',
-      facebook: 'https://facebook.com/matjary',
-      tiktok: 'https://tiktok.com/@matjary',
-    },
-    branches: [
-      {
-        id: `demo-branch-${index}-main`,
-        name: 'Main store',
-        address: '12 Mar Mikhael Street',
-        city: 'Beirut',
-        country: 'Lebanon',
-        latitude: 33.8938 + index * 0.004,
-        longitude: 35.5018 + index * 0.004,
-        phone: '+961 1 234 567',
-        whatsapp: '96170123456',
-        whatsappUrl: 'https://wa.me/96170123456',
-        isPrimary: true,
-        openingHours: {
-          mon: '09:00-18:00',
-          tue: '09:00-18:00',
-          wed: '09:00-18:00',
-          thu: '09:00-18:00',
-          fri: '09:00-18:00',
-          sat: '10:00-16:00',
-          sun: null,
-        },
+  ([name, , description, photo], index) => {
+    const business = demoBusinessCategories[index] ?? [
+      'other',
+      'Other business',
+      'ecommerce',
+    ];
+    return {
+      id: `demo-store-${index}`,
+      slug: `demo-store-${index}`,
+      name,
+      hasVerificationBadge: index === 0 || index === 1 || index === 3,
+      verificationBadgeExpiresAt: index === 3 ? '2020-01-01T00:00:00Z' : null,
+      brandColor:
+        ['#75604b', '#88452c', '#384e60', '#637348', '#426751', '#91614c'][
+          index
+        ] ?? null,
+      storeType:
+        business[2] === 'restaurant_menu' ? 'restaurant_menu' : 'ecommerce',
+      businessCategory: business[0],
+      businessCategoryLabel: business[1],
+      description,
+      bannerKey: `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=1600&q=85`,
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/matjary',
+        facebook: 'https://facebook.com/matjary',
+        tiktok: 'https://tiktok.com/@matjary',
       },
-      {
-        id: `demo-branch-${index}-sea`,
-        name: 'Seaside branch',
-        address: 'Ain el Mreisseh Corniche',
-        city: 'Beirut',
-        country: 'Lebanon',
-        latitude: 33.8995 + index * 0.004,
-        longitude: 35.4765 + index * 0.004,
-        phone: '+961 1 987 654',
-        whatsapp: '96170987654',
-        whatsappUrl: 'https://wa.me/96170987654',
-        openingHours: {
-          mon: '10:00-20:00',
-          tue: '10:00-20:00',
-          wed: '10:00-20:00',
-          thu: '10:00-20:00',
-          fri: '10:00-20:00',
-          sat: '10:00-20:00',
-          sun: '11:00-18:00',
+      branches: [
+        {
+          id: `demo-branch-${index}-main`,
+          name: 'Main store',
+          address: '12 Mar Mikhael Street',
+          city: 'Beirut',
+          country: 'Lebanon',
+          latitude: 33.8938 + index * 0.004,
+          longitude: 35.5018 + index * 0.004,
+          phone: '+961 1 234 567',
+          whatsapp: '96170123456',
+          whatsappUrl: 'https://wa.me/96170123456',
+          isPrimary: true,
+          openingHours: {
+            mon: '09:00-18:00',
+            tue: '09:00-18:00',
+            wed: '09:00-18:00',
+            thu: '09:00-18:00',
+            fri: '09:00-18:00',
+            sat: '10:00-16:00',
+            sun: null,
+          },
         },
-      },
-    ],
-    location: { city: 'Beirut', country: 'Lebanon' },
-  }),
+        {
+          id: `demo-branch-${index}-sea`,
+          name: 'Seaside branch',
+          address: 'Ain el Mreisseh Corniche',
+          city: 'Beirut',
+          country: 'Lebanon',
+          latitude: 33.8995 + index * 0.004,
+          longitude: 35.4765 + index * 0.004,
+          phone: '+961 1 987 654',
+          whatsapp: '96170987654',
+          whatsappUrl: 'https://wa.me/96170987654',
+          openingHours: {
+            mon: '10:00-20:00',
+            tue: '10:00-20:00',
+            wed: '10:00-20:00',
+            thu: '10:00-20:00',
+            fri: '10:00-20:00',
+            sat: '10:00-20:00',
+            sun: '11:00-18:00',
+          },
+        },
+      ],
+      location: { city: 'Beirut', country: 'Lebanon' },
+    };
+  },
 );
 
 const productNames = [

@@ -57,6 +57,12 @@ export class StoresController {
     return this.stores.findAll(undefined, safeLimit, safeOffset);
   }
 
+  // Static route: must stay above GET ':slug' so it is not treated as a shop.
+  @Get('categories')
+  getBusinessCategories() {
+    return this.stores.getBusinessCategoryCatalog();
+  }
+
   @Get('my')
   @UseGuards(SessionGuard)
   async getMyStores(

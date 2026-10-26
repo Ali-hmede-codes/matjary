@@ -36,6 +36,10 @@ import {
   actorContext,
   appendAdminAudit,
   purgeStoreRecords,
+  BUSINESS_CATEGORIES,
+  BUSINESS_CATEGORY_GROUPS,
+  defaultBusinessCategoryForStoreType,
+  isBusinessCategory,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
@@ -93,6 +97,25 @@ export class StoresService {
     throw new ServiceUnavailableException(
       'Store storage is temporarily unavailable',
     );
+  }
+
+  // The catalog itself is static, so it can be served without touching MySQL.
+  getBusinessCategoryCatalog() {
+    return {
+      groups: BUSINESS_CATEGORY_GROUPS.map((group) => ({ ...group })),
+      categories: BUSINESS_CATEGORIES.map((category) => ({ ...category })),
+    };
+  }
+
+  private businessCategoryValue(
+    value: string | undefined,
+    storeType: StoreType | undefined,
+  ): string {
+    const slug =
+      value?.trim() || defaultBusinessCategoryForStoreType(storeType);
+    if (!isBusinessCategory(slug))
+      throw new BadRequestException('Choose a valid business category');
+    return slug;
   }
 
   async findAll(
@@ -261,6 +284,10 @@ export class StoresService {
         brandColor: dto.brandColor ?? null,
         description: dto.description ?? null,
         storeType: dto.storeType ?? StoreType.ECOMMERCE,
+        businessCategory: this.businessCategoryValue(
+          dto.businessCategory,
+          dto.storeType,
+        ),
         socialMediaLinks: dto.socialMediaLinks ?? null,
         ownerId,
         subscriptionTier: StoreSubscriptionTier.FREE,
@@ -380,6 +407,11 @@ export class StoresService {
       if (dto.brandColor !== undefined) store.brandColor = dto.brandColor;
       if (dto.description !== undefined) store.description = dto.description;
       if (dto.storeType !== undefined) store.storeType = dto.storeType;
+      if (dto.businessCategory !== undefined)
+        store.businessCategory = this.businessCategoryValue(
+          dto.businessCategory,
+          dto.storeType ?? store.storeType,
+        );
       if (dto.socialMediaLinks !== undefined)
         store.socialMediaLinks = dto.socialMediaLinks;
       if (dto.logoKey !== undefined) store.logoKey = dto.logoKey;

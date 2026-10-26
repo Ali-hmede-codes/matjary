@@ -5,7 +5,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import {
+  Repository,
+  In,
+  type ObjectLiteral,
+  type SelectQueryBuilder,
+} from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import {
   Showcase,
@@ -14,12 +19,15 @@ import {
   MediaAsset,
   MediaKind,
   MediaStatus,
-  Product,
-  ProductStatus,
   PostEngagement,
   MediaVariant,
   publicWhere,
   publicVisibilitySql,
+  BUSINESS_CATEGORIES,
+  businessCategoryDefinition,
+  businessCategoryGroupLabel,
+  businessCategoryLabel,
+  isBusinessCategory,
 } from '@app/database';
 import {
   PostEngagementService,
@@ -28,6 +36,15 @@ import {
 import { LocationService } from '../../stores/services/location.service';
 import { MediaService } from '../media.service';
 import { StorageService } from '@app/storage';
+import {
+  diversifyByStore,
+  exploreScore,
+  nearbyScore,
+  popularityScore,
+  recencyScore,
+  storeFeedScore,
+  trendingScore,
+} from './feed-ranking';
 
 export interface FeedItem {
   id: string;
@@ -46,6 +63,8 @@ export interface FeedItem {
     slug: string;
     logoKey: string | null;
     brandColor: string | null;
+    businessCategory: string;
+    businessCategoryLabel: string;
     location?: {
       city: string | null;
       country: string | null;
@@ -96,6 +115,9 @@ export interface ExploreParams {
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
+  // One or more business-category slugs (restaurant, school, ...).
+  categories?: string[];
+  // Backwards-compatible single value; merged into categories.
   category?: string;
   city?: string;
   country?: string;
@@ -130,14 +152,125 @@ export class FeedExploreService {
     private readonly mediaAssets: Repository<MediaAsset>,
     @InjectRepository(PostEngagement)
     private readonly engagementRepo: Repository<PostEngagement>,
-    @InjectRepository(Product)
-    private readonly products: Repository<Product>,
     private readonly engagementService: PostEngagementService,
     private readonly locationService: LocationService,
     private readonly mediaService: MediaService,
     private readonly storage: StorageService,
     private readonly config: ConfigService,
   ) {}
+
+  // Category affinity is derived from durable likes, so a short in-process
+  // cache avoids one aggregate query per feed refresh without hiding new likes
+  // for long. The map is bounded to keep memory predictable.
+  private readonly affinityCache = new Map<
+    string,
+    { expiresAt: number; value: Map<string, number> }
+  >();
+  private static readonly AFFINITY_TTL_MS = 5 * 60 * 1000;
+  private static readonly AFFINITY_CACHE_MAX = 500;
+
+  private normalizedCategories(params: ExploreParams): string[] {
+    const values = [
+      ...(params.categories ?? []),
+      ...(params.category ? [params.category] : []),
+    ];
+    return [
+      ...new Set(
+        values
+          .map((value) => value.trim().toLowerCase())
+          .filter((value) => isBusinessCategory(value)),
+      ),
+    ].slice(0, 12);
+  }
+
+  private applyStoreScope<T extends ObjectLiteral>(
+    query: SelectQueryBuilder<T>,
+    params: ExploreParams,
+    alias = 'store',
+  ): SelectQueryBuilder<T> {
+    const categories = this.normalizedCategories(params);
+    if (categories.length > 0) {
+      query.andWhere(`${alias}.business_category IN (:...businessCategories)`, {
+        businessCategories: categories,
+      });
+    }
+    if (params.city)
+      query.andWhere(`${alias}.city = :city`, { city: params.city });
+    if (params.country) {
+      query.andWhere(`${alias}.country = :country`, {
+        country: params.country,
+      });
+    }
+    return query;
+  }
+
+  /**
+   * Stores whose categories the viewer has liked, plus their own shop
+   * categories. This is the only personal signal used by "For you": enough
+   * to feel familiar without pretending to be a large recommendation engine.
+   */
+  private async getCategoryAffinity(
+    viewer?: ResolvedViewer,
+  ): Promise<Map<string, number>> {
+    if (!viewer) return new Map();
+    const key = `${viewer.voterType}:${viewer.voterId}`;
+    const cached = this.affinityCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+    const affinity = new Map<string, number>();
+    try {
+      const rows = await this.engagementRepo.manager
+        .createQueryBuilder()
+        .select('store.business_category', 'category')
+        .addSelect('COUNT(*)', 'count')
+        .from('post_likes', 'pl')
+        .innerJoin('showcases', 'showcase', 'showcase.id = pl.post_id')
+        .innerJoin('stores', 'store', 'store.id = showcase.store_id')
+        .where('pl.voter_id = :voterId', { voterId: viewer.voterId })
+        .andWhere('pl.voter_type = :voterType', {
+          voterType: viewer.voterType,
+        })
+        .andWhere('store.business_category IS NOT NULL')
+        .groupBy('store.business_category')
+        .getRawMany<{ category: string; count: string }>();
+      for (const row of rows) {
+        const count = Number.parseInt(row.count, 10);
+        if (row.category && Number.isFinite(count)) {
+          affinity.set(row.category, count);
+        }
+      }
+    } catch {
+      // A personalization failure must never break the public feed.
+    }
+
+    if (viewer.voterType === 'user') {
+      try {
+        const ownStores = await this.stores.find({
+          where: { ownerId: viewer.voterId },
+          select: ['businessCategory'],
+        });
+        for (const store of ownStores) {
+          if (!store.businessCategory) continue;
+          affinity.set(
+            store.businessCategory,
+            (affinity.get(store.businessCategory) ?? 0) + 3,
+          );
+        }
+      } catch {
+        // Own-shop affinity is optional.
+      }
+    }
+
+    if (this.affinityCache.size >= FeedExploreService.AFFINITY_CACHE_MAX) {
+      const oldest = this.affinityCache.keys().next().value;
+      if (oldest) this.affinityCache.delete(oldest);
+    }
+    this.affinityCache.set(key, {
+      expiresAt: Date.now() + FeedExploreService.AFFINITY_TTL_MS,
+      value: affinity,
+    });
+    return affinity;
+  }
 
   // ============================================
   // MAIN FEED (Personalized for authenticated users)
@@ -270,36 +403,30 @@ export class FeedExploreService {
     params: ExploreParams,
     viewer?: ResolvedViewer,
   ): Promise<FeedResponse> {
-    const {
-      latitude,
-      longitude,
-      radiusKm = 25,
-      category,
-      city,
-      country,
-      limit = 20,
-      cursor,
-      algorithm = 'mixed',
-    } = params;
+    const { limit = 20, cursor, algorithm = 'mixed' } = params;
+    const normalized: ExploreParams = {
+      ...params,
+      categories: this.normalizedCategories(params),
+    };
 
     let items: FeedItem[] = [];
 
     switch (algorithm) {
       case 'trending':
-        items = await this.getTrendingPosts(params, viewer);
+        items = await this.getTrendingPosts(normalized, viewer);
         break;
       case 'popular':
-        items = await this.getPopularPosts(params, viewer);
+        items = await this.getPopularPosts(normalized, viewer);
         break;
       case 'recent':
-        items = await this.getRecentPosts(params, viewer);
+        items = await this.getRecentPosts(normalized, viewer);
         break;
       case 'nearby':
-        items = await this.getNearbyPosts(params, viewer);
+        items = await this.getNearbyPosts(normalized, viewer);
         break;
       case 'mixed':
       default:
-        items = await this.getMixedExploreFeed(params, viewer);
+        items = await this.getMixedExploreFeed(normalized, viewer);
         break;
     }
 
@@ -323,8 +450,7 @@ export class FeedExploreService {
     params: ExploreParams,
     viewer?: ResolvedViewer,
   ): Promise<FeedItem[]> {
-    const { latitude, longitude, radiusKm, category, city, country, limit } =
-      params;
+    const { latitude, longitude, radiusKm = 25, limit } = params;
 
     // Build base query
     let query = this.showcases
@@ -336,11 +462,11 @@ export class FeedExploreService {
       .andWhere('showcase.storeId IS NOT NULL');
 
     // Apply location filter if coordinates provided
-    if (latitude && longitude) {
+    if (latitude !== undefined && longitude !== undefined) {
       const bounds = this.locationService.calculateBoundingBox(
         latitude,
         longitude,
-        radiusKm ?? 25,
+        radiusKm,
       );
       query = query
         .andWhere('store.latitude IS NOT NULL')
@@ -355,27 +481,11 @@ export class FeedExploreService {
         });
     }
 
-    // Apply city/country filter
-    if (city) {
-      query = query.andWhere('store.city = :city', { city });
-    }
-    if (country) {
-      query = query.andWhere('store.country = :country', { country });
-    }
+    // Business-category, city and country filters.
+    query = this.applyStoreScope(query, params);
 
-    // Apply category filter via products
-    if (category) {
-      query = query
-        .innerJoin('store.products', 'product')
-        .andWhere('product.category = :category', { category })
-        .andWhere(publicVisibilitySql('product', 'product'))
-        .andWhere('product.status = :productStatus', {
-          productStatus: ProductStatus.ACTIVE,
-        });
-    }
-
-    // Get a larger pool for algorithm mixing
-    const poolSize = Math.min(limit * 5, 200);
+    // A wider pool gives the small mixer room to balance freshness and reach.
+    const poolSize = Math.min(Math.max(limit * 8, 60), 300);
     const rawItems = await query
       .orderBy('showcase.publishedAt', 'DESC')
       .take(poolSize)
@@ -383,23 +493,52 @@ export class FeedExploreService {
 
     // Enrich all items
     const enrichedItems = await this.enrichFeedItems(rawItems, viewer?.voterId);
+    const affinity = await this.getCategoryAffinity(viewer);
 
     // Apply mixed algorithm scoring
     const scoredItems = enrichedItems.map((item) => ({
       ...item,
-      _algorithmScore: this.calculateExploreScore(item, {
+      _algorithmScore: exploreScore(item, {
         latitude,
         longitude,
-        userId: viewer?.voterId,
+        affinity,
+        distanceKm: (lat1, lon1, lat2, lon2) =>
+          this.locationService.calculateDistance(lat1, lon1, lat2, lon2),
       }),
     }));
 
-    // Sort by score and return top items
+    // Sort by score, then break up runs from the same shop.
     scoredItems.sort(
       (a, b) => (b._algorithmScore ?? 0) - (a._algorithmScore ?? 0),
     );
 
-    return scoredItems;
+    return diversifyByStore(scoredItems);
+  }
+
+  /**
+   * Candidate ids ordered by durable engagement. Recent activity wins, and a
+   * quiet window falls back to 7 days so Trending is not blank on a small site.
+   */
+  private async fetchTrendingCandidateIds(
+    params: ExploreParams,
+    since: Date,
+    limit: number,
+  ): Promise<string[]> {
+    let query = this.engagementRepo
+      .createQueryBuilder('engagement')
+      .innerJoin('showcases', 'showcase', 'showcase.id = engagement.postId')
+      .innerJoin('stores', 'store', 'store.id = showcase.storeId')
+      .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(publicVisibilitySql('post', 'showcase'))
+      .andWhere('showcase.publishedAt >= :since', { since })
+      .andWhere('showcase.storeId IS NOT NULL');
+    query = this.applyStoreScope(query, params);
+    const rows = await query
+      .orderBy('(engagement.likesCount + engagement.viewsCount * 0.1)', 'DESC')
+      .take(Math.min(Math.max(limit * 3, 30), 100))
+      .select('showcase.id')
+      .getRawMany<{ showcase_id: string }>();
+    return rows.map((row) => row.showcase_id);
   }
 
   /**
@@ -411,25 +550,27 @@ export class FeedExploreService {
   ): Promise<FeedItem[]> {
     const { timeWindowHours = 24, limit } = params as TrendingParams &
       ExploreParams;
-    const since = new Date(Date.now() - timeWindowHours * 60 * 60 * 1000);
+    let fallback = false;
+    const recentIds = await this.fetchTrendingCandidateIds(
+      params,
+      new Date(Date.now() - timeWindowHours * 60 * 60 * 1000),
+      limit,
+    );
+    let postIds = recentIds;
 
-    // Get posts with high recent engagement
-    // We'll use the flushed engagement table for this
-    const trendingPostIds = await this.engagementRepo
-      .createQueryBuilder('engagement')
-      .innerJoin('showcases', 'showcase', 'showcase.id = engagement.postId')
-      .innerJoin('stores', 'store', 'store.id = showcase.storeId')
-      .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
-      .andWhere(publicVisibilitySql('post', 'showcase'))
-      .andWhere('showcase.publishedAt >= :since', { since })
-      .andWhere('showcase.storeId IS NOT NULL')
-      .orderBy('(engagement.likesCount + engagement.viewsCount * 0.1)', 'DESC')
-      .take(Math.min(limit * 3, 100))
-      .select('showcase.id')
-      .getRawMany();
-
-    const postIds = trendingPostIds.map((t) => t.showcase_id);
-
+    // A brand-new site can legitimately have little activity in 24 hours.
+    // Topping up from the last week keeps Trending useful without replacing
+    // the freshest posts, which still score higher on velocity.
+    const fallbackHours = 24 * 7;
+    if (recentIds.length < limit && timeWindowHours < fallbackHours) {
+      fallback = true;
+      const widerIds = await this.fetchTrendingCandidateIds(
+        params,
+        new Date(Date.now() - fallbackHours * 60 * 60 * 1000),
+        limit,
+      );
+      postIds = [...new Set([...recentIds, ...widerIds])];
+    }
     if (postIds.length === 0) return [];
 
     const items = await this.showcases
@@ -443,10 +584,13 @@ export class FeedExploreService {
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer?.voterId);
-    return enriched.map((item) => ({
+    const now = Date.now();
+    const scored = enriched.map((item) => ({
       ...item,
-      _algorithmScore: this.calculateTrendingScore(item),
+      _algorithmScore: trendingScore(item, now, fallback ? fallbackHours : 72),
     }));
+    scored.sort((a, b) => (b._algorithmScore ?? 0) - (a._algorithmScore ?? 0));
+    return diversifyByStore(scored);
   }
 
   /**
@@ -458,18 +602,20 @@ export class FeedExploreService {
   ): Promise<FeedItem[]> {
     const { limit } = params;
 
-    const popularPostIds = await this.engagementRepo
+    let query = this.engagementRepo
       .createQueryBuilder('engagement')
       .innerJoin('showcases', 'showcase', 'showcase.id = engagement.postId')
       .innerJoin('stores', 'store', 'store.id = showcase.storeId')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
       .andWhere(publicVisibilitySql('post', 'showcase'))
-      .andWhere('showcase.storeId IS NOT NULL')
+      .andWhere('showcase.storeId IS NOT NULL');
+    query = this.applyStoreScope(query, params);
+    const popularPostIds = await query
       .orderBy('engagement.likesCount', 'DESC')
       .addOrderBy('engagement.viewsCount', 'DESC')
       .take(Math.min(limit * 3, 100))
       .select('showcase.id')
-      .getRawMany();
+      .getRawMany<{ showcase_id: string }>();
 
     const postIds = popularPostIds.map((p) => p.showcase_id);
 
@@ -486,10 +632,12 @@ export class FeedExploreService {
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer?.voterId);
-    return enriched.map((item) => ({
+    const scored = enriched.map((item) => ({
       ...item,
-      _algorithmScore: this.calculatePopularityScore(item),
+      _algorithmScore: popularityScore(item),
     }));
+    scored.sort((a, b) => (b._algorithmScore ?? 0) - (a._algorithmScore ?? 0));
+    return diversifyByStore(scored);
   }
 
   /**
@@ -499,8 +647,7 @@ export class FeedExploreService {
     params: ExploreParams,
     viewer?: ResolvedViewer,
   ): Promise<FeedItem[]> {
-    const { limit, latitude, longitude, radiusKm, city, country, category } =
-      params;
+    const { limit, latitude, longitude, radiusKm = 25 } = params;
 
     let query = this.showcases
       .createQueryBuilder('showcase')
@@ -510,11 +657,11 @@ export class FeedExploreService {
       .andWhere('showcase.publishedAt IS NOT NULL')
       .andWhere('showcase.storeId IS NOT NULL');
 
-    if (latitude && longitude) {
+    if (latitude !== undefined && longitude !== undefined) {
       const bounds = this.locationService.calculateBoundingBox(
         latitude,
         longitude,
-        radiusKm ?? 25,
+        radiusKm,
       );
       query = query
         .andWhere('store.latitude IS NOT NULL')
@@ -529,28 +676,17 @@ export class FeedExploreService {
         });
     }
 
-    if (city) query = query.andWhere('store.city = :city', { city });
-    if (country)
-      query = query.andWhere('store.country = :country', { country });
-    if (category) {
-      query = query
-        .innerJoin('store.products', 'product')
-        .andWhere('product.category = :category', { category })
-        .andWhere(publicVisibilitySql('product', 'product'))
-        .andWhere('product.status = :productStatus', {
-          productStatus: ProductStatus.ACTIVE,
-        });
-    }
+    query = this.applyStoreScope(query, params);
 
     const items = await query
       .orderBy('showcase.publishedAt', 'DESC')
-      .take(Math.min(limit * 3, 100))
+      .take(Math.min(Math.max(limit * 8, 60), 300))
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer?.voterId);
     return enriched.map((item) => ({
       ...item,
-      _algorithmScore: this.calculateRecencyScore(item),
+      _algorithmScore: recencyScore(item),
     }));
   }
 
@@ -563,7 +699,7 @@ export class FeedExploreService {
   ): Promise<FeedItem[]> {
     const { latitude, longitude, radiusKm = 10, limit } = params;
 
-    if (!latitude || !longitude) {
+    if (latitude === undefined || longitude === undefined) {
       return [];
     }
 
@@ -573,7 +709,7 @@ export class FeedExploreService {
       radiusKm,
     );
 
-    const items = await this.showcases
+    let query = this.showcases
       .createQueryBuilder('showcase')
       .innerJoinAndSelect('showcase.store', 'store')
       .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
@@ -588,139 +724,27 @@ export class FeedExploreService {
       .andWhere('store.longitude BETWEEN :minLon AND :maxLon', {
         minLon: bounds.minLon,
         maxLon: bounds.maxLon,
-      })
+      });
+    query = this.applyStoreScope(query, params);
+
+    const items = await query
       .orderBy('showcase.publishedAt', 'DESC')
-      .take(Math.min(limit * 3, 100))
+      .take(Math.min(Math.max(limit * 8, 60), 300))
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer?.voterId);
+    const now = Date.now();
     return enriched.map((item) => ({
       ...item,
-      _algorithmScore: this.calculateNearbyScore(item, latitude, longitude),
+      _algorithmScore: nearbyScore(
+        item,
+        latitude,
+        longitude,
+        (lat1, lon1, lat2, lon2) =>
+          this.locationService.calculateDistance(lat1, lon1, lat2, lon2),
+        now,
+      ),
     }));
-  }
-
-  // ============================================
-  // ALGORITHM SCORING FUNCTIONS
-  // ============================================
-
-  /**
-   * Mixed explore score - combines multiple signals
-   */
-  private calculateExploreScore(
-    item: FeedItem,
-    context: { latitude?: number; longitude?: number; userId?: string },
-  ): number {
-    let score = 0;
-
-    // Recency score (0-40 points)
-    const hoursSincePublish = item.publishedAt
-      ? (Date.now() - new Date(item.publishedAt).getTime()) / (1000 * 60 * 60)
-      : 0;
-    score += Math.max(0, 40 - hoursSincePublish * 1.5);
-
-    // Engagement score (0-35 points)
-    const engagementRate =
-      item.engagement.views > 0
-        ? item.engagement.likes / item.engagement.views
-        : 0;
-    score += Math.min(35, engagementRate * 100 + item.engagement.likes * 2);
-
-    // Media richness (0-10 points)
-    if (item.media.length > 0) {
-      const hasVideo = item.media.some((m) => m.kind === MediaKind.VIDEO);
-      score += hasVideo ? 10 : 5;
-      if (item.media.length > 1) score += 5; // Carousel bonus
-    }
-
-    // Store quality (0-10 points)
-    if (item.store) {
-      if (item.store.brandColor) score += 2;
-      if (item.store.logoKey) score += 3;
-      if (item.store.location?.latitude) score += 5; // Has location
-    }
-
-    // Distance bonus for nearby (0-15 points)
-    if (
-      context.latitude &&
-      context.longitude &&
-      item.store?.location?.latitude &&
-      item.store?.location?.longitude
-    ) {
-      const distance = this.locationService.calculateDistance(
-        context.latitude,
-        context.longitude,
-        item.store.location.latitude,
-        item.store.location.longitude,
-      );
-      score += Math.max(0, 15 - distance);
-    }
-
-    return Math.round(score * 100) / 100;
-  }
-
-  /**
-   * Trending score - engagement velocity
-   */
-  private calculateTrendingScore(item: FeedItem): number {
-    const hoursSincePublish = item.publishedAt
-      ? (Date.now() - new Date(item.publishedAt).getTime()) / (1000 * 60 * 60)
-      : 0;
-
-    if (hoursSincePublish > 72) return 0; // Not trending if older than 3 days
-
-    // Velocity = engagement / time
-    const velocity =
-      (item.engagement.likes + item.engagement.views * 0.05) /
-      Math.max(1, hoursSincePublish);
-
-    return Math.round(velocity * 1000) / 1000;
-  }
-
-  /**
-   * Popularity score - all-time engagement
-   */
-  private calculatePopularityScore(item: FeedItem): number {
-    return item.engagement.likes * 2 + item.engagement.views * 0.1;
-  }
-
-  /**
-   * Recency score - newest first
-   */
-  private calculateRecencyScore(item: FeedItem): number {
-    const hoursSincePublish = item.publishedAt
-      ? (Date.now() - new Date(item.publishedAt).getTime()) / (1000 * 60 * 60)
-      : 999999;
-    return Math.max(0, 1000 - hoursSincePublish);
-  }
-
-  /**
-   * Nearby score - distance-based
-   */
-  private calculateNearbyScore(
-    item: FeedItem,
-    lat: number,
-    lon: number,
-  ): number {
-    if (!item.store?.location?.latitude || !item.store?.location?.longitude) {
-      return 0;
-    }
-
-    const distance = this.locationService.calculateDistance(
-      lat,
-      lon,
-      item.store.location.latitude,
-      item.store.location.longitude,
-    );
-
-    // Recency factor
-    const hoursSincePublish = item.publishedAt
-      ? (Date.now() - new Date(item.publishedAt).getTime()) / (1000 * 60 * 60)
-      : 999999;
-
-    return (
-      Math.round((100 - distance * 2 + (100 - hoursSincePublish)) * 100) / 100
-    );
   }
 
   // ============================================
@@ -863,6 +887,12 @@ export class FeedExploreService {
               slug: store.slug,
               logoKey: store.logoKey,
               brandColor: store.brandColor,
+              businessCategory: businessCategoryDefinition(
+                store.businessCategory,
+              ).slug,
+              businessCategoryLabel: businessCategoryLabel(
+                store.businessCategory,
+              ),
               location: {
                 city: store.city,
                 country: store.country,
@@ -1008,64 +1038,67 @@ export class FeedExploreService {
     let startIndex = 0;
 
     if (cursor) {
-      const cursorIndex = items.findIndex(
-        (item) =>
-          item.publishedAt?.toISOString() === cursor || item.id === cursor,
-      );
-      if (cursorIndex >= 0) {
-        startIndex = cursorIndex + 1;
+      // Scored feeds use a numeric offset so pagination stays aligned with the
+      // in-memory ranking. Legacy date/id cursors are still accepted.
+      const offset = Number(cursor);
+      if (Number.isInteger(offset) && offset >= 0) {
+        startIndex = offset;
+      } else {
+        const cursorIndex = items.findIndex(
+          (item) =>
+            item.publishedAt?.toISOString() === cursor || item.id === cursor,
+        );
+        if (cursorIndex >= 0) startIndex = cursorIndex + 1;
       }
     }
 
     const pageItems = items.slice(startIndex, startIndex + limit + 1);
     const hasMore = pageItems.length > limit;
     const displayItems = hasMore ? pageItems.slice(0, limit) : pageItems;
-    const lastItem =
-      displayItems.length > 0
-        ? displayItems[displayItems.length - 1]
-        : undefined;
-    const nextCursor =
-      hasMore && lastItem
-        ? lastItem.publishedAt?.toISOString() || lastItem.id
-        : undefined;
+    const nextCursor = hasMore
+      ? String(startIndex + displayItems.length)
+      : undefined;
 
     return { items: displayItems, hasMore, nextCursor };
   }
 
   /**
-   * Get categories with post counts for explore filters
+   * Get business categories that currently have public posts. Counts let the
+   * filter hide empty shops types instead of showing a long dead list.
    */
   async getExploreCategories(): Promise<
-    { category: string; label: string; count: number }[]
+    {
+      slug: string;
+      label: string;
+      group: string;
+      groupLabel: string;
+      count: number;
+    }[]
   > {
-    const result = await this.products
-      .createQueryBuilder('product')
-      .innerJoin('showcases', 'showcase', 'showcase.storeId = product.storeId')
-      .where('product.status = :status', { status: ProductStatus.ACTIVE })
-      .andWhere(publicVisibilitySql('product', 'product'))
+    const result = await this.showcases
+      .createQueryBuilder('showcase')
+      .innerJoin('showcase.store', 'store')
+      .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
       .andWhere(publicVisibilitySql('post', 'showcase'))
-      .andWhere('showcase.status = :showcaseStatus', {
-        showcaseStatus: ShowcaseStatus.PUBLISHED,
-      })
-      .select('product.category', 'category')
+      .andWhere('showcase.publishedAt IS NOT NULL')
+      .select('store.business_category', 'slug')
       .addSelect('COUNT(DISTINCT showcase.id)', 'count')
-      .groupBy('product.category')
-      .orderBy('count', 'DESC')
-      .getRawMany();
+      .groupBy('store.business_category')
+      .getRawMany<{ slug: string; count: string }>();
 
-    const categoryLabels: Record<string, string> = {
-      food: 'Food & Dining',
-      beverage: 'Beverages',
-      merchandise: 'Merchandise',
-      service: 'Services',
-      other: 'Other',
-    };
+    const counts = new Map(
+      result.map((row) => [row.slug, Number.parseInt(row.count, 10)]),
+    );
 
-    return result.map((r) => ({
-      category: r.category,
-      label: categoryLabels[r.category] || r.category,
-      count: parseInt(r.count, 10),
-    }));
+    return BUSINESS_CATEGORIES.map((category) => ({
+      slug: category.slug,
+      label: category.label,
+      group: category.group,
+      groupLabel: businessCategoryGroupLabel(category.slug),
+      count: counts.get(category.slug) ?? 0,
+    }))
+      .filter((category) => category.count > 0)
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }
 
   /**
@@ -1184,7 +1217,7 @@ export class FeedExploreService {
     // Apply store-specific ranking (recency + engagement)
     const rankedItems = enrichedItems.map((item) => ({
       ...item,
-      _algorithmScore: this.calculateStoreFeedScore(item),
+      _algorithmScore: storeFeedScore(item),
     }));
 
     rankedItems.sort(
@@ -1198,29 +1231,5 @@ export class FeedExploreService {
       nextCursor,
       algorithm: 'store',
     };
-  }
-
-  /**
-   * Store feed score - recency + engagement
-   */
-  private calculateStoreFeedScore(item: FeedItem): number {
-    let score = 0;
-
-    // Recency (strong weight for store feed)
-    const hoursSincePublish = item.publishedAt
-      ? (Date.now() - new Date(item.publishedAt).getTime()) / (1000 * 60 * 60)
-      : 0;
-    score += Math.max(0, 60 - hoursSincePublish * 3);
-
-    // Engagement
-    score += item.engagement.likes * 4;
-    score += item.engagement.views * 0.3;
-
-    // Media bonus
-    if (item.media.length > 0) {
-      score += item.media.some((m) => m.kind === MediaKind.VIDEO) ? 20 : 15;
-    }
-
-    return Math.round(score * 100) / 100;
   }
 }

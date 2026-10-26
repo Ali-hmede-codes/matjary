@@ -100,7 +100,7 @@ function ShopPageLoading() {
 
 export function StorePage({ slug }: { slug: string | null }) {
   const demo = new URLSearchParams(window.location.search).get('demo') === '1';
-  const { settings } = useWebsiteSettings(false);
+  const { settings } = useWebsiteSettings(false, !demo);
   const [search, setSearch] = useState('');
   // "All items" links ask this page to open on the catalogue; a restaurant
   // lands there by default once its store details arrive.
@@ -474,6 +474,11 @@ export function StorePage({ slug }: { slug: string | null }) {
                     <span>{store.name}</span>
                     <StoreVerifiedBadge store={store} size={26} />
                   </h1>
+                  {store.businessCategoryLabel && (
+                    <span className="shop-category">
+                      {store.businessCategoryLabel}
+                    </span>
+                  )}
                   {store.description?.trim() && (
                     <p className="shop-description">{store.description}</p>
                   )}

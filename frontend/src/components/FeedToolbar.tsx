@@ -1,7 +1,7 @@
-import { LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LayoutGrid, Rows3, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { DiscoveryFeedController } from '../hooks/useDiscoveryFeed';
 import type { Algorithm } from '../lib/feed';
-import { enableMouseScrolling } from '../lib/website';
 
 type FeedToolbarProps = Pick<
   DiscoveryFeedController,
@@ -12,14 +12,15 @@ type FeedToolbarProps = Pick<
   | 'setAlgorithm'
   | 'demo'
   | 'filtersOpen'
-  | 'category'
+  | 'categories'
+  | 'categoryFacets'
+  | 'toggleCategory'
+  | 'clearCategories'
   | 'setFiltersOpen'
   | 'layout'
   | 'setLayout'
   | 'setStore'
   | 'setView'
-  | 'categories'
-  | 'setCategory'
   | 'search'
 >;
 
@@ -31,16 +32,55 @@ export function FeedToolbar({
   setAlgorithm,
   demo,
   filtersOpen,
-  category,
+  categories,
+  categoryFacets,
+  toggleCategory,
+  clearCategories,
   setFiltersOpen,
   layout,
   setLayout,
   setStore,
   setView,
-  categories,
-  setCategory,
   search,
 }: FeedToolbarProps) {
+  const [group, setGroup] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const filtersRef = useRef<HTMLDivElement>(null);
+
+  // Make the whole panel visible when it opens; without this the fixed mobile
+  // dock can cover the last row of shop-type chips.
+  useEffect(() => {
+    if (!filtersOpen) return;
+    filtersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [filtersOpen]);
+
+  // Groups follow the server's popularity order, so the busiest shop types are
+  // reachable without scrolling through the whole taxonomy.
+  const groups = useMemo(() => {
+    const seen = new Map<
+      string,
+      { slug: string; label: string; total: number }
+    >();
+    for (const facet of categoryFacets) {
+      const current = seen.get(facet.group);
+      if (current) current.total += facet.count;
+      else
+        seen.set(facet.group, {
+          slug: facet.group,
+          label: facet.groupLabel,
+          total: facet.count,
+        });
+    }
+    return [...seen.values()].sort((a, b) => b.total - a.total);
+  }, [categoryFacets]);
+
+  const query = categoryQuery.trim().toLowerCase();
+  const visibleCategories = categoryFacets.filter(
+    (facet) =>
+      (!group || facet.group === group) &&
+      (!query || facet.label.toLowerCase().includes(query)),
+  );
+
   return (
     <>
       <div className="feed-toolbar">
@@ -72,13 +112,16 @@ export function FeedToolbar({
         <div className="feed-tools">
           {!store && (
             <button
-              className={`icon-button ${filtersOpen || category ? 'tool-active' : ''}`}
-              aria-label="Filter your feed"
+              className={`icon-button ${filtersOpen || categories.length > 0 ? 'tool-active' : ''}`}
+              aria-label="Filter your feed by shop type"
               aria-expanded={filtersOpen}
               aria-controls="feed-filters"
               onClick={() => setFiltersOpen(!filtersOpen)}
             >
               <SlidersHorizontal size={20} />
+              {categories.length > 0 && (
+                <span className="tool-badge">{categories.length}</span>
+              )}
             </button>
           )}
           <button
@@ -102,7 +145,7 @@ export function FeedToolbar({
         </div>
       </div>
       {!store && filtersOpen && (
-        <div className="feed-filters" id="feed-filters">
+        <div className="feed-filters" id="feed-filters" ref={filtersRef}>
           <label className="sort-select">
             Sort by
             <select
@@ -118,39 +161,108 @@ export function FeedToolbar({
               <option value="trending">Trending</option>
             </select>
           </label>
-          <div
-            className="category-tabs"
-            role="group"
-            aria-label="Categories"
-            ref={enableMouseScrolling}
-            tabIndex={0}
-          >
-            <button
-              className={!category ? 'selected' : ''}
-              aria-pressed={!category}
-              onClick={() => setCategory('')}
-            >
-              All
-            </button>
-            {categories.map((item) => (
+
+          <label className="category-search">
+            <Search size={16} aria-hidden="true" />
+            <span className="sr-only">Find a shop type</span>
+            <input
+              type="search"
+              value={categoryQuery}
+              placeholder="Find a shop type…"
+              autoComplete="off"
+              onChange={(event) => setCategoryQuery(event.target.value)}
+            />
+            {categoryQuery && (
               <button
-                key={item.category}
-                className={category === item.category ? 'selected' : ''}
-                aria-pressed={category === item.category}
-                onClick={() => setCategory(item.category)}
+                type="button"
+                aria-label="Clear the shop type search"
+                onClick={() => setCategoryQuery('')}
               >
-                {item.label}
+                <X size={14} />
               </button>
-            ))}
+            )}
+          </label>
+
+          {groups.length > 0 && (
+            <div
+              className="category-groups"
+              role="group"
+              aria-label="Shop type groups"
+            >
+              <button
+                className={!group ? 'selected' : ''}
+                aria-pressed={!group}
+                onClick={() => setGroup('')}
+              >
+                All groups
+              </button>
+              {groups.map((item) => (
+                <button
+                  key={item.slug}
+                  className={group === item.slug ? 'selected' : ''}
+                  aria-pressed={group === item.slug}
+                  onClick={() => setGroup(item.slug)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="category-tabs" role="group" aria-label="Shop types">
+            <button
+              className={!categories.length ? 'selected' : ''}
+              aria-pressed={!categories.length}
+              onClick={clearCategories}
+            >
+              All types
+            </button>
+            {visibleCategories.map((item) => {
+              const selected = categories.includes(item.slug);
+              return (
+                <button
+                  key={item.slug}
+                  className={selected ? 'selected' : ''}
+                  aria-pressed={selected}
+                  onClick={() => toggleCategory(item.slug)}
+                >
+                  {item.label}
+                  <span className="category-count">{item.count}</span>
+                </button>
+              );
+            })}
           </div>
+          {visibleCategories.length === 0 && (
+            <p className="filter-note">No shop types match this search yet.</p>
+          )}
+          <p className="filter-note category-hint">
+            Pick one or more types. The feed keeps every matching shop and ranks
+            posts you are most likely to enjoy first.
+          </p>
         </div>
       )}
-      {category && !filtersOpen && (
-        <button className="active-filter" onClick={() => setCategory('')}>
-          {categories.find((item) => item.category === category)?.label ||
-            category}
-          <X size={14} />
-        </button>
+      {categories.length > 0 && !store && (
+        <div className="active-filters" aria-label="Active shop type filters">
+          {categories.map((slug) => {
+            const label =
+              categoryFacets.find((facet) => facet.slug === slug)?.label ??
+              slug;
+            return (
+              <button
+                key={slug}
+                className="active-filter"
+                onClick={() => toggleCategory(slug)}
+                aria-label={`Remove ${label} filter`}
+              >
+                {label}
+                <X size={14} />
+              </button>
+            );
+          })}
+          <button className="clear-filters" onClick={clearCategories}>
+            Clear all
+          </button>
+        </div>
       )}
       {(view === 'saved' || view === 'videos' || search) && (
         <p className="filter-note">

@@ -52,7 +52,7 @@ export const ADMIN_RESOURCES: Record<string, Resource> = {
   stores: {
     target: Store,
     fields: fields(
-      'id ownerId name slug status trashedAt description brandColor storeType socialMediaLinks logoKey bannerKey enableCart enableWhatsAppCheckout designSettings latitude longitude address city country postalCode locationName phone website openingHours hasVerificationBadge verificationBadgeExpiresAt adminArchivedAt createdAt updatedAt',
+      'id ownerId name slug status trashedAt description brandColor storeType businessCategory socialMediaLinks logoKey bannerKey enableCart enableWhatsAppCheckout designSettings latitude longitude address city country postalCode locationName phone website openingHours hasVerificationBadge verificationBadgeExpiresAt adminArchivedAt createdAt updatedAt',
     ),
     search: ['name', 'slug'],
     owner: 'ownerId',

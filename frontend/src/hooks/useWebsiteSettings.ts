@@ -3,13 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { assetUrl, getJson } from '../lib/api';
 import { contrastColor, defaults, normalizeSettings } from '../lib/website';
 
-export function useWebsiteSettings(applyMetadata = true) {
+export function useWebsiteSettings(applyMetadata = true, enabled = true) {
   const settingsQuery = useQuery({
     queryKey: ['website-settings'],
     queryFn: async ({ signal }) =>
       normalizeSettings(await getJson<unknown>('settings/website', signal)),
     staleTime: 30_000,
     refetchInterval: 60_000,
+    enabled,
   });
   const settings = settingsQuery.data ?? defaults;
   useEffect(() => {

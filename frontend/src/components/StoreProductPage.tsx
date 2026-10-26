@@ -49,7 +49,7 @@ export function StoreProductPage({
   productSlug: string;
   demo: boolean;
 }) {
-  const { settings } = useWebsiteSettings(false);
+  const { settings } = useWebsiteSettings(false, !demo);
   const [imageIndex, setImageIndex] = useState(0);
   const storeQuery = useQuery({
     queryKey: ['storefront', shopSlug],

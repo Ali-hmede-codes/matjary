@@ -48,7 +48,12 @@ export function PostCard({
             <small>
               {demo
                 ? 'Sample showcase'
-                : post.store?.location?.city || 'Independent store'}
+                : [
+                    post.store?.businessCategoryLabel,
+                    post.store?.location?.city,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'Independent store'}
             </small>
           </span>
         </a>

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -7,6 +7,7 @@ import {
   MapPin,
   Store as StoreIcon,
 } from 'lucide-react';
+import { getJson, type ShopCategoryCatalog } from '../../lib/api';
 import {
   storeMediaUrl,
   storePresentation,
@@ -116,6 +117,12 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
   const [type, setType] = useState<'ecommerce' | 'restaurant_menu'>(
     store?.storeType || 'ecommerce',
   );
+  const [businessCategory, setBusinessCategory] = useState(
+    store?.businessCategory || '',
+  );
+  const [catalog, setCatalog] = useState<ShopCategoryCatalog | null>(null);
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [color, setColor] = useState(store?.brandColor || '#254e40');
   const [description, setDescription] = useState(store?.description || '');
   const [logo, setLogo] = useState(store?.logoKey || '');
@@ -151,9 +158,32 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       branch.latitude !== null ||
       branch.longitude !== null,
   );
+
+  // The catalog is static and public, so the editor can load it before the
+  // owner has saved anything (a new shop has no id yet).
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setCatalogError('');
+    getJson<ShopCategoryCatalog>('stores/categories', controller.signal)
+      .then((data) => {
+        if (active) setCatalog(data);
+      })
+      .catch(() => {
+        if (active)
+          setCatalogError(
+            'Shop types could not load. Check your connection and try again.',
+          );
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [catalogAttempt]);
   const snapshot = JSON.stringify({
     name,
     type,
+    businessCategory,
     color,
     description,
     logo,
@@ -190,6 +220,10 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     if (busy || lifecycleBusy || uploading || processing) return;
     if (!name.trim()) {
       setError('Please enter a store name.');
+      return;
+    }
+    if (!businessCategory) {
+      setError('Choose the business category that fits your shop.');
       return;
     }
     for (const [index, branch] of branchDrafts.entries()) {
@@ -269,6 +303,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       const body = {
         name: name.trim(),
         storeType: type,
+        businessCategory,
         brandColor: color,
         description: description.trim() || null,
         socialMediaLinks,
@@ -357,7 +392,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               />
             </label>
             <fieldset>
-              <legend>What kind of store?</legend>
+              <legend>How should your shop look?</legend>
               <div className="panel-type-options">
                 {(
                   [
@@ -391,6 +426,50 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                 ))}
               </div>
             </fieldset>
+          </section>
+          <section className="panel-card">
+            <h2>Where should people find you?</h2>
+            <p className="panel-muted">
+              Your business category powers the shop-type filters and the “For
+              you” ranking. You can change it anytime.
+            </p>
+            {catalogError ? (
+              <Notice error>
+                {catalogError}{' '}
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setCatalogAttempt((attempt) => attempt + 1)}
+                >
+                  Retry
+                </button>
+              </Notice>
+            ) : (
+              <label>
+                Business category
+                <select
+                  required
+                  value={businessCategory}
+                  disabled={!catalog}
+                  onChange={(event) => setBusinessCategory(event.target.value)}
+                >
+                  <option value="">
+                    {catalog ? 'Choose a category…' : 'Loading categories…'}
+                  </option>
+                  {catalog?.groups.map((group) => (
+                    <optgroup key={group.slug} label={group.label}>
+                      {catalog.categories
+                        .filter((category) => category.group === group.slug)
+                        .map((category) => (
+                          <option key={category.slug} value={category.slug}>
+                            {category.label}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+            )}
           </section>
           <section className="panel-card">
             <h2>Your signature color</h2>
@@ -586,7 +665,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                 busy ||
                 uploading ||
                 processing ||
-                (store ? !dirty : !name.trim())
+                (store ? !dirty : !name.trim() || !businessCategory)
               }
             >
               {busy ? 'Saving…' : store ? 'Save changes' : 'Create my store'}

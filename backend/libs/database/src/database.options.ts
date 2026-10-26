@@ -8,6 +8,7 @@ import { MaxPostsOnly1794177600000 } from './migrations/1794177600000-MaxPostsOn
 import { StoreCategoriesAndPlanQuotas1794264000000 } from './migrations/1794264000000-StoreCategoriesAndPlanQuotas';
 import { AddStoreBranches1794350400000 } from './migrations/1794350400000-AddStoreBranches';
 import { AddBranchGoogleMapsUrl1794436800000 } from './migrations/1794436800000-AddBranchGoogleMapsUrl';
+import { AddBusinessCategory1794523200000 } from './migrations/1794523200000-AddBusinessCategory';
 import { OwnerMediaTargets1793832000000 } from './migrations/1793832000000-OwnerMediaTargets';
 import { AddUserRoles1793745600000 } from './migrations/1793745600000-AddUserRoles';
 import { WebsiteSettings1793659200000 } from './migrations/1793659200000-WebsiteSettings';
@@ -76,6 +77,7 @@ export function createDatabaseOptions(
       StoreCategoriesAndPlanQuotas1794264000000,
       AddStoreBranches1794350400000,
       AddBranchGoogleMapsUrl1794436800000,
+      AddBusinessCategory1794523200000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

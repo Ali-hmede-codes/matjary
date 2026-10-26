@@ -42,7 +42,7 @@ export function StoreCategoryPage({
   categorySlug: string;
   demo: boolean;
 }) {
-  const { settings } = useWebsiteSettings(false);
+  const { settings } = useWebsiteSettings(false, !demo);
   const storeQuery = useQuery({
     queryKey: ['storefront', shopSlug],
     queryFn: ({ signal }) =>

@@ -27,6 +27,7 @@ import {
   EngagementFlushReceipt,
   type ProcessingLimits,
 } from './durability.entities';
+import { DEFAULT_BUSINESS_CATEGORY } from './business-categories';
 
 abstract class TimestampedEntity {
   @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
@@ -305,6 +306,7 @@ export enum StoreStatus {
 @Index('idx_stores_city', ['city'])
 @Index('idx_stores_country', ['country'])
 @Index('idx_stores_verification_badge', ['hasVerificationBadge'])
+@Index('idx_stores_business_category', ['businessCategory'])
 export class Store extends BaseEntity {
   // Only the locked lifecycle operation writes these; stale form saves cannot republish.
   @Column({
@@ -394,6 +396,16 @@ export class Store extends BaseEntity {
     default: StoreType.ECOMMERCE,
   })
   storeType!: StoreType;
+
+  // Public business taxonomy (restaurant, school, social media services, ...).
+  // Validated against the code-owned catalog before every owner/admin write.
+  @Column({
+    name: 'business_category',
+    type: 'varchar',
+    length: 64,
+    default: DEFAULT_BUSINESS_CATEGORY,
+  })
+  businessCategory!: string;
 
   @Column({ name: 'posts_count_this_month', type: 'int', default: 0 })
   postsCountThisMonth!: number;

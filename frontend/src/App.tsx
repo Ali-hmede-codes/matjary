@@ -106,7 +106,7 @@ function DiscoveryPage() {
     setSearch,
     setSearchOpen,
     setStore,
-    setCategory,
+    clearCategories,
     setSelected,
     setNotice,
   } = discovery;
@@ -162,7 +162,7 @@ function DiscoveryPage() {
               demo={demo}
               onClearStore={() => {
                 setStore(null);
-                setCategory('');
+                clearCategories();
               }}
             />
             {!demo && storesQuery.isError && (
