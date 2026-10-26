@@ -14,6 +14,7 @@ import {
   shareShellSegments,
 } from '../../apps/api/src/modules/seo/share-shell';
 import { ShareShellService } from '../../apps/api/src/modules/seo/share-shell.service';
+import { choosePreviewImage } from '../../apps/api/src/modules/seo/preview-image';
 import {
   Product,
   Store,
@@ -130,6 +131,38 @@ test('shell path segments only accept storefront slugs', () => {
     ['x'.repeat(192)],
   ])
     assert.equal(shareShellSegments(...segments), null);
+});
+
+test('share images prefer compact JPEGs that preview clients accept', () => {
+  const variants = [
+    { mimeType: 'image/avif', width: 1600, sizeBytes: '90000' },
+    { mimeType: 'image/jpeg', width: 1600, sizeBytes: '520000' },
+    { mimeType: 'image/jpeg', width: 1080, sizeBytes: '240000' },
+    { mimeType: 'image/jpeg', width: 480, sizeBytes: '70000' },
+    { mimeType: 'image/webp', width: 1080, sizeBytes: '100000' },
+  ];
+  assert.equal(choosePreviewImage(variants)?.width, 1080);
+  assert.equal(choosePreviewImage(variants)?.mimeType, 'image/jpeg');
+  // Nothing fits the limit: the smallest JPEG still beats WebP/AVIF.
+  assert.equal(
+    choosePreviewImage(variants.filter((entry) => entry.width === 1600))
+      ?.mimeType,
+    'image/jpeg',
+  );
+  assert.equal(
+    choosePreviewImage(variants.filter((entry) => entry.width === 480))?.width,
+    480,
+  );
+  // No JPEG or PNG at all still yields a usable image fallback.
+  assert.equal(choosePreviewImage([variants[0]!])?.mimeType, 'image/avif');
+  // Legacy rows without sizes fall back to the smallest JPEG.
+  assert.equal(
+    choosePreviewImage([
+      { mimeType: 'image/jpeg', width: 1600, sizeBytes: '0' },
+      { mimeType: 'image/jpeg', width: 480, sizeBytes: '0' },
+    ])?.width,
+    480,
+  );
 });
 
 test('the refresher writes one shell per public storefront page', async () => {

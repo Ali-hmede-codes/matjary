@@ -27,6 +27,7 @@ import {
   IndexNowDto,
 } from './seo.dto';
 import { isShareCrawler, renderShareDocument } from './share-document';
+import { choosePreviewImage } from './preview-image';
 
 type SeoKind = 'store' | 'product' | 'showcase';
 import { ConfigService } from '@nestjs/config';
@@ -1267,8 +1268,16 @@ export class SeoService {
       seo.canonicalUrl ||
       `${this.baseUrl}/stores/${store.slug}/p/${product.slug}`;
 
+    // Honor an explicitly saved image only while it is still one of the
+    // product's images; a replaced image leaves a stale key that would 404.
+    const preferredImageKey =
+      seo.ogImageKey && product.imageKeys?.includes(seo.ogImageKey)
+        ? seo.ogImageKey
+        : undefined;
     const ogImage =
-      (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
+      (preferredImageKey
+        ? await this.buildImageUrl(preferredImageKey)
+        : undefined) ??
       (await this.buildProductImageUrl(product)) ??
       (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
@@ -2312,21 +2321,18 @@ export class SeoService {
     }
   }
 
-  /** Prefer JPEG/PNG at card width; fall back to any image variant. */
+  /**
+   * The most reliable image a link preview can render, resolved from any
+   * attached variant of the same asset (JPEG/PNG, compact, wide enough).
+   */
   private async buildPreviewVariantUrl(variant: MediaVariant): Promise<string> {
     const siblings = await this.dataSource.manager.find(MediaVariant, {
       where: { assetId: variant.assetId },
       order: { width: 'DESC' },
       take: 12,
     });
-    const images = siblings.filter((entry) =>
-      /^image\/(?:jpeg|png)$/iu.test(entry.mimeType),
-    );
-    const image =
-      images.find((entry) => entry.width >= 600) ??
-      images[0] ??
-      siblings.find((entry) => entry.mimeType.startsWith('image/'));
-    return this.storage.presignedGetUrl((image ?? variant).storageKey);
+    const image = choosePreviewImage(siblings) ?? variant;
+    return this.storage.presignedGetUrl(image.storageKey);
   }
 
   private async buildImageUrl(
