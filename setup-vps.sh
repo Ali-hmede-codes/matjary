@@ -92,6 +92,9 @@ def render(template, current, updates):
             updates[key] = secrets.token_hex(32)
         elif not values.get(key, '').strip():
             raise ValueError('Existing deployment credentials are incomplete; restore the private environment backup.')
+    # Existing deployments gain the share-shell hook secret on the next setup.
+    if not values.get('SHARE_SHELL_TOKEN', '').strip():
+        updates['SHARE_SHELL_TOKEN'] = secrets.token_hex(32)
     if current is not None and values.get('STORAGE_PROVIDER') != 'local':
         raise ValueError('This installer only manages local media deployments.')
     lines = []
@@ -163,6 +166,10 @@ services:
     image: ${SETUP_PROJECT}-api:${RELEASE_TAG}
     environment:
       MYSQL_POOL_SIZE: 5
+    volumes:
+      - type: bind
+        source: ${WEB_ROOT}/stores
+        target: /srv/share
   worker:
     image: ${SETUP_PROJECT}-worker:${RELEASE_TAG}
     cpus: 1
@@ -458,6 +465,10 @@ if (( ! UPDATE_RESUMED )); then
   confirm 'Confirm this is the intended demo website, HTTPS is configured, and you have current VPS/database/media backups. Updates may briefly interrupt Matjary.' "$DOMAIN"
 fi
 
+# The API prerenders one storefront shell per shop, section, and product into
+# this directory. It runs as UID 1000 (node); only this subtree is writable.
+install -d -o 1000 -g 1000 -m 0755 "$WEB_ROOT/stores"
+
 # Install only missing prerequisites, never replace an existing Docker distribution.
 packages=()
 for command in git python3; do
@@ -488,7 +499,7 @@ compose_version=${compose_version#v}
 # Inherited shell variables must not override the private Compose environment.
 while IFS= read -r variable; do
   case "$variable" in
-    MYSQL_*|REDIS_*|S3_*|STORAGE_*|MEDIA_*|APP_*|GOOGLE_CLIENT_ID|ADMIN_EMAILS|NODE_ENV|RELEASE_TAG|COMPOSE_*) unset "$variable" ;;
+    MYSQL_*|REDIS_*|S3_*|STORAGE_*|MEDIA_*|APP_*|GOOGLE_CLIENT_ID|ADMIN_EMAILS|NODE_ENV|RELEASE_TAG|COMPOSE_*|SHARE_SHELL_*) unset "$variable" ;;
   esac
 done < <(compgen -e)
 export SETUP_PROJECT="$PROJECT" COMPOSE_PARALLEL_LIMIT=1
@@ -612,10 +623,37 @@ runuser -u "$SITE_USER" -- sh -c '
 ' sh "$BUILD_DIR" "$WEB_ROOT" "$PROJECT"
 
 printf '\nBackend and worker health checks passed. Frontend files are published.\n'
+# Give the API its own copy of the built index.html inside the writable share
+# mount; the rest of the web root is never exposed to the container. The rename
+# keeps a refresh from reading a half-written template.
+install -m 0644 -o 1000 -g 1000 "$WEB_ROOT/index.html" "$WEB_ROOT/stores/.matjary-template.next"
+mv -f "$WEB_ROOT/stores/.matjary-template.next" "$WEB_ROOT/stores/.matjary-template.html"
+SHARE_SHELL_TOKEN=$(env_get SHARE_SHELL_TOKEN)
+if [[ -n "$SHARE_SHELL_TOKEN" ]]; then
+  printf '\nPublishing storefront share previews...\n'
+  SHARE_SHELL_TOKEN="$SHARE_SHELL_TOKEN" python3 - "$API_PORT" <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+request = urllib.request.Request(
+    'http://127.0.0.1:' + sys.argv[1] + '/api/v1/seo/share-shells/refresh',
+    method='POST',
+    headers={'X-Share-Shell-Token': os.environ['SHARE_SHELL_TOKEN']},
+)
+try:
+    with urllib.request.urlopen(request, timeout=180) as response:
+        pages = json.loads(response.read() or b'{}').get('pages', 0)
+    print('Published ' + str(pages) + ' share preview pages.')
+except Exception:
+    print('WARNING: share previews could not refresh now; the API retries in the background.')
+PY
+fi
 printf '\nFINAL CLOUDPANEL STEP (host Nginx has NOT been changed):\n'
 printf 'Open %s > Vhost. In the HTTPS server block, apply the following locations.\n' "$DOMAIN"
 printf 'Add/replace locations without duplicates; keep SSL/ACME/root/security settings. Save through CloudPanel.\n'
-printf 'Social previews for shared shop links depend on the /stores/ crawler location below; without it every link previews as the site title.\n'
+printf 'Preview metadata is prerendered into %s/stores, so this location is optional; it answers crawlers from the API instead.\n' "$WEB_ROOT"
 printf 'If these matching locations are already installed, no Vhost change is necessary.\n\n'
 cat "$STATE/cloudpanel.locations.conf"
 printf '\nVerify social previews with a crawler user agent (use a real shop slug):\n'

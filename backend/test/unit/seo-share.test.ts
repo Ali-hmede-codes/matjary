@@ -1,11 +1,24 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
+import { ConfigService } from '@nestjs/config';
 import {
   isShareCrawler,
   renderShareDocument,
 } from '../../apps/api/src/modules/seo/share-document';
 import type { MetaTags } from '../../apps/api/src/modules/seo/seo.service';
+import {
+  renderShareShell,
+  shareShellSegments,
+} from '../../apps/api/src/modules/seo/share-shell';
+import { ShareShellService } from '../../apps/api/src/modules/seo/share-shell.service';
+import {
+  Product,
+  Store,
+  StoreCategory,
+} from '../../libs/database/src/entities';
 
 const canonical = 'https://matjary.test/stores/alabdalla/c/offers';
 const meta: MetaTags = {
@@ -77,6 +90,104 @@ test('owner-authored values cannot break out of the document', () => {
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/u);
   // The redirect literal escapes '<' so it cannot close the script element.
   assert.match(html, /\\u003cscript>/u);
+});
+
+test('storefront shells inject preview tags into the published SPA document', () => {
+  const template =
+    '<!doctype html><html><head><title>Matjary — Discover something good</title>' +
+    '<meta name="description" content="Discover independent stores, beautiful finds, and everyday inspiration on Matjary.">' +
+    '<script type="module" src="/assets/index.js"></script></head>' +
+    '<body><div id="root"></div></body></html>';
+  const html = renderShareShell(template, meta);
+  assert.match(html, /<title>Offers — Alabdalla<\/title>/u);
+  assert.match(
+    html,
+    /<meta property="og:title" content="Offers — Alabdalla">/u,
+  );
+  assert.match(html, /<link rel="canonical" href="https:\/\/matjary\.test/u);
+  assert.match(html, /src="\/assets\/index\.js"/u);
+  assert.doesNotMatch(html, /Discover independent stores/u);
+  assert.equal((html.match(/<title>/gu) ?? []).length, 1);
+});
+
+test('shell path segments only accept storefront slugs', () => {
+  assert.deepEqual(shareShellSegments('alabdalla', 'c', 'offers'), [
+    'alabdalla',
+    'c',
+    'offers',
+  ]);
+  assert.deepEqual(shareShellSegments('alabdalla', 'p', 'item-x'), [
+    'alabdalla',
+    'p',
+    'item-x',
+  ]);
+  for (const segments of [
+    [],
+    ['UPPER'],
+    ['..'],
+    ['a/b'],
+    ['-leading'],
+    ['x'.repeat(192)],
+  ])
+    assert.equal(shareShellSegments(...segments), null);
+});
+
+test('the refresher writes one shell per public storefront page', async () => {
+  await fs.mkdir('.tmp', { recursive: true });
+  const directory = await fs.mkdtemp(path.join('.tmp', 'share-shell-'));
+  try {
+    const templatePath = path.join(directory, 'index.html');
+    await fs.writeFile(
+      templatePath,
+      '<!doctype html><html><head><title>Default</title></head>' +
+        '<body><div id="root"></div></body></html>',
+    );
+    const root = path.join(directory, 'stores');
+    const store = { id: 'store-1', slug: 'alabdalla' };
+    const category = { id: 'category-1', name: 'Offers', sortOrder: 1 };
+    const product = { id: 'product-1', slug: 'item-x' };
+    const manager = {
+      find: async (target: unknown) =>
+        target === Store
+          ? [store]
+          : target === StoreCategory
+            ? [category]
+            : target === Product
+              ? [product]
+              : [],
+      count: async () => 0,
+    };
+    const seo = {
+      generateStoreMetaTags: async () => meta,
+      generateCategoryMetaTags: async () => meta,
+      generateUncategorizedShareMeta: async () => meta,
+      generateProductMetaTags: async () => meta,
+      categoryPathSlug: (name: string) => name.toLowerCase(),
+    };
+    const config = new ConfigService({
+      SHARE_SHELL_TEMPLATE: templatePath,
+      SHARE_SHELL_ROOT: root,
+      SHARE_SHELL_REFRESH_SECONDS: 120,
+      SHARE_SHELL_TOKEN: '',
+    });
+    const service = new ShareShellService(
+      { manager, query: async () => [{ stores: 1 }] } as never,
+      seo as never,
+      config as never,
+    );
+    assert.equal(await service.refreshAll(), 3);
+    for (const relative of [
+      'alabdalla/index.html',
+      'alabdalla/c/offers/index.html',
+      'alabdalla/p/item-x/index.html',
+    ]) {
+      const html = await fs.readFile(path.join(root, relative), 'utf8');
+      assert.match(html, /<meta property="og:title" content="Offers/u);
+      assert.doesNotMatch(html, />Default</u);
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('link preview fetchers are recognised so they get no redirect', () => {

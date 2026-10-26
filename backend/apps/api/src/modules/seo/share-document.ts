@@ -22,30 +22,6 @@ export function renderShareDocument(
   meta: MetaTags,
   redirectTo?: string,
 ): string {
-  const escape = escapeXml;
-  const tags = [
-    `<title>${escape(meta.title)}</title>`,
-    `<meta name="description" content="${escape(meta.description)}">`,
-    `<meta name="robots" content="${escape(meta.robots)}">`,
-    `<link rel="canonical" href="${escape(meta.canonical)}">`,
-    `<meta property="og:type" content="${escape(meta.og.type)}">`,
-    `<meta property="og:title" content="${escape(meta.og.title)}">`,
-    `<meta property="og:description" content="${escape(meta.og.description)}">`,
-    `<meta property="og:url" content="${escape(meta.og.url)}">`,
-    `<meta property="og:site_name" content="${escape(meta.og.siteName ?? 'Matjary')}">`,
-    meta.og.image
-      ? `<meta property="og:image" content="${escape(meta.og.image)}">`
-      : '',
-    meta.og.image
-      ? `<meta property="og:image:alt" content="${escape(meta.og.title)}">`
-      : '',
-    `<meta name="twitter:card" content="${escape(meta.twitter.card)}">`,
-    `<meta name="twitter:title" content="${escape(meta.twitter.title)}">`,
-    `<meta name="twitter:description" content="${escape(meta.twitter.description)}">`,
-    meta.twitter.image
-      ? `<meta name="twitter:image" content="${escape(meta.twitter.image)}">`
-      : '',
-  ];
   // Escaping '<' keeps an owner-authored canonical from closing the script tag.
   const redirect = redirectTo
     ? `<script>location.replace(${JSON.stringify(redirectTo).replace(/</gu, '\\u003c')});</script>\n`
@@ -55,16 +31,45 @@ export function renderShareDocument(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-${tags.filter(Boolean).join('\n')}
+${renderShareHeadTags(meta)}
 </head>
 <body>
 ${redirect}<main>
-<h1>${escape(meta.title)}</h1>
-<p>${escape(meta.description)}</p>
-<p><a href="${escape(meta.canonical)}">Open this page</a></p>
+<h1>${escapeXml(meta.title)}</h1>
+<p>${escapeXml(meta.description)}</p>
+<p><a href="${escapeXml(meta.canonical)}">Open this page</a></p>
 </main>
 </body>
 </html>`;
+}
+
+/** Head tags shared by the crawler page and the prerendered SPA shells. */
+export function renderShareHeadTags(meta: MetaTags): string {
+  return [
+    `<title>${escapeXml(meta.title)}</title>`,
+    `<meta name="description" content="${escapeXml(meta.description)}">`,
+    `<meta name="robots" content="${escapeXml(meta.robots)}">`,
+    `<link rel="canonical" href="${escapeXml(meta.canonical)}">`,
+    `<meta property="og:type" content="${escapeXml(meta.og.type)}">`,
+    `<meta property="og:title" content="${escapeXml(meta.og.title)}">`,
+    `<meta property="og:description" content="${escapeXml(meta.og.description)}">`,
+    `<meta property="og:url" content="${escapeXml(meta.og.url)}">`,
+    `<meta property="og:site_name" content="${escapeXml(meta.og.siteName ?? 'Matjary')}">`,
+    meta.og.image
+      ? `<meta property="og:image" content="${escapeXml(meta.og.image)}">`
+      : '',
+    meta.og.image
+      ? `<meta property="og:image:alt" content="${escapeXml(meta.og.title)}">`
+      : '',
+    `<meta name="twitter:card" content="${escapeXml(meta.twitter.card)}">`,
+    `<meta name="twitter:title" content="${escapeXml(meta.twitter.title)}">`,
+    `<meta name="twitter:description" content="${escapeXml(meta.twitter.description)}">`,
+    meta.twitter.image
+      ? `<meta name="twitter:image" content="${escapeXml(meta.twitter.image)}">`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function escapeXml(value: string): string {

@@ -61,6 +61,12 @@ export interface AppEnvironment extends DatabaseEnvironment {
   FFPROBE_PATH: string;
   TRUST_PROXY_CIDRS: string;
   WORKER_HEARTBEAT_FILE: string;
+  // Prerendered storefront shells for link previews. Empty paths or a missing
+  // template simply disable the refresher (development default).
+  SHARE_SHELL_TEMPLATE: string;
+  SHARE_SHELL_ROOT: string;
+  SHARE_SHELL_REFRESH_SECONDS: number;
+  SHARE_SHELL_TOKEN: string;
 }
 
 type Environment = Record<string, unknown>;
@@ -395,5 +401,19 @@ export function validateEnvironment(
       'WORKER_HEARTBEAT_FILE',
       '.tmp/worker-heartbeat',
     ),
+    SHARE_SHELL_TEMPLATE: text(
+      env,
+      'SHARE_SHELL_TEMPLATE',
+      '/srv/share/.matjary-template.html',
+    ),
+    SHARE_SHELL_ROOT: text(env, 'SHARE_SHELL_ROOT', '/srv/share'),
+    SHARE_SHELL_REFRESH_SECONDS: integer(
+      env,
+      'SHARE_SHELL_REFRESH_SECONDS',
+      120,
+      30,
+      3600,
+    ),
+    SHARE_SHELL_TOKEN: String(env.SHARE_SHELL_TOKEN ?? ''),
   };
 }

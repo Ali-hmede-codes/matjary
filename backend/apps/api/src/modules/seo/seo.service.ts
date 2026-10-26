@@ -497,12 +497,7 @@ export class SeoService {
     }
     if (kind === 'c' && slug) {
       if (slug === 'more-items') {
-        return this.generateCategoryPageMeta(store, 'More items', {
-          storeId: store.id,
-          categoryId: IsNull(),
-          status: ProductStatus.ACTIVE,
-          ...publicWhere('product'),
-        });
+        return this.generateUncategorizedShareMeta(store);
       }
       const categories = await this.dataSource.manager.find(StoreCategory, {
         where: { storeId: store.id },
@@ -517,7 +512,17 @@ export class SeoService {
     return this.generateStoreMetaTags(store);
   }
 
-  private async generateCategoryMetaTags(
+  /** Meta for the "More items" section (products without an owner category). */
+  async generateUncategorizedShareMeta(store: Store): Promise<MetaTags> {
+    return this.generateCategoryPageMeta(store, 'More items', {
+      storeId: store.id,
+      categoryId: IsNull(),
+      status: ProductStatus.ACTIVE,
+      ...publicWhere('product'),
+    });
+  }
+
+  async generateCategoryMetaTags(
     store: Store,
     category: StoreCategory,
   ): Promise<MetaTags> {
@@ -546,9 +551,10 @@ export class SeoService {
     const title = `${name} — ${store.name}`;
     const description = `${count} ${count === 1 ? 'item' : 'items'} in ${name} at ${store.name}.`;
     const canonical = `${this.baseUrl}/stores/${store.slug}/c/${this.categoryPathSlug(name)}`;
+    // The shop's logo card identifies the section; a dish photo is the fallback.
     const ogImage =
-      (first ? await this.buildProductImageUrl(first) : undefined) ??
       (await this.buildStoreShareImageUrl(store)) ??
+      (first ? await this.buildProductImageUrl(first) : undefined) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.buildImageUrl(settings.defaultOgImageKey));
@@ -577,7 +583,7 @@ export class SeoService {
 
   // Category rows have no slug column; mirror the storefront's name slug so a
   // shared /c/ link resolves to the same section.
-  private categoryPathSlug(name: string): string {
+  categoryPathSlug(name: string): string {
     const base = name
       .normalize('NFKD')
       .replace(/[\u0300-\u036f]/gu, '')
