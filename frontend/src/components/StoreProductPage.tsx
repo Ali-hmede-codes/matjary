@@ -199,6 +199,26 @@ export function StoreProductPage({
   const selectedOptions = optionGroups.length
     ? productOptionSelection(product, chosenOptions)
     : null;
+  const baseCents = /^\d+$/u.test(product.priceCents)
+    ? BigInt(product.priceCents)
+    : null;
+  // Update the headline price as choices are made, even before every group is
+  // complete, so shoppers see the effect of a paid option immediately.
+  const chosenExtraCents = optionGroups.reduce((sum, group) => {
+    const value = group.values.find(
+      (entry) => entry.label === chosenOptions[group.name],
+    );
+    return (
+      sum +
+      (value?.priceCents && /^\d+$/u.test(value.priceCents)
+        ? BigInt(value.priceCents)
+        : 0n)
+    );
+  }, 0n);
+  const displayPriceCents =
+    baseCents !== null
+      ? (baseCents + chosenExtraCents).toString()
+      : product.priceCents;
   return (
     <StoreDetailShell
       store={store}
@@ -260,8 +280,18 @@ export function StoreProductPage({
           </p>
           <h1>{product.name}</h1>
           <p className="shop-product-detail-price">
-            {formatProductPrice(product.priceCents, product.currency)}
+            {formatProductPrice(displayPriceCents, product.currency)}
           </p>
+          {baseCents !== null && chosenExtraCents > 0n && (
+            <p className="shop-product-price-note">
+              Base {formatProductPrice(product.priceCents, product.currency)} +
+              options{' '}
+              {formatProductPrice(
+                chosenExtraCents.toString(),
+                product.currency,
+              )}
+            </p>
+          )}
           {product.description && (
             <p className="shop-product-detail-description">
               {product.description}
@@ -280,21 +310,31 @@ export function StoreProductPage({
                   </legend>
                   <div className="shop-product-option-values">
                     {group.values.map((value) => {
-                      const selected = chosenOptions[group.name] === value;
+                      const selected =
+                        chosenOptions[group.name] === value.label;
                       return (
                         <button
-                          key={value}
+                          key={value.label}
                           type="button"
                           className={selected ? 'is-selected' : undefined}
                           aria-pressed={selected}
                           onClick={() =>
                             setChosenOptions((current) => ({
                               ...current,
-                              [group.name]: value,
+                              [group.name]: value.label,
                             }))
                           }
                         >
-                          {value}
+                          <span>{value.label}</span>
+                          {value.priceCents && value.priceCents !== '0' && (
+                            <small>
+                              +
+                              {formatProductPrice(
+                                value.priceCents,
+                                product.currency,
+                              )}
+                            </small>
+                          )}
                         </button>
                       );
                     })}

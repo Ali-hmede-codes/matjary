@@ -127,7 +127,14 @@ export const cartApi = {
     requestCart<ShopCart>(slug, '/items', 'POST', {
       productId,
       quantity: 1,
-      ...(selectedOptions?.length ? { selectedOptions } : {}),
+      ...(selectedOptions?.length
+        ? {
+            selectedOptions: selectedOptions.map(({ name, value }) => ({
+              name,
+              value,
+            })),
+          }
+        : {}),
     }),
   update: (slug: string, itemId: string, quantity: number) =>
     requestCart<ShopCart>(
@@ -206,14 +213,27 @@ export function updateDemoCart(
     throw new CartRequestError(409);
   if (product.currency !== cart.currency || !/^\d+$/u.test(product.priceCents))
     throw new CartRequestError(400);
+  // Option prices are additions to the base price, matching the API.
+  const optionPriceCents =
+    selection?.reduce((sum, option) => {
+      return (
+        sum +
+        (option.priceCents && /^\d+$/u.test(option.priceCents)
+          ? BigInt(option.priceCents)
+          : 0n)
+      );
+    }, 0n) ?? 0n;
+  const unitPriceCents = (
+    BigInt(product.priceCents) + optionPriceCents
+  ).toString();
   const item: CartItem = {
     id: lineId,
     productId: product.id,
     productSlug: product.slug,
     productName: product.name,
     quantity,
-    unitPriceCents: product.priceCents,
-    lineTotalCents: (BigInt(product.priceCents) * BigInt(quantity)).toString(),
+    unitPriceCents,
+    lineTotalCents: (BigInt(unitPriceCents) * BigInt(quantity)).toString(),
     notes: null,
     selectedOptions: selection,
   };
@@ -239,7 +259,15 @@ export const serializeDemoCart = (cart: ShopCart) =>
   JSON.stringify(
     cart.items.map(({ productId, quantity, selectedOptions }) =>
       selectedOptions?.length
-        ? { productId, quantity, selectedOptions }
+        ? {
+            productId,
+            quantity,
+            // Prices are recomputed from the current product when restored.
+            selectedOptions: selectedOptions.map(({ name, value }) => ({
+              name,
+              value,
+            })),
+          }
         : { productId, quantity },
     ),
   );
@@ -254,7 +282,7 @@ function storedOptions(value: unknown): SelectedProductOption[] | null {
       value?: unknown;
     };
     if (typeof name !== 'string' || typeof optionValue !== 'string') continue;
-    options.push({ name, value: optionValue });
+    options.push({ name, value: optionValue, priceCents: null });
   }
   return options.length ? options : null;
 }

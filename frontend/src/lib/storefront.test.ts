@@ -19,6 +19,7 @@ import {
   normalizeSlug,
   productCategoryKey,
   productOptionSelection,
+  productPriceLabel,
   slugDraft,
   storeCategoryPath,
   storeMenuPath,
@@ -498,8 +499,20 @@ test('product slugs keep readable URLs while typing and trim on save', () => {
 test('product option selection stays complete and in product order', () => {
   const product = {
     options: [
-      { name: 'Size', values: ['S', 'M'] },
-      { name: 'Color', values: ['Red', 'Blue'] },
+      {
+        name: 'Size',
+        values: [
+          { label: 'S', priceCents: null },
+          { label: 'M', priceCents: '200' },
+        ],
+      },
+      {
+        name: 'Color',
+        values: [
+          { label: 'Red', priceCents: null },
+          { label: 'Blue', priceCents: '100' },
+        ],
+      },
     ],
   };
   assert.equal(productOptionSelection(product, {}), null);
@@ -510,8 +523,32 @@ test('product option selection stays complete and in product order', () => {
   assert.deepEqual(
     productOptionSelection(product, { Color: 'Blue', Size: 'M' }),
     [
-      { name: 'Size', value: 'M' },
-      { name: 'Color', value: 'Blue' },
+      { name: 'Size', value: 'M', priceCents: '200' },
+      { name: 'Color', value: 'Blue', priceCents: '100' },
     ],
+  );
+});
+
+test('catalog prices say “from” when an option adds to the base price', () => {
+  assert.equal(
+    productPriceLabel({
+      priceCents: '1250',
+      currency: 'USD',
+      options: null,
+    }),
+    '$12.50',
+  );
+  assert.equal(
+    productPriceLabel({
+      priceCents: '1250',
+      currency: 'USD',
+      options: [
+        {
+          name: 'Size',
+          values: [{ label: 'Large', priceCents: '250' }],
+        },
+      ],
+    }),
+    'from $12.50',
   );
 });

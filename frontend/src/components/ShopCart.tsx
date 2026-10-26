@@ -263,6 +263,16 @@ export function ShopCart({
                             {item.selectedOptions.map((option) => (
                               <span key={`${option.name}:${option.value}`}>
                                 {option.name}: <strong>{option.value}</strong>
+                                {option.priceCents &&
+                                  option.priceCents !== '0' && (
+                                    <em>
+                                      +
+                                      {formatProductPrice(
+                                        option.priceCents,
+                                        cart.currency,
+                                      )}
+                                    </em>
+                                  )}
                               </span>
                             ))}
                           </p>

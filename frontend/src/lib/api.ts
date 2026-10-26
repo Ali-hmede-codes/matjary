@@ -48,14 +48,21 @@ export interface Store {
   } | null;
 }
 
+export interface ProductOptionValue {
+  label: string;
+  // Additional amount in cents, or null when the value uses the base price.
+  priceCents: string | null;
+}
+
 export interface ProductOptionGroup {
   name: string;
-  values: string[];
+  values: ProductOptionValue[];
 }
 
 export interface SelectedProductOption {
   name: string;
   value: string;
+  priceCents: string | null;
 }
 
 export interface Product {

@@ -238,6 +238,12 @@
 .shop-cart-item-options strong {
   font-weight: 650;
 }
+.shop-cart-item-options em {
+  margin-left: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
 .shop-cart-item-actions {
   display: flex;
   align-items: center;

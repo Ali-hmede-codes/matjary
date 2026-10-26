@@ -98,30 +98,58 @@ test('option combinations become separate cart lines and survive restore', () =>
   const configurable: Product = {
     ...product,
     options: [
-      { name: 'Size', values: ['S', 'M'] },
-      { name: 'Color', values: ['Red', 'Blue'] },
+      {
+        name: 'Size',
+        values: [
+          { label: 'S', priceCents: null },
+          { label: 'M', priceCents: '200' },
+        ],
+      },
+      {
+        name: 'Color',
+        values: [
+          { label: 'Red', priceCents: null },
+          { label: 'Blue', priceCents: '100' },
+        ],
+      },
     ],
   };
   const redSmall = [
-    { name: 'Size', value: 'S' },
-    { name: 'Color', value: 'Red' },
+    { name: 'Size', value: 'S', priceCents: null },
+    { name: 'Color', value: 'Red', priceCents: null },
   ];
   const blueMedium = [
-    { name: 'Size', value: 'M' },
-    { name: 'Color', value: 'Blue' },
+    { name: 'Size', value: 'M', priceCents: '200' },
+    { name: 'Color', value: 'Blue', priceCents: '100' },
   ];
   let cart = updateDemoCart(emptyCart(store), configurable, 1, redSmall);
   cart = updateDemoCart(cart, configurable, 2, blueMedium);
   assert.equal(cart.items.length, 2);
   assert.equal(cart.itemCount, 3);
-  assert.equal(cart.subtotalCents, '3750');
+  assert.equal(cart.subtotalCents, '4350');
+  assert.equal(cart.items[0]?.unitPriceCents, '1250');
+  assert.equal(cart.items[1]?.unitPriceCents, '1550');
   assert.deepEqual(cart.items[0]?.selectedOptions, redSmall);
   assert.deepEqual(cart.items[1]?.selectedOptions, blueMedium);
 
   const raw = serializeDemoCart(cart);
   assert.deepEqual(JSON.parse(raw), [
-    { productId: product.id, quantity: 1, selectedOptions: redSmall },
-    { productId: product.id, quantity: 2, selectedOptions: blueMedium },
+    {
+      productId: product.id,
+      quantity: 1,
+      selectedOptions: [
+        { name: 'Size', value: 'S' },
+        { name: 'Color', value: 'Red' },
+      ],
+    },
+    {
+      productId: product.id,
+      quantity: 2,
+      selectedOptions: [
+        { name: 'Size', value: 'M' },
+        { name: 'Color', value: 'Blue' },
+      ],
+    },
   ]);
   assert.deepEqual(restoreDemoCart(store, [configurable], raw), cart);
 
@@ -134,7 +162,15 @@ test('option combinations become separate cart lines and survive restore', () =>
 test('products with options reject an incomplete or stale choice', () => {
   const configurable: Product = {
     ...product,
-    options: [{ name: 'Size', values: ['S', 'M'] }],
+    options: [
+      {
+        name: 'Size',
+        values: [
+          { label: 'S', priceCents: null },
+          { label: 'M', priceCents: null },
+        ],
+      },
+    ],
   };
   assert.throws(
     () => updateDemoCart(emptyCart(store), configurable, 1),
@@ -143,7 +179,7 @@ test('products with options reject an incomplete or stale choice', () => {
   assert.throws(
     () =>
       updateDemoCart(emptyCart(store), configurable, 1, [
-        { name: 'Size', value: 'XL' },
+        { name: 'Size', value: 'XL', priceCents: null },
       ]),
     CartRequestError,
   );

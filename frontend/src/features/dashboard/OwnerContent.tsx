@@ -23,9 +23,9 @@ import {
 } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
 import {
-  formatProductPrice,
   normalizeSlug,
   productCategoryLabel,
+  productPriceLabel,
   slugDraft,
   storeMediaUrl,
 } from '../../lib/storefront';
@@ -65,6 +65,38 @@ interface PostMedia {
   kind: string;
   status: string;
   variants: { storageKey: string; mimeType: string }[];
+}
+
+interface OptionValueDraft {
+  label: string;
+  price: string;
+}
+
+interface OptionGroupDraft {
+  name: string;
+  values: OptionValueDraft[];
+}
+
+interface OptionValueWrite {
+  label: string;
+  priceCents: number | null;
+}
+
+interface OptionGroupWrite {
+  name: string;
+  values: OptionValueWrite[];
+}
+
+function optionDrafts(
+  groups?: ProductOptionGroup[] | null,
+): OptionGroupDraft[] {
+  return (groups ?? []).map((group) => ({
+    name: group.name,
+    values: group.values.map((value) => ({
+      label: value.label,
+      price: value.priceCents ? decimalPrice(value.priceCents) : '',
+    })),
+  }));
 }
 export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const { store, session } = useOwner();
@@ -183,10 +215,11 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                     <h2>{item.name || item.title}</h2>
                     <p>
                       {product
-                        ? formatProductPrice(
-                            item.priceCents || '0',
-                            item.currency || 'USD',
-                          )
+                        ? productPriceLabel({
+                            priceCents: item.priceCents || '0',
+                            currency: item.currency || 'USD',
+                            options: item.options ?? null,
+                          })
                         : item.description || 'Your next story.'}
                     </p>
                     {product && item.options?.length ? (
@@ -272,11 +305,8 @@ function ContentEditor({
   const [keys, setKeys] = useState(item?.imageKeys || []);
   const [slug, setSlug] = useState(item?.slug || '');
   const [slugTouched, setSlugTouched] = useState(Boolean(item));
-  const [options, setOptions] = useState<ProductOptionGroup[]>(() =>
-    (item?.options ?? []).map((group) => ({
-      name: group.name,
-      values: [...group.values],
-    })),
+  const [options, setOptions] = useState<OptionGroupDraft[]>(() =>
+    optionDrafts(item?.options),
   );
   const [optionsTouched, setOptionsTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -297,7 +327,7 @@ function ContentEditor({
     description: string;
     keys: string[];
     slug: string;
-    options: ProductOptionGroup[];
+    options: OptionGroupDraft[];
   }) => JSON.stringify(values);
   const snapshot = snapshotOf({
     name,
@@ -361,7 +391,7 @@ function ContentEditor({
     setSlugTouched(true);
     setSlugError('');
   }
-  function updateOption(index: number, next: ProductOptionGroup) {
+  function updateOption(index: number, next: OptionGroupDraft) {
     setOptions((current) =>
       current.map((group, position) => (position === index ? next : group)),
     );
@@ -377,7 +407,60 @@ function ContentEditor({
   }
   function addOption() {
     if (options.length >= 10) return;
-    setOptions((current) => [...current, { name: '', values: [] }]);
+    setOptions((current) => [
+      ...current,
+      { name: '', values: [{ label: '', price: '' }] },
+    ]);
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function addValue(groupIndex: number) {
+    setOptions((current) =>
+      current.map((group, index) =>
+        index === groupIndex && group.values.length < 25
+          ? {
+              ...group,
+              values: [...group.values, { label: '', price: '' }],
+            }
+          : group,
+      ),
+    );
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function updateValue(
+    groupIndex: number,
+    valueIndex: number,
+    patch: Partial<OptionValueDraft>,
+  ) {
+    setOptions((current) =>
+      current.map((group, index) =>
+        index === groupIndex
+          ? {
+              ...group,
+              values: group.values.map((value, position) =>
+                position === valueIndex ? { ...value, ...patch } : value,
+              ),
+            }
+          : group,
+      ),
+    );
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function removeValue(groupIndex: number, valueIndex: number) {
+    setOptions((current) =>
+      current.map((group, index) =>
+        index === groupIndex
+          ? {
+              ...group,
+              values: group.values.filter(
+                (_, position) => position !== valueIndex,
+              ),
+            }
+          : group,
+      ),
+    );
     setOptionsTouched(true);
     setOptionsError('');
   }
@@ -386,12 +469,7 @@ function ContentEditor({
       (entry) => entry.id === sourceId,
     );
     if (!source?.options?.length) return;
-    setOptions(
-      source.options.map((group) => ({
-        name: group.name,
-        values: [...group.values],
-      })),
-    );
+    setOptions(optionDrafts(source.options));
     setOptionsTouched(true);
     setOptionsError('');
     setNotice(
@@ -399,40 +477,63 @@ function ContentEditor({
     );
   }
   function validateOptions(): {
-    groups: ProductOptionGroup[] | null;
+    groups: OptionGroupWrite[] | null;
     error: string;
   } {
-    const groups: ProductOptionGroup[] = [];
+    const groups: OptionGroupWrite[] = [];
     const names = new Set<string>();
     for (const group of options) {
       const optionName = group.name.trim();
-      const values: string[] = [];
-      const seen = new Set<string>();
-      for (const raw of group.values) {
-        const value = raw.trim();
-        if (!value) continue;
-        const key = value.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        values.push(value);
-      }
+      const rows = group.values.filter(
+        (row) => row.label.trim() || row.price.trim(),
+      );
       // An option row that was added and left blank is simply ignored.
-      if (!optionName && !values.length) continue;
+      if (!optionName && !rows.length) continue;
       if (!optionName)
         return {
           groups: null,
           error: 'Give each option a name, such as Size or Color.',
         };
-      if (!values.length)
+      if (!rows.length)
         return {
           groups: null,
           error: `Add at least one value for “${optionName}”.`,
         };
-      if (values.length > 25)
+      if (rows.length > 25)
         return {
           groups: null,
           error: `“${optionName}” can have at most 25 values.`,
         };
+
+      const values: OptionValueWrite[] = [];
+      const seen = new Set<string>();
+      for (const row of rows) {
+        const label = row.label.trim();
+        if (!label)
+          return {
+            groups: null,
+            error: `Give every value in “${optionName}” a name.`,
+          };
+        const priceText = row.price.trim();
+        const cents = priceText === '' ? null : priceInput(priceText);
+        if (cents === null)
+          return {
+            groups: null,
+            error: `Use an extra price such as 2.50 for “${label}”, or leave it blank.`,
+          };
+        const valueKey = label.toLowerCase();
+        if (seen.has(valueKey))
+          return {
+            groups: null,
+            error: `“${label}” appears twice in “${optionName}”.`,
+          };
+        seen.add(valueKey);
+        values.push({
+          label,
+          priceCents: cents === 0 ? null : cents,
+        });
+      }
+
       const nameKey = optionName.toLowerCase();
       if (names.has(nameKey))
         return { groups: null, error: 'Option names must be unique.' };
@@ -518,22 +619,18 @@ function ContentEditor({
         record ? 'PATCH' : 'POST',
       );
       const savedSlug = saved.slug || finalSlug;
-      const savedOptions =
-        saved.options ??
-        (shouldSaveOptions ? validated.groups : options) ??
-        null;
+      const nextOptions = saved.options
+        ? optionDrafts(saved.options)
+        : shouldSaveOptions
+          ? []
+          : options;
       setRecord(saved);
       setName(cleanName);
       setDescription(cleanDescription);
       setSlug(savedSlug);
       setSlugTouched(true);
       setOptionsTouched(false);
-      setOptions(
-        (savedOptions ?? []).map((group) => ({
-          name: group.name,
-          values: [...group.values],
-        })),
-      );
+      setOptions(nextOptions);
       setBaseline(
         snapshotOf({
           name: cleanName,
@@ -544,7 +641,7 @@ function ContentEditor({
           description: cleanDescription,
           keys,
           slug: savedSlug,
-          options: savedOptions ?? [],
+          options: nextOptions,
         }),
       );
       await client.invalidateQueries({
@@ -718,7 +815,8 @@ function ContentEditor({
               </legend>
               <p className="panel-muted">
                 Add choices such as Size or Color. Shoppers must pick one value
-                from each option before adding this item to the cart.
+                from each option. An extra price is added to the item’s base
+                price; leave it blank when the value costs the same.
               </p>
               {options.map((group, index) => (
                 <div className="panel-option-group" key={index}>
@@ -747,32 +845,56 @@ function ContentEditor({
                       <Trash2 size={16} />
                     </button>
                   </div>
-                  <label>
-                    Values
-                    <input
-                      value={group.values.join(', ')}
-                      onChange={(e) =>
-                        updateOption(index, {
-                          ...group,
-                          values: e.target.value
-                            .split(',')
-                            .map((value) => value.trimStart()),
-                        })
-                      }
-                      placeholder="e.g. Small, Medium, Large"
-                    />
-                  </label>
-                  {group.values.some((value) => value.trim()) && (
-                    <div className="panel-option-preview" aria-hidden="true">
-                      {group.values.map((value, valueIndex) =>
-                        value.trim() ? (
-                          <span key={`${value}-${valueIndex}`}>
-                            {value.trim()}
-                          </span>
-                        ) : null,
-                      )}
-                    </div>
-                  )}
+                  <div className="panel-option-values">
+                    {group.values.map((value, valueIndex) => (
+                      <div className="panel-option-value-row" key={valueIndex}>
+                        <label className="panel-option-value-label">
+                          Value
+                          <input
+                            maxLength={80}
+                            value={value.label}
+                            onChange={(e) =>
+                              updateValue(index, valueIndex, {
+                                label: e.target.value,
+                              })
+                            }
+                            placeholder="e.g. Large"
+                          />
+                        </label>
+                        <label className="panel-option-value-price">
+                          Extra price (optional)
+                          <input
+                            inputMode="decimal"
+                            maxLength={18}
+                            value={value.price}
+                            onChange={(e) =>
+                              updateValue(index, valueIndex, {
+                                price: e.target.value,
+                              })
+                            }
+                            placeholder="0.00"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="panel-option-value-remove"
+                          aria-label={`Remove ${value.label || 'value'}`}
+                          title="Remove value"
+                          onClick={() => removeValue(index, valueIndex)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="panel-option-add-value"
+                      onClick={() => addValue(index)}
+                      disabled={group.values.length >= 25}
+                    >
+                      <Plus size={15} /> Add value
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="panel-option-tools">

@@ -548,6 +548,9 @@
   gap: 8px;
 }
 .shop-product-option-values button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   min-height: 44px;
   padding: 9px 15px;
   border: 1px solid var(--line);
@@ -557,6 +560,16 @@
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
+}
+.shop-product-option-values button small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.shop-product-option-values button.is-selected small {
+  color: inherit;
+  opacity: 0.75;
 }
 .shop-product-option-values button:hover {
   border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
@@ -568,6 +581,12 @@
 }
 .shop-product-option-hint {
   margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.shop-product-price-note {
+  margin-top: 4px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.5;

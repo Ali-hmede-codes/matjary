@@ -2,6 +2,7 @@ import {
   Product,
   ProductStatus,
   ProductCategory,
+  readProductOptions,
   type ProductOptionGroup,
 } from '@app/database';
 
@@ -55,7 +56,7 @@ export function toProductResponseDto(
     weightGrams: product.weightGrams,
     imageKeys: product.imageKeys,
     tags: product.tags,
-    options: product.options ?? null,
+    options: readProductOptions(product.options),
     sortOrder: product.sortOrder,
     requiresShipping: product.requiresShipping,
     createdAt: product.createdAt,

@@ -345,6 +345,13 @@ export function formatProductPrice(cents: string, currency: string): string {
   }
 }
 
+export function productPriceLabel(
+  product: Pick<Product, 'options' | 'priceCents' | 'currency'>,
+): string {
+  const price = formatProductPrice(product.priceCents, product.currency);
+  return productHasPricedOptions(product) ? `from ${price}` : price;
+}
+
 export function priceInput(value: string): number | null {
   if (value.length > 32 || !/^\d+(?:\.\d{1,2})?$/.test(value.trim()))
     return null;
@@ -381,12 +388,31 @@ export function productHasOptions(product: Pick<Product, 'options'>): boolean {
   return Boolean(product.options?.length);
 }
 
+/** True when at least one option value adds to the base price. */
+export function productHasPricedOptions(
+  product: Pick<Product, 'options'>,
+): boolean {
+  return Boolean(
+    product.options?.some((group) =>
+      group.values.some(
+        (value) => value.priceCents != null && value.priceCents !== '0',
+      ),
+    ),
+  );
+}
+
 /** Stable signature that separates cart lines sharing a product. */
 export function selectedOptionsKey(
   options?: readonly SelectedProductOption[] | null,
 ): string {
   return options?.length
-    ? JSON.stringify(options.map((option) => [option.name, option.value]))
+    ? JSON.stringify(
+        options.map((option) => [
+          option.name,
+          option.value,
+          option.priceCents ?? '',
+        ]),
+      )
     : '';
 }
 
@@ -399,9 +425,14 @@ export function productOptionSelection(
   if (!groups.length) return null;
   const selection: SelectedProductOption[] = [];
   for (const group of groups) {
-    const value = chosen[group.name];
-    if (!value || !group.values.includes(value)) return null;
-    selection.push({ name: group.name, value });
+    const chosenLabel = chosen[group.name];
+    const value = group.values.find((entry) => entry.label === chosenLabel);
+    if (!value) return null;
+    selection.push({
+      name: group.name,
+      value: value.label,
+      priceCents: value.priceCents,
+    });
   }
   return selection;
 }

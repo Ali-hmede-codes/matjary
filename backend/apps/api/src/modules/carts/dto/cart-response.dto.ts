@@ -58,7 +58,13 @@ export function toCartItemResponseDto(item: CartItem): CartItemResponseDto {
     unitPriceCents: item.unitPriceCents,
     currency: item.cart?.currency ?? 'USD',
     notes: item.notes,
-    selectedOptions: item.selectedOptions ?? null,
+    selectedOptions: item.selectedOptions
+      ? item.selectedOptions.map((option) => ({
+          name: option.name,
+          value: option.value,
+          priceCents: option.priceCents ?? null,
+        }))
+      : null,
     lineTotalCents: lineTotal.toString(),
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,

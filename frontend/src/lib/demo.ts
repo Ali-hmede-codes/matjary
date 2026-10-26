@@ -163,11 +163,33 @@ export const demoProducts: Product[] = examples.flatMap(
       options:
         storeIndex === 0 && index === 0
           ? [
-              { name: 'Color', values: ['Sand', 'Forest', 'Terracotta'] },
-              { name: 'Size', values: ['250 ml', '400 ml'] },
+              {
+                name: 'Color',
+                values: [
+                  { label: 'Sand', priceCents: null },
+                  { label: 'Forest', priceCents: null },
+                  { label: 'Terracotta', priceCents: '150' },
+                ],
+              },
+              {
+                name: 'Size',
+                values: [
+                  { label: '250 ml', priceCents: null },
+                  { label: '400 ml', priceCents: '250' },
+                ],
+              },
             ]
           : storeIndex === 1
-            ? [{ name: 'Size', values: ['Small', 'Medium', 'Large'] }]
+            ? [
+                {
+                  name: 'Size',
+                  values: [
+                    { label: 'Small', priceCents: null },
+                    { label: 'Medium', priceCents: '50' },
+                    { label: 'Large', priceCents: '100' },
+                  ],
+                },
+              ]
             : null,
     })),
 );

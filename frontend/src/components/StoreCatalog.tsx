@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Check, Minus, Package, Plus } from 'lucide-react';
 import { assetUrl, type Product, type SelectedProductOption } from '../lib/api';
 import {
-  formatProductPrice,
   productHasOptions,
+  productPriceLabel,
   selectedOptionsKey,
   storeMediaUrl,
   storeProductPath,
@@ -233,9 +233,7 @@ function ListItem({
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
-          <strong>
-            {formatProductPrice(product.priceCents, product.currency)}
-          </strong>
+          <strong>{productPriceLabel(product)}</strong>
           <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
@@ -274,9 +272,7 @@ function PhotoCard({
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
-          <strong>
-            {formatProductPrice(product.priceCents, product.currency)}
-          </strong>
+          <strong>{productPriceLabel(product)}</strong>
           <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
@@ -309,7 +305,7 @@ function PriceRow({
       </div>
       <span className="shop-price-leader" aria-hidden="true" />
       <strong className="shop-price-row-price">
-        {formatProductPrice(product.priceCents, product.currency)}
+        {productPriceLabel(product)}
       </strong>
       <AddToCart product={product} cart={cart} chooseHref={href} />
     </article>

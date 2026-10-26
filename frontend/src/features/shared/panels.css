@@ -791,6 +791,31 @@
   align-items: end;
   gap: 10px;
 }
+.panel-option-values {
+  display: grid;
+  gap: 10px;
+}
+.panel-option-value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px auto;
+  align-items: end;
+  gap: 10px;
+}
+.panel-option-value-remove {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: #9a3333;
+  border-color: #ecd3cf;
+  background: #fff7f5;
+}
+.panel-option-value-remove:hover:not(:disabled) {
+  border-color: #d9a69e;
+  background: #fdeeea;
+}
+.panel-option-add-value {
+  justify-self: start;
+}
 .panel-option-remove {
   width: 44px;
   height: 44px;
@@ -1923,6 +1948,19 @@
   }
   .panel-option-group-head {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .panel-option-value-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .panel-option-value-price {
+    grid-column: 1 / -1;
+  }
+  .panel-option-value-remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .panel-option-add-value {
+    width: 100%;
   }
   .panel-option-tools {
     align-items: stretch;
