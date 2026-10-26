@@ -53,14 +53,14 @@
   scroll-snap-align: center;
   scroll-snap-stop: always;
 }
-/* Every post is full-bleed: the media covers the whole screen instead of
-   sitting in a rounded card with bars around it. */
+/* Every post is shown whole inside a portrait frame capped at 9:16, so wide
+   screens get a reel-sized column instead of a stretched or cropped post. */
 .reel-stage {
   position: relative;
-  width: 100%;
-  height: 100dvh;
+  width: min(100vw, calc(100dvh * 9 / 16));
+  height: min(100dvh, calc(100vw * 16 / 9));
   overflow: hidden;
-  background: #000;
+  background: transparent;
 }
 .reel-stage > .auto-video,
 .reel-stage > .media-preview,
@@ -71,17 +71,20 @@
   width: 100%;
   height: 100%;
 }
+.reel-stage .auto-video {
+  background: transparent;
+}
 .reel-stage .auto-video-el {
-  object-fit: cover;
-  background: #000;
+  object-fit: contain;
+  background: transparent;
 }
 .reel-stage .media-preview {
-  background: #000;
+  background: transparent;
 }
 .reel-stage .media-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .reel-stage .media-placeholder {
   background: #06100c;
@@ -108,7 +111,7 @@
 }
 .reel-head {
   position: absolute;
-  inset: calc(14px + env(safe-area-inset-top)) 110px auto
+  inset: calc(14px + env(safe-area-inset-top)) 14px auto
     calc(14px + env(safe-area-inset-left));
   z-index: 3;
   display: flex;

@@ -112,6 +112,7 @@ function PostSlide({
             title={post.title}
             eager
             active={active}
+            fit="contain"
           />
         ) : (
           // Off-screen slides wait for the scroll instead of loading every

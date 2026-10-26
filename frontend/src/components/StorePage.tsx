@@ -176,6 +176,19 @@ export function StorePage({ slug }: { slug: string | null }) {
     // Posts tab is actually opened.
     enabled: Boolean(store) && !demo && activeTab === 'posts',
   });
+  // A shop's own posts are only the start: opening one continues into the
+  // site-wide feed so the viewer never dead-ends on the same shop.
+  const explorePostsQuery = useInfiniteQuery({
+    queryKey: ['storefront-post-explore'],
+    initialPageParam: '',
+    queryFn: ({ signal, pageParam }) => {
+      const params = new URLSearchParams({ limit: '12', algorithm: 'mixed' });
+      if (pageParam) params.set('cursor', pageParam);
+      return getJson<Feed>(`feed/explore?${params}`, signal);
+    },
+    getNextPageParam: (page) => (page.hasMore ? page.nextCursor : undefined),
+    enabled: Boolean(selectedPost) && !demo,
+  });
   const presentation = storePresentation(store ?? { brandColor: null });
   const missing = notFound || (demo && !store);
   const loadingShop = !store && !missing && !storeQuery.isError;
@@ -245,6 +258,18 @@ export function StorePage({ slug }: { slug: string | null }) {
   // The grid and the viewer page through one de-duplicated list, so the tile a
   // shopper taps is exactly the post the viewer opens.
   const shopPosts = [...new Map(posts.map((post) => [post.id, post])).values()];
+  const explorePosts = demo
+    ? demoPosts
+    : (explorePostsQuery.data?.pages.flatMap((page) => page.items) ?? []);
+  // The tapped post opens the reel; scrolling then continues through the mixed
+  // site feed instead of stopping at the same shop.
+  const viewerPosts = [
+    ...new Map(
+      (selectedPost ? [selectedPost, ...explorePosts] : explorePosts).map(
+        (post) => [post.id, post],
+      ),
+    ).values(),
+  ];
   // The menu loads its items inline so every section is browsable without a
   // detour. One request covers a typical menu; long catalogues append another
   // page on request, and a section chip filters server-side.
@@ -960,7 +985,7 @@ export function StorePage({ slug }: { slug: string | null }) {
       {selectedPost && store && activeTab === 'posts' && (
         <PostDialog
           key={selectedPost.id}
-          posts={shopPosts.map((post) =>
+          posts={viewerPosts.map((post) =>
             withLikes({ ...post, store: post.store ?? store }),
           )}
           initialPostId={selectedPost.id}
@@ -973,9 +998,13 @@ export function StorePage({ slug }: { slug: string | null }) {
           onNotice={setPostNotice}
           onActivePost={(post) => void registerView(post)}
           onNearEnd={() => {
-            // The reel should not stop at the first loaded page of a big shop.
-            if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage)
-              void postsQuery.fetchNextPage();
+            // The reel continues into the site feed; keep its next page warm
+            // as the shopper approaches the last loaded post.
+            if (
+              explorePostsQuery.hasNextPage &&
+              !explorePostsQuery.isFetchingNextPage
+            )
+              void explorePostsQuery.fetchNextPage();
           }}
           onClose={() => setSelectedPost(null)}
         />
