@@ -112,7 +112,6 @@ function PostSlide({
             title={post.title}
             eager
             active={active}
-            fit="contain"
           />
         ) : (
           // Off-screen slides wait for the scroll instead of loading every
@@ -416,9 +415,6 @@ export function PostDialog({
         ))}
       </div>
       <div className="reel-chrome">
-        <span className="reel-counter">
-          {active + 1} / {posts.length}
-        </span>
         {/* iOS Safari cannot full-screen an arbitrary element, so the button
             only exists where the browser can honour it. */}
         {document.fullscreenEnabled && (

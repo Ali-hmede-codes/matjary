@@ -49,20 +49,18 @@
   place-items: center;
   width: 100%;
   height: 100dvh;
-  padding: 24px 14px;
+  padding: 0;
   scroll-snap-align: center;
   scroll-snap-stop: always;
 }
-/* Fit the tallest 3:4 frame the viewport allows, without ever cropping media. */
+/* Every post is full-bleed: the media covers the whole screen instead of
+   sitting in a rounded card with bars around it. */
 .reel-stage {
   position: relative;
-  width: min(100%, 570px, calc((100dvh - 48px) * 0.75));
-  aspect-ratio: 3 / 4;
-  max-height: calc(100dvh - 48px);
-  border-radius: 22px;
+  width: 100%;
+  height: 100dvh;
   overflow: hidden;
-  background: #040a08;
-  box-shadow: 0 32px 80px -34px #000;
+  background: #000;
 }
 .reel-stage > .auto-video,
 .reel-stage > .media-preview,
@@ -74,13 +72,16 @@
   height: 100%;
 }
 .reel-stage .auto-video-el {
-  object-fit: contain;
-  background: #040a08;
+  object-fit: cover;
+  background: #000;
+}
+.reel-stage .media-preview {
+  background: #000;
 }
 .reel-stage .media-preview img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 .reel-stage .media-placeholder {
   background: #06100c;
@@ -102,12 +103,13 @@
 }
 .reel-stage::after {
   inset-block-end: 0;
-  height: 58%;
+  height: 48%;
   background: linear-gradient(transparent, #000000c4);
 }
 .reel-head {
   position: absolute;
-  inset: 14px 56px auto 14px;
+  inset: calc(14px + env(safe-area-inset-top)) 110px auto
+    calc(14px + env(safe-area-inset-left));
   z-index: 3;
   display: flex;
   align-items: center;
@@ -146,10 +148,11 @@
   font-size: 11px;
   color: #ffffffbd;
 }
-/* The sound toggle in a stage moves to the top, clear of the action rail. */
+/* The sound toggle sits under the full-screen/close buttons, clear of the
+   action rail and the shop identity. */
 .reel-stage .auto-video-sound {
-  top: 10px;
-  right: 10px;
+  top: calc(62px + env(safe-area-inset-top));
+  right: calc(10px + env(safe-area-inset-right));
   bottom: auto;
 }
 .reel-bottom {
@@ -159,7 +162,9 @@
   display: flex;
   align-items: flex-end;
   gap: 12px;
-  padding: 0 14px 16px;
+  padding: 0 calc(14px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom))
+    calc(14px + env(safe-area-inset-left));
   pointer-events: none;
 }
 .reel-copy {
@@ -194,9 +199,9 @@
   text-transform: uppercase;
   color: #ffffffa8;
 }
-/* Desktop reads the counter in the top chrome; phones need it by the caption. */
+/* Where the shopper is in the shop's reel, next to the caption. */
 .reel-position {
-  display: none;
+  display: block;
   font-size: 10.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -307,22 +312,12 @@
 }
 .reel-chrome {
   position: fixed;
-  inset: 14px 14px auto auto;
+  inset: calc(14px + env(safe-area-inset-top))
+    calc(14px + env(safe-area-inset-right)) auto auto;
   z-index: 5;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.reel-counter {
-  padding: 7px 11px;
-  border-radius: 999px;
-  border: 1px solid #ffffff21;
-  background: #0b1a15b3;
-  backdrop-filter: blur(7px);
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #ffffffd0;
 }
 .reel-chrome-button {
   display: grid;
@@ -385,7 +380,7 @@
     flex: 0 0 100%;
     width: 100%;
     height: 100dvh;
-    padding: 20px 90px;
+    padding: 0;
     scroll-snap-align: center;
   }
   .reel-prev {
@@ -395,46 +390,15 @@
     right: 26px;
   }
 }
-/* Phones swipe between posts; the chevrons and counter would only crowd the
-   media. */
+/* Phones swipe between posts; the chevrons would only crowd the media. */
 @media (max-width: 899px) {
-  .reel-slide {
-    padding: 20px 14px;
-  }
-  .reel-nav,
-  .reel-counter {
+  .reel-nav {
     display: none;
   }
-  .reel-position {
-    display: block;
-  }
-  .reel-stage {
-    border-radius: 18px;
-  }
 }
-/* True browser full screen: media may use every pixel, chrome stays clear. */
+/* True browser full screen keeps the same full-bleed stage. */
 .post-dialog:fullscreen {
   background: #000;
-}
-.post-dialog:fullscreen .reel-slide {
-  padding: 0;
-}
-.post-dialog:fullscreen .reel-stage {
-  width: 100vw;
-  height: 100dvh;
-  max-height: none;
-  aspect-ratio: auto;
-  border-radius: 0;
-  box-shadow: none;
-}
-.post-dialog:fullscreen .reel-head {
-  inset: 16px 150px auto 18px;
-}
-.post-dialog:fullscreen .reel-stage .auto-video-sound {
-  top: 62px;
-}
-.post-dialog:fullscreen .reel-bottom {
-  padding: 0 20px calc(20px + env(safe-area-inset-bottom));
 }
 @media (prefers-reduced-motion: reduce) {
   .post-dialog[open] {
