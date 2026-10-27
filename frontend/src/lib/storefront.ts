@@ -5,6 +5,13 @@ import type {
   Store,
   StoreCategory,
 } from './api';
+import {
+  designTheme,
+  hasSavedDesign,
+  normalizeDesign,
+  type CatalogLayout,
+} from './design.ts';
+export type { CatalogLayout } from './design.ts';
 import { contrastColor, safeUrl } from './website.ts';
 
 export type StoreLifecycleStatus =
@@ -193,12 +200,12 @@ export function findCategoryBySlug<
   return categories.find((category) => categorySlug(category.name) === slug);
 }
 
-export type CatalogLayout = 'list' | 'cards' | 'compact';
 const catalogLayouts: readonly CatalogLayout[] = ['list', 'cards', 'compact'];
 
 /**
  * Category order decides the visual rhythm of the shop: 1st section is a menu
- * list, 2nd a photo grid, 3rd a compact price list, then it repeats.
+ * list, 2nd a photo grid, 3rd a compact price list, then it repeats. Shops with
+ * a saved design use their own rhythm instead (see lib/design.ts).
  */
 export function catalogLayout(index: number): CatalogLayout {
   const safe = Number.isInteger(index) && index > 0 ? index : 0;
@@ -296,7 +303,10 @@ export function storeMap(location: Store['location']) {
 }
 
 export function storePresentation(
-  store: Pick<Store, 'storeType' | 'brandColor'>,
+  store: Pick<Store, 'brandColor'> & {
+    storeType?: Store['storeType'];
+    designSettings?: Store['designSettings'];
+  },
 ) {
   const restaurant = store.storeType === 'restaurant_menu';
   const fallback = restaurant ? '#994a2c' : '#254e40';
@@ -306,19 +316,32 @@ export function storePresentation(
     : /^#[\da-f]{3}$/iu.test(input)
       ? `#${[...input.slice(1)].map((char) => char + char).join('')}`
       : fallback;
+  // Shops saved before the design studio keep the exact legacy storefront:
+  // only stores with real studio keys get palette, font and layout tokens.
+  const design = hasSavedDesign(store.designSettings)
+    ? normalizeDesign(store.designSettings)
+    : null;
+  const designTokens = design ? designTheme(design) : null;
+  // Record<string, string> keeps the token bag indexable for tests and pages
+  // while each CSS variable stays one plain string.
+  const theme: Record<string, string> = {
+    '--brand-primary': primary,
+    '--brand-secondary': designTokens?.['--brand-secondary'] ?? primary,
+    '--brand-surface':
+      designTokens?.['--brand-surface'] ?? (restaurant ? '#fffcf5' : '#ffffff'),
+    '--brand-ink':
+      designTokens?.['--brand-ink'] ?? (restaurant ? '#302820' : '#17231e'),
+    '--brand-on-primary': contrastColor(primary),
+    ...designTokens,
+  };
   return {
     restaurant,
     label: restaurant ? 'Restaurant & café' : 'Independent shop',
     catalogTabLabel: restaurant ? 'Restaurant' : 'Shop',
     catalogTitle: restaurant ? 'On the menu' : 'The collection',
     catalogAction: restaurant ? 'Explore our menu' : 'Explore the collection',
-    theme: {
-      '--brand-primary': primary,
-      '--brand-secondary': primary,
-      '--brand-surface': restaurant ? '#fffcf5' : '#ffffff',
-      '--brand-ink': restaurant ? '#302820' : '#17231e',
-      '--brand-on-primary': contrastColor(primary),
-    },
+    design,
+    theme,
   };
 }
 

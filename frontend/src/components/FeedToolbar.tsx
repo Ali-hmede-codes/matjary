@@ -10,6 +10,9 @@ type FeedToolbarProps = Pick<
   | 'feedTitle'
   | 'algorithm'
   | 'setAlgorithm'
+  | 'explore'
+  | 'exploreActive'
+  | 'selectExplore'
   | 'demo'
   | 'filtersOpen'
   | 'categories'
@@ -30,6 +33,9 @@ export function FeedToolbar({
   feedTitle,
   algorithm,
   setAlgorithm,
+  explore,
+  exploreActive,
+  selectExplore,
   demo,
   filtersOpen,
   categories,
@@ -91,21 +97,20 @@ export function FeedToolbar({
           {feedTitle}
         </h2>
         {view === 'discover' && !store && (
-          <div className="feed-tabs" aria-label="Feed order">
+          <div className="feed-tabs" aria-label="Feed views">
             <button
-              className={algorithm === 'mixed' ? 'selected' : ''}
-              aria-pressed={algorithm === 'mixed'}
-              onClick={() => setAlgorithm('mixed')}
+              className={!explore ? 'selected' : ''}
+              aria-pressed={!explore}
+              onClick={() => selectExplore(false)}
             >
               For you
             </button>
             <button
-              className={algorithm === 'recent' ? 'selected' : ''}
-              aria-pressed={algorithm === 'recent'}
-              disabled={demo}
-              onClick={() => setAlgorithm('recent')}
+              className={explore ? 'selected' : ''}
+              aria-pressed={explore}
+              onClick={() => selectExplore(true)}
             >
-              Latest
+              Explore
             </button>
           </div>
         )}
@@ -124,15 +129,25 @@ export function FeedToolbar({
               )}
             </button>
           )}
-          <button
-            className="icon-button"
-            aria-label={
-              layout === 'feed' ? 'Switch to grid view' : 'Switch to feed view'
-            }
-            onClick={() => setLayout(layout === 'feed' ? 'grid' : 'feed')}
-          >
-            {layout === 'feed' ? <LayoutGrid size={20} /> : <Rows3 size={20} />}
-          </button>
+          {/* Explore already is a grid; the card-density toggle would only
+              muddle the choice, so it belongs to the "For you" surface. */}
+          {!exploreActive && (
+            <button
+              className="icon-button"
+              aria-label={
+                layout === 'feed'
+                  ? 'Switch to grid view'
+                  : 'Switch to feed view'
+              }
+              onClick={() => setLayout(layout === 'feed' ? 'grid' : 'feed')}
+            >
+              {layout === 'feed' ? (
+                <LayoutGrid size={20} />
+              ) : (
+                <Rows3 size={20} />
+              )}
+            </button>
+          )}
           {store && (
             <button
               className="icon-button"

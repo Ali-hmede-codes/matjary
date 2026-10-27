@@ -5,6 +5,7 @@ import {
   StoreSubscriptionTier,
   StoreType,
   SocialMediaLinks,
+  DesignSettings,
   businessCategoryDefinition,
   businessCategoryLabel,
 } from '@app/database';
@@ -130,6 +131,10 @@ export class StoreResponseDto {
   // Location fields
   location!: StoreLocationResponseDto | null;
 
+  // The owner's saved visual system. Public: the storefront needs it to render
+  // the chosen template, fonts, layouts and per-section overrides.
+  designSettings!: DesignSettings | null;
+
   // Public branch list in display order. Omitted when the caller supplied an
   // entity that was not loaded with the relation (e.g. lifecycle updates), so
   // cached branch details are never silently erased.
@@ -214,6 +219,7 @@ export function toStoreResponseDto(
           mapUrl,
         }
       : null,
+    designSettings: store.designSettings ?? null,
     ...(Array.isArray(store.branches)
       ? { branches: sortedBranches(store).map(toStoreBranchResponseDto) }
       : {}),

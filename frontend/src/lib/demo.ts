@@ -1,4 +1,5 @@
 import type { Post, Product, Store } from './api';
+import { designWithPreset, type DesignTemplate } from './design.ts';
 
 // Opt-in visual examples only. Never substituted for real API results silently.
 export const inspirationPhoto =
@@ -57,6 +58,17 @@ const demoBusinessCategories = [
   ['clothing_store', 'Clothing store', 'ecommerce'],
 ] as const;
 
+// The preview shops wear one complete studio design each, so ?demo=1 shows
+// what the design studio produces for very different kinds of business.
+const demoDesignTemplates: DesignTemplate[] = [
+  'bazaar',
+  'roast',
+  'atelier',
+  'table',
+  'bloom',
+  'editorial',
+];
+
 export const demoStores: Store[] = examples.map(
   ([name, , description, photo], index) => {
     const business = demoBusinessCategories[index] ?? [
@@ -70,6 +82,7 @@ export const demoStores: Store[] = examples.map(
       name,
       hasVerificationBadge: index === 0 || index === 1 || index === 3,
       verificationBadgeExpiresAt: index === 3 ? '2020-01-01T00:00:00Z' : null,
+      designSettings: designWithPreset(demoDesignTemplates[index] ?? 'studio'),
       brandColor:
         ['#75604b', '#88452c', '#384e60', '#637348', '#426751', '#91614c'][
           index

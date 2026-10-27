@@ -6,12 +6,10 @@ import {
   ArrowUpRight,
   ChevronDown,
   Images,
-  Layers,
   LayoutGrid,
   LoaderCircle,
   MapPin,
   Package,
-  Play,
   Search,
   Share2,
   ShoppingBag,
@@ -30,6 +28,7 @@ import {
   type StoreCategoryList,
 } from '../lib/api';
 import { demoPosts, demoProducts, demoStores } from '../lib/demo';
+import { resolveCategoryLayout } from '../lib/design.ts';
 import {
   categoryIndexGroups,
   categorySlug,
@@ -51,10 +50,10 @@ import { useShare } from '../hooks/useShare';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
 import { CatalogItems, CatalogLoading, ShopImage } from './StoreCatalog';
+import { StorePostWall } from './StorePostWall';
 import { ShopBranches } from './ShopBranches';
 import { SocialIcon } from './SocialIcon';
 import { LoadingBar, StatusBanner } from './Feedback';
-import { MediaView } from './MediaView';
 import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 import { absoluteMediaUrl } from './StoreDetail';
@@ -192,7 +191,10 @@ export function StorePage({ slug }: { slug: string | null }) {
   useEffect(() => {
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', presentation.theme['--brand-primary']);
+      ?.setAttribute(
+        'content',
+        presentation.theme['--brand-primary'] ?? '#254e40',
+      );
     document
       .getElementById('site-favicon')
       ?.setAttribute(
@@ -319,7 +321,11 @@ export function StorePage({ slug }: { slug: string | null }) {
   const menuSections = groups
     .map((group, position) => ({
       group,
-      layout: catalogLayout(position),
+      // A saved design controls the section rhythm (and per-section overrides);
+      // shops without one keep the familiar rotating layouts.
+      layout: presentation.design
+        ? resolveCategoryLayout(presentation.design, position, group.key)
+        : catalogLayout(position),
       items: matchingItems.filter((item) => menuKeyOf(item) === group.key),
     }))
     .filter((section) => section.items.length > 0);
@@ -364,7 +370,7 @@ export function StorePage({ slug }: { slug: string | null }) {
 
   return (
     <div
-      className={`app storefront ${store ? 'has-store' : ''} ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${cartItems > 0 && !cart.open ? ' has-cart' : ''}`}
+      className={`app storefront ${store ? 'has-store' : ''} ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${cartItems > 0 && !cart.open ? ' has-cart' : ''}${presentation.design ? ` shop-design-${presentation.design.template}` : ''}`}
       style={presentation.theme as CSSProperties}
     >
       <a className="skip-link" href="#shop-main">
@@ -468,7 +474,10 @@ export function StorePage({ slug }: { slug: string | null }) {
           </section>
         ) : (
           <>
-            <section className="shop-hero" aria-labelledby="shop-title">
+            <section
+              className={`shop-hero hero-${presentation.design?.hero ?? 'classic'}`}
+              aria-labelledby="shop-title"
+            >
               <div className="shop-banner">
                 <ShopImage
                   value={store.bannerKey || store.logoKey}
@@ -668,37 +677,11 @@ export function StorePage({ slug }: { slug: string | null }) {
                         Posts couldn’t load right now.
                       </StatusBanner>
                     )}
-                    <div className="shop-post-grid">
-                      {shopPosts.map((post) => (
-                        <button
-                          className="shop-post-tile"
-                          key={post.id}
-                          type="button"
-                          aria-label={`Open post: ${post.title}`}
-                          aria-haspopup="dialog"
-                          onClick={() => openStorePost(post)}
-                        >
-                          <span
-                            className="shop-post-thumbnail"
-                            aria-hidden="true"
-                          >
-                            <MediaView
-                              media={post.media[0]}
-                              title={post.title}
-                            />
-                          </span>
-                          <span
-                            className="shop-post-indicators"
-                            aria-hidden="true"
-                          >
-                            {post.media.some(
-                              (media) => media.kind === 'video',
-                            ) && <Play size={19} fill="currentColor" />}
-                            {post.media.length > 1 && <Layers size={19} />}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <StorePostWall
+                      posts={shopPosts}
+                      layout={presentation.design?.postsLayout ?? 'grid'}
+                      onOpen={openStorePost}
+                    />
                     {!posts.length && (demo || postsQuery.isSuccess) && (
                       <p className="shop-inline-state">
                         This shop hasn’t shared any posts yet.
@@ -878,6 +861,12 @@ export function StorePage({ slug }: { slug: string | null }) {
                               layout={layout}
                               shopSlug={store.slug}
                               demo={demo}
+                              showImages={
+                                presentation.design?.showProductImages
+                              }
+                              showDescriptions={
+                                presentation.design?.showProductDescriptions
+                              }
                             />
                           </div>
                           {items.length > CATALOG_SECTION_PREVIEW && (

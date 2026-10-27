@@ -123,7 +123,33 @@ export interface SubscriptionLimits {
   verificationBadgePriceCents?: number | null; // price per badge in cents (0 or null = free)
 }
 
+// One owner-chosen layout override for a single menu section. Layout keys are
+// code-owned strings (see frontend/src/lib/design.ts); the storefront ignores
+// keys it no longer understands instead of breaking a shop page.
+export interface DesignCategoryLayout {
+  categoryId: string;
+  layout: string;
+}
+
 export interface DesignSettings {
+  // Visual system chosen in the owner's design studio. Every value is a small
+  // code-owned key so a stale row still renders with sensible fallbacks.
+  template?: string;
+  palette?: string;
+  typography?: string;
+  shape?: string;
+  density?: string;
+  hero?: string;
+  postsLayout?: string;
+  catalogLayout?: string;
+  accentLayout?: string;
+  rhythm?: string;
+  categoryLayouts?: DesignCategoryLayout[];
+  showProductImages?: boolean;
+  showProductDescriptions?: boolean;
+
+  // Legacy fields kept for rows saved by older builds; new writes use the
+  // studio keys above.
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
@@ -132,8 +158,6 @@ export interface DesignSettings {
   fontFamily?: string;
   borderRadius?: string;
   layout?: 'grid' | 'list' | 'masonry';
-  showProductImages?: boolean;
-  showProductDescriptions?: boolean;
   customCss?: string;
 }
 
@@ -660,20 +684,6 @@ export class StoreBranch extends BaseEntity {
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder!: number;
-}
-
-export interface DesignSettings {
-  primaryColor?: string;
-  secondaryColor?: string;
-  accentColor?: string;
-  backgroundColor?: string;
-  textColor?: string;
-  fontFamily?: string;
-  borderRadius?: string;
-  layout?: 'grid' | 'list' | 'masonry';
-  showProductImages?: boolean;
-  showProductDescriptions?: boolean;
-  customCss?: string;
 }
 
 @Entity({ name: 'subscription_plans', engine: 'InnoDB' })

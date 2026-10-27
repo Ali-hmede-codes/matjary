@@ -39,6 +39,7 @@ import {
   Retry,
 } from '../shared/PanelUI';
 import { StoreEditor } from './StoreEditor.tsx';
+import { StoreDesignStudio } from './StoreDesignStudio';
 import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
 import { StoreManager } from './StoreManager';
@@ -274,6 +275,12 @@ export default function OwnerPanel({ session }: { session: Session }) {
               }
             />
             <Route
+              path="design"
+              element={
+                store ? <StoreDesignStudio key={store.id} /> : <NoStore />
+              }
+            />
+            <Route
               path="products"
               element={
                 store ? (
@@ -439,10 +446,10 @@ function OwnerHome() {
           <span>A photo, a moment, a new arrival.</span>
           <ArrowUpRight />
         </Link>
-        <Link to="/dashboard/store">
+        <Link to="/dashboard/design">
           <Palette />
           <strong>Refresh your look</strong>
-          <span>Pick colors and upload your branding.</span>
+          <span>Pick a look, layouts and per-section styles.</span>
           <ArrowUpRight />
         </Link>
         <Link to="/dashboard/boost">

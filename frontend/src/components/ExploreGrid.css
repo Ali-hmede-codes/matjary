@@ -1,0 +1,78 @@
+/* Instagram-style explore: three square tiles per row on phones, four on
+   desktop. Tiles carry only the visual; details live in the viewer. */
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  animation: reveal-in 260ms ease-out;
+}
+.explore-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--wash);
+  cursor: pointer;
+  animation: reveal-in 300ms ease-out backwards;
+}
+.explore-tile .media-preview,
+.explore-tile .media-placeholder,
+.explore-tile img {
+  width: 100%;
+  height: 100%;
+}
+.explore-tile .media-preview,
+.explore-tile .media-placeholder {
+  min-height: 0;
+}
+.explore-tile img {
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.explore-tile .media-placeholder span {
+  display: none;
+}
+.explore-tile-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  color: #fff;
+  filter: drop-shadow(0 1px 3px #0009);
+  pointer-events: none;
+}
+.explore-skeleton {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--wash);
+}
+.explore-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+  animation: shimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .explore-tile:hover img {
+    transform: scale(1.04);
+  }
+}
+@media (max-width: 600px) {
+  .explore-grid {
+    padding-inline: 12px;
+  }
+}
+@media (min-width: 900px) {
+  .explore-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+}

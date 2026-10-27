@@ -222,6 +222,31 @@ test('store type selects the layout and safely derives shop colors', () => {
   );
 });
 
+test('a saved design paints the shop while unsaved shops keep the legacy look', () => {
+  const themed = storePresentation({
+    storeType: 'ecommerce',
+    brandColor: '#123456',
+    designSettings: {
+      template: 'boutique',
+      palette: 'sand',
+      typography: 'editorial',
+      shape: 'pill',
+      density: 'airy',
+    },
+  });
+  assert.equal(themed.theme['--brand-surface'], '#f8f2e7');
+  assert.equal(themed.theme['--brand-ink'], '#2c261d');
+  assert.equal(themed.theme['--shop-control-radius'], '999px');
+  assert.match(themed.theme['--shop-font-display'] ?? '', /serif/u);
+  // The owner's brand colour always drives buttons, not the preset.
+  assert.equal(themed.theme['--brand-primary'], '#123456');
+  assert.equal(themed.design?.template, 'boutique');
+  assert.equal(
+    storePresentation({ storeType: 'ecommerce', brandColor: null }).design,
+    null,
+  );
+});
+
 test('menu categories follow the owner order and absorb product fallbacks', () => {
   const products = [
     {

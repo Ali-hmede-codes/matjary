@@ -502,6 +502,10 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                 onChange={(e) => setColor(e.target.value)}
               />
             </label>
+            <p className="panel-muted">
+              Want layouts, type and a style for each menu section?{' '}
+              <Link to="/dashboard/design">Open the design studio</Link>.
+            </p>
           </section>
           {store && (
             <section className="panel-card">

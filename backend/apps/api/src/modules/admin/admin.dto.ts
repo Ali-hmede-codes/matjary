@@ -12,9 +12,6 @@ import {
   MaxLength,
   Min,
   Matches,
-  IsHexColor,
-  IsObject,
-  ValidateNested,
 } from 'class-validator';
 import { CreateStoreDto } from '../stores/dto/create-store.dto';
 import { UpdateStoreDto } from '../stores/dto/update-store.dto';
@@ -89,29 +86,7 @@ export class AdminCreateStoreDto extends CreateStoreDto {
   ownerId!: string;
 }
 
-export class AdminDesignDto {
-  @IsOptional() @IsHexColor() primaryColor?: string;
-  @IsOptional() @IsHexColor() secondaryColor?: string;
-  @IsOptional() @IsHexColor() accentColor?: string;
-  @IsOptional() @IsHexColor() backgroundColor?: string;
-  @IsOptional() @IsHexColor() textColor?: string;
-  @IsOptional()
-  @IsIn(['system-ui', 'sans-serif', 'serif', 'monospace'])
-  fontFamily?: string;
-  @IsOptional() @Matches(/^\d{1,2}(px|rem)$/) borderRadius?: string;
-  @IsOptional() @IsIn(['grid', 'list', 'masonry']) layout?:
-    'grid' | 'list' | 'masonry';
-  @IsOptional() @IsBoolean() showProductImages?: boolean;
-  @IsOptional() @IsBoolean() showProductDescriptions?: boolean;
-}
-
-export class AdminUpdateStoreDto extends UpdateStoreDto {
-  @IsOptional()
-  @IsObject()
-  @ValidateNested()
-  @Type(() => AdminDesignDto)
-  designSettings?: AdminDesignDto | null;
-}
+export class AdminUpdateStoreDto extends UpdateStoreDto {}
 
 export class AdminCreateProductDto extends CreateProductDto {
   @IsUUID()

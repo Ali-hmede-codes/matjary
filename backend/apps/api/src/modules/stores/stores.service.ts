@@ -13,6 +13,7 @@ import { Repository, QueryFailedError, Not, In, EntityManager } from 'typeorm';
 import {
   Store,
   StoreBranch,
+  StoreCategory,
   StoreSubscriptionTier,
   StoreType,
   Product,
@@ -45,6 +46,7 @@ import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
 import { UpdateStoreDto, UpdateStoreLocationDto } from './dto/update-store.dto';
 import { StoreBranchDto } from './dto/store-branch.dto';
+import { storedDesignSettings } from './store-design';
 import { StoreResponseDto, toStoreResponseDto } from './dto/store-response.dto';
 import {
   LocationService,
@@ -443,6 +445,19 @@ export class StoresService {
         store.socialMediaLinks = dto.socialMediaLinks;
       if (dto.logoKey !== undefined) store.logoKey = dto.logoKey;
       if (dto.bannerKey !== undefined) store.bannerKey = dto.bannerKey;
+
+      // A design save replaces the whole visual system. Overrides for sections
+      // this store no longer owns are dropped before they reach the JSON column.
+      if (dto.designSettings !== undefined) {
+        const categories = await this.stores.manager.find(StoreCategory, {
+          where: { storeId: store.id },
+          select: { id: true },
+        });
+        store.designSettings = storedDesignSettings(
+          dto.designSettings,
+          categories.map((category) => category.id),
+        );
+      }
 
       // Handle location update
       if (dto.location) {

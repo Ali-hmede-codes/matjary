@@ -227,10 +227,12 @@ function ListItem({
   product,
   cart,
   href,
+  showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
   return (
@@ -249,7 +251,7 @@ function ListItem({
         <h3>
           <a href={href}>{product.name}</a>
         </h3>
-        {product.description && (
+        {showDescriptions && product.description && (
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
@@ -266,10 +268,12 @@ function PhotoCard({
   product,
   cart,
   href,
+  showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
   return (
@@ -288,7 +292,7 @@ function PhotoCard({
         <h3>
           <a href={href}>{product.name}</a>
         </h3>
-        {product.description && (
+        {showDescriptions && product.description && (
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
@@ -305,10 +309,12 @@ function PriceRow({
   product,
   cart,
   href,
+  showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
   return (
@@ -319,7 +325,7 @@ function PriceRow({
         <h3>
           <a href={href}>{product.name}</a>
         </h3>
-        {product.description && (
+        {showDescriptions && product.description && (
           <p title={product.description}>{product.description}</p>
         )}
         {unavailable && (
@@ -335,25 +341,199 @@ function PriceRow({
   );
 }
 
+// Layout 4: an editorial menu line — dotted leader, serif name, price on the
+// right. The restaurant template's signature section style.
+function MenuRow({
+  product,
+  cart,
+  href,
+  showDescriptions = true,
+}: {
+  product: Product;
+  cart: ShopCartController;
+  href: string;
+  showDescriptions?: boolean;
+}) {
+  const unavailable = productCartLimit(product) === 0;
+  return (
+    <article
+      className={`shop-price-row shop-menu-row${unavailable ? ' is-unavailable' : ''}`}
+    >
+      <div className="shop-price-row-copy">
+        <h3>
+          <a href={href}>{product.name}</a>
+        </h3>
+        {showDescriptions && product.description && (
+          <p title={product.description}>{product.description}</p>
+        )}
+        {unavailable && (
+          <span className="shop-price-row-stock">Out of stock</span>
+        )}
+      </div>
+      <span className="shop-price-leader" aria-hidden="true" />
+      <strong className="shop-price-row-price">
+        {productPriceLabel(product)}
+      </strong>
+      <AddToCart product={product} cart={cart} chooseHref={href} />
+    </article>
+  );
+}
+
+// Layout 5: image-first tiles. The name and price sit on the photo, so a
+// gallery reads as one continuous wall.
+function GalleryTile({
+  product,
+  cart,
+  href,
+  showDescriptions = true,
+}: {
+  product: Product;
+  cart: ShopCartController;
+  href: string;
+  showDescriptions?: boolean;
+}) {
+  const unavailable = productCartLimit(product) === 0;
+  return (
+    <article
+      className={`shop-product shop-gallery-tile${unavailable ? ' is-unavailable' : ''}`}
+    >
+      <a
+        className="shop-gallery-media"
+        href={href}
+        aria-label={`Open ${product.name}`}
+      >
+        <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
+        <StockBadge product={product} cart={cart} />
+      </a>
+      <div className="shop-gallery-copy">
+        <h3>
+          <a href={href}>{product.name}</a>
+        </h3>
+        {showDescriptions && product.description && (
+          <p title={product.description}>{product.description}</p>
+        )}
+        <div className="shop-product-bottom">
+          <strong>{productPriceLabel(product)}</strong>
+          <AddToCart product={product} cart={cart} chooseHref={href} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// Layout 6: one hero item followed by regular cards.
+function FeaturedItem({
+  product,
+  cart,
+  href,
+  showDescriptions = true,
+}: {
+  product: Product;
+  cart: ShopCartController;
+  href: string;
+  showDescriptions?: boolean;
+}) {
+  const unavailable = productCartLimit(product) === 0;
+  return (
+    <article
+      className={`shop-product shop-featured-item${unavailable ? ' is-unavailable' : ''}`}
+    >
+      <a
+        className="shop-product-image shop-product-image-link"
+        href={href}
+        aria-label={`Open ${product.name}`}
+      >
+        <ShopImage value={product.imageKeys?.[0]} alt={product.name} eager />
+        <StockBadge product={product} cart={cart} />
+      </a>
+      <div className="shop-product-copy">
+        <span className="shop-featured-eyebrow">Featured</span>
+        <h3>
+          <a href={href}>{product.name}</a>
+        </h3>
+        {showDescriptions && product.description && (
+          <p title={product.description}>{product.description}</p>
+        )}
+        <div className="shop-product-bottom">
+          <strong>{productPriceLabel(product)}</strong>
+          <AddToCart product={product} cart={cart} chooseHref={href} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function CatalogItem({
   product,
   cart,
   layout,
   shopSlug,
   demo,
+  showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   layout: CatalogLayout;
   shopSlug: string;
   demo: boolean;
+  showDescriptions?: boolean;
 }) {
   const href = storeProductPath(shopSlug, product.slug, demo);
   if (layout === 'cards')
-    return <PhotoCard product={product} cart={cart} href={href} />;
+    return (
+      <PhotoCard
+        product={product}
+        cart={cart}
+        href={href}
+        showDescriptions={showDescriptions}
+      />
+    );
   if (layout === 'compact')
-    return <PriceRow product={product} cart={cart} href={href} />;
-  return <ListItem product={product} cart={cart} href={href} />;
+    return (
+      <PriceRow
+        product={product}
+        cart={cart}
+        href={href}
+        showDescriptions={showDescriptions}
+      />
+    );
+  if (layout === 'menu')
+    return (
+      <MenuRow
+        product={product}
+        cart={cart}
+        href={href}
+        showDescriptions={showDescriptions}
+      />
+    );
+  if (layout === 'gallery')
+    return (
+      <GalleryTile
+        product={product}
+        cart={cart}
+        href={href}
+        showDescriptions={showDescriptions}
+      />
+    );
+  // "featured" and "shelves" are arranged by CatalogItems; a stray item in
+  // one of those modes still renders as a normal card.
+  if (layout === 'featured' || layout === 'shelves')
+    return (
+      <PhotoCard
+        product={product}
+        cart={cart}
+        href={href}
+        showDescriptions={showDescriptions}
+      />
+    );
+  return (
+    <ListItem
+      product={product}
+      cart={cart}
+      href={href}
+      showDescriptions={showDescriptions}
+    />
+  );
 }
 
 export function CatalogItems({
@@ -362,34 +542,76 @@ export function CatalogItems({
   layout,
   shopSlug,
   demo,
+  showImages = true,
+  showDescriptions = true,
 }: {
   products: Product[];
   cart: ShopCartController;
   layout: CatalogLayout;
   shopSlug: string;
   demo: boolean;
+  showImages?: boolean;
+  showDescriptions?: boolean;
 }) {
-  return (
-    <div className={`shop-catalog-items layout-${layout}`}>
-      {products.map((product) => (
-        <CatalogItem
-          key={product.id}
-          product={product}
+  // Without photos, image-led layouts would show empty frames; the compact
+  // price list is the honest fallback (a menu keeps its own text-only style).
+  const visualLayout: CatalogLayout = showImages
+    ? layout
+    : layout === 'menu'
+      ? 'menu'
+      : 'compact';
+  const item = (product: Product, variant: CatalogLayout) => (
+    <CatalogItem
+      key={product.id}
+      product={product}
+      cart={cart}
+      layout={variant}
+      shopSlug={shopSlug}
+      demo={demo}
+      showDescriptions={showDescriptions}
+    />
+  );
+  if (visualLayout === 'featured' && products.length > 0) {
+    const [first, ...rest] = products;
+    return (
+      <div className="shop-catalog-items layout-featured">
+        <FeaturedItem
+          product={first!}
           cart={cart}
-          layout={layout}
-          shopSlug={shopSlug}
-          demo={demo}
+          href={storeProductPath(shopSlug, first!.slug, demo)}
+          showDescriptions={showDescriptions}
         />
-      ))}
+        <div className="shop-featured-grid">
+          {rest.map((product) => item(product, 'cards'))}
+        </div>
+      </div>
+    );
+  }
+  if (visualLayout === 'shelves')
+    return (
+      <div className="shop-catalog-items layout-shelves">
+        {products.map((product) => item(product, 'cards'))}
+      </div>
+    );
+  return (
+    <div className={`shop-catalog-items layout-${visualLayout}`}>
+      {products.map((product) => item(product, visualLayout))}
     </div>
   );
 }
 
 export function CatalogLoading({ layout }: { layout: CatalogLayout }) {
-  const rows = layout === 'cards' ? 6 : 4;
+  // Skeletons mirror the shape of the chosen layout without inventing data.
+  const skeleton: 'list' | 'cards' | 'compact' =
+    layout === 'menu' || layout === 'compact'
+      ? 'compact'
+      : layout === 'list'
+        ? 'list'
+        : 'cards';
+  const rows = skeleton === 'cards' ? 6 : 4;
   return (
     <div
-      className={`shop-catalog-items layout-${layout}`}
+      className={`shop-catalog-items layout-${skeleton}`}
       role="status"
       aria-busy="true"
     >
@@ -397,14 +619,14 @@ export function CatalogLoading({ layout }: { layout: CatalogLayout }) {
       {Array.from({ length: rows }, (_, index) => (
         <div
           className={
-            layout === 'compact'
+            skeleton === 'compact'
               ? 'shop-price-row shop-skeleton'
               : 'shop-product shop-skeleton'
           }
           key={index}
           aria-hidden="true"
         >
-          {layout !== 'compact' && (
+          {skeleton !== 'compact' && (
             <div className="shop-product-image shop-skeleton" />
           )}
           <div className="shop-product-copy">

@@ -519,6 +519,10 @@
   position: absolute;
   inset: 0;
 }
+/* The product page shows the whole item; a square crop can hide part of it. */
+.shop-product-main-image .shop-image > img {
+  object-fit: contain;
+}
 .shop-product-thumbs {
   display: flex;
   gap: 8px;
@@ -1069,5 +1073,237 @@
     background: #171a1d;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+/* ---------- Design studio: owner-chosen catalog layouts ---------- */
+/* Section rhythm and type come from the design tokens. */
+.shop-menu-sections {
+  gap: var(--shop-section-gap, 38px);
+}
+.shop-menu-section-head h3 {
+  font-family: var(--shop-font-display, inherit);
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: var(--shop-display-spacing, -0.5px);
+}
+.storefront .shop-menu-item {
+  border-radius: var(--shop-tile-radius, 22px);
+}
+
+/* Gallery: one continuous wall of image-first tiles. */
+.shop-catalog-items.layout-gallery {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.storefront .shop-gallery-tile {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: var(--shop-tile-radius, 8px);
+  background: var(--wash);
+  box-shadow: none;
+}
+.storefront .shop-gallery-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+.shop-gallery-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.shop-gallery-media > .shop-image {
+  position: absolute;
+  inset: 0;
+}
+.shop-gallery-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.45s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-gallery-tile:hover .shop-gallery-media img {
+    transform: scale(1.05);
+  }
+}
+.shop-gallery-copy {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  padding: 44px 14px 14px;
+  background: linear-gradient(transparent, #000000b8);
+  color: #fff;
+}
+.shop-gallery-copy h3 {
+  margin: 0 0 4px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  line-height: 1.35;
+}
+.shop-gallery-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #ffffffd9;
+  font-size: 11px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-gallery-copy .shop-product-bottom {
+  padding-top: 10px;
+  color: #fff;
+  font-size: 16px;
+}
+.shop-gallery-copy .shop-add-to-cart,
+.shop-gallery-copy .shop-qty-stepper {
+  background-color: #fff;
+  border-color: #fff;
+  color: #17231e;
+}
+/* The stock pill belongs to the photo, so it must stay above the overlay. */
+.shop-gallery-tile .shop-stock-label {
+  z-index: 3;
+}
+.shop-gallery-copy .shop-qty-stepper button {
+  color: #17231e;
+}
+
+/* Menu: dotted leaders and a serif line, like a printed card. */
+.shop-catalog-items.layout-menu {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.shop-menu-row {
+  align-items: baseline;
+  padding: 16px 4px;
+}
+.shop-menu-row .shop-price-row-copy h3 {
+  font-family: var(--shop-font-display, inherit);
+  font-size: 18px;
+  font-weight: var(--shop-display-weight, 600);
+  letter-spacing: var(--shop-display-spacing, -0.2px);
+}
+.shop-menu-row .shop-price-row-copy p {
+  overflow: visible;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+  text-overflow: clip;
+}
+.shop-menu-row .shop-price-leader {
+  display: block;
+  flex: 1;
+  min-width: 20px;
+  align-self: center;
+  border-bottom: 1px dotted color-mix(in srgb, var(--ink) 32%, transparent);
+}
+.shop-menu-row .shop-price-row-price {
+  font-size: 17px;
+}
+
+/* Featured: a hero item, then a regular card grid. */
+.shop-catalog-items.layout-featured {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.storefront .shop-featured-item {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--shop-radius, 24px);
+}
+.shop-featured-item .shop-product-image {
+  flex: 0 0 46%;
+  width: 46%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 18px);
+}
+.shop-featured-item .shop-product-copy {
+  justify-content: center;
+  padding: 18px 22px;
+}
+.shop-featured-eyebrow {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.shop-featured-item h3 {
+  font-family: var(--shop-font-display, inherit);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: var(--shop-display-spacing, -0.6px);
+  line-height: 1.2;
+}
+.shop-featured-item p {
+  max-width: 54ch;
+  font-size: 13px;
+}
+.shop-featured-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+/* Shelves: a swipeable row of product cards. */
+.shop-catalog-items.layout-shelves {
+  display: flex;
+  overflow-x: auto;
+  gap: 14px;
+  padding-bottom: 8px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+}
+.layout-shelves > .shop-photo-card {
+  flex: 0 0 clamp(196px, 40vw, 252px);
+  scroll-snap-align: start;
+}
+
+@media (max-width: 720px) {
+  .storefront .shop-featured-item {
+    flex-direction: column;
+  }
+  .shop-featured-item .shop-product-image {
+    flex: none;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+  }
+  .shop-featured-item .shop-product-copy {
+    padding: 14px 6px 6px;
+  }
+  .shop-catalog-items.layout-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .shop-menu-row .shop-price-row-copy h3 {
+    font-size: 16px;
+  }
+  .shop-menu-row .shop-add-to-cart,
+  .shop-menu-row .shop-qty-stepper {
+    flex-shrink: 0;
+  }
+}
+/* Keep a long dish name readable: the leader is decoration, not a column. */
+@media (max-width: 560px) {
+  .shop-menu-row {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .shop-menu-row .shop-price-leader {
+    display: none;
   }
 }

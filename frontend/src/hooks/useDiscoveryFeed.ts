@@ -75,6 +75,9 @@ export function useDiscoveryFeed() {
   const [algorithm, setAlgorithm] = useState<Algorithm>(
     view === 'trending' ? 'trending' : 'mixed',
   );
+  // Explore is a presentation of the discovery feed: an image-only grid over
+  // every published post, ordered newest first like the old "Latest" tab.
+  const [explore, setExplore] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [store, setStore] = useState<Store | null>(null);
   const [search, setSearch] = useState('');
@@ -173,8 +176,15 @@ export function useDiscoveryFeed() {
     setStore(null);
     setCategories([]);
     setSearch('');
+    setExplore(false);
     setAlgorithm(next === 'trending' ? 'trending' : 'mixed');
     window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  // Tabs choose the discovery surface, not just an ordering: "Explore" paints
+  // every post as a tile grid, while "For you" restores the ranked cards.
+  function selectExplore(next: boolean) {
+    setExplore(next);
+    setAlgorithm(next ? 'recent' : 'mixed');
   }
   function toggleCategory(slug: string) {
     setCategories((current) =>
@@ -197,10 +207,17 @@ export function useDiscoveryFeed() {
   const isLoading =
     settingsQuery.isLoading ||
     (!demo && (feed.isLoading || storesQuery.isLoading));
+  // The tile grid only exists on the discovery surface; a selected shop,
+  // search view or demo switch always falls back to the card feed.
+  const exploreActive = explore && view === 'discover' && !store;
   const feedTitle =
     store?.name ||
     {
-      discover: algorithm === 'recent' ? 'Latest' : 'For you',
+      discover: exploreActive
+        ? 'Explore'
+        : algorithm === 'recent'
+          ? 'Latest'
+          : 'For you',
       trending: 'Trending',
       videos: 'Videos',
       saved: 'Saved',
@@ -213,6 +230,8 @@ export function useDiscoveryFeed() {
   return {
     view,
     algorithm,
+    explore,
+    exploreActive,
     categories,
     store,
     search,
@@ -239,6 +258,7 @@ export function useDiscoveryFeed() {
     feedTitle,
     setView,
     setAlgorithm,
+    selectExplore,
     setCategories,
     setStore,
     setSearch,

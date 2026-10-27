@@ -6,10 +6,14 @@ export function MediaView({
   media,
   title,
   eager = false,
+  sizes = '(max-width: 600px) 100vw, 440px',
 }: {
   media?: Media;
   title: string;
   eager?: boolean;
+  /** Lets callers declare smaller slots (explore tiles) so browsers do not
+      download a full-card image for a thumbnail. */
+  sizes?: string;
 }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -47,12 +51,12 @@ export function MediaView({
           <source
             type="image/avif"
             srcSet={srcSet('image/avif') || undefined}
-            sizes="(max-width: 600px) 100vw, 440px"
+            sizes={sizes}
           />
           <source
             type="image/webp"
             srcSet={srcSet('image/webp') || undefined}
-            sizes="(max-width: 600px) 100vw, 440px"
+            sizes={sizes}
           />
         </>
       )}

@@ -10,6 +10,8 @@
   position: relative;
   overflow-wrap: anywhere;
   background: var(--wash);
+  /* A saved design can pair a display face with a quieter body face. */
+  font-family: var(--shop-font-body, var(--font-family));
 }
 /* Opaque fallbacks keep controls readable when backdrop filters are unavailable. */
 .storefront .shop-glass {
@@ -1186,5 +1188,87 @@
   .shop-product:hover,
   .shop-product:hover .shop-product-image img {
     transform: none;
+  }
+}
+
+/* ---------- Design studio: typography and hero styles ---------- */
+/* The owner's chosen display face shapes names and section titles. Everything
+   falls back to the legacy look when no design is saved. */
+.storefront .shop-intro h1 {
+  font-family: var(--shop-font-display, inherit);
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: var(--shop-display-spacing, -1px);
+}
+.shop-hero {
+  position: relative;
+}
+.shop-hero.hero-minimal .shop-banner {
+  height: clamp(140px, 14vw, 200px);
+}
+.shop-hero.hero-minimal .shop-logo {
+  margin-top: -34px;
+}
+.shop-hero.hero-minimal .shop-logo .store-avatar.large {
+  width: 78px;
+  height: 78px;
+  font-size: 24px;
+}
+.shop-hero.hero-minimal .shop-intro {
+  padding-top: 8px;
+}
+.shop-hero.hero-split .shop-banner {
+  height: clamp(170px, 17vw, 230px);
+}
+@media (min-width: 960px) {
+  .shop-hero.hero-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: stretch;
+    background: var(--surface);
+  }
+  .shop-hero.hero-split .shop-banner {
+    height: auto;
+    min-height: 300px;
+  }
+  .shop-hero.hero-split .shop-profile {
+    width: calc(100% - 56px);
+    margin: 42px auto;
+  }
+  .shop-hero.hero-split .shop-logo {
+    margin-top: 0;
+  }
+}
+.shop-hero.hero-poster .shop-banner {
+  height: clamp(310px, 36vw, 470px);
+}
+.shop-hero.hero-poster .shop-profile {
+  margin-top: -112px;
+  padding: 22px 26px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--shop-radius, 24px);
+  background: var(--surface);
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.shop-hero.hero-immersive .shop-banner {
+  height: clamp(360px, 46vw, 560px);
+}
+.shop-hero.hero-immersive .shop-profile {
+  margin-top: -150px;
+  padding: 24px 28px 6px;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: var(--shop-radius, 24px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--ink) 18%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+@media (max-width: 720px) {
+  .shop-hero.hero-poster .shop-profile,
+  .shop-hero.hero-immersive .shop-profile {
+    margin-top: -72px;
+    padding: 16px 16px 2px;
+  }
+  .shop-hero.hero-immersive .shop-banner {
+    height: clamp(280px, 58vw, 380px);
   }
 }

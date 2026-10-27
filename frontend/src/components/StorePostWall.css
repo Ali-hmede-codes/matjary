@@ -1,0 +1,123 @@
+/* Owner-chosen post wall layouts. Loaded after StorePage.css so the shared
+   tile frame (portrait, no chrome) stays the base for every variant. */
+
+/* Rail: a swipeable strip. Tiles keep the portrait frame and snap into place. */
+.shop-post-wall.layout-rail {
+  display: flex;
+  overflow-x: auto;
+  gap: 8px;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
+  overscroll-behavior-x: contain;
+}
+.shop-post-wall.layout-rail .shop-post-tile {
+  flex: 0 0 clamp(176px, 38vw, 248px);
+  scroll-snap-align: start;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+
+/* Masonry: mixed portrait ratios in balanced columns. */
+.shop-post-wall.layout-masonry {
+  display: block;
+  column-count: 3;
+  column-gap: 6px;
+}
+.shop-post-wall.layout-masonry .shop-post-tile {
+  width: 100%;
+  margin-bottom: 6px;
+  break-inside: avoid;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.shop-post-wall.layout-masonry .shop-post-tile:nth-child(4n + 2) {
+  aspect-ratio: 1 / 1;
+}
+.shop-post-wall.layout-masonry .shop-post-tile:nth-child(4n + 3) {
+  aspect-ratio: 4 / 5;
+}
+
+/* Spotlight: the newest post takes a double frame, the rest follow. */
+@media (min-width: 900px) {
+  .shop-post-wall.layout-spotlight {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-flow: dense;
+  }
+  .shop-post-wall.layout-spotlight .shop-post-tile:first-child {
+    grid-column: span 2;
+    grid-row: span 2;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--shop-tile-radius, 14px);
+  }
+}
+
+/* Mosaic: alternating wide and tall tiles with a dense, collage feel. */
+@media (min-width: 900px) {
+  .shop-post-wall.layout-mosaic {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-flow: dense;
+    gap: 8px;
+  }
+  .shop-post-wall.layout-mosaic .shop-post-tile:nth-child(5n + 1),
+  .shop-post-wall.layout-mosaic .shop-post-tile:nth-child(5n + 4) {
+    grid-column: span 2;
+    border-radius: var(--shop-tile-radius, 14px);
+  }
+  .shop-post-wall.layout-mosaic .shop-post-tile:nth-child(5n + 1) {
+    aspect-ratio: 4 / 5;
+  }
+}
+
+/* Frames: gallery prints with a border and breathing room. */
+.shop-post-wall.layout-frames {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (min-width: 760px) {
+  .shop-post-wall.layout-frames {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+  }
+}
+.shop-post-wall.layout-frames .shop-post-tile {
+  aspect-ratio: 4 / 5;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--shop-tile-radius, 7px);
+  background: var(--surface);
+  box-shadow: 0 10px 24px #101b160a;
+}
+.shop-post-wall.layout-frames .shop-post-thumbnail {
+  inset: 9px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+.shop-post-wall.layout-frames .shop-post-indicators {
+  top: 16px;
+  right: 16px;
+}
+
+@media (min-width: 900px) {
+  .shop-post-wall.layout-masonry {
+    column-count: 4;
+  }
+}
+
+@media (max-width: 640px) {
+  .shop-post-wall.layout-masonry {
+    column-count: 2;
+  }
+  .shop-post-wall.layout-frames {
+    gap: 10px;
+  }
+  .shop-post-wall.layout-frames .shop-post-tile {
+    padding: 6px;
+  }
+  .shop-post-wall.layout-frames .shop-post-thumbnail {
+    inset: 6px;
+  }
+  .shop-post-wall.layout-frames .shop-post-indicators {
+    top: 12px;
+    right: 12px;
+  }
+}

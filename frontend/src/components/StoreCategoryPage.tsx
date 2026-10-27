@@ -9,6 +9,7 @@ import {
   type StoreCategoryList,
 } from '../lib/api';
 import { demoProducts, demoStores } from '../lib/demo';
+import { resolveCategoryLayout } from '../lib/design.ts';
 import {
   categorySlug,
   catalogLayout,
@@ -83,7 +84,6 @@ export function StoreCategoryPage({
     (group) => categorySlug(group.name) === categoryParam,
   );
   const group = categoryPosition >= 0 ? groups[categoryPosition] : undefined;
-  const layout = catalogLayout(categoryPosition);
   const productsQuery = useInfiniteQuery({
     queryKey: ['storefront-category-products', shopSlug, group?.key ?? ''],
     initialPageParam: 0,
@@ -180,6 +180,10 @@ export function StoreCategoryPage({
     );
 
   const presentation = storePresentation(store);
+  // The section page honours the same design and rhythm as the shop page.
+  const layout = presentation.design
+    ? resolveCategoryLayout(presentation.design, categoryPosition, group.key)
+    : catalogLayout(categoryPosition);
   const shareUrl = `${window.location.origin}${storeCategoryPath(shopSlug, categoryParam, demo)}`;
   return (
     <StoreDetailShell
@@ -266,6 +270,8 @@ export function StoreCategoryPage({
           layout={layout}
           shopSlug={shopSlug}
           demo={demo}
+          showImages={presentation.design?.showProductImages}
+          showDescriptions={presentation.design?.showProductDescriptions}
         />
       ) : (
         <div className="shop-inline-state">

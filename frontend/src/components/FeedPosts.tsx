@@ -10,6 +10,7 @@ import {
 import { Fragment } from 'react';
 import type { DiscoveryFeedController } from '../hooks/useDiscoveryFeed';
 import { AdCard } from './AdCard';
+import { ExploreGrid } from './ExploreGrid';
 import { PostCard } from './PostCard';
 
 type FeedPostsProps = Pick<
@@ -18,6 +19,7 @@ type FeedPostsProps = Pick<
   | 'feed'
   | 'layout'
   | 'view'
+  | 'exploreActive'
   | 'posts'
   | 'ads'
   | 'withLikes'
@@ -37,6 +39,7 @@ export function FeedPosts({
   feed,
   layout,
   view,
+  exploreActive,
   posts,
   ads,
   withLikes,
@@ -54,18 +57,26 @@ export function FeedPosts({
     <>
       {!demo && feed.isPending && (
         <div
-          className={`post-grid ${layout === 'grid' ? 'compact-grid' : ''} ${view === 'videos' ? 'video-feed' : ''}`}
+          className={
+            exploreActive
+              ? 'explore-grid'
+              : `post-grid ${layout === 'grid' ? 'compact-grid' : ''} ${view === 'videos' ? 'video-feed' : ''}`
+          }
           role="status"
           aria-label="Loading discoveries"
         >
           <span className="sr-only">Finding your next favorites…</span>
-          {[0, 1].map((id) => (
-            <div key={id} className="skeleton-card" aria-hidden="true">
-              <div />
-              <div />
-              <div />
-            </div>
-          ))}
+          {exploreActive
+            ? Array.from({ length: 9 }, (_, id) => (
+                <div key={id} className="explore-skeleton" aria-hidden="true" />
+              ))
+            : [0, 1].map((id) => (
+                <div key={id} className="skeleton-card" aria-hidden="true">
+                  <div />
+                  <div />
+                  <div />
+                </div>
+              ))}
         </div>
       )}
       {!demo && feed.isError && (
@@ -90,7 +101,10 @@ export function FeedPosts({
           </div>
         </div>
       )}
-      {posts.length > 0 && (
+      {posts.length > 0 && exploreActive && (
+        <ExploreGrid posts={posts} demo={demo} onOpen={openPost} />
+      )}
+      {posts.length > 0 && !exploreActive && (
         <div
           className={`post-grid ${layout === 'grid' ? 'compact-grid' : ''} ${view === 'videos' ? 'video-feed' : ''}`}
         >

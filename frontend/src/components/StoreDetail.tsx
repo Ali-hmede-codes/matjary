@@ -52,7 +52,7 @@ export function StoreDetailShell({
   const count = cart.cart?.itemCount ?? 0;
   return (
     <div
-      className={`app storefront storefront-detail ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${count > 0 && !cart.open ? ' has-cart' : ''}`}
+      className={`app storefront storefront-detail ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${count > 0 && !cart.open ? ' has-cart' : ''}${presentation.design ? ` shop-design-${presentation.design.template}` : ''}`}
       style={presentation.theme as CSSProperties}
     >
       <a className="skip-link" href="#shop-detail-main">

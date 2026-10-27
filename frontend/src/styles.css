@@ -10,6 +10,7 @@
 @import './components/StoreAvatar.css';
 @import './components/FeedToolbar.css';
 @import './components/FeedPosts.css';
+@import './components/ExploreGrid.css';
 @import './components/MediaView.css';
 @import './components/AutoplayVideo.css';
 @import './components/PostCard.css';
@@ -20,6 +21,7 @@
 @import './components/Feedback.css';
 @import './components/PostDialog.css';
 @import './components/StorePage.css';
+@import './components/StorePostWall.css';
 @import './components/StoreMenu.css';
 @import './components/ShopBranches.css';
 @import './components/PricingPage.css';

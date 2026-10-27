@@ -1,4 +1,5 @@
 import { mediaUrl, parseLikeResponse, parseViewResponse } from './website';
+import type { DesignSettingsInput } from './design';
 
 export interface StoreBranch {
   id: string;
@@ -30,6 +31,8 @@ export interface Store {
   storeType?: 'ecommerce' | 'restaurant_menu';
   businessCategory?: string | null;
   businessCategoryLabel?: string | null;
+  // The owner's saved visual system; the storefront renders this exact look.
+  designSettings?: DesignSettingsInput | null;
   logoKey?: string | null;
   bannerKey?: string | null;
   socialMediaLinks?: Record<string, string> | null;

@@ -18,6 +18,7 @@ import {
 import { Type } from 'class-transformer';
 import { SocialMediaLinks, StoreType } from '@app/database';
 import { StoreBranchDto } from './store-branch.dto';
+import { StoreDesignSettingsDto } from './store-design.dto';
 
 const HTTP_URL = /^https?:\/\//iu;
 
@@ -169,6 +170,14 @@ export class UpdateStoreDto {
   @ValidateNested()
   @Type(() => UpdateStoreLocationDto)
   location?: UpdateStoreLocationDto | null;
+
+  // The design studio's complete visual system. Null clears it and returns the
+  // shop to the default storefront look.
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => StoreDesignSettingsDto)
+  designSettings?: StoreDesignSettingsDto | null;
 
   // The complete branch list, in display order. Omitted ids are deleted and
   // new entries are created inside the same locked store transaction.
