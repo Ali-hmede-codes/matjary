@@ -17,6 +17,7 @@ import {
   formatProductPrice,
   menuCategoryGroups,
   productCategoryKey,
+  productFromPriceCents,
   productOptionSelection,
   storeCategoryPath,
   storeMediaUrl,
@@ -130,7 +131,7 @@ export function StoreProductPage({
   const images = product?.imageKeys?.filter(Boolean) ?? [];
   const heroImage = images[imageIndex] ?? images[0];
   const shareUrl = `${window.location.origin}${storeProductPath(shopSlug, productSlug, demo)}`;
-  const price = product ? decimalPrice(product.priceCents) : '';
+  const price = product ? decimalPrice(productFromPriceCents(product)) : '';
 
   usePageSeo(
     store && product
@@ -199,26 +200,21 @@ export function StoreProductPage({
   const selectedOptions = optionGroups.length
     ? productOptionSelection(product, chosenOptions)
     : null;
-  const baseCents = /^\d+$/u.test(product.priceCents)
-    ? BigInt(product.priceCents)
-    : null;
-  // Update the headline price as choices are made, even before every group is
-  // complete, so shoppers see the effect of a paid option immediately.
-  const chosenExtraCents = optionGroups.reduce((sum, group) => {
-    const value = group.values.find(
-      (entry) => entry.label === chosenOptions[group.name],
-    );
-    return (
-      sum +
-      (value?.priceCents && /^\d+$/u.test(value.priceCents)
-        ? BigInt(value.priceCents)
-        : 0n)
-    );
-  }, 0n);
-  const displayPriceCents =
-    baseCents !== null
-      ? (baseCents + chosenExtraCents).toString()
-      : product.priceCents;
+  // Update the headline price as soon as a value with its own price is picked,
+  // even before every group is complete.
+  const chosenPriceCents = optionGroups.reduce<string | null>(
+    (found, group) => {
+      if (found) return found;
+      const value = group.values.find(
+        (entry) => entry.label === chosenOptions[group.name],
+      );
+      return value?.priceCents && /^\d+$/u.test(value.priceCents)
+        ? value.priceCents
+        : null;
+    },
+    null,
+  );
+  const displayPriceCents = chosenPriceCents ?? product.priceCents;
   return (
     <StoreDetailShell
       store={store}
@@ -282,16 +278,6 @@ export function StoreProductPage({
           <p className="shop-product-detail-price">
             {formatProductPrice(displayPriceCents, product.currency)}
           </p>
-          {baseCents !== null && chosenExtraCents > 0n && (
-            <p className="shop-product-price-note">
-              Base {formatProductPrice(product.priceCents, product.currency)} +
-              options{' '}
-              {formatProductPrice(
-                chosenExtraCents.toString(),
-                product.currency,
-              )}
-            </p>
-          )}
           {product.description && (
             <p className="shop-product-detail-description">
               {product.description}
@@ -328,7 +314,6 @@ export function StoreProductPage({
                           <span>{value.label}</span>
                           {value.priceCents && value.priceCents !== '0' && (
                             <small>
-                              +
                               {formatProductPrice(
                                 value.priceCents,
                                 product.currency,

@@ -585,12 +585,6 @@
   font-size: 11px;
   line-height: 1.5;
 }
-.shop-product-price-note {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
 .shop-product-stock {
   margin-top: 12px;
   color: var(--muted);

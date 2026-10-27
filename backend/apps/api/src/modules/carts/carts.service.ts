@@ -20,6 +20,7 @@ import {
   effectiveLimits,
   publicWhere,
   normalizeSelectedOptions,
+  resolveOptionUnitPriceCents,
   selectedOptionsKey,
 } from '@app/database';
 import { AddToCartDto } from './dto/add-to-cart.dto';
@@ -227,16 +228,12 @@ export class CartsService {
         dto.selectedOptions,
       );
       const optionKey = selectedOptionsKey(selectedOptions);
-      // Option prices are additions to the product's base price. The request
-      // never supplies prices; they always come from the product record.
-      const optionPriceCents =
-        selectedOptions?.reduce(
-          (sum, option) => sum + BigInt(option.priceCents ?? '0'),
-          0n,
-        ) ?? 0n;
-      const unitPriceCents = (
-        BigInt(product.priceCents) + optionPriceCents
-      ).toString();
+      // A value with its own price replaces the product's base price. The
+      // request never supplies prices; they always come from the product.
+      const unitPriceCents = resolveOptionUnitPriceCents(
+        product.priceCents,
+        selectedOptions,
+      );
 
       const cart = await this.getOrCreateCart(store.id, userId, visitorId);
 
@@ -638,11 +635,11 @@ export class CartsService {
       if (item.selectedOptions?.length) {
         const optionLine = item.selectedOptions
           .map((option) => {
-            const extra =
+            const price =
               option.priceCents && option.priceCents !== '0'
-                ? ` (+${formatCurrency(option.priceCents, currency)})`
+                ? ` (${formatCurrency(option.priceCents, currency)})`
                 : '';
-            return `${option.name}: ${option.value}${extra}`;
+            return `${option.name}: ${option.value}${price}`;
           })
           .join(' · ');
         lines.push(`  ${optionLine}`);

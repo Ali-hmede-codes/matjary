@@ -50,7 +50,7 @@ export interface Store {
 
 export interface ProductOptionValue {
   label: string;
-  // Additional amount in cents, or null when the value uses the base price.
+  // This value's own price in cents, or null when it uses the base price.
   priceCents: string | null;
 }
 

@@ -17,7 +17,8 @@ export class ProductOptionValueDto {
   @Length(1, 80)
   label!: string;
 
-  // Optional additional amount added to the product's base price.
+  // Optional price for this value alone, replacing the product's base price.
+  // At most one option group may carry prices.
   @IsOptional()
   @IsInt()
   @Min(0)

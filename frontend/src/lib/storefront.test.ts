@@ -529,7 +529,7 @@ test('product option selection stays complete and in product order', () => {
   );
 });
 
-test('catalog prices say “from” when an option adds to the base price', () => {
+test('catalog prices say “from” the lowest value price', () => {
   assert.equal(
     productPriceLabel({
       priceCents: '1250',
@@ -540,15 +540,36 @@ test('catalog prices say “from” when an option adds to the base price', () =
   );
   assert.equal(
     productPriceLabel({
-      priceCents: '1250',
+      priceCents: '0',
       currency: 'USD',
       options: [
         {
           name: 'Size',
-          values: [{ label: 'Large', priceCents: '250' }],
+          values: [
+            { label: 'Small', priceCents: '1000' },
+            { label: 'Medium', priceCents: '1500' },
+            { label: 'Large', priceCents: '2000' },
+          ],
         },
       ],
     }),
-    'from $12.50',
+    'from $10.00',
+  );
+  // An unpriced value can still fall back to the base price.
+  assert.equal(
+    productPriceLabel({
+      priceCents: '900',
+      currency: 'USD',
+      options: [
+        {
+          name: 'Size',
+          values: [
+            { label: 'Small', priceCents: null },
+            { label: 'Large', priceCents: '2000' },
+          ],
+        },
+      ],
+    }),
+    'from $9.00',
   );
 });

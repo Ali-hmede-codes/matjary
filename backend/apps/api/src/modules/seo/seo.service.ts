@@ -60,6 +60,8 @@ import {
   assertSubscriptionActive,
   adminContext,
   businessCategoryLabel,
+  productFromPriceCents,
+  readProductOptions,
   type AdminActor,
 } from '@app/database';
 
@@ -1290,7 +1292,11 @@ export class SeoService {
     const ogDescription =
       seo.ogDescription || product.description || description;
 
-    const price = (parseInt(product.priceCents, 10) / 100).toFixed(2);
+    const lowestPriceCents = productFromPriceCents(
+      product.priceCents,
+      readProductOptions(product.options),
+    );
+    const price = (parseInt(lowestPriceCents, 10) / 100).toFixed(2);
     const isInStock =
       product.status === 'active' &&
       (product.stockQuantity === null || product.stockQuantity > 0);

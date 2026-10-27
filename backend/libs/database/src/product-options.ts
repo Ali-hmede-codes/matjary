@@ -1,9 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 
-// Product choices are small owner-defined lists (size, color, ...). Each value
-// may add an optional amount to the product's base price. Prices are stored as
-// BIGINT strings so cents never pass through JavaScript floating point, and a
-// cart line snapshots the chosen values plus their prices at add time.
+// Product choices are small owner-defined lists (size, color, ...). A value may
+// carry its own price that replaces the product's base price (small $10, medium
+// $15, large $20); values without a price fall back to the base price. Prices
+// are stored as BIGINT strings so cents never pass through JavaScript floating
+// point, and a cart line snapshots the chosen values plus their prices.
 export interface ProductOptionValue {
   label: string;
   priceCents: string | null;
@@ -94,14 +95,14 @@ function readOptionValue(raw: unknown): ProductOptionValue | null {
   if (price === null) return null;
   return {
     label: cleanLabel,
-    // Zero means "no extra cost"; keep the stored JSON compact and explicit.
+    // Zero means "use the base price"; keep the stored JSON compact.
     priceCents: price > 0n ? price.toString() : null,
   };
 }
 
 /**
- * Reads options from the database. Legacy string values become priced values
- * with no extra cost, and malformed groups are dropped instead of breaking a
+ * Reads options from the database. Legacy string values become values without
+ * their own price, and malformed groups are dropped instead of breaking a
  * public product page. Writes use normalizeProductOptions below.
  */
 export function readProductOptions(
@@ -149,6 +150,9 @@ export function normalizeProductOptions(
     invalid(`A product can have at most ${MAX_PRODUCT_OPTION_GROUPS} options`);
   const groups: ProductOptionGroup[] = [];
   const names = new Set<string>();
+  // Unit price is resolved from the first priced selection, so two priced
+  // groups would make the result depend on option order. Reject that instead.
+  let pricedGroup: string | null = null;
   for (const group of input) {
     if (
       !group ||
@@ -170,9 +174,7 @@ export function normalizeProductOptions(
     for (const raw of group.values) {
       const value = readOptionValue(raw);
       if (!value)
-        invalid(
-          'Each option value needs a label and a non-negative extra price',
-        );
+        invalid('Each option value needs a label and a non-negative price');
       const valueKey = value.label.toLocaleLowerCase('en-US');
       if (seen.has(valueKey)) invalid('Option value labels must be unique');
       seen.add(valueKey);
@@ -183,6 +185,13 @@ export function normalizeProductOptions(
       invalid(
         `Each option can have at most ${MAX_PRODUCT_OPTION_VALUES} values`,
       );
+    if (values.some((value) => value.priceCents !== null)) {
+      if (pricedGroup !== null)
+        invalid(
+          'Only one option can set its own prices; leave the other options blank',
+        );
+      pricedGroup = name;
+    }
     groups.push({ name, values });
   }
   return groups;
@@ -233,6 +242,51 @@ export function normalizeSelectedOptions(
       priceCents: optionValue.priceCents,
     };
   });
+}
+
+/**
+ * A chosen value with its own price replaces the product's base price; an
+ * unpriced value keeps the base price. Writes allow only one priced group, so
+ * the first priced selection is unambiguous. The client mirrors this rule.
+ */
+export function resolveOptionUnitPriceCents(
+  basePriceCents: string,
+  selected: readonly SelectedProductOption[] | null | undefined,
+): string {
+  for (const option of selected ?? []) {
+    if (option.priceCents && /^\d+$/u.test(option.priceCents))
+      return option.priceCents;
+  }
+  return basePriceCents;
+}
+
+/**
+ * Lowest price a shopper can reach. Every value with its own price is a
+ * candidate; the base price stays reachable while any value is unpriced.
+ * Catalogue labels use this so a priced product never advertises $0.
+ */
+export function productFromPriceCents(
+  basePriceCents: string,
+  options: readonly ProductOptionGroup[] | null | undefined,
+): string {
+  let lowest: bigint | null = null;
+  let allPriced = Boolean(options?.length);
+  for (const group of options ?? []) {
+    for (const value of group.values) {
+      if (value.priceCents && /^\d+$/u.test(value.priceCents)) {
+        const cents = BigInt(value.priceCents);
+        if (lowest === null || cents < lowest) lowest = cents;
+      } else {
+        allPriced = false;
+      }
+    }
+  }
+  if (lowest === null) return basePriceCents;
+  if (!allPriced && /^\d+$/u.test(basePriceCents)) {
+    const base = BigInt(basePriceCents);
+    if (base < lowest) lowest = base;
+  }
+  return lowest.toString();
 }
 
 /** Stable comparison key for cart lines that share a product but not choices. */

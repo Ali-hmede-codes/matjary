@@ -3,6 +3,7 @@ import {
   productHasOptions,
   productOptionSelection,
   selectedOptionsKey,
+  selectedUnitPriceCents,
 } from './storefront.ts';
 
 export interface CartItem {
@@ -213,19 +214,8 @@ export function updateDemoCart(
     throw new CartRequestError(409);
   if (product.currency !== cart.currency || !/^\d+$/u.test(product.priceCents))
     throw new CartRequestError(400);
-  // Option prices are additions to the base price, matching the API.
-  const optionPriceCents =
-    selection?.reduce((sum, option) => {
-      return (
-        sum +
-        (option.priceCents && /^\d+$/u.test(option.priceCents)
-          ? BigInt(option.priceCents)
-          : 0n)
-      );
-    }, 0n) ?? 0n;
-  const unitPriceCents = (
-    BigInt(product.priceCents) + optionPriceCents
-  ).toString();
+  // A value with its own price replaces the base price, matching the API.
+  const unitPriceCents = selectedUnitPriceCents(product.priceCents, selection);
   const item: CartItem = {
     id: lineId,
     productId: product.id,

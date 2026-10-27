@@ -348,7 +348,10 @@ export function formatProductPrice(cents: string, currency: string): string {
 export function productPriceLabel(
   product: Pick<Product, 'options' | 'priceCents' | 'currency'>,
 ): string {
-  const price = formatProductPrice(product.priceCents, product.currency);
+  const price = formatProductPrice(
+    productFromPriceCents(product),
+    product.currency,
+  );
   return productHasPricedOptions(product) ? `from ${price}` : price;
 }
 
@@ -388,7 +391,7 @@ export function productHasOptions(product: Pick<Product, 'options'>): boolean {
   return Boolean(product.options?.length);
 }
 
-/** True when at least one option value adds to the base price. */
+/** True when at least one option value sets its own price. */
 export function productHasPricedOptions(
   product: Pick<Product, 'options'>,
 ): boolean {
@@ -399,6 +402,45 @@ export function productHasPricedOptions(
       ),
     ),
   );
+}
+
+/**
+ * Lowest price a shopper can reach. Every value with its own price is a
+ * candidate; the base price stays reachable while any value is unpriced.
+ */
+export function productFromPriceCents(
+  product: Pick<Product, 'options' | 'priceCents'>,
+): string {
+  let lowest: bigint | null = null;
+  let allPriced = Boolean(product.options?.length);
+  for (const group of product.options ?? []) {
+    for (const value of group.values) {
+      if (value.priceCents && /^\d+$/u.test(value.priceCents)) {
+        const cents = BigInt(value.priceCents);
+        if (lowest === null || cents < lowest) lowest = cents;
+      } else {
+        allPriced = false;
+      }
+    }
+  }
+  if (lowest === null) return product.priceCents;
+  if (!allPriced && /^\d+$/u.test(product.priceCents)) {
+    const base = BigInt(product.priceCents);
+    if (base < lowest) lowest = base;
+  }
+  return lowest.toString();
+}
+
+/** A chosen value with its own price replaces the product's base price. */
+export function selectedUnitPriceCents(
+  basePriceCents: string,
+  options?: readonly SelectedProductOption[] | null,
+): string {
+  for (const option of options ?? []) {
+    if (option.priceCents && /^\d+$/u.test(option.priceCents))
+      return option.priceCents;
+  }
+  return basePriceCents;
 }
 
 /** Stable signature that separates cart lines sharing a product. */

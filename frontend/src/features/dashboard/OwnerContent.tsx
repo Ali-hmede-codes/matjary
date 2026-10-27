@@ -74,6 +74,8 @@ interface OptionValueDraft {
 
 interface OptionGroupDraft {
   name: string;
+  // Prices are hidden until the owner asks for value-specific prices.
+  priced: boolean;
   values: OptionValueDraft[];
 }
 
@@ -92,6 +94,9 @@ function optionDrafts(
 ): OptionGroupDraft[] {
   return (groups ?? []).map((group) => ({
     name: group.name,
+    priced: group.values.some(
+      (value) => value.priceCents != null && value.priceCents !== '0',
+    ),
     values: group.values.map((value) => ({
       label: value.label,
       price: value.priceCents ? decimalPrice(value.priceCents) : '',
@@ -409,8 +414,27 @@ function ContentEditor({
     if (options.length >= 10) return;
     setOptions((current) => [
       ...current,
-      { name: '', values: [{ label: '', price: '' }] },
+      { name: '', priced: false, values: [{ label: '', price: '' }] },
     ]);
+    setOptionsTouched(true);
+    setOptionsError('');
+  }
+  function toggleOptionPrices(groupIndex: number) {
+    setOptions((current) =>
+      current.map((group, index) => {
+        if (index !== groupIndex) return group;
+        const priced = !group.priced;
+        return {
+          ...group,
+          priced,
+          // Hiding prices must also stop sending them, so turning the switch
+          // off returns every value to the item's base price.
+          values: priced
+            ? group.values
+            : group.values.map((value) => ({ ...value, price: '' })),
+        };
+      }),
+    );
     setOptionsTouched(true);
     setOptionsError('');
   }
@@ -485,7 +509,7 @@ function ContentEditor({
     for (const group of options) {
       const optionName = group.name.trim();
       const rows = group.values.filter(
-        (row) => row.label.trim() || row.price.trim(),
+        (row) => row.label.trim() || (group.priced && row.price.trim()),
       );
       // An option row that was added and left blank is simply ignored.
       if (!optionName && !rows.length) continue;
@@ -514,12 +538,13 @@ function ContentEditor({
             groups: null,
             error: `Give every value in “${optionName}” a name.`,
           };
-        const priceText = row.price.trim();
+        const priceText = group.priced ? row.price.trim() : '';
         const cents = priceText === '' ? null : priceInput(priceText);
-        if (cents === null)
+        // A blank price is valid: the value keeps the item's base price.
+        if (priceText !== '' && cents === null)
           return {
             groups: null,
-            error: `Use an extra price such as 2.50 for “${label}”, or leave it blank.`,
+            error: `Use a price such as 15.00 for “${label}”, or leave it blank.`,
           };
         const valueKey = label.toLowerCase();
         if (seen.has(valueKey))
@@ -544,6 +569,15 @@ function ContentEditor({
       return {
         groups: null,
         error: 'A product can have at most 10 options.',
+      };
+    const pricedGroups = groups.filter((group) =>
+      group.values.some((value) => value.priceCents !== null),
+    );
+    if (pricedGroups.length > 1)
+      return {
+        groups: null,
+        error:
+          'Only one option can set its own prices, such as Size. Leave the other options blank.',
       };
     return { groups: groups.length ? groups : null, error: '' };
   }
@@ -748,7 +782,7 @@ function ContentEditor({
           <>
             <div className="panel-two-fields">
               <label>
-                Price
+                Base price
                 <input
                   required
                   inputMode="decimal"
@@ -762,6 +796,9 @@ function ContentEditor({
                   placeholder="0.00"
                   maxLength={18}
                 />
+                <small>
+                  Used when an option value has no price of its own.
+                </small>
               </label>
               <label>
                 Currency
@@ -815,8 +852,8 @@ function ContentEditor({
               </legend>
               <p className="panel-muted">
                 Add choices such as Size or Color. Shoppers must pick one value
-                from each option. An extra price is added to the item’s base
-                price; leave it blank when the value costs the same.
+                from each option. Prices are optional: leave them blank to use
+                the item’s base price.
               </p>
               {options.map((group, index) => (
                 <div className="panel-option-group" key={index}>
@@ -845,9 +882,26 @@ function ContentEditor({
                       <Trash2 size={16} />
                     </button>
                   </div>
+                  <label className="panel-option-price-toggle">
+                    <input
+                      type="checkbox"
+                      checked={group.priced}
+                      onChange={() => toggleOptionPrices(index)}
+                    />
+                    <span>
+                      Set a price for each value
+                      <small>
+                        Example: $10 small, $15 medium, $20 large. A blank price
+                        uses the item’s base price.
+                      </small>
+                    </span>
+                  </label>
                   <div className="panel-option-values">
                     {group.values.map((value, valueIndex) => (
-                      <div className="panel-option-value-row" key={valueIndex}>
+                      <div
+                        className={`panel-option-value-row${group.priced ? '' : ' is-plain'}`}
+                        key={valueIndex}
+                      >
                         <label className="panel-option-value-label">
                           Value
                           <input
@@ -861,20 +915,22 @@ function ContentEditor({
                             placeholder="e.g. Large"
                           />
                         </label>
-                        <label className="panel-option-value-price">
-                          Extra price (optional)
-                          <input
-                            inputMode="decimal"
-                            maxLength={18}
-                            value={value.price}
-                            onChange={(e) =>
-                              updateValue(index, valueIndex, {
-                                price: e.target.value,
-                              })
-                            }
-                            placeholder="0.00"
-                          />
-                        </label>
+                        {group.priced && (
+                          <label className="panel-option-value-price">
+                            Price
+                            <input
+                              inputMode="decimal"
+                              maxLength={18}
+                              value={value.price}
+                              onChange={(e) =>
+                                updateValue(index, valueIndex, {
+                                  price: e.target.value,
+                                })
+                              }
+                              placeholder={price || 'Item price'}
+                            />
+                          </label>
+                        )}
                         <button
                           type="button"
                           className="panel-option-value-remove"

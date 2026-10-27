@@ -146,52 +146,56 @@ const productNames = [
 
 export const demoProducts: Product[] = examples.flatMap(
   ([, , description, photo, category], storeIndex) =>
-    (productNames[storeIndex] ?? []).map((name, index) => ({
-      id: `demo-product-${storeIndex}-${index}`,
-      storeId: `demo-store-${storeIndex}`,
-      slug: `demo-product-${storeIndex}-${index}`,
-      name,
-      description,
-      priceCents: String((storeIndex === 1 ? 350 : 1800) + index * 250),
-      currency: 'USD',
-      category: storeIndex === 3 && index === 2 ? 'beverage' : category,
-      stockQuantity: null,
-      imageKeys: [
-        `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=600&q=85`,
-      ],
-      tags: null,
-      options:
-        storeIndex === 0 && index === 0
-          ? [
-              {
-                name: 'Color',
-                values: [
-                  { label: 'Sand', priceCents: null },
-                  { label: 'Forest', priceCents: null },
-                  { label: 'Terracotta', priceCents: '150' },
-                ],
-              },
-              {
-                name: 'Size',
-                values: [
-                  { label: '250 ml', priceCents: null },
-                  { label: '400 ml', priceCents: '250' },
-                ],
-              },
-            ]
-          : storeIndex === 1
+    (productNames[storeIndex] ?? []).map((name, index) => {
+      const basePrice = (storeIndex === 1 ? 350 : 1800) + index * 250;
+      return {
+        id: `demo-product-${storeIndex}-${index}`,
+        storeId: `demo-store-${storeIndex}`,
+        slug: `demo-product-${storeIndex}-${index}`,
+        name,
+        description,
+        priceCents: String(basePrice),
+        currency: 'USD',
+        category: storeIndex === 3 && index === 2 ? 'beverage' : category,
+        stockQuantity: null,
+        imageKeys: [
+          `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=600&q=85`,
+        ],
+        tags: null,
+        options:
+          storeIndex === 0 && index === 0
             ? [
+                {
+                  name: 'Color',
+                  values: [
+                    { label: 'Sand', priceCents: null },
+                    { label: 'Forest', priceCents: null },
+                    { label: 'Terracotta', priceCents: null },
+                  ],
+                },
                 {
                   name: 'Size',
                   values: [
-                    { label: 'Small', priceCents: null },
-                    { label: 'Medium', priceCents: '50' },
-                    { label: 'Large', priceCents: '100' },
+                    { label: '250 ml', priceCents: null },
+                    // Own price replaces the base price, not an addition.
+                    { label: '400 ml', priceCents: '2050' },
                   ],
                 },
               ]
-            : null,
-    })),
+            : storeIndex === 1
+              ? [
+                  {
+                    name: 'Size',
+                    values: [
+                      { label: 'Small', priceCents: null },
+                      { label: 'Medium', priceCents: String(basePrice + 50) },
+                      { label: 'Large', priceCents: String(basePrice + 100) },
+                    ],
+                  },
+                ]
+              : null,
+      };
+    }),
 );
 
 export const demoPosts: (Post & { category: string })[] = examples.map(

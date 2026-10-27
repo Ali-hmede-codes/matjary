@@ -102,14 +102,15 @@ test('option combinations become separate cart lines and survive restore', () =>
         name: 'Size',
         values: [
           { label: 'S', priceCents: null },
-          { label: 'M', priceCents: '200' },
+          // The value's own price replaces the product's base price.
+          { label: 'M', priceCents: '1500' },
         ],
       },
       {
         name: 'Color',
         values: [
           { label: 'Red', priceCents: null },
-          { label: 'Blue', priceCents: '100' },
+          { label: 'Blue', priceCents: null },
         ],
       },
     ],
@@ -119,16 +120,16 @@ test('option combinations become separate cart lines and survive restore', () =>
     { name: 'Color', value: 'Red', priceCents: null },
   ];
   const blueMedium = [
-    { name: 'Size', value: 'M', priceCents: '200' },
-    { name: 'Color', value: 'Blue', priceCents: '100' },
+    { name: 'Size', value: 'M', priceCents: '1500' },
+    { name: 'Color', value: 'Blue', priceCents: null },
   ];
   let cart = updateDemoCart(emptyCart(store), configurable, 1, redSmall);
   cart = updateDemoCart(cart, configurable, 2, blueMedium);
   assert.equal(cart.items.length, 2);
   assert.equal(cart.itemCount, 3);
-  assert.equal(cart.subtotalCents, '4350');
+  assert.equal(cart.subtotalCents, '4250');
   assert.equal(cart.items[0]?.unitPriceCents, '1250');
-  assert.equal(cart.items[1]?.unitPriceCents, '1550');
+  assert.equal(cart.items[1]?.unitPriceCents, '1500');
   assert.deepEqual(cart.items[0]?.selectedOptions, redSmall);
   assert.deepEqual(cart.items[1]?.selectedOptions, blueMedium);
 

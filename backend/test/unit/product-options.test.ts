@@ -5,7 +5,9 @@ import {
   PRODUCT_OPTIONS_INVALID_CODE,
   normalizeProductOptions,
   normalizeSelectedOptions,
+  productFromPriceCents,
   readProductOptions,
+  resolveOptionUnitPriceCents,
   selectedOptionsKey,
 } from '../../libs/database/src/product-options';
 
@@ -17,7 +19,7 @@ function errorCode(error: unknown): string | undefined {
     : undefined;
 }
 
-test('option values trim, keep order, and carry optional prices', () => {
+test('option values trim, keep order, and carry optional own prices', () => {
   assert.equal(normalizeProductOptions(null), null);
   assert.equal(normalizeProductOptions([]), null);
   assert.deepEqual(
@@ -111,6 +113,10 @@ test('invalid option groups fail with a stable product-options code', () => {
     [{ name: 'Size', values: ['Small', 'small'] }],
     [{ name: 'Size', values: [{ label: 'Small', priceCents: -1 }] }],
     [{ name: 'Size', values: [{ label: 'Small', priceCents: 1.5 }] }],
+    [
+      { name: 'Size', values: [{ label: 'Small', priceCents: 1000 }] },
+      { name: 'Color', values: [{ label: 'Blue', priceCents: 100 }] },
+    ],
     [{ name: 'S'.repeat(61), values: ['Small'] }],
     [{ name: 'Size', values: Array.from({ length: 26 }, (_, i) => `S${i}`) }],
   ];
@@ -198,4 +204,47 @@ test('selected options accept legacy product options from older rows', () => {
     ),
     [{ name: 'Size', value: 'M', priceCents: null }],
   );
+});
+
+test('a chosen value price replaces the base price', () => {
+  const selection = [
+    { name: 'Size', value: 'M', priceCents: '1500' },
+    { name: 'Color', value: 'Blue', priceCents: null },
+  ];
+  assert.equal(resolveOptionUnitPriceCents('1000', selection), '1500');
+  assert.equal(resolveOptionUnitPriceCents('1000', null), '1000');
+  assert.equal(
+    resolveOptionUnitPriceCents('1000', [
+      { name: 'Size', value: 'S', priceCents: null },
+    ]),
+    '1000',
+  );
+});
+
+test('catalogue from-price ignores a base price no selection can reach', () => {
+  const sizes = [
+    {
+      name: 'Size',
+      values: [
+        { label: 'Small', priceCents: '1000' },
+        { label: 'Medium', priceCents: '1500' },
+        { label: 'Large', priceCents: '2000' },
+      ],
+    },
+  ];
+  assert.equal(productFromPriceCents('0', sizes), '1000');
+  // An unpriced value can still fall back to the base price.
+  assert.equal(
+    productFromPriceCents('900', [
+      {
+        name: 'Size',
+        values: [
+          { label: 'Small', priceCents: null },
+          { label: 'Large', priceCents: '2000' },
+        ],
+      },
+    ]),
+    '900',
+  );
+  assert.equal(productFromPriceCents('1250', null), '1250');
 });
