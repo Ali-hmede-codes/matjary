@@ -26,6 +26,7 @@ import {
   normalizeSlug,
   productCategoryLabel,
   productPriceLabel,
+  productStatusLabel,
   slugDraft,
   storeMediaUrl,
 } from '../../lib/storefront';
@@ -110,6 +111,8 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const [editor, setEditor] = useState<Content | null | undefined>();
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [statusBusy, setStatusBusy] = useState('');
   const product = kind === 'products';
   const categoryQuery = useQuery({
     queryKey: ['categories', store!.slug, 'my'],
@@ -140,6 +143,34 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
       ? 'menu item'
       : 'product'
     : 'post';
+  // The quick toggle only applies to items that are already live: a draft or an
+  // archived item is published (or not) through the editor instead.
+  const isLive = (item: Content) =>
+    item.status === 'active' || item.status === 'out_of_stock';
+  async function toggleAvailability(item: Content) {
+    if (statusBusy) return;
+    const next = item.status === 'out_of_stock' ? 'active' : 'out_of_stock';
+    setStatusBusy(item.id);
+    setNotice('');
+    setActionError('');
+    try {
+      await mutate(
+        `stores/${encodeURIComponent(store!.slug)}/products/${encodeURIComponent(item.slug)}`,
+        { status: next },
+        'PATCH',
+      );
+      setNotice(
+        next === 'out_of_stock'
+          ? `${item.name || 'This item'} is now shown as out of stock.`
+          : `${item.name || 'This item'} is available to order again.`,
+      );
+      await query.refetch();
+    } catch (e) {
+      setActionError(panelError(e));
+    } finally {
+      setStatusBusy('');
+    }
+  }
   return (
     <>
       <PageTitle
@@ -163,6 +194,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
         }
       />
       {notice && <Notice>{notice}</Notice>}
+      {actionError && <Notice error>{actionError}</Notice>}
       <div className="panel-toolbar">
         <label>
           Status
@@ -175,7 +207,9 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
           >
             <option value="">All items</option>
             <option value="draft">Drafts</option>
-            <option value={product ? 'active' : 'published'}>Published</option>
+            <option value={product ? 'active' : 'published'}>
+              {product ? 'Published (in stock)' : 'Published'}
+            </option>
             <option value="archived">Archived</option>
             {product && <option value="out_of_stock">Out of stock</option>}
           </select>
@@ -210,10 +244,12 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                     ) : (
                       <ImagePlus size={36} />
                     )}
-                    <span className="panel-pill">
-                      {item.status === 'active'
-                        ? 'Published'
-                        : item.status.replaceAll('_', ' ')}
+                    <span
+                      className={`panel-pill${item.status === 'out_of_stock' ? ' is-out-of-stock' : ''}`}
+                    >
+                      {productStatusLabel[
+                        item.status as keyof typeof productStatusLabel
+                      ] ?? item.status.replaceAll('_', ' ')}
                     </span>
                   </div>
                   <div>
@@ -242,6 +278,19 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                     <button onClick={() => setEditor(item)}>
                       Edit {label}
                     </button>
+                    {product && isLive(item) && (
+                      <button
+                        type="button"
+                        disabled={statusBusy === item.id}
+                        onClick={() => void toggleAvailability(item)}
+                      >
+                        {statusBusy === item.id
+                          ? 'Updating…'
+                          : item.status === 'out_of_stock'
+                            ? 'Mark in stock'
+                            : 'Mark out of stock'}
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -303,6 +352,11 @@ function ContentEditor({
   );
   const [currency, setCurrency] = useState(item?.currency || 'USD');
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '');
+  // Availability is stored as the product's status: publishing an item keeps
+  // "out of stock" visible to shoppers instead of hiding it.
+  const [availability, setAvailability] = useState<'active' | 'out_of_stock'>(
+    item?.status === 'out_of_stock' ? 'out_of_stock' : 'active',
+  );
   const [stock, setStock] = useState(
     item?.stockQuantity == null ? '' : String(item.stockQuantity),
   );
@@ -328,6 +382,7 @@ function ContentEditor({
     price: string;
     currency: string;
     categoryId: string;
+    availability: string;
     stock: string;
     description: string;
     keys: string[];
@@ -339,6 +394,7 @@ function ContentEditor({
     price,
     currency,
     categoryId,
+    availability,
     stock,
     description,
     keys,
@@ -665,12 +721,22 @@ function ContentEditor({
       setSlugTouched(true);
       setOptionsTouched(false);
       setOptions(nextOptions);
+      // A live item reports its saved availability; a draft or archived item
+      // keeps the owner's choice so the next publish uses it.
+      const nextAvailability: 'active' | 'out_of_stock' =
+        saved.status === 'out_of_stock'
+          ? 'out_of_stock'
+          : saved.status === 'active'
+            ? 'active'
+            : availability;
+      if (product) setAvailability(nextAvailability);
       setBaseline(
         snapshotOf({
           name: cleanName,
           price,
           currency,
           categoryId,
+          availability: nextAvailability,
           stock,
           description: cleanDescription,
           keys,
@@ -697,7 +763,9 @@ function ContentEditor({
             ? 'Draft saved.'
             : status === 'archived'
               ? 'Item archived.'
-              : 'Your changes are live.',
+              : status === 'out_of_stock'
+                ? 'Saved. Shoppers now see this item as out of stock.'
+                : 'Your changes are live.',
         );
     } catch (e) {
       setError(panelError(e));
@@ -713,7 +781,7 @@ function ContentEditor({
     void save(
       action === 'publish'
         ? product
-          ? 'active'
+          ? availability
           : 'published'
         : action === 'archive'
           ? 'archived'
@@ -846,6 +914,44 @@ function ContentEditor({
                   : 'Categories are managed per shop and count toward your plan.'}
               </small>
             </label>
+            <fieldset className="panel-availability">
+              <legend>
+                Availability <span>Shown to shoppers</span>
+              </legend>
+              <div className="panel-availability-options">
+                {(
+                  [
+                    [
+                      'active',
+                      'In stock',
+                      'Shoppers can order this item right away.',
+                    ],
+                    [
+                      'out_of_stock',
+                      'Out of stock',
+                      'It stays on your shop, but ordering is paused.',
+                    ],
+                  ] as const
+                ).map(([value, title, hint]) => (
+                  <label
+                    key={value}
+                    className={`panel-availability-option${availability === value ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="availability"
+                      value={value}
+                      checked={availability === value}
+                      onChange={() => setAvailability(value)}
+                    />
+                    <span>
+                      <strong>{title}</strong>
+                      <small>{hint}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <fieldset className="panel-option-editor">
               <legend>
                 Options <span>Optional</span>

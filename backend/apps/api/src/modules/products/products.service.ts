@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError, IsNull } from 'typeorm';
+import { Repository, QueryFailedError, IsNull, In } from 'typeorm';
 import {
   Store,
   StoreCategory,
@@ -21,6 +21,8 @@ import {
   assertQuota,
   ownerWhere,
   publicWhere,
+  PUBLIC_PRODUCT_STATUSES,
+  isPublicProductStatus,
   lockOwnerContent,
   chooseContentSlug,
   assertMediaAttachment,
@@ -58,14 +60,14 @@ export class ProductsService {
     storeId: string | undefined,
     limit: number,
     offset: number,
-    status?: ProductStatus,
+    statuses?: readonly ProductStatus[],
     category?: ProductCategory,
     categoryId?: string,
   ): Promise<ProductListResponseDto> {
     try {
       const where: Record<string, unknown> = { ...publicWhere('product') };
       if (storeId) where.storeId = storeId;
-      if (status) where.status = status;
+      if (statuses?.length) where.status = In([...statuses]);
       if (category) where.category = category;
       // Category pages filter on the owner-defined category row so only that
       // section is transferred, instead of the whole catalogue. "uncategorized"
@@ -95,7 +97,7 @@ export class ProductsService {
     storeSlug: string,
     limit: number,
     offset: number,
-    status?: ProductStatus,
+    statuses?: readonly ProductStatus[],
     category?: ProductCategory,
     categoryId?: string,
   ): Promise<ProductListResponseDto> {
@@ -112,7 +114,7 @@ export class ProductsService {
         store.id,
         limit,
         offset,
-        status,
+        statuses,
         category,
         categoryId,
       );
@@ -131,7 +133,7 @@ export class ProductsService {
     try {
       const publicItem = {
         slug,
-        status: ProductStatus.ACTIVE,
+        status: In([...PUBLIC_PRODUCT_STATUSES]),
         ...publicWhere('product'),
       };
       const product = await this.products.findOne({
@@ -147,8 +149,9 @@ export class ProductsService {
         throw new NotFoundException('Product not found');
       }
 
-      // For non-active products, only allow owner to see
-      if (product.status !== ProductStatus.ACTIVE) {
+      // Drafts and archived items are owner-only; out of stock stays public so
+      // shoppers can still open it and see that it is unavailable.
+      if (!isPublicProductStatus(product.status)) {
         const store = await this.stores.findOneBy({
           id: product.storeId,
           ...ownerWhere('store'),

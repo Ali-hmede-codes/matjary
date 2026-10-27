@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Minus, Package, Plus } from 'lucide-react';
+import { Ban, Check, Minus, Package, Plus } from 'lucide-react';
 import { assetUrl, type Product, type SelectedProductOption } from '../lib/api';
 import {
   productHasOptions,
@@ -109,9 +109,9 @@ export function AddToCart({
         type="button"
         className="shop-add-to-cart"
         disabled
-        title={`${product.name} is sold out`}
+        title={`${product.name} is out of stock`}
       >
-        Sold out
+        Out of stock
       </button>
     );
   // Products with choices open their page first: adding the base product
@@ -183,23 +183,43 @@ export function AddToCart({
   );
 }
 
-function InCartBadge({
+// One badge per item: availability first, then the shopper's own cart line.
+function StockBadge({
   product,
   cart,
 }: {
   product: Product;
   cart: ShopCartController;
 }) {
+  if (productCartLimit(product) === 0)
+    return (
+      <span className="shop-stock-label shop-out-of-stock">
+        <Ban size={13} aria-hidden="true" />
+        Out of stock
+      </span>
+    );
   const quantity =
     cart.cart?.items.find((item) => item.productId === product.id)?.quantity ??
     0;
-  if (!quantity) return null;
-  return (
-    <span className="shop-stock-label shop-glass">
-      <Check size={13} aria-hidden="true" />
-      {quantity} in cart
-    </span>
-  );
+  if (quantity)
+    return (
+      <span className="shop-stock-label shop-glass">
+        <Check size={13} aria-hidden="true" />
+        {quantity} in cart
+      </span>
+    );
+  // Tracked stock below the low-stock threshold is worth a heads-up.
+  if (
+    product.stockQuantity !== null &&
+    product.stockQuantity > 0 &&
+    product.stockQuantity <= 5
+  )
+    return (
+      <span className="shop-stock-label shop-glass">
+        Only {product.stockQuantity} left
+      </span>
+    );
+  return null;
 }
 
 // Layout 1: image-first menu row. Best for dishes with descriptions.
@@ -223,7 +243,7 @@ function ListItem({
         aria-label={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-        <InCartBadge product={product} cart={cart} />
+        <StockBadge product={product} cart={cart} />
       </a>
       <div className="shop-product-copy">
         <h3>
@@ -262,7 +282,7 @@ function PhotoCard({
         aria-label={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-        <InCartBadge product={product} cart={cart} />
+        <StockBadge product={product} cart={cart} />
       </a>
       <div className="shop-product-copy">
         <h3>
@@ -301,6 +321,9 @@ function PriceRow({
         </h3>
         {product.description && (
           <p title={product.description}>{product.description}</p>
+        )}
+        {unavailable && (
+          <span className="shop-price-row-stock">Out of stock</span>
         )}
       </div>
       <span className="shop-price-leader" aria-hidden="true" />

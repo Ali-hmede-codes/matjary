@@ -81,14 +81,17 @@ test('store listing count queries map storeId to the MySQL column', async () => 
   for (const query of [postQuery, productQuery]) {
     const [sql, parameters] = query.getQueryAndParameters();
     assert.match(sql, /SELECT `\w+`\.`store_id` AS `storeId`/);
-    assert.match(sql, /WHERE `\w+`\.`store_id` IN \(\?\)/);
+    assert.match(sql, /WHERE `\w+`\.`store_id` IN \(\?/);
     assert.match(sql, /GROUP BY `\w+`\.`store_id`/);
     assert.match(sql, /admin_archived_at IS NULL/);
     assert.match(sql, /suspended_at IS NULL/);
-    assert.deepEqual(parameters, [
-      'store-1',
-      query === postQuery ? 'published' : 'active',
-    ]);
+    // Out of stock items still count on the public shop listing.
+    assert.deepEqual(
+      parameters,
+      query === postQuery
+        ? ['store-1', 'published']
+        : ['store-1', 'active', 'out_of_stock'],
+    );
   }
 });
 

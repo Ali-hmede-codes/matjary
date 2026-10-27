@@ -9,14 +9,13 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, QueryFailedError, Not, EntityManager } from 'typeorm';
+import { Repository, QueryFailedError, Not, In, EntityManager } from 'typeorm';
 import {
   Store,
   StoreBranch,
   StoreSubscriptionTier,
   StoreType,
   Product,
-  ProductStatus,
   SubscriptionPlan,
   User,
   effectiveLimits,
@@ -32,6 +31,7 @@ import {
   assertMediaAttachment,
   visibilitySql,
   publicVisibilitySql,
+  PUBLIC_PRODUCT_STATUSES,
   ShowcaseStatus,
   actorContext,
   appendAdminAudit,
@@ -859,7 +859,8 @@ export class StoresService {
     return this.products.count({
       where: {
         storeId,
-        status: ProductStatus.ACTIVE,
+        // Out of stock items still appear on the shop and its menus.
+        status: In([...PUBLIC_PRODUCT_STATUSES]),
         ...moderationWhere('product'),
       },
     });
@@ -898,7 +899,9 @@ export class StoresService {
       .select('product.storeId', 'storeId')
       .addSelect('COUNT(*)', 'count')
       .where('product.storeId IN (:...storeIds)', { storeIds })
-      .andWhere('product.status = :status', { status: ProductStatus.ACTIVE })
+      .andWhere('product.status IN (:...statuses)', {
+        statuses: [...PUBLIC_PRODUCT_STATUSES],
+      })
       .andWhere(visibilitySql('product', 'product'))
       .groupBy('product.storeId')
       .getRawMany();

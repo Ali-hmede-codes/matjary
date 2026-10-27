@@ -7,7 +7,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, IsNull, type EntityManager } from 'typeorm';
+import {
+  Repository,
+  DataSource,
+  In,
+  IsNull,
+  type EntityManager,
+} from 'typeorm';
 import { plainToInstance, ClassConstructor } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminGuard } from '../auth/guards/auth.guards';
@@ -50,7 +56,8 @@ import {
   MediaAsset,
   MediaVariant,
   MediaStatus,
-  ProductStatus,
+  PUBLIC_PRODUCT_STATUSES,
+  isPublicProductStatus,
   User,
   publicWhere,
   ownerWhere,
@@ -436,7 +443,7 @@ export class SeoService {
         where: {
           slug,
           ...publicWhere('product'),
-          status: ProductStatus.ACTIVE,
+          status: In([...PUBLIC_PRODUCT_STATUSES]),
           ...(storeSlug ? { store: { slug: storeSlug } } : {}),
         },
         relations: ['store'],
@@ -493,7 +500,7 @@ export class SeoService {
       const product = await this.dataSource.manager.findOneBy(Product, {
         slug,
         storeId: store.id,
-        status: ProductStatus.ACTIVE,
+        status: In([...PUBLIC_PRODUCT_STATUSES]),
         ...publicWhere('product'),
       });
       if (!product) throw new NotFoundException('Page not found');
@@ -521,7 +528,7 @@ export class SeoService {
     return this.generateCategoryPageMeta(store, 'More items', {
       storeId: store.id,
       categoryId: IsNull(),
-      status: ProductStatus.ACTIVE,
+      status: In([...PUBLIC_PRODUCT_STATUSES]),
       ...publicWhere('product'),
     });
   }
@@ -533,7 +540,7 @@ export class SeoService {
     return this.generateCategoryPageMeta(store, category.name, {
       storeId: store.id,
       categoryId: category.id,
-      status: ProductStatus.ACTIVE,
+      status: In([...PUBLIC_PRODUCT_STATUSES]),
       ...publicWhere('product'),
     });
   }
@@ -1255,7 +1262,7 @@ export class SeoService {
     product: Product,
     store: Store,
   ): Promise<MetaTags> {
-    if (product.status !== ProductStatus.ACTIVE)
+    if (!isPublicProductStatus(product.status))
       throw new NotFoundException('Product not found');
     // Ensure SEO exists (auto-generate if needed)
     let seo = await this.getProductSeo(product.id);
@@ -1784,7 +1791,7 @@ export class SeoService {
       const product = await this.dataSource.manager.findOne(Product, {
         where: {
           id: seo.productId,
-          status: ProductStatus.ACTIVE,
+          status: In([...PUBLIC_PRODUCT_STATUSES]),
           ...publicWhere('product'),
         },
         relations: ['store'],
@@ -2032,7 +2039,8 @@ export class SeoService {
       url = this.baseUrl + '/stores/' + (entity as Store).slug;
     } else if (entityType === 'product') {
       const product = entity as Product;
-      if (product.status !== ProductStatus.ACTIVE) return;
+      // Out of stock pages stay indexed; only hidden items are skipped.
+      if (!isPublicProductStatus(product.status)) return;
       const store = await this.dataSource.manager.findOneBy(Store, {
         id: product.storeId,
       });
@@ -2079,7 +2087,10 @@ export class SeoService {
     }
     if (!kind || kind === 'product') {
       for (const product of await manager.find(Product, {
-        where: { status: ProductStatus.ACTIVE, ...publicWhere('product') },
+        where: {
+          status: In([...PUBLIC_PRODUCT_STATUSES]),
+          ...publicWhere('product'),
+        },
         relations: ['store'],
       })) {
         const seo = await this.getProductSeo(product.id);

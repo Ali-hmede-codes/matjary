@@ -607,6 +607,12 @@
   background: #f2ebe5;
   color: #84644c;
 }
+/* Keep the phrase readable: capitalize would turn it into "Out Of Stock". */
+.panel-app .panel-pill.is-out-of-stock {
+  background: #f6ece4;
+  color: #8a5a34;
+  text-transform: none;
+}
 .panel-record > button {
   font-size: 12px;
   flex-shrink: 0;
@@ -776,6 +782,66 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
+}
+/* Availability has two explicit states: "out of stock" stays published but
+   stops taking orders, so it must not look like archiving. */
+.panel-app .panel-availability {
+  display: block;
+  min-width: 0;
+}
+.panel-availability > legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  margin-bottom: 10px;
+}
+.panel-availability > legend span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef3ec;
+  color: var(--panel-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.panel-availability-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.panel-app .panel-availability-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-line);
+  border-radius: 11px;
+  background: #fff;
+  font-weight: 500;
+  cursor: pointer;
+}
+.panel-availability-option.is-selected {
+  border-color: #7f9a79;
+  background: #f1f6eb;
+}
+.panel-availability-option input {
+  flex: none;
+  margin-top: 1px;
+}
+.panel-availability-option strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+}
+.panel-availability-option small {
+  display: block;
+  margin-top: 2px;
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 .panel-option-group {
   display: grid;
@@ -1359,7 +1425,9 @@
 }
 .panel-content-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Fill the width instead of a fixed three columns, so a wide desktop shows
+     four or more menu cards per row. Never below 240px per card. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
   gap: 20px;
 }
 .panel-content-card {
@@ -2071,6 +2139,9 @@
   .panel-content-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+  }
+  .panel-availability-options {
+    grid-template-columns: 1fr;
   }
   .panel-content-card > div:last-child:not(.panel-content-image) {
     padding: 14px;

@@ -156,8 +156,11 @@ export const demoProducts: Product[] = examples.flatMap(
         description,
         priceCents: String(basePrice),
         currency: 'USD',
+        // One sample item is sold out and one is low so the preview shows the
+        // availability states shoppers see on a live menu.
+        status: storeIndex === 1 && index === 2 ? 'out_of_stock' : 'active',
         category: storeIndex === 3 && index === 2 ? 'beverage' : category,
-        stockQuantity: null,
+        stockQuantity: storeIndex === 0 && index === 1 ? 3 : null,
         imageKeys: [
           `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=600&q=85`,
         ],

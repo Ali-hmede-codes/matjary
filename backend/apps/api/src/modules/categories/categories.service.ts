@@ -9,13 +9,13 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   QueryFailedError,
+  In,
   IsNull,
   Repository,
   type EntityManager,
 } from 'typeorm';
 import {
   Product,
-  ProductStatus,
   Store,
   StoreCategory,
   User,
@@ -25,6 +25,7 @@ import {
   ownerWhere,
   publicWhere,
   publicVisibilitySql,
+  PUBLIC_PRODUCT_STATUSES,
 } from '@app/database';
 import {
   CategoryListResponseDto,
@@ -110,7 +111,7 @@ export class CategoriesService {
           where: {
             storeId: store.id,
             categoryId: IsNull(),
-            status: ProductStatus.ACTIVE,
+            status: In([...PUBLIC_PRODUCT_STATUSES]),
             ...publicWhere('product'),
           },
         }),
@@ -280,9 +281,11 @@ export class CategoriesService {
       .where('product.storeId = :storeId', { storeId })
       .andWhere('product.categoryId IS NOT NULL');
     if (publicOnly) {
+      // Public counts must match the items the storefront lists, including
+      // out-of-stock ones that remain visible but cannot be bought.
       query
-        .andWhere('product.status = :status', {
-          status: ProductStatus.ACTIVE,
+        .andWhere('product.status IN (:...statuses)', {
+          statuses: [...PUBLIC_PRODUCT_STATUSES],
         })
         .andWhere(publicVisibilitySql('product', 'product'));
     }

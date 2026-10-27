@@ -29,7 +29,11 @@ import {
   AuthenticatedRequest,
   OptionalSessionGuard,
 } from '../auth/guards/auth.guards';
-import { ProductStatus, ProductCategory } from '@app/database';
+import {
+  ProductStatus,
+  ProductCategory,
+  PUBLIC_PRODUCT_STATUSES,
+} from '@app/database';
 import {
   BadRequestException,
   NotFoundException,
@@ -73,7 +77,9 @@ export class ProductsController {
       storeSlug,
       safeLimit,
       safeOffset,
-      ProductStatus.ACTIVE,
+      // Out of stock items stay on the menu so shoppers see them; drafts and
+      // archived items never leave the owner panel.
+      PUBLIC_PRODUCT_STATUSES,
       category,
       categoryId,
     );

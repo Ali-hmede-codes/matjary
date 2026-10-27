@@ -316,6 +316,39 @@
 .shop-catalog-items.layout-compact {
   grid-template-columns: minmax(0, 1fr);
 }
+/* ---------- Availability states ---------- */
+/* An out-of-stock item stays browsable, so its badge must outrank the neutral
+   glass pills used for "N in cart" and low stock. */
+.shop-stock-label.shop-out-of-stock {
+  border: 1px solid color-mix(in srgb, #8a4a1f 24%, transparent);
+  background: color-mix(in srgb, #8a4a1f 14%, var(--surface));
+  color: #6d3611;
+  font-weight: 750;
+}
+.shop-price-row-stock {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #8a4a1f 12%, var(--surface));
+  color: #6d3611;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+/* The horizontal menu row keeps a 118px thumbnail: trim the sold-out pill so
+   the label never wraps inside it. */
+.shop-menu-item .shop-stock-label.shop-out-of-stock {
+  bottom: 8px;
+  right: 8px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.shop-menu-item .shop-out-of-stock svg {
+  display: none;
+}
+
 /* Layout 1: horizontal menu rows. */
 .shop-product-image-link {
   display: block;

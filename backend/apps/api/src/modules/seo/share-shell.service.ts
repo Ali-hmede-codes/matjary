@@ -7,14 +7,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, In, IsNull } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
 import {
   Product,
-  ProductStatus,
   Store,
   StoreCategory,
   publicWhere,
+  PUBLIC_PRODUCT_STATUSES,
 } from '@app/database';
 import { SeoService, type MetaTags } from './seo.service';
 import { renderShareShell, shareShellSegments } from './share-shell';
@@ -129,7 +129,7 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
           where: {
             storeId: store.id,
             categoryId: IsNull(),
-            status: ProductStatus.ACTIVE,
+            status: In([...PUBLIC_PRODUCT_STATUSES]),
             ...publicWhere('product'),
           },
         });
@@ -145,7 +145,7 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
         const products = await manager.find(Product, {
           where: {
             storeId: store.id,
-            status: ProductStatus.ACTIVE,
+            status: In([...PUBLIC_PRODUCT_STATUSES]),
             ...publicWhere('product'),
           },
         });

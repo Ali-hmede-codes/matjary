@@ -1,8 +1,28 @@
 import { NotFoundException } from '@nestjs/common';
 import { Raw, type EntityManager } from 'typeorm';
-import { MediaAsset, Product, Showcase, Store } from './entities';
+import {
+  MediaAsset,
+  Product,
+  ProductStatus,
+  Showcase,
+  Store,
+} from './entities';
 
 export type ContentKind = 'store' | 'product' | 'post' | 'media';
+
+// Out of stock is still a published item: shoppers must see that it exists (and
+// that it cannot be bought), so every public product query shares this pair.
+// Drafts and archived items remain private. Purchasing stays ACTIVE-only.
+export const PUBLIC_PRODUCT_STATUSES: readonly ProductStatus[] = [
+  ProductStatus.ACTIVE,
+  ProductStatus.OUT_OF_STOCK,
+];
+
+export function isPublicProductStatus(status: ProductStatus): boolean {
+  return (
+    status === ProductStatus.ACTIVE || status === ProductStatus.OUT_OF_STOCK
+  );
+}
 
 // Aliases are code-owned. No caller-supplied values are interpolated into SQL.
 export function visibilitySql(kind: ContentKind, alias: string): string {

@@ -65,6 +65,9 @@ export interface SelectedProductOption {
   priceCents: string | null;
 }
 
+/** Out of stock stays published: it is shown, but it cannot be bought. */
+export type ProductStatus = 'draft' | 'active' | 'archived' | 'out_of_stock';
+
 export interface Product {
   id: string;
   storeId: string;
@@ -73,6 +76,7 @@ export interface Product {
   description: string | null;
   priceCents: string;
   currency: string;
+  status?: ProductStatus;
   category: string;
   categoryId?: string | null;
   categoryName?: string | null;

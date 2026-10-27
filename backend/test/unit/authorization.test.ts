@@ -12,7 +12,7 @@ import {
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
-import { FindOperator, type DataSource, type EntityManager } from 'typeorm';
+import { FindOperator, In, type DataSource, type EntityManager } from 'typeorm';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -681,7 +681,11 @@ test('SEO service independently enforces ownership, publication and field allowl
       return where;
     }),
     [
-      { slug: 'draft', status: ProductStatus.ACTIVE },
+      // Out of stock pages stay public; only drafts and archived items hide.
+      {
+        slug: 'draft',
+        status: In([ProductStatus.ACTIVE, ProductStatus.OUT_OF_STOCK]),
+      },
       { slug: 'draft', status: ShowcaseStatus.PUBLISHED },
     ],
   );

@@ -1,5 +1,6 @@
 import type {
   Product,
+  ProductStatus,
   SelectedProductOption,
   Store,
   StoreCategory,
@@ -390,6 +391,24 @@ export function productCategoryKey(
 export function productHasOptions(product: Pick<Product, 'options'>): boolean {
   return Boolean(product.options?.length);
 }
+
+/**
+ * An owner can publish an item as out of stock ("sold out for now") without
+ * hiding it, and a zero stock count means the same thing at checkout.
+ */
+export function productIsOutOfStock(
+  product: Pick<Product, 'status' | 'stockQuantity'>,
+): boolean {
+  return product.status === 'out_of_stock' || product.stockQuantity === 0;
+}
+
+/** Owner-facing wording for the product lifecycle, shared by the panel. */
+export const productStatusLabel: Record<ProductStatus, string> = {
+  draft: 'Draft',
+  active: 'Published',
+  archived: 'Archived',
+  out_of_stock: 'Out of stock',
+};
 
 /** True when at least one option value sets its own price. */
 export function productHasPricedOptions(

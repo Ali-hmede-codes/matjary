@@ -335,7 +335,7 @@ export function StoreProductPage({
           )}
           {limit === 0 ? (
             <p className="shop-product-stock is-sold-out">
-              Sold out right now. Ask the shop when it returns.
+              Out of stock right now. Ask the shop when it returns.
             </p>
           ) : product.stockQuantity !== null ? (
             <p className="shop-product-stock">

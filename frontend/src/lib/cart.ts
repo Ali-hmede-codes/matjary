@@ -1,6 +1,7 @@
 import type { Product, SelectedProductOption, Store } from './api';
 import {
   productHasOptions,
+  productIsOutOfStock,
   productOptionSelection,
   selectedOptionsKey,
   selectedUnitPriceCents,
@@ -49,6 +50,9 @@ export interface CartCheckout {
 export const MAX_CART_QUANTITY = 99;
 
 export function productCartLimit(product?: Product) {
+  // An item published as out of stock is visible but no longer orderable, the
+  // same as one whose tracked stock reached zero.
+  if (product && productIsOutOfStock(product)) return 0;
   return Math.max(
     0,
     Math.min(MAX_CART_QUANTITY, product?.stockQuantity ?? MAX_CART_QUANTITY),
