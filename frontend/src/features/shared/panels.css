@@ -629,6 +629,8 @@
   margin-right: auto;
 }
 .panel-pagination button {
+  min-height: 38px;
+  padding: 8px 14px;
   font-size: 12px;
 }
 .panel-empty {
@@ -954,16 +956,6 @@
   color: var(--panel-muted);
   font-size: 12px;
   font-weight: 600;
-}
-.panel-content-options {
-  margin-top: 4px;
-  font-size: 11px;
-}
-.panel-content-slug {
-  margin-top: 2px;
-  color: var(--panel-muted);
-  font-size: 10px;
-  overflow-wrap: anywhere;
 }
 .panel-form .panel-card > label,
 .panel-form .panel-card > fieldset,
@@ -1426,18 +1418,23 @@
 .panel-content-grid {
   display: grid;
   /* Fill the width instead of a fixed three columns, so a wide desktop shows
-     four or more menu cards per row. Never below 240px per card. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
-  gap: 20px;
+     four or more menu cards per row. Never below 220px per card. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 .panel-content-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   border: 1px solid var(--panel-line);
-  border-radius: 15px;
+  border-radius: 14px;
   background: white;
   overflow: hidden;
 }
 .panel-content-image {
-  aspect-ratio: 1.4;
+  flex: 0 0 auto;
+  height: 118px;
   background: #ecf0e6;
   display: grid;
   place-items: center;
@@ -1453,22 +1450,67 @@
 }
 .panel-content-image .panel-pill {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   background: #fffffff0;
   color: #40513d;
 }
-.panel-content-card > div:last-child:not(.panel-content-image) {
-  padding: 20px;
-  display: grid;
-  gap: 13px;
+/* The body grows while the actions stay at the bottom, so every card in a row
+   lines its buttons up no matter how long the item name is. */
+.panel-content-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
 }
 .panel-content-card h2 {
-  font-size: 19px;
+  margin: 0;
+  font-size: 15px;
+  /* Two lines stay readable; anything longer is cut instead of pushing the
+     buttons down and breaking the row alignment. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.panel-content-card p {
+.panel-content-meta {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   font-size: 12px;
   color: var(--panel-muted);
+}
+.panel-content-meta strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--panel-ink);
+}
+.panel-content-meta > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-content-actions {
+  display: grid;
+  /* Two rows are always reserved, so a card without the stock toggle keeps its
+     Edit button level with the rest of the row instead of dropping to the
+     bottom edge. */
+  grid-template-rows: repeat(2, minmax(38px, auto));
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.panel-content-actions button {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 12px;
 }
 .panel-editor-actions {
   position: sticky;
@@ -1876,9 +1918,6 @@
   .panel-type-options {
     grid-template-columns: 1fr;
   }
-  .panel-content-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .panel-quick-actions {
     gap: 12px;
   }
@@ -2143,15 +2182,14 @@
   .panel-availability-options {
     grid-template-columns: 1fr;
   }
-  .panel-content-card > div:last-child:not(.panel-content-image) {
-    padding: 14px;
+  .panel-content-card .panel-content-body {
+    padding: 12px;
   }
   .panel-content-card h2 {
-    font-size: 16px;
+    font-size: 14px;
   }
-  .panel-content-card button {
-    padding: 9px;
-    font-size: 12px;
+  .panel-content-image {
+    height: 108px;
   }
   .panel-photo-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

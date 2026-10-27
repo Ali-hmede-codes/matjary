@@ -238,11 +238,12 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                           item.imageKeys?.[0] || item.thumbnailKey,
                         )}
                         alt={item.name || item.title || ''}
+                        loading="lazy"
                       />
                     ) : product ? (
-                      <Package size={36} />
+                      <Package size={30} />
                     ) : (
-                      <ImagePlus size={36} />
+                      <ImagePlus size={30} />
                     )}
                     <span
                       className={`panel-pill${item.status === 'out_of_stock' ? ' is-out-of-stock' : ''}`}
@@ -252,45 +253,52 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                       ] ?? item.status.replaceAll('_', ' ')}
                     </span>
                   </div>
-                  <div>
+                  <div className="panel-content-body">
                     <h2>{item.name || item.title}</h2>
-                    <p>
-                      {product
-                        ? productPriceLabel({
+                    <p className="panel-content-meta">
+                      {product ? (
+                        <strong>
+                          {productPriceLabel({
                             priceCents: item.priceCents || '0',
                             currency: item.currency || 'USD',
                             options: item.options ?? null,
-                          })
-                        : item.description || 'Your next story.'}
+                          })}
+                        </strong>
+                      ) : null}
+                      {product && item.options?.length ? (
+                        <span>
+                          {item.options.length}{' '}
+                          {item.options.length === 1 ? 'option' : 'options'} ·{' '}
+                          {item.options.map((option) => option.name).join(', ')}
+                        </span>
+                      ) : (
+                        !product && (
+                          <span>{item.description || 'Your next story.'}</span>
+                        )
+                      )}
                     </p>
-                    {product && item.options?.length ? (
-                      <p className="panel-muted panel-content-options">
-                        {item.options.length}{' '}
-                        {item.options.length === 1 ? 'option' : 'options'} ·{' '}
-                        {item.options.map((option) => option.name).join(', ')}
-                      </p>
-                    ) : null}
-                    {product && item.slug ? (
-                      <small className="panel-content-slug">
-                        /p/{item.slug}
-                      </small>
-                    ) : null}
-                    <button onClick={() => setEditor(item)}>
-                      Edit {label}
-                    </button>
-                    {product && isLive(item) && (
+                    <div className="panel-content-actions">
                       <button
                         type="button"
-                        disabled={statusBusy === item.id}
-                        onClick={() => void toggleAvailability(item)}
+                        aria-label={`Edit ${item.name || item.title || label}`}
+                        onClick={() => setEditor(item)}
                       >
-                        {statusBusy === item.id
-                          ? 'Updating…'
-                          : item.status === 'out_of_stock'
-                            ? 'Mark in stock'
-                            : 'Mark out of stock'}
+                        Edit
                       </button>
-                    )}
+                      {product && isLive(item) && (
+                        <button
+                          type="button"
+                          disabled={statusBusy === item.id}
+                          onClick={() => void toggleAvailability(item)}
+                        >
+                          {statusBusy === item.id
+                            ? 'Updating…'
+                            : item.status === 'out_of_stock'
+                              ? 'Mark in stock'
+                              : 'Mark out of stock'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </article>
               ))}
