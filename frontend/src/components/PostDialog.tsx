@@ -384,7 +384,7 @@ export function PostDialog({
   return (
     <dialog
       ref={dialog}
-      className="post-dialog"
+      className={`post-dialog${fullscreen ? ' is-fullscreen' : ''}`}
       aria-label="Post viewer"
       onCancel={onClose}
       onKeyDown={(event) => {

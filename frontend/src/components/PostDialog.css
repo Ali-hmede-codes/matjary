@@ -403,6 +403,12 @@
 .post-dialog:fullscreen {
   background: #000;
 }
+/* Full screen belongs to the media, so the rail drops the like tally and keeps
+   only its controls. */
+.post-dialog:fullscreen .reel-rail .likes-count,
+.post-dialog.is-fullscreen .reel-rail .likes-count {
+  display: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .post-dialog[open] {
     animation: none;
