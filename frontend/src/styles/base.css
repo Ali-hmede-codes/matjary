@@ -7,6 +7,15 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
+/* Arabic joins its letters, so Latin tracking pulls the script apart; marked
+   Arabic/RTL copy keeps natural spacing and a taller line box instead. */
+:lang(ar),
+:lang(fa),
+:lang(ur),
+[dir='rtl'] {
+  letter-spacing: normal;
+  line-height: 1.7;
+}
 body {
   margin: 0;
 }

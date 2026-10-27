@@ -1,6 +1,6 @@
 /* Shared design controls. Component-specific and responsive styles live beside their TSX files. */
 :root {
-  --font-family: 'DM Sans Variable', sans-serif;
+  --font-family: 'DM Sans Variable', 'Cairo Variable', sans-serif;
   --sidebar-width: 208px;
   --content-max-width: 1040px;
   --feed-max-width: 600px;
