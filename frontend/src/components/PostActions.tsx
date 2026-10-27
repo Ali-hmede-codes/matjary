@@ -19,8 +19,7 @@ export function PostActions({
   onLike,
   onSave,
   onNotice,
-  showCount = true,
-}: PostActionProps & { media?: Media; showCount?: boolean }) {
+}: PostActionProps & { media?: Media }) {
   const [sharing, setSharing] = useState(false);
   const shareUrl = assetUrl(media?.primaryUrl);
   async function shareMedia() {
@@ -56,12 +55,6 @@ export function PostActions({
           fill={post.engagement.viewerLiked ? 'currentColor' : 'none'}
         />
       </button>
-      {showCount && (
-        <span className="likes-count">
-          {post.engagement.likes.toLocaleString()}
-          <span className="sr-only"> likes</span>
-        </span>
-      )}
       <button
         className="icon-button"
         aria-label={`Share ${media?.kind === 'video' ? 'video' : 'photo'} from ${post.title}`}

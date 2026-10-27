@@ -202,14 +202,6 @@
   text-transform: uppercase;
   color: #ffffffa8;
 }
-/* Where the shopper is in the shop's reel, next to the caption. */
-.reel-position {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #ffffffb8;
-}
 .reel-notice {
   align-self: flex-start;
   padding: 7px 11px;
@@ -285,13 +277,6 @@
 }
 .reel-rail .save-button {
   margin-left: 0;
-}
-.reel-rail .likes-count {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 650;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
 }
 .reel-visit {
   display: flex;
@@ -402,12 +387,6 @@
 /* True browser full screen keeps the same full-bleed stage. */
 .post-dialog:fullscreen {
   background: #000;
-}
-/* Full screen belongs to the media, so the rail drops the like tally and keeps
-   only its controls. */
-.post-dialog:fullscreen .reel-rail .likes-count,
-.post-dialog.is-fullscreen .reel-rail .likes-count {
-  display: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .post-dialog[open] {

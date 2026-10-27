@@ -118,7 +118,6 @@ export function PostCard({
           onLike={onLike}
           onSave={onSave}
           onNotice={onNotice}
-          showCount={false}
         />
         <p className="post-caption">
           <a

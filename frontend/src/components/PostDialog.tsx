@@ -170,11 +170,6 @@ function PostSlide({
               </a>{' '}
               {post.description || post.title}
             </p>
-            {/* Phones hide the top counter; keep the position by the caption
-                so swiping between posts still reports where you are. */}
-            <span className="reel-position" aria-hidden="true">
-              {index + 1} / {total}
-            </span>
             {published && <p className="reel-date">Shared {published}</p>}
             {notice && active && (
               <p className="reel-notice" role="status">
@@ -191,7 +186,6 @@ function PostSlide({
               onLike={onLike}
               onSave={onSave}
               onNotice={onNotice}
-              showCount
             />
             {post.store && (
               <a
@@ -384,7 +378,7 @@ export function PostDialog({
   return (
     <dialog
       ref={dialog}
-      className={`post-dialog${fullscreen ? ' is-fullscreen' : ''}`}
+      className="post-dialog"
       aria-label="Post viewer"
       onCancel={onClose}
       onKeyDown={(event) => {
