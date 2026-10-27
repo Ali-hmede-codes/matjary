@@ -704,6 +704,12 @@
   gap: 6px;
   margin-bottom: 24px;
 }
+/* Desktop has room for a fourth tile without shrinking the 3:4 frame. */
+@media (min-width: 900px) {
+  .shop-post-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
 .shop-post-tile,
 .shop-post-skeleton {
   position: relative;
@@ -749,21 +755,6 @@
   color: #fff;
   filter: drop-shadow(0 1px 3px #0009);
   pointer-events: none;
-}
-.shop-post-open {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: #0004;
-  color: #fff;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-  pointer-events: none;
-}
-.shop-post-tile:hover .shop-post-open,
-.shop-post-tile:focus-visible .shop-post-open {
-  opacity: 1;
 }
 .shop-post-tile:focus-visible {
   outline: 3px solid var(--ink);
@@ -1154,8 +1145,7 @@
   .storefront .shop-glass,
   .shop-add-to-cart,
   .shop-product,
-  .shop-product-image img,
-  .shop-post-open {
+  .shop-product-image img {
     transition: none;
   }
   .storefront a.shop-glass:hover,

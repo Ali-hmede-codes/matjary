@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Expand, Layers } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import { storePath } from '../lib/storefront';
 import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
@@ -58,13 +58,6 @@ export function PostCard({
           </span>
         </a>
         {demo && <span className="sample-label">SAMPLE</span>}
-        <button
-          className={`icon-button post-expand${media?.kind === 'video' ? ' post-expand-video' : ''}`}
-          aria-label={`Open details for ${post.title}`}
-          onClick={() => onOpen(mediaIndex)}
-        >
-          <Expand size={18} />
-        </button>
       </header>
       <div className="post-media">
         {media?.kind === 'video' ? (

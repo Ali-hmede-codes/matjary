@@ -5,7 +5,6 @@ import {
   ArrowUp,
   ArrowUpRight,
   ChevronDown,
-  Expand,
   Images,
   Layers,
   LayoutGrid,
@@ -697,9 +696,6 @@ export function StorePage({ slug }: { slug: string | null }) {
                               (media) => media.kind === 'video',
                             ) && <Play size={19} fill="currentColor" />}
                             {post.media.length > 1 && <Layers size={19} />}
-                          </span>
-                          <span className="shop-post-open" aria-hidden="true">
-                            <Expand size={25} />
                           </span>
                         </button>
                       ))}

@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  Expand,
-  LoaderCircle,
-  Pause,
-  Play,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+import { LoaderCircle, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { assetUrl, type Media } from '../lib/api';
 import {
   isFeedPlaybackSuspended,
@@ -215,9 +208,9 @@ export function AutoplayVideo({
           onOpen ? `Open ${title}` : `${paused ? 'Play' : 'Pause'} ${title}`
         }
       >
-        {onOpen ? (
-          <Expand size={24} />
-        ) : paused ? (
+        {/* Feed clips are opened by tapping anywhere on the frame, so no
+            overlay icon is drawn; the viewer keeps its play/pause control. */}
+        {onOpen ? null : paused ? (
           <Play size={26} fill="currentColor" />
         ) : (
           <Pause size={24} fill="currentColor" />

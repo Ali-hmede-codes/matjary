@@ -57,7 +57,8 @@
 .post-video {
   width: 100%;
   margin: 0;
-  aspect-ratio: 4 / 3;
+  /* Portrait 3:4 matches the shop tiles and the post viewer's stage. */
+  aspect-ratio: 3 / 4;
   display: block;
   position: relative;
   padding: 0;
@@ -85,10 +86,6 @@
 }
 .post-image:hover img {
   transform: scale(1.035);
-}
-.video-feed .post-image,
-.video-feed .post-video {
-  aspect-ratio: 3 / 4;
 }
 .media-previous,
 .media-next {
@@ -143,23 +140,14 @@
   align-items: center;
   gap: 5px;
 }
-.post-expand {
-  margin-left: auto;
-  color: var(--muted);
-}
 .compact-grid .post-image,
 .compact-grid .post-video {
   aspect-ratio: 1;
 }
 .compact-grid .post-caption,
 .compact-grid .sample-label,
-.compact-grid .post-expand,
 .compact-grid .store-identity small {
   display: none;
-}
-/* Videos autoplay inside the tile, so keep a details affordance visible. */
-.compact-grid .post-expand-video {
-  display: inline-flex;
 }
 .compact-grid .post-header {
   min-height: 50px;
@@ -192,10 +180,6 @@
     border-radius: 0;
     border-inline: 0;
     border-top: 0;
-  }
-  .post-image,
-  .post-video {
-    aspect-ratio: 1;
   }
   .compact-grid .post-card {
     border: 1px solid var(--line);
