@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   ConflictException,
@@ -40,6 +41,7 @@ import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
   constructor(
     @InjectRepository(Showcase)
     private readonly showcases: Repository<Showcase>,
@@ -257,6 +259,7 @@ export class MediaService {
         stored.size > (asset.processingLimits?.maxBytes ?? 0)
       )
         throw new BadRequestException('Uploaded media size is invalid');
+      let queued = false;
       await this.mediaAssets.manager.transaction(async (manager) => {
         await manager.findOneOrFail(User, {
           where: { id: ownerId },
@@ -276,9 +279,30 @@ export class MediaService {
         current.status = MediaStatus.PROCESSING;
         await manager.save(current);
         await manager.insert(MediaProcessingOutbox, { assetId: id });
+        queued = true;
       });
+      // Hand the job over immediately instead of waiting for the worker's
+      // repair sweep, which otherwise added up to ten seconds to every upload.
+      if (queued) await this.enqueue(asset);
     } catch (error) {
       this.sanitize(error);
+    }
+  }
+
+  private async enqueue(asset: MediaAsset): Promise<void> {
+    if (!asset.originalKey) return;
+    try {
+      await this.queue.enqueueMediaProcessing({
+        mediaId: asset.id,
+        originalKey: asset.originalKey,
+        kind: asset.kind,
+        mimeType: asset.mimeType,
+        sizeBytes: asset.sizeBytes,
+      });
+    } catch {
+      // The outbox row is durable: the worker sweep retries a lost enqueue,
+      // so a Redis hiccup must not fail the owner's request.
+      this.logger.warn(`Media job enqueue deferred for ${asset.id}`);
     }
   }
 

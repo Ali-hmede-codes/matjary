@@ -27,7 +27,6 @@ import {
   productCategoryLabel,
   productPriceLabel,
   productStatusLabel,
-  slugDraft,
   storeMediaUrl,
 } from '../../lib/storefront';
 import { useOwner } from './OwnerPanel';
@@ -387,8 +386,6 @@ function ContentEditor({
         : '',
   );
   const [keys, setKeys] = useState(item?.imageKeys || []);
-  const [slug, setSlug] = useState(item?.slug || '');
-  const [slugTouched, setSlugTouched] = useState(Boolean(item));
   const [options, setOptions] = useState<OptionGroupDraft[]>(() =>
     optionDrafts(item?.options),
   );
@@ -399,9 +396,11 @@ function ContentEditor({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [priceError, setPriceError] = useState('');
-  const [slugError, setSlugError] = useState('');
   const [optionsError, setOptionsError] = useState('');
-  const cleanSlug = normalizeSlug(slug);
+  // The web address is generated from the item name on the server; owners
+  // never type it. An existing item keeps its stored address so links that
+  // were already shared keep working.
+  const addressPreview = record?.slug || normalizeSlug(name);
   const snapshotOf = (values: {
     name: string;
     price: string;
@@ -411,7 +410,6 @@ function ContentEditor({
     stock: string;
     description: string;
     keys: string[];
-    slug: string;
     options: OptionGroupDraft[];
     link: string;
   }) => JSON.stringify(values);
@@ -424,7 +422,6 @@ function ContentEditor({
     stock,
     description,
     keys,
-    slug,
     options,
     link: linkValue,
   });
@@ -489,18 +486,6 @@ function ContentEditor({
     );
   const existingFailed =
     !product && media.data?.some((a) => a.status === 'failed');
-  function changeName(value: string) {
-    setName(value);
-    setSlugError('');
-    // A new product gets a readable address while the owner types the name;
-    // editing the address manually opts out of automatic updates.
-    if (product && !slugTouched) setSlug(slugDraft(value));
-  }
-  function changeSlug(value: string) {
-    setSlug(slugDraft(value));
-    setSlugTouched(true);
-    setSlugError('');
-  }
   function updateOption(index: number, next: OptionGroupDraft) {
     setOptions((current) =>
       current.map((group, position) => (position === index ? next : group)),
@@ -706,10 +691,6 @@ function ContentEditor({
       setPriceError('Use a price such as 12.50, with at most two decimals.');
       return;
     }
-    if (product && slug && !cleanSlug) {
-      setSlugError('Use letters, numbers, and dashes for the web address.');
-      return;
-    }
     const shouldSaveOptions = product && (optionsTouched || !record);
     const validated = shouldSaveOptions
       ? validateOptions()
@@ -721,7 +702,6 @@ function ContentEditor({
     setBusy(true);
     setError('');
     setPriceError('');
-    setSlugError('');
     setOptionsError('');
     setNotice('');
     const cleanDescription = description.trim();
@@ -729,15 +709,12 @@ function ContentEditor({
       const base = product
         ? `stores/${encodeURIComponent(store!.slug)}/products`
         : 'posts';
-      // A new product always gets a readable address; an existing product
-      // keeps its current slug unless the owner edited the field.
-      const finalSlug =
-        cleanSlug || (!record && product ? normalizeSlug(cleanName) : '');
+      // The API derives a unique, readable address from the name for a new
+      // product and leaves an existing product's address untouched.
       const body = {
         ...(product
           ? {
               name: cleanName,
-              ...(finalSlug ? { slug: finalSlug } : {}),
               priceCents: cents,
               currency,
               categoryId: categoryId || null,
@@ -766,7 +743,6 @@ function ContentEditor({
         body,
         record ? 'PATCH' : 'POST',
       );
-      const savedSlug = saved.slug || finalSlug;
       const nextOptions = saved.options
         ? optionDrafts(saved.options)
         : shouldSaveOptions
@@ -781,8 +757,6 @@ function ContentEditor({
           ? `c:${saved.linkedCategoryId}`
           : '';
       setLinkValue(savedLink);
-      setSlug(savedSlug);
-      setSlugTouched(true);
       setOptionsTouched(false);
       setOptions(nextOptions);
       // A live item reports its saved availability; a draft or archived item
@@ -804,7 +778,6 @@ function ContentEditor({
           stock,
           description: cleanDescription,
           keys,
-          slug: savedSlug,
           options: nextOptions,
           link: savedLink,
         }),
@@ -872,7 +845,7 @@ function ContentEditor({
             required
             maxLength={200}
             value={name}
-            onChange={(e) => changeName(e.target.value)}
+            onChange={(e) => setName(e.target.value)}
             placeholder={
               product
                 ? 'e.g. Handmade ceramic mug'
@@ -881,35 +854,18 @@ function ContentEditor({
           />
         </label>
         {product && (
-          <label>
-            Product web address
-            <div className="panel-slug-field">
-              <span>/stores/{store!.slug}/p/</span>
-              <input
-                value={slug}
-                onChange={(e) => changeSlug(e.target.value)}
-                placeholder="handmade-ceramic-mug"
-                maxLength={191}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                aria-invalid={Boolean(slugError)}
-              />
-            </div>
-            {slugError ? (
-              <p className="panel-field-error" role="alert">
-                {slugError}
-              </p>
-            ) : (
-              <small>
-                {cleanSlug
-                  ? `Shoppers will open /stores/${store!.slug}/p/${cleanSlug}.`
-                  : record
-                    ? 'Leave this blank to keep the current address.'
-                    : 'Leave blank to generate an address from the item name.'}
-              </small>
-            )}
-          </label>
+          <div className="panel-slug-preview">
+            <span className="panel-slug-preview-label">Web address</span>
+            <code>
+              /stores/{store!.slug}/p/
+              <strong>{addressPreview || 'item-name'}</strong>
+            </code>
+            <small>
+              {record
+                ? 'The address stays the same when you rename the item, so shared links keep working.'
+                : 'Created automatically from the item name. No setup needed.'}
+            </small>
+          </div>
         )}
         {product && (
           <>

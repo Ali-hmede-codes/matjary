@@ -57,7 +57,10 @@ export function MediaUpload({
   }, []);
   const isGallery = purpose === 'product_image' || purpose === 'post';
   async function finish(id: string) {
-    for (let n = 0; n < 45; n++) {
+    const waitingSince = Date.now();
+    // One-second polls keep the wait short: encoding now finishes in a few
+    // seconds, and a completed job should not sit unseen for two.
+    for (let n = 0; n < 90; n++) {
       if (!alive.current) return;
       const status = await getJson<MediaStatus>(`media/${id}`);
       if (status.status === 'failed') {
@@ -81,8 +84,10 @@ export function MediaUpload({
         setProgress('Ready. Save your changes to finish.');
         return;
       }
-      setProgress('Uploaded. Optimizing your media…');
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      setProgress(
+        `Uploaded. Optimizing your media… ${Math.max(1, Math.round((Date.now() - waitingSince) / 1000))}s`,
+      );
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
     }
     setProgress('Still processing. You can check again in a moment.');
   }

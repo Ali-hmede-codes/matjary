@@ -423,15 +423,26 @@ test('lifecycle migration defaults existing stores online and refuses unsafe rol
   assert.match(statements.at(-1)!, /DROP COLUMN status/);
 });
 
-test('generated addresses support non-Latin names and retry collisions', async () => {
+test('generated addresses are readable, non-Latin safe and retry collisions', async () => {
   let attempts = 0;
   const slug = await chooseContentSlug(
     'متجري',
     undefined,
     async () => ++attempts < 2,
   );
-  assert.match(slug, /^shop-[a-f0-9]+$/);
+  // A shop name without Latin letters still gets a stable readable prefix and
+  // a numeric suffix instead of an opaque identifier.
+  assert.equal(slug, 'shop-2');
   assert.equal(attempts, 2);
+  const seen: string[] = [];
+  assert.equal(
+    await chooseContentSlug('Handmade Mug', undefined, async (value) => {
+      seen.push(value);
+      return value === 'handmade-mug';
+    }),
+    'handmade-mug-2',
+  );
+  assert.deepEqual(seen, ['handmade-mug', 'handmade-mug-2']);
   assert.equal(
     await chooseContentSlug('New name', 'existing-address', async () => true),
     'existing-address',

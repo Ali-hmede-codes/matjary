@@ -262,6 +262,72 @@ test('share sizes of attached store and product images are public; detached ones
   await assert.rejects(media.authorizeDownload(wideKey), NotFoundException);
 });
 
+test('completion records the outbox and enqueues the job without waiting for the sweep', async () => {
+  const log: string[] = [];
+  const makeAsset = () =>
+    ({
+      id: 'media-1',
+      showcaseId: 'post-1',
+      storeId: null,
+      productId: null,
+      originalKey: 'originals/post-1/media-1/source',
+      sizeBytes: '10',
+      mimeType: 'image/jpeg',
+      kind: MediaKind.IMAGE,
+      status: MediaStatus.PENDING,
+      uploadExpiresAt: new Date(Date.now() + 60_000),
+      processingLimits: { maxBytes: 100 },
+    }) as unknown as MediaAsset;
+  const build = (
+    asset: MediaAsset,
+    enqueueMediaProcessing: () => Promise<void>,
+  ) => {
+    const manager = {
+      findOneOrFail: async (target: unknown) =>
+        target === MediaAsset ? asset : { id: 'owner', suspendedAt: null },
+      findOneBy: async (target: unknown) =>
+        target === Showcase
+          ? { id: 'post-1', ownerId: 'owner', storeId: null }
+          : null,
+      save: async () => {
+        log.push('save');
+      },
+      insert: async () => {
+        log.push('outbox');
+      },
+    };
+    return new MediaService(
+      {} as never,
+      {} as never,
+      {
+        findOneBy: async () => asset,
+        manager: {
+          ...manager,
+          transaction: async (run: (em: unknown) => Promise<unknown>) =>
+            run(manager),
+        },
+      } as never,
+      { statObject: async () => ({ size: 10 }) } as never,
+      { enqueueMediaProcessing } as unknown as QueueService,
+      {} as unknown as ConfigService<AppEnvironment, true>,
+    );
+  };
+  const asset = makeAsset();
+  await build(asset, async () => {
+    log.push('enqueue');
+  }).complete('media-1', 'owner');
+  assert.equal(asset.status, MediaStatus.PROCESSING);
+  // The worker gets the job right away, after the durable outbox row exists.
+  assert.deepEqual(log, ['save', 'outbox', 'enqueue']);
+  // A Redis outage defers the job to the repair sweep instead of failing the
+  // owner's request after the outbox row was already committed.
+  const pending = makeAsset();
+  await build(pending, async () => {
+    throw new Error('queue unavailable');
+  }).complete('media-1', 'owner');
+  assert.equal(pending.status, MediaStatus.PROCESSING);
+});
+
 test('owner media migration preserves existing assets and refuses destructive reversal', async () => {
   const statements: string[] = [];
   let nonPostAssets = 0;

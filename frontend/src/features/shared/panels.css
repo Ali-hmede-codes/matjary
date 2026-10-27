@@ -717,43 +717,37 @@
   gap: 22px;
   min-width: 0;
 }
-/* The slug prefix and input share one bordered surface so the final address
-   reads as a single field instead of a mystery text input. */
-.panel-slug-field {
-  display: flex;
-  align-items: stretch;
+/* The product address is generated from the item name, so it is shown as a
+   read-only preview instead of an input the owner could mistype. */
+.panel-slug-preview {
+  display: grid;
+  gap: 6px;
   min-width: 0;
-  border: 1px solid #ced8ce;
-  border-radius: 9px;
-  background: #fff;
-  overflow: hidden;
+  padding: 12px 14px;
+  border: 1px dashed #ced8ce;
+  border-radius: 10px;
+  background: #f7f9f5;
 }
-.panel-slug-field > span {
-  display: flex;
-  align-items: center;
-  flex-shrink: 1;
-  min-width: 0;
-  padding: 0 10px;
-  border-right: 1px solid #e2e8e1;
-  background: #f4f7f3;
+.panel-slug-preview-label {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--panel-muted);
-  font-size: 12px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.panel-app .panel-slug-field > input {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+.panel-slug-preview code {
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--panel-muted);
+  overflow-wrap: anywhere;
 }
-.panel-app .panel-slug-field > input:focus {
-  outline: none;
+.panel-slug-preview code strong {
+  color: var(--panel-ink);
+  font-weight: 600;
 }
-.panel-slug-field:focus-within {
-  outline: 3px solid #759889;
-  outline-offset: 2px;
+.panel-slug-preview small {
+  margin: 0;
 }
 .panel-app .panel-option-editor {
   display: grid;
@@ -1971,6 +1965,38 @@
     max-width: 100%;
     margin-left: 0;
   }
+  /* Phones and small tablets give dialogs the whole screen: product editors
+     carry options, photos and actions that a floating card squeezes out. */
+  .panel-app .panel-dialog {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    padding: 16px;
+    border: 0;
+    border-radius: 0;
+  }
+  .panel-dialog > header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: -16px -16px 16px;
+    padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+    background: #fff;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .panel-dialog > header h2 {
+    font-size: 20px;
+  }
+  /* The editor actions ride at the bottom edge instead of floating mid-card. */
+  .panel-editor-actions {
+    bottom: -16px;
+    margin-inline: -16px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  }
 }
 @media (max-width: 620px) {
   .panel-main {
@@ -2053,31 +2079,11 @@
   .panel-pagination {
     flex-wrap: wrap;
   }
-  .panel-app .panel-dialog {
-    padding: 20px;
-    max-height: calc(100dvh - 24px);
-    width: calc(100% - 20px);
-    border-radius: 15px;
-  }
-  .panel-dialog h2 {
-    font-size: 22px;
-  }
   .panel-plan-options {
     grid-template-columns: 1fr;
   }
   .panel-two-fields {
     gap: 12px;
-  }
-  .panel-slug-field {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .panel-slug-field > span {
-    min-height: 38px;
-    border-right: 0;
-    border-bottom: 1px solid #e2e8e1;
-    white-space: normal;
-    overflow-wrap: anywhere;
   }
   .panel-app .panel-option-editor {
     padding: 14px;
@@ -2193,9 +2199,6 @@
   }
   .panel-photo-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .panel-editor-actions {
-    bottom: -20px;
   }
   .panel-editor-actions button {
     flex: 1;

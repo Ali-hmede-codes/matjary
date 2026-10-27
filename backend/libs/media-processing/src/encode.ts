@@ -1,14 +1,17 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import sharp from 'sharp';
 import type { ProcessingLimits } from '@app/database';
 
 // Native file caching can retain handles after metadata reads (notably on
-// Windows), preventing per-attempt cleanup. Keep CPU use bounded as well.
+// Windows), preventing per-attempt cleanup. Keep CPU use bounded as well:
+// four libvips threads shorten a single encode on multi-core hosts while a
+// two-vCPU deployment still uses only the cores it owns.
 sharp.cache({ files: 0 });
-sharp.concurrency(2);
+sharp.concurrency(Math.max(1, Math.min(4, availableParallelism())));
 const execute = promisify(execFile);
 export class InvalidMediaError extends Error {}
 // Originals are removed after processing, so these variants are the only copy
@@ -16,6 +19,14 @@ export class InvalidMediaError extends Error {}
 // storage/CPU) but encode them at a slightly higher quality than the earlier
 // AVIF50/WebP75/JPEG80 baseline.
 const IMAGE_QUALITY = { avif: 55, webp: 80, jpeg: 84 } as const;
+// Widths stay fixed; the widest tier is also the decode ceiling because every
+// narrower variant is derived from the same pixel buffer.
+const VARIANT_WIDTHS = [480, 1080, 1600] as const;
+const MAX_VARIANT_WIDTH = VARIANT_WIDTHS[VARIANT_WIDTHS.length - 1];
+// AVIF effort 4 (the sharp default) dominates upload latency: one phone photo
+// spent roughly ten of twelve seconds there. Effort 3 keeps the quality and
+// file size within a few percent while encoding several times faster.
+const AVIF_EFFORT = 3;
 export interface EncodedVariant {
   label: string;
   file: string;
@@ -109,8 +120,35 @@ export async function encodeImage(
     width * height > limits.maxPixels
   )
     throw new InvalidMediaError('Image dimensions exceed the limit');
+  // Decode and auto-orient once, capped at the widest tier, then feed the
+  // pixels back to sharp for every variant. Decoding the original nine times
+  // repeated the same work and kept uploads waiting.
+  let base: { data: Buffer; info: sharp.OutputInfo };
+  try {
+    base = await sharp(input, {
+      limitInputPixels: limits.maxPixels,
+      failOn: 'warning',
+    })
+      .rotate()
+      // Force 8-bit sRGB: a CMYK or 16-bit source would otherwise hand back
+      // pixels that cannot be reinterpreted as RGBA.
+      .toColourspace('srgb')
+      .resize({ width: MAX_VARIANT_WIDTH, withoutEnlargement: true })
+      .timeout({ seconds: Math.max(1, Math.ceil(remaining(options) / 1000)) })
+      .raw({ depth: 'uchar' })
+      .toBuffer({ resolveWithObject: true });
+  } catch {
+    remaining(options);
+    throw new InvalidMediaError('Invalid image');
+  }
+  remaining(options);
+  const pixels = {
+    width: base.info.width,
+    height: base.info.height,
+    channels: base.info.channels,
+  };
   const variants: EncodedVariant[] = [];
-  for (const target of [480, 1080, 1600]) {
+  for (const target of VARIANT_WIDTHS) {
     for (const format of ['avif', 'webp', 'jpeg'] as const) {
       const label = `${format}-${target}`;
       const file = path.join(
@@ -118,17 +156,18 @@ export async function encodeImage(
         `${label}.${format === 'jpeg' ? 'jpg' : format}`,
       );
       // Sharp strips metadata by default. Orientation is applied to pixels first.
-      const image = sharp(input, {
-        limitInputPixels: limits.maxPixels,
-        failOn: 'warning',
-      })
-        .rotate()
+      const image = sharp(base.data, { raw: pixels })
         .resize({ width: target, withoutEnlargement: true })
         .timeout({
           seconds: Math.max(1, Math.ceil(remaining(options) / 1000)),
         });
       const info = await image
-        .toFormat(format, { quality: IMAGE_QUALITY[format] })
+        .toFormat(
+          format,
+          format === 'avif'
+            ? { quality: IMAGE_QUALITY.avif, effort: AVIF_EFFORT }
+            : { quality: IMAGE_QUALITY[format] },
+        )
         .toFile(file);
       remaining(options);
       variants.push({
