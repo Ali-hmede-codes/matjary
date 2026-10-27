@@ -11,6 +11,7 @@ import { FeedExploreService } from './services/feed-explore.service';
 import {
   Showcase,
   Store,
+  StoreCategory,
   MediaAsset,
   MediaVariant,
   PostEngagement,
@@ -40,6 +41,7 @@ import { SeoModule } from '../seo/seo.module';
       PostEngagement,
       PostLike,
       Product,
+      StoreCategory,
     ]),
     AuthModule,
     StorageModule,

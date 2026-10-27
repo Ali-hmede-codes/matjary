@@ -31,4 +31,13 @@ export class CreateShowcaseDto {
   @IsOptional()
   @IsUUID('4')
   storeId?: string;
+
+  // Shoppable post: one of the shop's products or one of its categories.
+  @IsOptional()
+  @IsUUID('4')
+  linkedProductId?: string | null;
+
+  @IsOptional()
+  @IsUUID('4')
+  linkedCategoryId?: string | null;
 }

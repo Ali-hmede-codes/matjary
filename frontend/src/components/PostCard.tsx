@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  LayoutGrid,
+  ShoppingBag,
+} from 'lucide-react';
 import { storePath } from '../lib/storefront';
 import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
@@ -83,6 +89,18 @@ export function PostCard({
               eager={index === 0}
             />
           </button>
+        )}
+        {/* The card only hints at the link; the viewer carries the tappable
+            pill, so the badge never fights the card's own open action. */}
+        {post.link && (
+          <span className="post-link-badge" title={post.link.name}>
+            {post.link.type === 'product' ? (
+              <ShoppingBag size={14} aria-hidden="true" />
+            ) : (
+              <LayoutGrid size={14} aria-hidden="true" />
+            )}
+            <span>{post.link.name}</span>
+          </span>
         )}
         {post.media.length > 1 && (
           <>

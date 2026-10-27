@@ -9,9 +9,11 @@ import {
 } from '@nestjs/common';
 import { QueryFailedError, FindOperator, type Repository } from 'typeorm';
 import {
+  Product,
   Showcase,
   ShowcaseStatus,
   Store,
+  StoreCategory,
   User,
   UserSubscription,
 } from '../../libs/database/src/entities';
@@ -135,6 +137,8 @@ function serviceWith(fake: FakeRepository): ShowcasesService {
   return new ShowcasesService(
     fake as unknown as Repository<Showcase>,
     fake as unknown as Repository<Store>,
+    fake as unknown as Repository<Product>,
+    fake as unknown as Repository<StoreCategory>,
     seoService,
   );
 }

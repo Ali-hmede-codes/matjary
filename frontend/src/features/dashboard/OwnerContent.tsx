@@ -49,6 +49,15 @@ interface Content {
   options?: ProductOptionGroup[] | null;
   // Posts carry their first ready media variant here; products use imageKeys.
   thumbnailKey?: string | null;
+  // Shoppable posts point at one own product or one own section.
+  linkedProductId?: string | null;
+  linkedCategoryId?: string | null;
+}
+interface LinkProduct {
+  id: string;
+  name: string;
+  priceCents?: string;
+  currency?: string;
 }
 interface Category {
   id: string;
@@ -369,6 +378,14 @@ function ContentEditor({
     item?.stockQuantity == null ? '' : String(item.stockQuantity),
   );
   const [description, setDescription] = useState(item?.description || '');
+  // One value drives the picker: "p:<id>", "c:<id>" or empty for no link.
+  const [linkValue, setLinkValue] = useState(
+    item?.linkedProductId
+      ? `p:${item.linkedProductId}`
+      : item?.linkedCategoryId
+        ? `c:${item.linkedCategoryId}`
+        : '',
+  );
   const [keys, setKeys] = useState(item?.imageKeys || []);
   const [slug, setSlug] = useState(item?.slug || '');
   const [slugTouched, setSlugTouched] = useState(Boolean(item));
@@ -396,6 +413,7 @@ function ContentEditor({
     keys: string[];
     slug: string;
     options: OptionGroupDraft[];
+    link: string;
   }) => JSON.stringify(values);
   const snapshot = snapshotOf({
     name,
@@ -408,6 +426,7 @@ function ContentEditor({
     keys,
     slug,
     options,
+    link: linkValue,
   });
   const [baseline, setBaseline] = useState(snapshot);
   const dirty = snapshot !== baseline;
@@ -429,6 +448,28 @@ function ContentEditor({
       ),
     enabled: product,
   });
+  // Shoppable posts can only point at this shop's own catalogue, so the picker
+  // offers exactly the rows the owner already created here.
+  const linkSources = useQuery({
+    queryKey: ['panel', session.user.id, 'post-link-sources', store!.id],
+    queryFn: async ({ signal }) => {
+      const [products, categories] = await Promise.all([
+        getJson<LinkProduct[]>(
+          `stores/${encodeURIComponent(store!.slug)}/products/my`,
+          signal,
+        ),
+        getJson<CategoryList>(
+          `stores/${encodeURIComponent(store!.slug)}/categories/my`,
+          signal,
+        ),
+      ]);
+      return { products, categories: categories.items };
+    },
+    enabled: !product,
+    staleTime: 60_000,
+  });
+  const linkProducts = linkSources.data?.products ?? [];
+  const linkCategories = linkSources.data?.categories ?? [];
   // Other products owned by this account are the source for copied options.
   // One query covers every store, so a shop can reuse a size chart or color
   // list from a sibling shop without retyping it.
@@ -707,7 +748,16 @@ function ContentEditor({
                 ? { requiresShipping: store?.storeType !== 'restaurant_menu' }
                 : {}),
             }
-          : { title: cleanName, ...(!record ? { storeId: store!.id } : {}) }),
+          : {
+              title: cleanName,
+              ...(!record ? { storeId: store!.id } : {}),
+              linkedProductId: linkValue.startsWith('p:')
+                ? linkValue.slice(2)
+                : null,
+              linkedCategoryId: linkValue.startsWith('c:')
+                ? linkValue.slice(2)
+                : null,
+            }),
         description: cleanDescription || null,
         status,
       };
@@ -725,6 +775,12 @@ function ContentEditor({
       setRecord(saved);
       setName(cleanName);
       setDescription(cleanDescription);
+      const savedLink = saved.linkedProductId
+        ? `p:${saved.linkedProductId}`
+        : saved.linkedCategoryId
+          ? `c:${saved.linkedCategoryId}`
+          : '';
+      setLinkValue(savedLink);
       setSlug(savedSlug);
       setSlugTouched(true);
       setOptionsTouched(false);
@@ -750,6 +806,7 @@ function ContentEditor({
           keys,
           slug: savedSlug,
           options: nextOptions,
+          link: savedLink,
         }),
       );
       await client.invalidateQueries({
@@ -1137,6 +1194,39 @@ function ContentEditor({
                 onChange={(e) => setStock(e.target.value)}
                 placeholder="Leave blank to skip stock tracking"
               />
+            </label>
+          )}
+          {!product && (
+            <label>
+              Linked product or section
+              <select
+                value={linkValue}
+                onChange={(e) => setLinkValue(e.target.value)}
+              >
+                <option value="">Nothing linked</option>
+                {linkProducts.length > 0 && (
+                  <optgroup label="Products">
+                    {linkProducts.map((entry) => (
+                      <option key={entry.id} value={`p:${entry.id}`}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {linkCategories.length > 0 && (
+                  <optgroup label="Sections">
+                    {linkCategories.map((entry) => (
+                      <option key={entry.id} value={`c:${entry.id}`}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <small>
+                Shoppers see a small tag on this post that opens the product or
+                section page.
+              </small>
             </label>
           )}
         </details>

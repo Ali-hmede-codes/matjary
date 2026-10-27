@@ -187,6 +187,54 @@
   -webkit-line-clamp: 3;
   overflow: hidden;
 }
+/* Shoppable post: one compact pill above the caption, the way a tagged
+   product sits in a reel without covering the photo. */
+.reel-product {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 5px 11px 5px 9px;
+  border: 1px solid #ffffff33;
+  border-radius: 999px;
+  background: #0b1a15b3;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  text-shadow: none;
+  pointer-events: auto;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.reel-product:hover {
+  border-color: #ffffff66;
+  background: #0b1a15e6;
+}
+.reel-product-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+.reel-product-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reel-product-copy small {
+  flex-shrink: 0;
+  color: #ffffffb8;
+  font-size: 10px;
+  font-weight: 600;
+}
+.reel-product > svg {
+  flex-shrink: 0;
+}
+.reel-product > svg:last-child {
+  opacity: 0.7;
+}
 .reel-caption-author {
   font-weight: 700;
   color: #fff;

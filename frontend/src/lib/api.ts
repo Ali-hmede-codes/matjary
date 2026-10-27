@@ -121,6 +121,16 @@ export interface Media {
   }[];
 }
 
+// A shoppable post points at one own product or one of its categories. The API
+// resolves the display fields and drops links that are no longer public.
+export interface PostLink {
+  type: 'product' | 'category';
+  name: string;
+  slug: string | null;
+  priceCents: string | null;
+  currency: string | null;
+}
+
 export interface Post {
   id: string;
   slug: string;
@@ -129,6 +139,7 @@ export interface Post {
   publishedAt: string | null;
   store?: Store;
   media: Media[];
+  link?: PostLink;
   engagement: { likes: number; views: number; viewerLiked: boolean };
 }
 

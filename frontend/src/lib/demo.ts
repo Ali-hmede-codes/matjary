@@ -225,5 +225,27 @@ export const demoPosts: (Post & { category: string })[] = examples.map(
       views: [2400, 980, 6100, 3700, 1420, 2900][index] ?? 0,
       viewerLiked: false,
     },
+    // Two sample shoppable posts so the design preview shows both link kinds.
+    ...(index === 0
+      ? {
+          link: {
+            type: 'product' as const,
+            name: 'Everyday ceramic mug',
+            slug: 'demo-product-0-0',
+            priceCents: '1800',
+            currency: 'USD',
+          },
+        }
+      : index === 1
+        ? {
+            link: {
+              type: 'category' as const,
+              name: 'Beverage',
+              slug: null,
+              priceCents: null,
+              currency: null,
+            },
+          }
+        : {}),
   }),
 );

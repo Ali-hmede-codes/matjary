@@ -280,6 +280,38 @@ export class Showcase extends BaseEntity {
   })
   publishedAt!: Date | null;
 
+  // A post may point shoppers at one own product or one of its categories, the
+  // way a shoppable post does. The service enforces "one or the other".
+  @Column({
+    name: 'linked_product_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  linkedProductId!: string | null;
+
+  @ManyToOne(() => Product, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'linked_product_id',
+    foreignKeyConstraintName: 'fk_showcases_linked_product',
+  })
+  linkedProduct!: Relation<Product | null>;
+
+  @Column({
+    name: 'linked_category_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  linkedCategoryId!: string | null;
+
+  @ManyToOne(() => StoreCategory, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'linked_category_id',
+    foreignKeyConstraintName: 'fk_showcases_linked_category',
+  })
+  linkedCategory!: Relation<StoreCategory | null>;
+
   // Denormalized counters for performance (updated by worker/flusher)
   @Column({ name: 'media_count', type: 'int', unsigned: true, default: 0 })
   mediaCount!: number;

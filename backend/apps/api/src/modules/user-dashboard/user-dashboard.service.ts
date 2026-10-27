@@ -439,6 +439,8 @@ export class UserDashboardService {
           'sc.mediaCount',
           'sc.likesCount',
           'sc.viewsCount',
+          'sc.linkedProductId',
+          'sc.linkedCategoryId',
           'store.id',
           'store.slug',
           'store.name',

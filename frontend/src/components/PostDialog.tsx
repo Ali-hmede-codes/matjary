@@ -9,13 +9,21 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  LayoutGrid,
   Maximize,
   Minimize,
+  ShoppingBag,
   X,
 } from 'lucide-react';
 import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
-import { storePath } from '../lib/storefront';
+import {
+  categorySlug,
+  formatProductPrice,
+  storeCategoryPath,
+  storePath,
+  storeProductPath,
+} from '../lib/storefront';
 import type { Post } from '../lib/api';
 import { resumeFeedPlayback, suspendFeedPlayback } from '../lib/video-playback';
 import { PostActions } from './PostActions';
@@ -160,6 +168,42 @@ function PostSlide({
                   <ChevronRight size={16} aria-hidden="true" />
                 </button>
               </div>
+            )}
+            {/* A shoppable post carries one link: a product or a section. It
+                stays a small pill so the photo keeps the stage. */}
+            {post.link && post.store && (
+              <a
+                className="reel-product"
+                href={
+                  post.link.type === 'product' && post.link.slug
+                    ? storeProductPath(post.store.slug, post.link.slug, demo)
+                    : storeCategoryPath(
+                        post.store.slug,
+                        categorySlug(post.link.name),
+                        demo,
+                      )
+                }
+              >
+                {post.link.type === 'product' ? (
+                  <ShoppingBag size={15} aria-hidden="true" />
+                ) : (
+                  <LayoutGrid size={15} aria-hidden="true" />
+                )}
+                <span className="reel-product-copy">
+                  <strong>{post.link.name}</strong>
+                  {post.link.type === 'product' &&
+                    post.link.priceCents &&
+                    post.link.currency && (
+                      <small>
+                        {formatProductPrice(
+                          post.link.priceCents,
+                          post.link.currency,
+                        )}
+                      </small>
+                    )}
+                </span>
+                <ArrowUpRight size={14} aria-hidden="true" />
+              </a>
             )}
             <p className="reel-caption">
               <a

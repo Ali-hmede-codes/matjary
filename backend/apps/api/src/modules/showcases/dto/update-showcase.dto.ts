@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsOptional,
   IsDateString,
+  IsUUID,
 } from 'class-validator';
 import { ShowcaseStatus } from '@app/database';
 
@@ -25,4 +26,13 @@ export class UpdateShowcaseDto {
   @IsOptional()
   @IsDateString()
   publishedAt?: string | null;
+
+  // Shoppable post: one of the shop's products or one of its categories.
+  @IsOptional()
+  @IsUUID('4')
+  linkedProductId?: string | null;
+
+  @IsOptional()
+  @IsUUID('4')
+  linkedCategoryId?: string | null;
 }

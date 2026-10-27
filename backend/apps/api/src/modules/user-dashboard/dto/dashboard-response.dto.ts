@@ -74,6 +74,9 @@ export class UserPostSummaryDto {
   // First ready media thumbnail so the panel list can render posts without
   // fetching each showcase's media separately.
   thumbnailKey!: string | null;
+  // Shoppable post targets; the editor prefills its link picker from these.
+  linkedProductId!: string | null;
+  linkedCategoryId!: string | null;
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -102,6 +105,8 @@ export class UserPostSummaryDto {
     dto.viewsCount = viewsCount;
     dto.viewerLiked = viewerLiked;
     dto.thumbnailKey = thumbnailKey;
+    dto.linkedProductId = post.linkedProductId ?? null;
+    dto.linkedCategoryId = post.linkedCategoryId ?? null;
     dto.createdAt = post.createdAt;
     dto.updatedAt = post.updatedAt;
     return dto;

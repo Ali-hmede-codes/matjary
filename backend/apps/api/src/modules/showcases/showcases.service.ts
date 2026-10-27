@@ -4,14 +4,17 @@ import {
   ForbiddenException,
   ConflictException,
   ServiceUnavailableException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
 import {
+  Product,
   Showcase,
   ShowcaseStatus,
   Store,
+  StoreCategory,
   User,
   effectiveLimits,
   assertSubscriptionActive,
@@ -35,6 +38,10 @@ export class ShowcasesService {
     private readonly showcases: Repository<Showcase>,
     @InjectRepository(Store)
     private readonly stores: Repository<Store>,
+    @InjectRepository(Product)
+    private readonly products: Repository<Product>,
+    @InjectRepository(StoreCategory)
+    private readonly categories: Repository<StoreCategory>,
     private readonly seoService: SeoService,
   ) {}
 
@@ -42,6 +49,41 @@ export class ShowcasesService {
     throw new ServiceUnavailableException(
       'Post storage is temporarily unavailable',
     );
+  }
+
+  /**
+   * A shoppable post may point at one product or one category, and only rows
+   * that belong to the post's own shop — a link must never leak another shop's
+   * catalogue into the post.
+   */
+  private async resolveLinks(
+    storeId: string | null,
+    linkedProductId: string | null | undefined,
+    linkedCategoryId: string | null | undefined,
+  ): Promise<{ productId: string | null; categoryId: string | null }> {
+    const productId = linkedProductId ?? null;
+    const categoryId = linkedCategoryId ?? null;
+    if (productId && categoryId) {
+      throw new BadRequestException(
+        'A post can link one item or one section, not both',
+      );
+    }
+    if ((productId || categoryId) && !storeId) {
+      throw new BadRequestException('Link a shop post before adding an item');
+    }
+    if (productId) {
+      const product = await this.products.findOneBy({ id: productId });
+      if (!product || product.storeId !== storeId || product.adminArchivedAt) {
+        throw new NotFoundException('Product not found');
+      }
+    }
+    if (categoryId) {
+      const category = await this.categories.findOneBy({ id: categoryId });
+      if (!category || category.storeId !== storeId) {
+        throw new NotFoundException('Category not found');
+      }
+    }
+    return { productId, categoryId };
   }
 
   async findAll(
@@ -74,6 +116,8 @@ export class ShowcasesService {
           'createdAt',
           'updatedAt',
           'ownerId',
+          'linkedProductId',
+          'linkedCategoryId',
         ],
       });
 
@@ -164,6 +208,12 @@ export class ShowcasesService {
             }
           }
 
+          const link = await this.resolveLinks(
+            dto.storeId ?? null,
+            dto.linkedProductId,
+            dto.linkedCategoryId,
+          );
+
           const showcase = manager.create(Showcase, {
             slug,
             title: dto.title,
@@ -171,6 +221,8 @@ export class ShowcasesService {
             status: dto.status ?? ShowcaseStatus.DRAFT,
             ownerId,
             storeId: dto.storeId ?? null,
+            linkedProductId: link.productId,
+            linkedCategoryId: link.categoryId,
             publishedAt:
               dto.status === ShowcaseStatus.PUBLISHED ? new Date() : null,
           });
@@ -197,7 +249,8 @@ export class ShowcasesService {
       if (
         error instanceof ConflictException ||
         error instanceof NotFoundException ||
-        error instanceof ForbiddenException
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -242,6 +295,29 @@ export class ShowcasesService {
           ? new Date(dto.publishedAt)
           : null;
       }
+      if (
+        dto.linkedProductId !== undefined ||
+        dto.linkedCategoryId !== undefined
+      ) {
+        let productId =
+          dto.linkedProductId === undefined
+            ? showcase.linkedProductId
+            : dto.linkedProductId;
+        let categoryId =
+          dto.linkedCategoryId === undefined
+            ? showcase.linkedCategoryId
+            : dto.linkedCategoryId;
+        // Choosing a new link replaces the other kind instead of stacking two.
+        if (dto.linkedProductId) categoryId = null;
+        if (dto.linkedCategoryId) productId = null;
+        const link = await this.resolveLinks(
+          showcase.storeId,
+          productId,
+          categoryId,
+        );
+        showcase.linkedProductId = link.productId;
+        showcase.linkedCategoryId = link.categoryId;
+      }
 
       const saved = await this.showcases.manager.transaction(
         async (manager) => {
@@ -275,7 +351,8 @@ export class ShowcasesService {
       if (
         error instanceof NotFoundException ||
         error instanceof ForbiddenException ||
-        error instanceof ConflictException
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
       ) {
         throw error;
       }
@@ -332,6 +409,8 @@ export class ShowcasesService {
       createdAt: showcase.createdAt,
       updatedAt: showcase.updatedAt,
       ...(includeOwnerId ? { ownerId: showcase.ownerId } : {}),
+      linkedProductId: showcase.linkedProductId,
+      linkedCategoryId: showcase.linkedCategoryId,
     };
   }
 }

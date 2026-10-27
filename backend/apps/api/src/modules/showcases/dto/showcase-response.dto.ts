@@ -10,4 +10,6 @@ export class ShowcaseResponseDto {
   createdAt!: Date;
   updatedAt!: Date;
   ownerId?: string;
+  linkedProductId?: string | null;
+  linkedCategoryId?: string | null;
 }

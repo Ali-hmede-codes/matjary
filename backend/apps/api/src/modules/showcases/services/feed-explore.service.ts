@@ -16,11 +16,14 @@ import {
   Showcase,
   ShowcaseStatus,
   Store,
+  StoreCategory,
+  Product,
   MediaAsset,
   MediaKind,
   MediaStatus,
   PostEngagement,
   MediaVariant,
+  isPublicProductStatus,
   publicWhere,
   publicVisibilitySql,
   BUSINESS_CATEGORIES,
@@ -73,6 +76,8 @@ export interface FeedItem {
     };
   };
   media: FeedMediaItem[];
+  // Shoppable post target, resolved only when it is still publicly visible.
+  link?: FeedPostLink;
   engagement: {
     likes: number;
     views: number;
@@ -80,6 +85,15 @@ export interface FeedItem {
   };
   // Algorithm score for debugging/ordering
   _algorithmScore?: number;
+}
+
+export interface FeedPostLink {
+  type: 'product' | 'category';
+  name: string;
+  // Products are addressed by slug; categories by their derived slug.
+  slug: string | null;
+  priceCents: string | null;
+  currency: string | null;
 }
 
 export interface FeedMediaItem {
@@ -827,6 +841,29 @@ export class FeedExploreService {
         : [];
     const storeMap = new Map(stores.map((s) => [s.id, s]));
 
+    // Shoppable post targets, resolved in two batched lookups. A link only
+    // survives when the row still belongs to the post's shop and is public.
+    const productIds = [
+      ...new Set(showcases.map((item) => item.linkedProductId).filter(Boolean)),
+    ] as string[];
+    const categoryIds = [
+      ...new Set(
+        showcases.map((item) => item.linkedCategoryId).filter(Boolean),
+      ),
+    ] as string[];
+    const linkedProducts = productIds.length
+      ? await this.showcases.manager.getRepository(Product).find({
+          where: { id: In(productIds), ...publicWhere('product') },
+        })
+      : [];
+    const linkedCategories = categoryIds.length
+      ? await this.showcases.manager
+          .getRepository(StoreCategory)
+          .findBy({ id: In(categoryIds) })
+      : [];
+    const productMap = new Map(linkedProducts.map((p) => [p.id, p]));
+    const categoryMap = new Map(linkedCategories.map((c) => [c.id, c]));
+
     // Group media by showcase
     const mediaByShowcase = new Map<string, MediaAsset[]>();
     for (const asset of mediaAssets) {
@@ -869,6 +906,38 @@ export class FeedExploreService {
 
       const store = showcase.storeId ? storeMap.get(showcase.storeId) : null;
 
+      let link: FeedPostLink | undefined;
+      const linkedProduct = showcase.linkedProductId
+        ? productMap.get(showcase.linkedProductId)
+        : undefined;
+      const linkedCategory = showcase.linkedCategoryId
+        ? categoryMap.get(showcase.linkedCategoryId)
+        : undefined;
+      if (
+        linkedProduct &&
+        linkedProduct.storeId === showcase.storeId &&
+        isPublicProductStatus(linkedProduct.status)
+      ) {
+        link = {
+          type: 'product',
+          name: linkedProduct.name,
+          slug: linkedProduct.slug,
+          priceCents: linkedProduct.priceCents,
+          currency: linkedProduct.currency,
+        };
+      } else if (
+        linkedCategory &&
+        linkedCategory.storeId === showcase.storeId
+      ) {
+        link = {
+          type: 'category',
+          name: linkedCategory.name,
+          slug: null,
+          priceCents: null,
+          currency: null,
+        };
+      }
+
       items.push({
         id: showcase.id,
         slug: showcase.slug,
@@ -902,6 +971,7 @@ export class FeedExploreService {
             }
           : undefined,
         media,
+        ...(link ? { link } : {}),
         engagement: { likes, views, viewerLiked },
       });
     }

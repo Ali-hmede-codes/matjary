@@ -140,6 +140,39 @@
   align-items: center;
   gap: 5px;
 }
+/* A linked product/section only hints on the card; the tappable pill lives in
+   the viewer, so this badge stays inert and lets the card open the post. */
+.post-link-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: calc(100% - 24px);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #17231ecc;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 650;
+  pointer-events: none;
+}
+.post-link-badge > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compact-grid .post-link-badge {
+  bottom: 8px;
+  left: 8px;
+  padding: 4px 7px;
+}
+/* The compact grid has no room for a label; the icon alone marks the tile. */
+.compact-grid .post-link-badge > span {
+  display: none;
+}
 .compact-grid .post-image,
 .compact-grid .post-video {
   aspect-ratio: 1;
