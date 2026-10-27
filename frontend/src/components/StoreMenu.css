@@ -1092,8 +1092,8 @@
 
 /* Gallery: one continuous wall of image-first tiles. */
 .shop-catalog-items.layout-gallery {
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
+  gap: 8px;
 }
 .storefront .shop-gallery-tile {
   position: relative;
@@ -1135,14 +1135,14 @@
   position: absolute;
   inset: auto 0 0;
   z-index: 2;
-  padding: 44px 14px 14px;
+  padding: 34px 12px 12px;
   background: linear-gradient(transparent, #000000b8);
   color: #fff;
 }
 .shop-gallery-copy h3 {
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.3px;
   line-height: 1.35;
@@ -1159,9 +1159,9 @@
   line-clamp: 2;
 }
 .shop-gallery-copy .shop-product-bottom {
-  padding-top: 10px;
+  padding-top: 8px;
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
 }
 .shop-gallery-copy .shop-add-to-cart,
 .shop-gallery-copy .shop-qty-stepper {
@@ -1244,7 +1244,7 @@
 }
 .shop-featured-item h3 {
   font-family: var(--shop-font-display, inherit);
-  font-size: clamp(22px, 3vw, 30px);
+  font-size: clamp(20px, 2.4vw, 26px);
   font-weight: var(--shop-display-weight, 700);
   letter-spacing: var(--shop-display-spacing, -0.6px);
   line-height: 1.2;
@@ -1269,7 +1269,7 @@
   overscroll-behavior-x: contain;
 }
 .layout-shelves > .shop-photo-card {
-  flex: 0 0 clamp(196px, 40vw, 252px);
+  flex: 0 0 clamp(168px, 36vw, 220px);
   scroll-snap-align: start;
 }
 

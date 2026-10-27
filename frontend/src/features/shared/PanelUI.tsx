@@ -47,7 +47,7 @@ export function PanelShell({
         ['', 'Home'],
         ['/stores', 'My stores'],
         ['/store', 'Store editor'],
-        ['/design', 'Design studio'],
+        ['/design', 'Shop design'],
         ['/products', 'Products / menu'],
         ['/posts', 'Posts'],
         ['/boost', 'Boost'],

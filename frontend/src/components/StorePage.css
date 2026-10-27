@@ -1217,7 +1217,7 @@
   padding-top: 8px;
 }
 .shop-hero.hero-split .shop-banner {
-  height: clamp(170px, 17vw, 230px);
+  height: clamp(150px, 15vw, 200px);
 }
 @media (min-width: 960px) {
   .shop-hero.hero-split {
@@ -1228,33 +1228,33 @@
   }
   .shop-hero.hero-split .shop-banner {
     height: auto;
-    min-height: 300px;
+    min-height: 250px;
   }
   .shop-hero.hero-split .shop-profile {
     width: calc(100% - 56px);
-    margin: 42px auto;
+    margin: 30px auto;
   }
   .shop-hero.hero-split .shop-logo {
     margin-top: 0;
   }
 }
 .shop-hero.hero-poster .shop-banner {
-  height: clamp(310px, 36vw, 470px);
+  height: clamp(250px, 29vw, 380px);
 }
 .shop-hero.hero-poster .shop-profile {
-  margin-top: -112px;
-  padding: 22px 26px 4px;
+  margin-top: -88px;
+  padding: 18px 22px 2px;
   border: 1px solid var(--line);
   border-radius: var(--shop-radius, 24px);
   background: var(--surface);
   box-shadow: 0 24px 60px color-mix(in srgb, var(--ink) 14%, transparent);
 }
 .shop-hero.hero-immersive .shop-banner {
-  height: clamp(360px, 46vw, 560px);
+  height: clamp(300px, 38vw, 450px);
 }
 .shop-hero.hero-immersive .shop-profile {
-  margin-top: -150px;
-  padding: 24px 28px 6px;
+  margin-top: -112px;
+  padding: 20px 24px 4px;
   border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   border-radius: var(--shop-radius, 24px);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -1265,10 +1265,10 @@
 @media (max-width: 720px) {
   .shop-hero.hero-poster .shop-profile,
   .shop-hero.hero-immersive .shop-profile {
-    margin-top: -72px;
-    padding: 16px 16px 2px;
+    margin-top: -56px;
+    padding: 14px 14px 0;
   }
   .shop-hero.hero-immersive .shop-banner {
-    height: clamp(280px, 58vw, 380px);
+    height: clamp(240px, 50vw, 320px);
   }
 }

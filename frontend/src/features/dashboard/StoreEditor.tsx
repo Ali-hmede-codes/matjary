@@ -504,7 +504,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
             </label>
             <p className="panel-muted">
               Want layouts, type and a style for each menu section?{' '}
-              <Link to="/dashboard/design">Open the design studio</Link>.
+              <Link to="/dashboard/design">Open shop design</Link>.
             </p>
           </section>
           {store && (

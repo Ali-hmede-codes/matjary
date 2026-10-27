@@ -1,9 +1,11 @@
+import './StoreDesignStudio.css';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpRight,
   Check,
+  ChevronDown,
   LoaderCircle,
   Palette,
   Sparkles,
@@ -165,13 +167,11 @@ function StudioSection({
   title,
   hint,
   children,
-  action,
 }: {
   step: string;
   title: string;
   hint?: string;
   children: ReactNode;
-  action?: ReactNode;
 }) {
   return (
     <section className="panel-card design-card">
@@ -181,7 +181,6 @@ function StudioSection({
           <h2>{title}</h2>
           {hint && <p className="panel-muted">{hint}</p>}
         </div>
-        {action}
       </header>
       {children}
     </section>
@@ -248,11 +247,12 @@ function LayoutPicker<T extends string>({
             type="button"
             className={`design-layout ${value === layout ? 'is-selected' : ''}`}
             aria-pressed={value === layout}
+            aria-label={`${info[layout].label}: ${info[layout].hint}`}
+            title={info[layout].hint}
             onClick={() => onChange(layout)}
           >
             <LayoutWire boxes={wires[layout]} />
             <strong>{info[layout].label}</strong>
-            <small>{info[layout].hint}</small>
           </button>
         ))}
       </div>
@@ -268,6 +268,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   const [baseline, setBaseline] = useState(() =>
     JSON.stringify(normalizeDesign(store.designSettings)),
   );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -307,6 +308,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   const shapes = shapeChoices();
   const densities = densityChoices();
   const heroes = heroChoices();
+  const advancedSummary = `${
+    heroes.find((entry) => entry.key === design.hero)?.label ?? 'Classic'
+  } cover · ${rhythmSummary(design)}`;
 
   const update = (patch: Partial<StoreDesign>) =>
     setDesign((current) => ({ ...current, ...patch }));
@@ -348,7 +352,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
       const saved = normalizeDesign(updated.designSettings);
       setDesign(saved);
       setBaseline(JSON.stringify(saved));
-      setNotice('Your design is live on your shop.');
+      setNotice('Saved. Your shop now uses this design.');
     } catch (e) {
       setError(panelError(e));
     } finally {
@@ -388,9 +392,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   return (
     <>
       <PageTitle
-        eyebrow="DESIGN STUDIO"
+        eyebrow="SHOP DESIGN"
         title="Give your shop a signature."
-        description="Pick a starting point, then tune every layout, type and colour. What you see is exactly what visitors get."
+        description="Pick a look, then choose your post and menu layouts. Everything else can stay as it is."
         action={
           store.status === 'active' && (
             <Link
@@ -406,16 +410,16 @@ function DesignStudio({ store }: { store: OwnerStore }) {
       />
       {!hasSavedDesign(store.designSettings) && (
         <Notice>
-          Your shop still has the classic look. Pick a starting point, tune it,
-          then save to make this design live.
+          Your shop still has the classic look. Pick a starting point, then
+          press Save to make it live.
         </Notice>
       )}
       <div className="design-studio">
         <div className="design-studio-main">
           <StudioSection
             step="01"
-            title="Start with a look"
-            hint="Each look is a complete system: palette, type, corners, spacing, hero and layouts. Choosing one keeps your section styles and brand colour."
+            title="Pick a look"
+            hint="One click sets the palette, type, corners and layouts. Your brand colour stays yours."
           >
             <div className="design-presets">
               {designPresets.map((entry) => {
@@ -434,34 +438,53 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                         {entry.name}
                         {selected && (
                           <span className="design-preset-check">
-                            <Check size={13} />
+                            <Check size={12} />
                           </span>
                         )}
                       </strong>
                       <small>{entry.tagline}</small>
-                      <em>{entry.bestFor}</em>
                     </span>
                   </button>
                 );
               })}
             </div>
             <p className="design-fineprint panel-muted">
-              <Sparkles size={14} /> Looks are a starting point, not a lock:
-              every option below can be changed.
+              <Sparkles size={13} /> A look is a starting point — change any
+              part below.
             </p>
           </StudioSection>
 
           <StudioSection
             step="02"
-            title="Make it yours"
-            hint="Your brand colour sets buttons and accents. The palette sets the page surface and ink."
-            action={
-              <Link className="design-inline-link" to="/dashboard/store">
-                <Palette size={15} /> Brand colour & logo
-              </Link>
-            }
+            title="Layouts"
+            hint="The two arrangements most visitors notice first."
           >
-            <div className="design-control-grid">
+            <LayoutPicker
+              label="Posts"
+              hint="Your photo and video wall."
+              layouts={postLayouts}
+              info={postLayoutInfo}
+              wires={postWires}
+              value={design.postsLayout}
+              onChange={(postsLayout) => update({ postsLayout })}
+            />
+            <LayoutPicker
+              label={preview.restaurant ? 'Menu' : 'Products'}
+              hint="Your items, section by section."
+              layouts={catalogLayouts}
+              info={catalogLayoutInfo}
+              wires={catalogWires}
+              value={design.catalogLayout}
+              onChange={(catalogLayout) => update({ catalogLayout })}
+            />
+          </StudioSection>
+
+          <StudioSection
+            step="03"
+            title="Colors & type"
+            hint="A quick way to make the look yours."
+          >
+            <div className="design-quick-grid">
               <div className="design-control">
                 <strong>Palette</strong>
                 <div className="design-palettes">
@@ -505,276 +528,264 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                   ))}
                 </div>
               </div>
-              <div className="design-control">
-                <strong>Corners</strong>
-                <div className="design-shapes">
-                  {shapes.map((choice) => (
+            </div>
+            <p className="design-fineprint panel-muted">
+              <Palette size={13} /> The main colour and logo live in{' '}
+              <Link to="/dashboard/store">Store editor</Link>.
+            </p>
+          </StudioSection>
+
+          <details
+            className="panel-card design-advanced"
+            open={advancedOpen}
+            onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+          >
+            <summary>
+              <span>
+                <strong>Advanced</strong>
+                <small>{advancedSummary}</small>
+              </span>
+              <ChevronDown size={18} aria-hidden="true" />
+            </summary>
+            <div className="design-advanced-body">
+              <div className="design-advanced-block">
+                <h3>Cover style</h3>
+                <div className="design-heroes">
+                  {heroes.map((choice) => (
                     <button
                       key={choice.key}
                       type="button"
-                      className={`design-shape ${design.shape === choice.key ? 'is-selected' : ''}`}
-                      aria-pressed={design.shape === choice.key}
-                      onClick={() => update({ shape: choice.key })}
-                      title={choice.note}
+                      className={`design-hero ${design.hero === choice.key ? 'is-selected' : ''}`}
+                      aria-pressed={design.hero === choice.key}
+                      onClick={() => update({ hero: choice.key })}
                     >
-                      <i style={{ borderRadius: choice.radius }} />
-                      {choice.label}
+                      <span className={`design-hero-art is-${choice.key}`}>
+                        <i />
+                        <b />
+                      </span>
+                      <strong>{choice.label}</strong>
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="design-control">
-                <strong>Spacing</strong>
-                <div className="design-shapes">
-                  {densities.map((choice) => (
-                    <button
-                      key={choice.key}
-                      type="button"
-                      className={`design-shape ${design.density === choice.key ? 'is-selected' : ''}`}
-                      aria-pressed={design.density === choice.key}
-                      onClick={() => update({ density: choice.key })}
-                      title={choice.note}
+
+              <div className="design-advanced-block">
+                <h3>Section rhythm</h3>
+                <div className="design-rhythm-head">
+                  <small className="panel-muted">{rhythmSummary(design)}</small>
+                  <label className="design-select">
+                    Second style
+                    <select
+                      value={design.accentLayout}
+                      onChange={(event) =>
+                        update({
+                          accentLayout: event.target.value as CatalogLayout,
+                        })
+                      }
+                      disabled={design.rhythm === 'uniform'}
                     >
-                      <i className={`design-density ${choice.key}`} />
-                      {choice.label}
+                      {catalogLayouts.map((layout) => (
+                        <option key={layout} value={layout}>
+                          {catalogLayoutInfo[layout].label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div
+                  className="design-rhythms"
+                  role="radiogroup"
+                  aria-label="Section rhythm"
+                >
+                  {designRhythms.map((rhythm) => (
+                    <button
+                      key={rhythm}
+                      type="button"
+                      role="radio"
+                      aria-checked={design.rhythm === rhythm}
+                      title={rhythmInfo[rhythm].hint}
+                      className={`design-rhythm ${design.rhythm === rhythm ? 'is-selected' : ''}`}
+                      onClick={() => update({ rhythm })}
+                    >
+                      <span className={`design-rhythm-art is-${rhythm}`}>
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                      <strong>{rhythmInfo[rhythm].label}</strong>
                     </button>
                   ))}
                 </div>
-              </div>
-            </div>
-            <div className="design-control design-control-wide">
-              <strong>Hero</strong>
-              <div className="design-heroes">
-                {heroes.map((choice) => (
-                  <button
-                    key={choice.key}
-                    type="button"
-                    className={`design-hero ${design.hero === choice.key ? 'is-selected' : ''}`}
-                    aria-pressed={design.hero === choice.key}
-                    onClick={() => update({ hero: choice.key })}
-                  >
-                    <span className={`design-hero-art is-${choice.key}`}>
-                      <i />
-                      <b />
-                    </span>
-                    <strong>{choice.label}</strong>
-                    <small>{choice.hint}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </StudioSection>
 
-          <StudioSection
-            step="03"
-            title="Posts"
-            hint="The wall of photos and videos on your shop page."
-          >
-            <LayoutPicker
-              label="Post layout"
-              hint="Same posts, a different stage."
-              layouts={postLayouts}
-              info={postLayoutInfo}
-              wires={postWires}
-              value={design.postsLayout}
-              onChange={(postsLayout) => update({ postsLayout })}
-            />
-          </StudioSection>
-
-          <StudioSection
-            step="04"
-            title={preview.restaurant ? 'Menu' : 'Products'}
-            hint="Choose the main item style and a second style for the section rhythm."
-          >
-            <LayoutPicker
-              label="Main item style"
-              hint="Used in every section unless a section overrides it."
-              layouts={catalogLayouts}
-              info={catalogLayoutInfo}
-              wires={catalogWires}
-              value={design.catalogLayout}
-              onChange={(catalogLayout) => update({ catalogLayout })}
-            />
-            <div className="design-rhythm-head">
-              <div>
-                <strong>Section rhythm</strong>
-                <small className="panel-muted">{rhythmSummary(design)}</small>
-              </div>
-              <label className="design-select">
-                Second style
-                <select
-                  value={design.accentLayout}
-                  onChange={(event) =>
-                    update({
-                      accentLayout: event.target.value as CatalogLayout,
-                    })
-                  }
-                  disabled={design.rhythm === 'uniform'}
-                >
-                  {catalogLayouts.map((layout) => (
-                    <option key={layout} value={layout}>
-                      {catalogLayoutInfo[layout].label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div
-              className="design-rhythms"
-              role="radiogroup"
-              aria-label="Section rhythm"
-            >
-              {designRhythms.map((rhythm) => (
-                <button
-                  key={rhythm}
-                  type="button"
-                  role="radio"
-                  aria-checked={design.rhythm === rhythm}
-                  className={`design-rhythm ${design.rhythm === rhythm ? 'is-selected' : ''}`}
-                  onClick={() => update({ rhythm })}
-                >
-                  <span className={`design-rhythm-art is-${rhythm}`}>
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                  <strong>{rhythmInfo[rhythm].label}</strong>
-                  <small>{rhythmInfo[rhythm].hint}</small>
-                </button>
-              ))}
-            </div>
-            <div className="design-overrides">
-              <div className="design-overrides-head">
-                <div>
-                  <strong>Section styles</strong>
-                  <small className="panel-muted">
-                    A section with its own style keeps it in every rhythm.
-                  </small>
+                <div className="design-overrides">
+                  <div className="design-overrides-head">
+                    <div>
+                      <strong>One style per section</strong>
+                      <small className="panel-muted">
+                        Optional. A section with its own style keeps it in every
+                        rhythm.
+                      </small>
+                    </div>
+                    {design.categoryLayouts.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => update({ categoryLayouts: [] })}
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  {categories.isPending ? (
+                    <p className="panel-muted">
+                      <LoaderCircle className="spin" size={14} /> Loading
+                      sections…
+                    </p>
+                  ) : categories.isError ? (
+                    <Notice error>
+                      Sections could not load.{' '}
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => void categories.refetch()}
+                      >
+                        Try again
+                      </button>
+                    </Notice>
+                  ) : categoryItems.length === 0 ? (
+                    <p className="panel-muted">
+                      Add sections in{' '}
+                      <Link to="/dashboard/products">
+                        {preview.restaurant ? 'Menu' : 'Products'}
+                      </Link>{' '}
+                      first.
+                    </p>
+                  ) : (
+                    <ul className="design-section-list">
+                      {categoryItems.map((category, index) => {
+                        const effective = resolveCategoryLayout(
+                          design,
+                          index,
+                          category.id,
+                        );
+                        return (
+                          <li key={category.id}>
+                            <div className="design-section-copy">
+                              <strong>{category.name}</strong>
+                              <small>
+                                {category.productCount ?? 0}{' '}
+                                {(category.productCount ?? 0) === 1
+                                  ? 'item'
+                                  : 'items'}{' '}
+                                · {catalogLayoutInfo[effective].label}
+                              </small>
+                            </div>
+                            <select
+                              aria-label={`Layout for ${category.name}`}
+                              value={overrideOf(category.id)}
+                              onChange={(event) =>
+                                setCategoryLayout(
+                                  category.id,
+                                  event.target.value as CatalogLayout | '',
+                                )
+                              }
+                            >
+                              <option value="">Follow the rhythm</option>
+                              {catalogLayouts.map((layout) => (
+                                <option key={layout} value={layout}>
+                                  {catalogLayoutInfo[layout].label}
+                                </option>
+                              ))}
+                            </select>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {staleOverrides > 0 && (
+                    <p className="panel-muted design-fineprint">
+                      {staleOverrides}{' '}
+                      {staleOverrides === 1
+                        ? 'saved style belongs'
+                        : 'saved styles belong'}{' '}
+                      to a removed section and will be cleaned up on save.
+                    </p>
+                  )}
                 </div>
-                {design.categoryLayouts.length > 0 && (
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => update({ categoryLayouts: [] })}
-                  >
-                    Clear all section styles
-                  </button>
-                )}
               </div>
-              {categories.isPending ? (
-                <p className="panel-muted">
-                  <LoaderCircle className="spin" size={15} /> Loading your
-                  sections…
-                </p>
-              ) : categories.isError ? (
-                <Notice error>
-                  Your sections could not load.{' '}
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => void categories.refetch()}
-                  >
-                    Try again
-                  </button>
-                </Notice>
-              ) : categoryItems.length === 0 ? (
-                <p className="panel-muted">
-                  No sections yet. Add them when you create your{' '}
-                  <Link to="/dashboard/products">
-                    {preview.restaurant ? 'menu' : 'products'}
-                  </Link>
-                  , then come back to style each one.
-                </p>
-              ) : (
-                <ul className="design-section-list">
-                  {categoryItems.map((category, index) => {
-                    const effective = resolveCategoryLayout(
-                      design,
-                      index,
-                      category.id,
-                    );
-                    return (
-                      <li key={category.id}>
-                        <div className="design-section-copy">
-                          <strong>{category.name}</strong>
-                          <small>
-                            {category.productCount ?? 0}{' '}
-                            {(category.productCount ?? 0) === 1
-                              ? 'item'
-                              : 'items'}{' '}
-                            · showing {catalogLayoutInfo[effective].label}
-                          </small>
-                        </div>
-                        <select
-                          aria-label={`Layout for ${category.name}`}
-                          value={overrideOf(category.id)}
-                          onChange={(event) =>
-                            setCategoryLayout(
-                              category.id,
-                              event.target.value as CatalogLayout | '',
-                            )
-                          }
+
+              <div className="design-advanced-block">
+                <h3>Spacing & corners</h3>
+                <div className="design-control-grid">
+                  <div className="design-control">
+                    <strong>Corners</strong>
+                    <div className="design-shapes">
+                      {shapes.map((choice) => (
+                        <button
+                          key={choice.key}
+                          type="button"
+                          className={`design-shape ${design.shape === choice.key ? 'is-selected' : ''}`}
+                          aria-pressed={design.shape === choice.key}
+                          onClick={() => update({ shape: choice.key })}
+                          title={choice.note}
                         >
-                          <option value="">Follow the rhythm</option>
-                          {catalogLayouts.map((layout) => (
-                            <option key={layout} value={layout}>
-                              {catalogLayoutInfo[layout].label}
-                            </option>
-                          ))}
-                        </select>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {staleOverrides > 0 && (
-                <p className="panel-muted design-fineprint">
-                  {staleOverrides}{' '}
-                  {staleOverrides === 1
-                    ? 'saved style belongs'
-                    : 'saved styles belong'}{' '}
-                  to a section that no longer exists. It will be cleaned up when
-                  you save.
-                </p>
-              )}
-            </div>
-          </StudioSection>
+                          <i style={{ borderRadius: choice.radius }} />
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="design-control">
+                    <strong>Spacing</strong>
+                    <div className="design-shapes">
+                      {densities.map((choice) => (
+                        <button
+                          key={choice.key}
+                          type="button"
+                          className={`design-shape ${design.density === choice.key ? 'is-selected' : ''}`}
+                          aria-pressed={design.density === choice.key}
+                          onClick={() => update({ density: choice.key })}
+                          title={choice.note}
+                        >
+                          <i className={`design-density ${choice.key}`} />
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-          <StudioSection
-            step="05"
-            title="Finishing touches"
-            hint="Less can be more. These choices apply to every item layout."
-          >
-            <div className="design-toggles">
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={design.showProductImages}
-                  onChange={(event) =>
-                    update({ showProductImages: event.target.checked })
-                  }
-                />
-                Show product photos
-                <small>
-                  When off, image-led layouts become a clean price list.
-                </small>
-              </label>
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={design.showProductDescriptions}
-                  onChange={(event) =>
-                    update({ showProductDescriptions: event.target.checked })
-                  }
-                />
-                Show product descriptions
-                <small>
-                  Hide ingredient or detail text for a lighter menu.
-                </small>
-              </label>
+              <div className="design-advanced-block">
+                <h3>Product details</h3>
+                <div className="design-toggles">
+                  <label className="panel-toggle">
+                    <input
+                      type="checkbox"
+                      checked={design.showProductImages}
+                      onChange={(event) =>
+                        update({ showProductImages: event.target.checked })
+                      }
+                    />
+                    Show product photos
+                  </label>
+                  <label className="panel-toggle">
+                    <input
+                      type="checkbox"
+                      checked={design.showProductDescriptions}
+                      onChange={(event) =>
+                        update({
+                          showProductDescriptions: event.target.checked,
+                        })
+                      }
+                    />
+                    Show product descriptions
+                  </label>
+                </div>
+              </div>
             </div>
-          </StudioSection>
+          </details>
 
           {error && <Notice error>{error}</Notice>}
           {notice && <Notice>{notice}</Notice>}
@@ -834,7 +845,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             </div>
           </div>
           <p className="design-preview-caption">
-            <Wand2 size={14} />
+            <Wand2 size={13} />
             <span>
               {preset.name} · {rhythmSummary(design)}
             </span>
@@ -872,11 +883,36 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </button>
         </aside>
       </div>
+      {dirty && (
+        <div
+          className="design-mobile-save"
+          role="region"
+          aria-label="Unsaved design changes"
+        >
+          <span>Unsaved changes</span>
+          <button
+            type="button"
+            className="panel-secondary"
+            onClick={undo}
+            disabled={busy}
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="panel-primary"
+            onClick={() => void save()}
+            disabled={busy}
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
     </>
   );
 }
 
-// The preview uses the first section's resolved layout so a rhythm is visible.
+// The preview shows the first section's resolved layout, so a rhythm is visible.
 function displayLayout(design: StoreDesign): CatalogLayout {
   return resolveCategoryLayout(design, 0);
 }
