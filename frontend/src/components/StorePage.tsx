@@ -59,6 +59,10 @@ import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 import { absoluteMediaUrl } from './StoreDetail';
 
+// Catalog sections preview a fixed number of items; "View all" expands the
+// rest in place so the shop page stays scannable instead of becoming a wall.
+const CATALOG_SECTION_PREVIEW = 10;
+
 function ShopCardsLoading({ label = 'Loading posts…' }: { label?: string }) {
   return (
     <div role="status">
@@ -108,6 +112,8 @@ export function StorePage({ slug }: { slug: string | null }) {
     initialView === 'catalog' ? 'catalog' : 'posts',
   );
   const [menuFilter, setMenuFilter] = useState('all');
+  // Sections the shopper asked to see in full, keyed by catalog group.
+  const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [focusSearch, setFocusSearch] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const [contactOpen, setContactOpen] = useState(false);
@@ -344,6 +350,14 @@ export function StorePage({ slug }: { slug: string | null }) {
 
   function openStorePost(post: Post) {
     setSelectedPost(post);
+  }
+
+  function toggleSection(key: string) {
+    setExpandedSections((current) =>
+      current.includes(key)
+        ? current.filter((entry) => entry !== key)
+        : [...current, key],
+    );
   }
 
   const cartItems = cart.cart?.itemCount ?? 0;
@@ -828,6 +842,10 @@ export function StorePage({ slug }: { slug: string | null }) {
                     {menuSections.map(({ group, layout, items }) => {
                       // While searching, the visible count is the honest one.
                       const count = searchTerm ? items.length : group.count;
+                      const expanded = expandedSections.includes(group.key);
+                      const visible = expanded
+                        ? items
+                        : items.slice(0, CATALOG_SECTION_PREVIEW);
                       return (
                         <section
                           className="shop-menu-section"
@@ -853,13 +871,33 @@ export function StorePage({ slug }: { slug: string | null }) {
                               <ArrowUpRight size={15} aria-hidden="true" />
                             </a>
                           </div>
-                          <CatalogItems
-                            products={items}
-                            cart={cart}
-                            layout={layout}
-                            shopSlug={store.slug}
-                            demo={demo}
-                          />
+                          <div id={`menu-${group.key}-items`}>
+                            <CatalogItems
+                              products={visible}
+                              cart={cart}
+                              layout={layout}
+                              shopSlug={store.slug}
+                              demo={demo}
+                            />
+                          </div>
+                          {items.length > CATALOG_SECTION_PREVIEW && (
+                            <button
+                              type="button"
+                              className="shop-menu-more"
+                              aria-expanded={expanded}
+                              aria-controls={`menu-${group.key}-items`}
+                              onClick={() => toggleSection(group.key)}
+                            >
+                              {expanded
+                                ? 'Show less'
+                                : `View all ${items.length} items`}
+                              <ChevronDown
+                                size={16}
+                                className={expanded ? 'is-open' : ''}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          )}
                         </section>
                       );
                     })}

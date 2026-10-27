@@ -138,6 +138,33 @@
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+/* Sections preview ten items; this pill reveals the rest in place. */
+.shop-menu-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: fit-content;
+  min-height: 44px;
+  margin: 16px auto 0;
+  padding: 9px 18px;
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--line));
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+.shop-menu-more:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+.shop-menu-more svg {
+  transition: transform 0.18s ease;
+}
+.shop-menu-more svg.is-open {
+  transform: rotate(180deg);
+}
 .shop-menu-section-link {
   display: inline-flex;
   align-items: center;
