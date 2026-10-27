@@ -16,6 +16,7 @@ const STRING_KEYS = [
   'postsLayout',
   'catalogLayout',
   'accentLayout',
+  'thirdLayout',
   'rhythm',
 ] as const;
 

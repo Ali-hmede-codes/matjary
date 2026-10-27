@@ -143,6 +143,7 @@ export interface DesignSettings {
   postsLayout?: string;
   catalogLayout?: string;
   accentLayout?: string;
+  thirdLayout?: string;
   rhythm?: string;
   categoryLayouts?: DesignCategoryLayout[];
   showProductImages?: boolean;

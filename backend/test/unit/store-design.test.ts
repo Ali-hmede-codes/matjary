@@ -30,10 +30,11 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
       shape: 'soft',
       density: 'airy',
       hero: 'poster',
-      postsLayout: 'frames',
+      postsLayout: 'cover',
       catalogLayout: 'gallery',
       accentLayout: 'cards',
-      rhythm: 'every3',
+      thirdLayout: 'menu',
+      rhythm: 'repeat3',
       showProductImages: true,
       showProductDescriptions: false,
       categoryLayouts: [{ categoryId: categoryA, layout: 'menu' }],
@@ -44,7 +45,9 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
     { template: 'not-a-template' },
     { postsLayout: 'carousel-of-doom' },
     { palette: 'neon' },
+    { rhythm: 'every3' },
     { rhythm: 'every7' },
+    { thirdLayout: 'nope' },
     { categoryLayouts: [{ categoryId: 'not-a-uuid', layout: 'menu' }] },
     { categoryLayouts: [{ categoryId: categoryA, layout: 'nope' }] },
     { showProductImages: 'yes' },
@@ -54,7 +57,10 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
 });
 
 test('store design vocabulary stays aligned across layouts', () => {
+  assert.equal(DESIGN_POST_LAYOUT_KEYS.length, 10);
   assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('spotlight'));
+  assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('list'));
+  assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('cover'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('menu'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('shelves'));
 });
@@ -65,6 +71,7 @@ test('saved design drops stale categories, duplicates, and foreign values', () =
       template: 'table',
       palette: 'sand',
       postsLayout: 'grid',
+      thirdLayout: 'menu',
       categoryLayouts: [
         { categoryId: categoryA, layout: 'menu' },
         { categoryId: categoryA, layout: 'cards' },
@@ -82,6 +89,7 @@ test('saved design drops stale categories, duplicates, and foreign values', () =
     template: 'table',
     palette: 'sand',
     postsLayout: 'grid',
+    thirdLayout: 'menu',
     categoryLayouts: [
       { categoryId: categoryA, layout: 'menu' },
       { categoryId: categoryB, layout: 'gallery' },

@@ -97,6 +97,108 @@
   right: 16px;
 }
 
+/* Wall: dense square tiles for shops with a big visual archive. */
+.shop-post-wall.layout-wall {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+}
+.shop-post-wall.layout-wall .shop-post-tile {
+  aspect-ratio: 1 / 1;
+  border-radius: 0;
+}
+@media (min-width: 900px) {
+  .shop-post-wall.layout-wall {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* List: a readable feed of posts with their titles. */
+.shop-post-wall.layout-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.shop-post-wall.layout-list .shop-post-tile.shop-post-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  aspect-ratio: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--shop-tile-radius, 12px);
+  background: var(--surface);
+  text-align: left;
+}
+.shop-post-row-thumb {
+  position: relative;
+  flex: 0 0 76px;
+  width: 76px;
+  height: 76px;
+  overflow: hidden;
+  border-radius: calc(var(--shop-tile-radius, 12px) - 4px);
+  background: var(--wash);
+}
+.shop-post-row-thumb .shop-post-thumbnail {
+  position: absolute;
+  inset: 0;
+}
+.shop-post-row-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.shop-post-row-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-post-row-copy small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.shop-post-row .shop-post-indicators {
+  top: 6px;
+  right: 6px;
+}
+
+/* Stack: one cinematic post after another. */
+.shop-post-wall.layout-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+.shop-post-wall.layout-stack .shop-post-tile {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+@media (min-width: 900px) {
+  .shop-post-wall.layout-stack .shop-post-tile {
+    aspect-ratio: 21 / 9;
+  }
+}
+
+/* Cover: the newest post is a full-width banner, the rest follow in a grid. */
+.shop-post-wall.layout-cover {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.shop-post-wall.layout-cover .shop-post-tile {
+  border-radius: var(--shop-tile-radius, 12px);
+}
+.shop-post-wall.layout-cover .shop-post-tile:first-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 7;
+}
+@media (min-width: 900px) {
+  .shop-post-wall.layout-cover {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 900px) {
   .shop-post-wall.layout-masonry {
     column-count: 4;

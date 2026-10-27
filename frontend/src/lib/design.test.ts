@@ -30,6 +30,7 @@ test('every preset is a complete, distinct system', () => {
     assert.equal(design.template, preset.id);
     assert.ok(catalogLayoutInfo[design.catalogLayout]);
     assert.ok(catalogLayoutInfo[design.accentLayout]);
+    assert.ok(catalogLayoutInfo[design.thirdLayout]);
     assert.notEqual(design.postsLayout, undefined);
     assert.ok(preset.tagline.length > 0);
   }
@@ -97,66 +98,82 @@ test('per-section overrides accept only live, unique category ids', () => {
   ]);
 });
 
-test('the rhythm changes layout every 3 sections for restaurants', () => {
+test('repeat 3 rotates through the three chosen layouts', () => {
   const design = normalizeDesign({
     catalogLayout: 'menu',
     accentLayout: 'cards',
-    rhythm: 'every3',
+    thirdLayout: 'gallery',
+    rhythm: 'repeat3',
   });
   assert.deepEqual(
     [0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) =>
       resolveCategoryLayout(design, index),
     ),
-    ['menu', 'menu', 'menu', 'cards', 'cards', 'cards', 'menu', 'menu', 'menu'],
+    [
+      'menu',
+      'cards',
+      'gallery',
+      'menu',
+      'cards',
+      'gallery',
+      'menu',
+      'cards',
+      'gallery',
+    ],
   );
-  assert.equal(rhythmSummary(design), 'Menu × 3, then Photo cards × 3');
+  assert.equal(
+    rhythmSummary(design),
+    'Menu → Photo cards → Gallery, repeating',
+  );
 });
 
-test('alternate and every-2 rhythms stay predictable', () => {
-  const alternate = normalizeDesign({
+test('repeat 2 alternates the two chosen layouts', () => {
+  const design = normalizeDesign({
     catalogLayout: 'list',
     accentLayout: 'gallery',
-    rhythm: 'alternate',
+    rhythm: 'repeat2',
   });
   assert.deepEqual(
-    [0, 1, 2, 3].map((index) => resolveCategoryLayout(alternate, index)),
+    [0, 1, 2, 3].map((index) => resolveCategoryLayout(design, index)),
     ['list', 'gallery', 'list', 'gallery'],
   );
-  const every2 = normalizeDesign({
-    catalogLayout: 'shelves',
-    accentLayout: 'menu',
-    rhythm: 'every2',
-  });
-  assert.deepEqual(
-    [0, 1, 2, 3, 4].map((index) => resolveCategoryLayout(every2, index)),
-    ['shelves', 'shelves', 'menu', 'menu', 'shelves'],
-  );
-  assert.equal(resolveCategoryLayout(every2, Number.NaN), 'shelves');
+  assert.equal(resolveCategoryLayout(design, Number.NaN), 'list');
+  assert.equal(rhythmSummary(design), 'Classic rows → Gallery, repeating');
 });
 
-test('an explicit section layout wins over the rhythm', () => {
+test('old rhythm values keep their meaning after the redesign', () => {
+  assert.equal(normalizeDesign({ rhythm: 'alternate' }).rhythm, 'repeat2');
+  assert.equal(normalizeDesign({ rhythm: 'every2' }).rhythm, 'repeat2');
+  assert.equal(normalizeDesign({ rhythm: 'every3' }).rhythm, 'repeat2');
+  assert.equal(normalizeDesign({ rhythm: 'uniform' }).rhythm, 'same');
+  assert.equal(normalizeDesign({ rhythm: 'custom' }).rhythm, 'same');
+});
+
+test('an explicit section layout wins over the repeat', () => {
   const design = normalizeDesign({
     catalogLayout: 'menu',
     accentLayout: 'cards',
-    rhythm: 'every3',
-    categoryLayouts: [{ categoryId: categoryB, layout: 'gallery' }],
+    thirdLayout: 'gallery',
+    rhythm: 'repeat3',
+    categoryLayouts: [{ categoryId: categoryB, layout: 'featured' }],
   });
-  assert.equal(resolveCategoryLayout(design, 4, categoryB), 'gallery');
+  assert.equal(resolveCategoryLayout(design, 4, categoryB), 'featured');
   assert.equal(resolveCategoryLayout(design, 4, categoryA), 'cards');
   assert.equal(resolveCategoryLayout(design, 4, 'uncategorized'), 'cards');
   assert.equal(resolveCategoryLayout(design, 4), 'cards');
 });
 
-test('custom rhythm never surprises: only chosen sections change', () => {
+test('same rhythm uses layout 1 everywhere, but overrides still win', () => {
   const design = normalizeDesign({
     catalogLayout: 'list',
     accentLayout: 'cards',
-    rhythm: 'custom',
+    rhythm: 'same',
     categoryLayouts: [{ categoryId: categoryA, layout: 'menu' }],
   });
   assert.equal(resolveCategoryLayout(design, 0, categoryA), 'menu');
   assert.equal(resolveCategoryLayout(design, 1, categoryB), 'list');
   assert.equal(resolveCategoryLayout(design, 5), 'list');
+  assert.equal(rhythmSummary(design), 'Classic rows in every section');
 });
 
 test('applying a preset keeps the owner’s overrides and visibility choices', () => {

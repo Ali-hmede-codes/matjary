@@ -65,6 +65,10 @@ export const DESIGN_POST_LAYOUT_KEYS = [
   'spotlight',
   'mosaic',
   'frames',
+  'wall',
+  'list',
+  'stack',
+  'cover',
 ] as const;
 
 export const DESIGN_CATALOG_LAYOUT_KEYS = [
@@ -77,13 +81,9 @@ export const DESIGN_CATALOG_LAYOUT_KEYS = [
   'shelves',
 ] as const;
 
-export const DESIGN_RHYTHM_KEYS = [
-  'uniform',
-  'alternate',
-  'every2',
-  'every3',
-  'custom',
-] as const;
+// Menu sections repeat one layout, a pair, or a triple. The studio keeps the
+// UI to three simple choices: all sections same / 2 layouts / 3 layouts.
+export const DESIGN_RHYTHM_KEYS = ['same', 'repeat2', 'repeat3'] as const;
 
 export class DesignCategoryLayoutDto implements DesignCategoryLayout {
   @IsUUID()
@@ -126,11 +126,14 @@ export class StoreDesignSettingsDto implements DesignSettings {
   @IsIn(DESIGN_CATALOG_LAYOUT_KEYS)
   catalogLayout?: string;
 
-  // Second style in the repeating rhythm (for example the layout used for
-  // every third menu section).
+  // Second and third styles in the repeating rhythm.
   @IsOptional()
   @IsIn(DESIGN_CATALOG_LAYOUT_KEYS)
   accentLayout?: string;
+
+  @IsOptional()
+  @IsIn(DESIGN_CATALOG_LAYOUT_KEYS)
+  thirdLayout?: string;
 
   @IsOptional()
   @IsIn(DESIGN_RHYTHM_KEYS)

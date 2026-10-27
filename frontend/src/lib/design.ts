@@ -65,6 +65,10 @@ export const postLayouts = [
   'spotlight',
   'mosaic',
   'frames',
+  'wall',
+  'list',
+  'stack',
+  'cover',
 ] as const;
 export type PostLayout = (typeof postLayouts)[number];
 
@@ -79,13 +83,9 @@ export const catalogLayouts = [
 ] as const;
 export type CatalogLayout = (typeof catalogLayouts)[number];
 
-export const designRhythms = [
-  'uniform',
-  'alternate',
-  'every2',
-  'every3',
-  'custom',
-] as const;
+// Section rhythm is deliberately simple: one style everywhere, or a repeating
+// group of two or three styles.
+export const designRhythms = ['same', 'repeat2', 'repeat3'] as const;
 export type DesignRhythm = (typeof designRhythms)[number];
 
 export interface DesignCategoryLayout {
@@ -104,6 +104,7 @@ export interface DesignSettingsInput {
   postsLayout?: string | null;
   catalogLayout?: string | null;
   accentLayout?: string | null;
+  thirdLayout?: string | null;
   rhythm?: string | null;
   categoryLayouts?:
     { categoryId?: string | null; layout?: string | null }[] | null;
@@ -122,6 +123,7 @@ export interface StoreDesign {
   postsLayout: PostLayout;
   catalogLayout: CatalogLayout;
   accentLayout: CatalogLayout;
+  thirdLayout: CatalogLayout;
   rhythm: DesignRhythm;
   categoryLayouts: DesignCategoryLayout[];
   showProductImages: boolean;
@@ -297,12 +299,19 @@ export const postLayoutInfo: Record<
   PostLayout,
   { label: string; hint: string }
 > = {
-  grid: { label: 'Grid', hint: 'Even, clean tiles.' },
+  grid: { label: 'Grid', hint: 'Even, clean portrait tiles.' },
   masonry: { label: 'Masonry', hint: 'Mixed heights, gallery flow.' },
   rail: { label: 'Rail', hint: 'A swipeable strip of posts.' },
-  spotlight: { label: 'Spotlight', hint: 'One hero post, then the rest.' },
+  spotlight: {
+    label: 'Spotlight',
+    hint: 'The newest post gets a double frame.',
+  },
   mosaic: { label: 'Mosaic', hint: 'Bold mixed-size collage.' },
-  frames: { label: 'Frames', hint: 'Framed, spaced-out gallery.' },
+  frames: { label: 'Frames', hint: 'Framed, spaced-out gallery prints.' },
+  wall: { label: 'Wall', hint: 'Dense square tiles, edge to edge.' },
+  list: { label: 'List', hint: 'Rows with a thumbnail and the post title.' },
+  stack: { label: 'Stack', hint: 'One full-width post after another.' },
+  cover: { label: 'Cover', hint: 'A full-width cover post, then a grid.' },
 };
 
 export const catalogLayoutInfo: Record<
@@ -320,25 +329,17 @@ export const catalogLayoutInfo: Record<
 
 export const rhythmInfo: Record<DesignRhythm, { label: string; hint: string }> =
   {
-    uniform: {
-      label: 'One style everywhere',
-      hint: 'Every section uses the same layout.',
+    same: {
+      label: 'All sections same',
+      hint: 'Every section uses layout 1.',
     },
-    alternate: {
-      label: 'Alternate',
-      hint: 'First style, second style, repeat.',
+    repeat2: {
+      label: '2 layouts repeating',
+      hint: 'Layout 1, layout 2, then repeat.',
     },
-    every2: {
-      label: 'Every 2 sections',
-      hint: 'Two sections of one style, then two of the other.',
-    },
-    every3: {
-      label: 'Every 3 sections',
-      hint: 'Three sections of one style, then three of the other.',
-    },
-    custom: {
-      label: 'Choose each section',
-      hint: 'Pick the exact layout for every menu section.',
+    repeat3: {
+      label: '3 layouts repeating',
+      hint: 'Layout 1, 2, 3, then repeat.',
     },
   };
 
@@ -355,6 +356,7 @@ export interface DesignPreset {
   postsLayout: PostLayout;
   catalogLayout: CatalogLayout;
   accentLayout: CatalogLayout;
+  thirdLayout: CatalogLayout;
   rhythm: DesignRhythm;
 }
 
@@ -373,7 +375,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'frames',
     catalogLayout: 'gallery',
     accentLayout: 'featured',
-    rhythm: 'alternate',
+    thirdLayout: 'cards',
+    rhythm: 'repeat2',
   },
   {
     id: 'boutique',
@@ -388,7 +391,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'spotlight',
     catalogLayout: 'featured',
     accentLayout: 'cards',
-    rhythm: 'every2',
+    thirdLayout: 'list',
+    rhythm: 'repeat2',
   },
   {
     id: 'bloom',
@@ -403,7 +407,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'masonry',
     catalogLayout: 'gallery',
     accentLayout: 'cards',
-    rhythm: 'alternate',
+    thirdLayout: 'featured',
+    rhythm: 'repeat2',
   },
   {
     id: 'editorial',
@@ -418,7 +423,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'mosaic',
     catalogLayout: 'list',
     accentLayout: 'gallery',
-    rhythm: 'every3',
+    thirdLayout: 'menu',
+    rhythm: 'repeat3',
   },
   {
     id: 'studio',
@@ -433,7 +439,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'grid',
     catalogLayout: 'cards',
     accentLayout: 'list',
-    rhythm: 'uniform',
+    thirdLayout: 'gallery',
+    rhythm: 'same',
   },
   {
     id: 'noir',
@@ -448,7 +455,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'mosaic',
     catalogLayout: 'featured',
     accentLayout: 'compact',
-    rhythm: 'uniform',
+    thirdLayout: 'list',
+    rhythm: 'same',
   },
   {
     id: 'bazaar',
@@ -463,7 +471,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'masonry',
     catalogLayout: 'gallery',
     accentLayout: 'list',
-    rhythm: 'every3',
+    thirdLayout: 'shelves',
+    rhythm: 'repeat3',
   },
   {
     id: 'table',
@@ -478,7 +487,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'grid',
     catalogLayout: 'menu',
     accentLayout: 'cards',
-    rhythm: 'every3',
+    thirdLayout: 'compact',
+    rhythm: 'repeat3',
   },
   {
     id: 'roast',
@@ -493,7 +503,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'rail',
     catalogLayout: 'shelves',
     accentLayout: 'menu',
-    rhythm: 'every3',
+    thirdLayout: 'cards',
+    rhythm: 'repeat3',
   },
   {
     id: 'fresh',
@@ -508,7 +519,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'grid',
     catalogLayout: 'shelves',
     accentLayout: 'compact',
-    rhythm: 'every2',
+    thirdLayout: 'cards',
+    rhythm: 'repeat2',
   },
   {
     id: 'arcade',
@@ -523,7 +535,8 @@ export const designPresets: readonly DesignPreset[] = [
     postsLayout: 'rail',
     catalogLayout: 'cards',
     accentLayout: 'menu',
-    rhythm: 'alternate',
+    thirdLayout: 'gallery',
+    rhythm: 'repeat2',
   },
 ];
 
@@ -541,7 +554,8 @@ export const defaultDesign: StoreDesign = {
   postsLayout: 'grid',
   catalogLayout: 'cards',
   accentLayout: 'list',
-  rhythm: 'uniform',
+  thirdLayout: 'gallery',
+  rhythm: 'same',
   categoryLayouts: [],
   showProductImages: true,
   showProductDescriptions: true,
@@ -606,6 +620,19 @@ function categoryOverrides(
 }
 
 /**
+ * The earlier studio stored `alternate`, `every2`, `every3`, `uniform` and
+ * `custom`. Map those rows onto the simple "same / repeat 2 / repeat 3" model;
+ * anything that used two styles keeps repeating those two.
+ */
+function normalizedRhythm(value: unknown): DesignRhythm {
+  if (value === 'same' || value === 'repeat2' || value === 'repeat3')
+    return value;
+  if (value === 'alternate' || value === 'every2' || value === 'every3')
+    return 'repeat2';
+  return defaultDesign.rhythm;
+}
+
+/**
  * Turn whatever is stored in the JSON column into a complete design. Older
  * shops with no settings get the legacy storefront (callers check for null
  * first); malformed keys inside a saved row fall back one by one.
@@ -636,7 +663,12 @@ export function normalizeDesign(
       catalogLayouts,
       defaultDesign.accentLayout,
     ),
-    rhythm: pick(raw.rhythm, designRhythms, defaultDesign.rhythm),
+    thirdLayout: pick(
+      raw.thirdLayout,
+      catalogLayouts,
+      defaultDesign.thirdLayout,
+    ),
+    rhythm: normalizedRhythm(raw.rhythm),
     categoryLayouts: categoryOverrides(raw.categoryLayouts),
     showProductImages: raw.showProductImages !== false,
     showProductDescriptions: raw.showProductDescriptions !== false,
@@ -666,6 +698,7 @@ export function designWithPreset(
     postsLayout: preset.postsLayout,
     catalogLayout: preset.catalogLayout,
     accentLayout: preset.accentLayout,
+    thirdLayout: preset.thirdLayout,
     rhythm: preset.rhythm,
     categoryLayouts: current?.categoryLayouts ?? [],
     showProductImages: current?.showProductImages ?? true,
@@ -675,7 +708,8 @@ export function designWithPreset(
 
 /**
  * Resolve one section's layout. An explicit per-category choice always wins;
- * otherwise the rhythm decides between the primary and accent layout.
+ * otherwise the simple rhythm decides: one layout everywhere, or a repeating
+ * pair/triple of layouts.
  */
 export function resolveCategoryLayout(
   design: StoreDesign,
@@ -689,36 +723,27 @@ export function resolveCategoryLayout(
     );
     if (override) return override.layout;
   }
-  const useAccent = (() => {
-    switch (design.rhythm) {
-      case 'alternate':
-        return position % 2 === 1;
-      case 'every2':
-        return Math.floor(position / 2) % 2 === 1;
-      case 'every3':
-        return Math.floor(position / 3) % 2 === 1;
-      default:
-        return false;
-    }
-  })();
-  return useAccent ? design.accentLayout : design.catalogLayout;
+  if (design.rhythm === 'repeat2')
+    return position % 2 === 1 ? design.accentLayout : design.catalogLayout;
+  if (design.rhythm === 'repeat3') {
+    const sequence = [
+      design.catalogLayout,
+      design.accentLayout,
+      design.thirdLayout,
+    ];
+    return sequence[position % 3] ?? design.catalogLayout;
+  }
+  return design.catalogLayout;
 }
 
 export function rhythmSummary(design: StoreDesign): string {
   const first = catalogLayoutInfo[design.catalogLayout].label;
   const second = catalogLayoutInfo[design.accentLayout].label;
-  switch (design.rhythm) {
-    case 'alternate':
-      return `${first}, then ${second}, repeating`;
-    case 'every2':
-      return `${first} × 2, then ${second} × 2`;
-    case 'every3':
-      return `${first} × 3, then ${second} × 3`;
-    case 'custom':
-      return 'A layout chosen for each section';
-    default:
-      return `${first} in every section`;
-  }
+  const third = catalogLayoutInfo[design.thirdLayout].label;
+  if (design.rhythm === 'repeat2') return `${first} → ${second}, repeating`;
+  if (design.rhythm === 'repeat3')
+    return `${first} → ${second} → ${third}, repeating`;
+  return `${first} in every section`;
 }
 
 /** CSS custom properties consumed by the storefront stylesheets. */
@@ -740,20 +765,6 @@ export function designTheme(design: StoreDesign): Record<string, string> {
     '--shop-control-radius': shape.control,
     '--shop-section-gap': density.gap,
     '--shop-card-pad': density.pad,
-  };
-}
-
-export function designSwatch(id: DesignTemplate): {
-  surface: string;
-  ink: string;
-  accent: string;
-} {
-  const preset = designPreset(id);
-  const palette = paletteTokens[preset.palette];
-  return {
-    surface: palette.surface,
-    ink: palette.ink,
-    accent: palette.accent,
   };
 }
 

@@ -72,105 +72,84 @@
   font-size: 12px;
 }
 
-/* ---------- Starting points ---------- */
-.design-presets {
+/* ---------- Section rhythm: same / repeat 2 / repeat 3 ---------- */
+.design-pattern-options {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
 }
-.design-preset {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
+.design-pattern {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
   border: 1px solid var(--panel-line);
-  border-radius: 16px;
+  border-radius: 12px;
   background: #fff;
   color: var(--panel-ink);
   text-align: left;
 }
-.design-preset:hover {
-  border-color: #b9c8be;
-  transform: translateY(-2px);
-}
-.design-preset.is-selected {
+.design-pattern.is-selected {
   border-color: var(--panel-green);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-green) 22%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-green) 18%, transparent);
 }
-.design-preset-art {
-  position: relative;
-  display: block;
-  height: 76px;
-  overflow: hidden;
-  padding: 10px;
+.design-pattern strong {
+  font-size: 11.5px;
 }
-.design-preset-band {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 20px;
-  opacity: 0.85;
-}
-.design-preset-word {
-  position: relative;
-  z-index: 1;
-  display: block;
-  margin-top: 9px;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-.design-preset-tiles {
-  position: absolute;
-  right: 9px;
-  bottom: 8px;
-  display: flex;
-  gap: 3px;
-}
-.design-preset-tiles i {
-  display: block;
-  width: 13px;
-  height: 19px;
-  border-radius: 3px 3px 0 0;
-  background: color-mix(in srgb, currentColor 16%, transparent);
-}
-.design-preset-tiles i:first-child {
-  opacity: 0.85;
-}
-.design-preset-copy {
-  display: grid;
-  gap: 2px;
-  padding: 9px 11px 11px;
-}
-.design-preset-copy strong {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-}
-.design-preset-copy small {
+.design-pattern small {
   color: var(--panel-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.35;
 }
-.design-preset-copy em {
-  color: #8a958e;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+.design-pattern-art {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 4px;
 }
-.design-preset-check {
+.design-pattern-art i {
+  flex: 1;
+  height: 12px;
+  border-radius: 2px;
+  background: #254e40;
+}
+.design-pattern-art.is-repeat2 i:nth-child(2) {
+  background: #cad7ce;
+}
+.design-pattern-art.is-repeat3 i:nth-child(2) {
+  background: #cad7ce;
+}
+.design-pattern-art.is-repeat3 i:nth-child(3) {
+  background: #e2c69a;
+}
+.design-slots {
   display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--panel-green);
-  color: #fff;
+  gap: 8px;
+}
+.design-slot {
+  display: grid;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--panel-muted);
+}
+.design-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.design-slot-row .layout-wire {
+  flex: 0 0 58px;
+  width: 58px;
+  height: 28px;
+  margin: 0;
+}
+.panel-app .design-slot select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 8px;
+  font-size: 11.5px;
 }
 
 /* ---------- Palette, type, corners, spacing, hero ---------- */
@@ -446,33 +425,7 @@
   display: none;
 }
 
-/* ---------- Rhythm ---------- */
-.design-rhythm-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 0 0 10px;
-}
-.design-rhythm-head > div {
-  display: grid;
-  gap: 2px;
-}
-.design-rhythm-head strong {
-  font-size: 12.5px;
-}
-.design-rhythm-head small {
-  font-size: 11.5px;
-}
-.design-select {
-  display: grid;
-  gap: 4px;
-  font-size: 10.5px;
-  font-weight: 650;
-  color: var(--panel-muted);
-}
-.design-select select,
+/* Section override selects (kept compact). */
 .design-section-list select {
   min-height: 32px;
   padding: 4px 8px;
@@ -481,63 +434,6 @@
   background: #fff;
   color: var(--panel-ink);
   font-size: 11.5px;
-}
-.design-select select:disabled {
-  opacity: 0.55;
-}
-.design-rhythms {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 7px;
-}
-.design-rhythm {
-  display: grid;
-  gap: 2px;
-  padding: 8px 10px;
-  border: 1px solid var(--panel-line);
-  border-radius: 11px;
-  background: #fff;
-  color: var(--panel-ink);
-  text-align: left;
-}
-.design-rhythm.is-selected {
-  border-color: var(--panel-green);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-green) 18%, transparent);
-}
-.design-rhythm strong {
-  font-size: 11.5px;
-}
-.design-rhythm small {
-  color: var(--panel-muted);
-  font-size: 10.5px;
-  line-height: 1.35;
-}
-.design-rhythm-art {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2px;
-  margin-bottom: 5px;
-}
-.design-rhythm-art i {
-  display: block;
-  height: 9px;
-  border-radius: 2px;
-  background: #254e40;
-}
-.design-rhythm-art.is-alternate i:nth-child(even) {
-  background: #cdd9d1;
-}
-.design-rhythm-art.is-every2 i:nth-child(n + 3) {
-  background: #cdd9d1;
-}
-.design-rhythm-art.is-every3 i:nth-child(n + 4) {
-  background: #cdd9d1;
-}
-.design-rhythm-art.is-custom i:nth-child(2) {
-  background: #cdd9d1;
-}
-.design-rhythm-art.is-custom i:nth-child(4) {
-  background: #e5be8d;
 }
 
 /* ---------- Advanced (collapsed by default) ---------- */
@@ -838,6 +734,39 @@
   border: 1px solid color-mix(in srgb, var(--brand-ink) 26%, transparent);
   background: color-mix(in srgb, var(--brand-ink) 10%, var(--brand-surface));
 }
+.design-preview-wall.is-wall {
+  gap: 2px;
+}
+.design-preview-wall.is-wall i {
+  aspect-ratio: 1 / 1;
+  border-radius: 2px;
+}
+.design-preview-wall.is-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+.design-preview-wall.is-list i {
+  height: 20px;
+  aspect-ratio: auto;
+  border-radius: 4px;
+}
+.design-preview-wall.is-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.design-preview-wall.is-stack i {
+  aspect-ratio: 16 / 7;
+}
+.design-preview-wall.is-cover {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.design-preview-wall.is-cover i:first-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 6;
+  border-radius: 5px;
+}
 .design-preview-items {
   display: grid;
   gap: 5px;
@@ -970,24 +899,15 @@
 /* The dashboard base gives every button a large touch target. The studio's
    visual pickers are chips, so these scoped rules win on specificity without
    touching other panel screens. */
-.panel-app .design-preset,
 .panel-app .design-layout,
 .panel-app .design-palette,
 .panel-app .design-typeface,
 .panel-app .design-shape,
 .panel-app .design-hero,
-.panel-app .design-rhythm,
+.panel-app .design-pattern,
 .panel-app .design-remove {
   min-height: 0;
   justify-content: flex-start;
-}
-.panel-app .design-preset {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-  border-radius: 16px;
 }
 .panel-app .design-layout {
   display: grid;
@@ -1009,11 +929,12 @@
   padding: 8px;
   border-radius: 11px;
 }
-.panel-app .design-rhythm {
+.panel-app .design-pattern {
   display: grid;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 11px;
+  align-items: stretch;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 12px;
 }
 .panel-app .design-remove {
   display: block;
@@ -1033,10 +954,6 @@
   min-height: 34px;
   padding: 7px 11px;
   font-size: 12px;
-}
-.panel-app .design-select select {
-  width: auto;
-  min-width: 140px;
 }
 .panel-app .design-section-list select {
   width: auto;
@@ -1093,16 +1010,13 @@
   .design-control-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .design-presets {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .design-pattern-options {
+    grid-template-columns: minmax(0, 1fr);
   }
   .design-layouts {
     grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   }
   .design-heroes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .design-rhythms {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .design-advanced-body {

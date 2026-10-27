@@ -4,11 +4,9 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpRight,
-  Check,
   ChevronDown,
   LoaderCircle,
   Palette,
-  Sparkles,
   Undo2,
   Wand2,
 } from 'lucide-react';
@@ -16,11 +14,7 @@ import type { StoreCategoryList } from '../../lib/api';
 import {
   catalogLayoutInfo,
   catalogLayouts,
-  designPresets,
-  designPreset,
   designRhythms,
-  designWithPreset,
-  designSwatch,
   densityChoices,
   hasSavedDesign,
   heroChoices,
@@ -34,7 +28,6 @@ import {
   shapeChoices,
   typographyChoices,
   type CatalogLayout,
-  type DesignPreset,
   type PostLayout,
   type StoreDesign,
 } from '../../lib/design.ts';
@@ -87,6 +80,40 @@ const postWires: Record<PostLayout, WireBoxes> = {
     [3, 15, 10, 9],
     [15, 15, 10, 9],
     [27, 15, 10, 9],
+  ],
+  wall: [
+    [1, 1, 9, 8],
+    [11, 1, 9, 8],
+    [21, 1, 9, 8],
+    [31, 1, 8, 8],
+    [1, 10, 9, 8],
+    [11, 10, 9, 8],
+    [21, 10, 9, 8],
+    [31, 10, 8, 8],
+    [1, 19, 9, 8],
+    [11, 19, 9, 8],
+    [21, 19, 9, 8],
+    [31, 19, 8, 8],
+  ],
+  list: [
+    [2, 3, 7, 7],
+    [11, 4, 26, 2],
+    [11, 8, 16, 2],
+    [2, 13, 7, 7],
+    [11, 14, 26, 2],
+    [11, 18, 16, 2],
+    [2, 23, 7, 3],
+  ],
+  stack: [
+    [2, 2, 36, 10],
+    [2, 14, 36, 10],
+  ],
+  cover: [
+    [2, 2, 36, 12],
+    [2, 16, 8, 10],
+    [12, 16, 8, 10],
+    [22, 16, 7, 10],
+    [31, 16, 7, 10],
   ],
 };
 
@@ -187,36 +214,6 @@ function StudioSection({
   );
 }
 
-function PresetArt({ preset }: { preset: DesignPreset }) {
-  const swatch = designSwatch(preset.id);
-  const typeface = typographyChoices().find(
-    (entry) => entry.key === preset.typography,
-  );
-  return (
-    <span
-      className="design-preset-art"
-      style={{ background: swatch.surface, color: swatch.ink }}
-      aria-hidden="true"
-    >
-      <span
-        className="design-preset-band"
-        style={{ background: swatch.accent }}
-      />
-      <span
-        className="design-preset-word"
-        style={{ fontFamily: typeface?.display }}
-      >
-        {preset.name}
-      </span>
-      <span className="design-preset-tiles">
-        <i style={{ background: swatch.accent }} />
-        <i />
-        <i />
-      </span>
-    </span>
-  );
-}
-
 function LayoutPicker<T extends string>({
   label,
   hint,
@@ -257,6 +254,36 @@ function LayoutPicker<T extends string>({
         ))}
       </div>
     </div>
+  );
+}
+
+/** One "Layout 1/2/3" slot: a tiny wireframe plus the layout select. */
+function LayoutSlot({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: CatalogLayout;
+  onChange: (layout: CatalogLayout) => void;
+}) {
+  return (
+    <label className="design-slot">
+      <span>{label}</span>
+      <span className="design-slot-row">
+        <LayoutWire boxes={catalogWires[value]} />
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value as CatalogLayout)}
+        >
+          {catalogLayouts.map((layout) => (
+            <option key={layout} value={layout}>
+              {catalogLayoutInfo[layout].label}
+            </option>
+          ))}
+        </select>
+      </span>
+    </label>
   );
 }
 
@@ -302,7 +329,6 @@ function DesignStudio({ store }: { store: OwnerStore }) {
       ).length
     : 0;
   const preview = storePresentation({ ...store, designSettings: design });
-  const preset = designPreset(design.template);
   const typography = typographyChoices();
   const palettes = paletteChoices();
   const shapes = shapeChoices();
@@ -311,13 +337,16 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   const advancedSummary = `${
     heroes.find((entry) => entry.key === design.hero)?.label ?? 'Classic'
   } cover · ${rhythmSummary(design)}`;
+  // Very tall layouts get fewer preview tiles so the preview stays compact.
+  const previewTiles =
+    design.postsLayout === 'stack'
+      ? 2
+      : design.postsLayout === 'cover' || design.postsLayout === 'list'
+        ? 4
+        : 6;
 
   const update = (patch: Partial<StoreDesign>) =>
     setDesign((current) => ({ ...current, ...patch }));
-
-  function applyPreset(id: DesignPreset['id']) {
-    setDesign((current) => designWithPreset(id, current));
-  }
 
   function setCategoryLayout(categoryId: string, layout: CatalogLayout | '') {
     setDesign((current) => {
@@ -393,8 +422,8 @@ function DesignStudio({ store }: { store: OwnerStore }) {
     <>
       <PageTitle
         eyebrow="SHOP DESIGN"
-        title="Give your shop a signature."
-        description="Pick a look, then choose your post and menu layouts. Everything else can stay as it is."
+        title="Choose your layouts."
+        description="Pick how posts look, then how your menu sections repeat. Colors and type are just below."
         action={
           store.status === 'active' && (
             <Link
@@ -410,79 +439,87 @@ function DesignStudio({ store }: { store: OwnerStore }) {
       />
       {!hasSavedDesign(store.designSettings) && (
         <Notice>
-          Your shop still has the classic look. Pick a starting point, then
-          press Save to make it live.
+          Your shop still has the classic look. Choose your layouts, then press
+          Save to make them live.
         </Notice>
       )}
       <div className="design-studio">
         <div className="design-studio-main">
           <StudioSection
             step="01"
-            title="Pick a look"
-            hint="One click sets the palette, type, corners and layouts. Your brand colour stays yours."
-          >
-            <div className="design-presets">
-              {designPresets.map((entry) => {
-                const selected = entry.id === design.template;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className={`design-preset ${selected ? 'is-selected' : ''}`}
-                    aria-pressed={selected}
-                    onClick={() => applyPreset(entry.id)}
-                  >
-                    <PresetArt preset={entry} />
-                    <span className="design-preset-copy">
-                      <strong>
-                        {entry.name}
-                        {selected && (
-                          <span className="design-preset-check">
-                            <Check size={12} />
-                          </span>
-                        )}
-                      </strong>
-                      <small>{entry.tagline}</small>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="design-fineprint panel-muted">
-              <Sparkles size={13} /> A look is a starting point — change any
-              part below.
-            </p>
-          </StudioSection>
-
-          <StudioSection
-            step="02"
-            title="Layouts"
-            hint="The two arrangements most visitors notice first."
+            title="Post layout"
+            hint="Ten arrangements. Pick the one that fits your shop."
           >
             <LayoutPicker
               label="Posts"
-              hint="Your photo and video wall."
+              hint="Tap a layout to use it."
               layouts={postLayouts}
               info={postLayoutInfo}
               wires={postWires}
               value={design.postsLayout}
               onChange={(postsLayout) => update({ postsLayout })}
             />
-            <LayoutPicker
-              label={preview.restaurant ? 'Menu' : 'Products'}
-              hint="Your items, section by section."
-              layouts={catalogLayouts}
-              info={catalogLayoutInfo}
-              wires={catalogWires}
-              value={design.catalogLayout}
-              onChange={(catalogLayout) => update({ catalogLayout })}
-            />
+          </StudioSection>
+
+          <StudioSection
+            step="02"
+            title={preview.restaurant ? 'Menu sections' : 'Product sections'}
+            hint="Choose one layout for every section, or repeat two or three layouts."
+          >
+            <div
+              className="design-pattern-options"
+              role="radiogroup"
+              aria-label="Section rhythm"
+            >
+              {designRhythms.map((rhythm) => (
+                <button
+                  key={rhythm}
+                  type="button"
+                  role="radio"
+                  aria-checked={design.rhythm === rhythm}
+                  className={`design-pattern ${design.rhythm === rhythm ? 'is-selected' : ''}`}
+                  onClick={() => update({ rhythm })}
+                >
+                  <span className={`design-pattern-art is-${rhythm}`}>
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <strong>{rhythmInfo[rhythm].label}</strong>
+                  <small>{rhythmInfo[rhythm].hint}</small>
+                </button>
+              ))}
+            </div>
+            <div className="design-slots">
+              <LayoutSlot
+                label="Layout 1"
+                value={design.catalogLayout}
+                onChange={(catalogLayout) => update({ catalogLayout })}
+              />
+              {design.rhythm !== 'same' && (
+                <LayoutSlot
+                  label="Layout 2"
+                  value={design.accentLayout}
+                  onChange={(accentLayout) => update({ accentLayout })}
+                />
+              )}
+              {design.rhythm === 'repeat3' && (
+                <LayoutSlot
+                  label="Layout 3"
+                  value={design.thirdLayout}
+                  onChange={(thirdLayout) => update({ thirdLayout })}
+                />
+              )}
+            </div>
+            <p className="design-fineprint panel-muted">
+              <Wand2 size={13} /> {rhythmSummary(design)}
+            </p>
           </StudioSection>
 
           <StudioSection
             step="03"
             title="Colors & type"
-            hint="A quick way to make the look yours."
+            hint="Keep it simple: one palette, one type."
           >
             <div className="design-quick-grid">
               <div className="design-control">
@@ -530,7 +567,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
               </div>
             </div>
             <p className="design-fineprint panel-muted">
-              <Palette size={13} /> The main colour and logo live in{' '}
+              <Palette size={13} /> Main colour and logo live in{' '}
               <Link to="/dashboard/store">Store editor</Link>.
             </p>
           </StudioSection>
@@ -557,6 +594,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                       type="button"
                       className={`design-hero ${design.hero === choice.key ? 'is-selected' : ''}`}
                       aria-pressed={design.hero === choice.key}
+                      title={choice.hint}
                       onClick={() => update({ hero: choice.key })}
                     >
                       <span className={`design-hero-art is-${choice.key}`}>
@@ -570,61 +608,82 @@ function DesignStudio({ store }: { store: OwnerStore }) {
               </div>
 
               <div className="design-advanced-block">
-                <h3>Section rhythm</h3>
-                <div className="design-rhythm-head">
-                  <small className="panel-muted">{rhythmSummary(design)}</small>
-                  <label className="design-select">
-                    Second style
-                    <select
-                      value={design.accentLayout}
+                <h3>Spacing & corners</h3>
+                <div className="design-control-grid">
+                  <div className="design-control">
+                    <strong>Corners</strong>
+                    <div className="design-shapes">
+                      {shapes.map((choice) => (
+                        <button
+                          key={choice.key}
+                          type="button"
+                          className={`design-shape ${design.shape === choice.key ? 'is-selected' : ''}`}
+                          aria-pressed={design.shape === choice.key}
+                          onClick={() => update({ shape: choice.key })}
+                          title={choice.note}
+                        >
+                          <i style={{ borderRadius: choice.radius }} />
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="design-control">
+                    <strong>Spacing</strong>
+                    <div className="design-shapes">
+                      {densities.map((choice) => (
+                        <button
+                          key={choice.key}
+                          type="button"
+                          className={`design-shape ${design.density === choice.key ? 'is-selected' : ''}`}
+                          aria-pressed={design.density === choice.key}
+                          onClick={() => update({ density: choice.key })}
+                          title={choice.note}
+                        >
+                          <i className={`design-density ${choice.key}`} />
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="design-advanced-block">
+                <h3>Product details</h3>
+                <div className="design-toggles">
+                  <label className="panel-toggle">
+                    <input
+                      type="checkbox"
+                      checked={design.showProductImages}
+                      onChange={(event) =>
+                        update({ showProductImages: event.target.checked })
+                      }
+                    />
+                    Show product photos
+                  </label>
+                  <label className="panel-toggle">
+                    <input
+                      type="checkbox"
+                      checked={design.showProductDescriptions}
                       onChange={(event) =>
                         update({
-                          accentLayout: event.target.value as CatalogLayout,
+                          showProductDescriptions: event.target.checked,
                         })
                       }
-                      disabled={design.rhythm === 'uniform'}
-                    >
-                      {catalogLayouts.map((layout) => (
-                        <option key={layout} value={layout}>
-                          {catalogLayoutInfo[layout].label}
-                        </option>
-                      ))}
-                    </select>
+                    />
+                    Show product descriptions
                   </label>
                 </div>
-                <div
-                  className="design-rhythms"
-                  role="radiogroup"
-                  aria-label="Section rhythm"
-                >
-                  {designRhythms.map((rhythm) => (
-                    <button
-                      key={rhythm}
-                      type="button"
-                      role="radio"
-                      aria-checked={design.rhythm === rhythm}
-                      title={rhythmInfo[rhythm].hint}
-                      className={`design-rhythm ${design.rhythm === rhythm ? 'is-selected' : ''}`}
-                      onClick={() => update({ rhythm })}
-                    >
-                      <span className={`design-rhythm-art is-${rhythm}`}>
-                        <i />
-                        <i />
-                        <i />
-                        <i />
-                      </span>
-                      <strong>{rhythmInfo[rhythm].label}</strong>
-                    </button>
-                  ))}
-                </div>
+              </div>
 
+              <div className="design-advanced-block">
+                <h3>One style per section (optional)</h3>
                 <div className="design-overrides">
                   <div className="design-overrides-head">
                     <div>
-                      <strong>One style per section</strong>
                       <small className="panel-muted">
-                        Optional. A section with its own style keeps it in every
-                        rhythm.
+                        Overrides the repeat for that section only.
                       </small>
                     </div>
                     {design.categoryLayouts.length > 0 && (
@@ -714,76 +773,6 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                   )}
                 </div>
               </div>
-
-              <div className="design-advanced-block">
-                <h3>Spacing & corners</h3>
-                <div className="design-control-grid">
-                  <div className="design-control">
-                    <strong>Corners</strong>
-                    <div className="design-shapes">
-                      {shapes.map((choice) => (
-                        <button
-                          key={choice.key}
-                          type="button"
-                          className={`design-shape ${design.shape === choice.key ? 'is-selected' : ''}`}
-                          aria-pressed={design.shape === choice.key}
-                          onClick={() => update({ shape: choice.key })}
-                          title={choice.note}
-                        >
-                          <i style={{ borderRadius: choice.radius }} />
-                          {choice.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="design-control">
-                    <strong>Spacing</strong>
-                    <div className="design-shapes">
-                      {densities.map((choice) => (
-                        <button
-                          key={choice.key}
-                          type="button"
-                          className={`design-shape ${design.density === choice.key ? 'is-selected' : ''}`}
-                          aria-pressed={design.density === choice.key}
-                          onClick={() => update({ density: choice.key })}
-                          title={choice.note}
-                        >
-                          <i className={`design-density ${choice.key}`} />
-                          {choice.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="design-advanced-block">
-                <h3>Product details</h3>
-                <div className="design-toggles">
-                  <label className="panel-toggle">
-                    <input
-                      type="checkbox"
-                      checked={design.showProductImages}
-                      onChange={(event) =>
-                        update({ showProductImages: event.target.checked })
-                      }
-                    />
-                    Show product photos
-                  </label>
-                  <label className="panel-toggle">
-                    <input
-                      type="checkbox"
-                      checked={design.showProductDescriptions}
-                      onChange={(event) =>
-                        update({
-                          showProductDescriptions: event.target.checked,
-                        })
-                      }
-                    />
-                    Show product descriptions
-                  </label>
-                </div>
-              </div>
             </div>
           </details>
 
@@ -827,7 +816,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                 className={`design-preview-wall is-${design.postsLayout}`}
                 aria-hidden="true"
               >
-                {[0, 1, 2, 3, 4, 5].map((index) => (
+                {Array.from({ length: previewTiles }, (_, index) => (
                   <i key={index} />
                 ))}
               </div>
@@ -847,7 +836,8 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           <p className="design-preview-caption">
             <Wand2 size={13} />
             <span>
-              {preset.name} · {rhythmSummary(design)}
+              {postLayoutInfo[design.postsLayout].label} posts ·{' '}
+              {rhythmSummary(design)}
             </span>
           </p>
           <div className="panel-save-bar design-save-bar">
@@ -912,7 +902,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   );
 }
 
-// The preview shows the first section's resolved layout, so a rhythm is visible.
+// The preview uses the first section's resolved layout, so a repeat is visible.
 function displayLayout(design: StoreDesign): CatalogLayout {
   return resolveCategoryLayout(design, 0);
 }
