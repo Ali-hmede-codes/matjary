@@ -10,8 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
-  Maximize,
-  Minimize,
   ShoppingBag,
   X,
 } from 'lucide-react';
@@ -273,7 +271,6 @@ export function PostDialog({
     ),
   );
   const [active, setActive] = useState(startIndex);
-  const [fullscreen, setFullscreen] = useState(false);
   const activeRef = useRef(active);
   activeRef.current = active;
   const activePost = posts[active];
@@ -394,31 +391,6 @@ export function PostDialog({
     return () => node.removeEventListener('wheel', onWheel);
   }, [go]);
 
-  useEffect(() => {
-    const element = dialog.current;
-    const onChange = () =>
-      setFullscreen(Boolean(element) && document.fullscreenElement === element);
-    document.addEventListener('fullscreenchange', onChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', onChange);
-      // Leaving the viewer must not strand the tab in full screen.
-      if (element && document.fullscreenElement === element)
-        void document.exitFullscreen().catch(() => undefined);
-    };
-  }, []);
-
-  async function toggleFullscreen() {
-    const element = dialog.current;
-    if (!element) return;
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await element.requestFullscreen();
-    } catch {
-      // iOS Safari cannot full-screen an element; the viewer already fills the
-      // screen there, so this stays a silent no-op rather than a dead control.
-    }
-  }
-
   return (
     <dialog
       ref={dialog}
@@ -454,22 +426,6 @@ export function PostDialog({
         ))}
       </div>
       <div className="reel-chrome">
-        {/* iOS Safari cannot full-screen an arbitrary element, so the button
-            only exists where the browser can honour it. */}
-        {document.fullscreenEnabled && (
-          <button
-            type="button"
-            className="reel-chrome-button"
-            onClick={() => void toggleFullscreen()}
-            aria-label={fullscreen ? 'Exit full screen' : 'Enter full screen'}
-          >
-            {fullscreen ? (
-              <Minimize size={18} aria-hidden="true" />
-            ) : (
-              <Maximize size={18} aria-hidden="true" />
-            )}
-          </button>
-        )}
         <button
           type="button"
           className="reel-chrome-button reel-close"
