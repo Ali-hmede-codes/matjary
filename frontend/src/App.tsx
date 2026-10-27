@@ -8,10 +8,6 @@ import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
 import { StoreStrip } from './components/StoreStrip';
 import { TrendingStores } from './components/TrendingStores';
-import { StorePage } from './components/StorePage';
-import { StoreCategoryPage } from './components/StoreCategoryPage';
-import { StoreProductPage } from './components/StoreProductPage';
-import { PricingPage } from './components/PricingPage';
 import { storefrontRouteFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 
@@ -22,6 +18,28 @@ import { Loading } from './features/shared/PanelUI';
 import './features/shared/panels.css';
 const AdminPanel = lazy(() => import('./features/admin/AdminPanel'));
 const OwnerPanel = lazy(() => import('./features/dashboard/OwnerPanel'));
+// Shop and pricing screens are reached from the feed, so they stay out of the
+// initial bundle; the discovery page ships only what it renders.
+const StorePage = lazy(() =>
+  import('./components/StorePage').then((module) => ({
+    default: module.StorePage,
+  })),
+);
+const StoreCategoryPage = lazy(() =>
+  import('./components/StoreCategoryPage').then((module) => ({
+    default: module.StoreCategoryPage,
+  })),
+);
+const StoreProductPage = lazy(() =>
+  import('./components/StoreProductPage').then((module) => ({
+    default: module.StoreProductPage,
+  })),
+);
+const PricingPage = lazy(() =>
+  import('./components/PricingPage').then((module) => ({
+    default: module.PricingPage,
+  })),
+);
 
 export default function App() {
   return (

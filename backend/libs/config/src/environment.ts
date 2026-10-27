@@ -45,6 +45,9 @@ export interface AppEnvironment extends DatabaseEnvironment {
   MEDIA_MAX_IMAGE_SIZE_BYTES: number;
   MEDIA_MAX_VIDEO_SIZE_BYTES: number;
   MEDIA_MAX_VIDEO_DURATION_SECONDS: number;
+  // How long browsers/proxies may reuse a public (published) media variant.
+  // 0 falls back to revalidating every request.
+  MEDIA_PUBLIC_CACHE_SECONDS: number;
   // Comma-separated list of admin email addresses. Empty means no admins.
   ADMIN_EMAILS: string;
   PROMETHEUS_URL: string;
@@ -316,6 +319,16 @@ export function validateEnvironment(
       90,
       1,
       90,
+    ),
+    // Public variants are immutable URLs; a bounded max-age lets browsers and
+    // an optional shared cache absorb traffic while moderation stays bounded
+    // by this window.
+    MEDIA_PUBLIC_CACHE_SECONDS: integer(
+      env,
+      'MEDIA_PUBLIC_CACHE_SECONDS',
+      3600,
+      0,
+      604800,
     ),
     // Storage provider selection: 's3' (object storage) or 'local' (VPS disk).
     STORAGE_PROVIDER: storageProvider as AppEnvironment['STORAGE_PROVIDER'],

@@ -625,9 +625,18 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
     assert.equal(part.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(
       part.headers.get('cache-control'),
-      'public, max-age=0, must-revalidate',
+      'public, max-age=3600',
+      'published variants are cacheable so repeat views skip the origin',
     );
     assert.equal(await part.text(), '2345');
+    // A revalidating browser gets a bodyless response instead of the bytes.
+    const etag = part.headers.get('etag');
+    assert.ok(etag);
+    const revalidated = await fetch(url(variant.storageKey), {
+      headers: { 'If-None-Match': etag },
+    });
+    assert.equal(revalidated.status, 304);
+    assert.equal(await revalidated.text(), '');
     const invalid = await fetch(url(variant.storageKey), {
       headers: { Range: 'bytes=10-' },
     });

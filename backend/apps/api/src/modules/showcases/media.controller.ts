@@ -153,13 +153,21 @@ export class MediaController {
     const { size } = await this.storage.statObject(key);
     const header = request.headers.range;
     const range = header ? parseMediaRange(header, size) : undefined;
+    // Public variant keys contain the asset UUID and never change bytes, so a
+    // positive response is safe to cache. Every request is still authorized
+    // above, and `MEDIA_PUBLIC_CACHE_SECONDS` bounds how long a browser or a
+    // shared proxy may reuse the bytes after content is unpublished.
     response.setHeader(
       'Cache-Control',
       access.public
-        ? 'public, max-age=0, must-revalidate'
+        ? `public, max-age=${this.config.get(
+            'MEDIA_PUBLIC_CACHE_SECONDS',
+            3600,
+            { infer: true },
+          )}`
         : 'private, no-store',
     );
-    response.setHeader('Vary', 'Cookie');
+    if (!access.public) response.setHeader('Vary', 'Cookie');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Content-Type', access.mimeType);
     response.setHeader('Accept-Ranges', 'bytes');
@@ -167,6 +175,16 @@ export class MediaController {
       response.setHeader('Content-Range', `bytes */${size}`);
       response.status(416).end();
       return;
+    }
+    if (access.public) {
+      const etag = `"${size.toString(16)}"`;
+      response.setHeader('ETag', etag);
+      // A revalidating browser gets a bodyless answer, which keeps repeat
+      // visits cheap without skipping the authorization check above.
+      if (!header && request.headers['if-none-match'] === etag) {
+        response.status(304).end();
+        return;
+      }
     }
     if (range) {
       response.status(206);

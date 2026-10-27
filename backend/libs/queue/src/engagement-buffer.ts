@@ -62,6 +62,30 @@ export async function readEngagement(
   const value = await redis.get(stateKey(postId));
   return value ? (JSON.parse(value) as EngagementState) : null;
 }
+
+/**
+ * Batched variant of readEngagement for feed pages. Missing or malformed
+ * entries are simply absent from the map; callers fall back to the durable
+ * MySQL counters for those posts.
+ */
+export async function readEngagementMany(
+  redis: RedisService,
+  postIds: string[],
+): Promise<Map<string, EngagementState>> {
+  const states = new Map<string, EngagementState>();
+  if (postIds.length === 0) return states;
+  const values = await redis.mget(postIds.map(stateKey));
+  postIds.forEach((postId, index) => {
+    const value = values[index];
+    if (!value) return;
+    try {
+      states.set(postId, JSON.parse(value) as EngagementState);
+    } catch {
+      // A corrupt entry must not fail the whole feed page.
+    }
+  });
+  return states;
+}
 export async function hydrateEngagement(
   redis: RedisService,
   postId: string,

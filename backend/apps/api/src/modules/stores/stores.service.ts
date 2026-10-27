@@ -99,6 +99,16 @@ export class StoresService {
     );
   }
 
+  // The public shop list is identical for every visitor and powers the home
+  // strip and the shop directory. Its per-store post/product counts are the
+  // expensive part, so a short shared cache keeps page loads cheap.
+  private readonly publicListCache = new Map<
+    string,
+    { expiresAt: number; value: { items: StoreResponseDto[]; total: number } }
+  >();
+  private static readonly PUBLIC_LIST_TTL_MS = 30 * 1000;
+  private static readonly PUBLIC_LIST_CACHE_MAX = 20;
+
   // The catalog itself is static, so it can be served without touching MySQL.
   getBusinessCategoryCatalog() {
     return {
@@ -123,6 +133,12 @@ export class StoresService {
     limit: number,
     offset: number,
   ): Promise<{ items: StoreResponseDto[]; total: number }> {
+    // Owner-scoped listings always read fresh; only the public list is shared.
+    const cacheKey = ownerId ? '' : `${limit}:${offset}`;
+    if (cacheKey) {
+      const cached = this.publicListCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) return cached.value;
+    }
     try {
       const where: Record<string, unknown> = {
         ...(ownerId ? ownerWhere('store') : publicWhere('store')),
@@ -144,7 +160,7 @@ export class StoresService {
         this.getProductsCounts(storeIds),
       ]);
 
-      return {
+      const result = {
         items: items.map((item, index) =>
           toStoreResponseDto(
             item,
@@ -155,6 +171,17 @@ export class StoresService {
         ),
         total,
       };
+      if (cacheKey) {
+        if (this.publicListCache.size >= StoresService.PUBLIC_LIST_CACHE_MAX) {
+          const oldest = this.publicListCache.keys().next().value;
+          if (oldest) this.publicListCache.delete(oldest);
+        }
+        this.publicListCache.set(cacheKey, {
+          expiresAt: Date.now() + StoresService.PUBLIC_LIST_TTL_MS,
+          value: result,
+        });
+      }
+      return result;
     } catch (error) {
       this.sanitize(error);
     }

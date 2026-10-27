@@ -22,6 +22,7 @@ import {
   MediaKind,
   MediaStatus,
   PostEngagement,
+  PostLike,
   MediaVariant,
   isPublicProductStatus,
   publicWhere,
@@ -32,13 +33,15 @@ import {
   businessCategoryLabel,
   isBusinessCategory,
 } from '@app/database';
-import {
-  PostEngagementService,
-  ResolvedViewer,
-} from '../engagement/post-engagement.service';
+import { ResolvedViewer } from '../engagement/post-engagement.service';
 import { LocationService } from '../../stores/services/location.service';
 import { MediaService } from '../media.service';
 import { StorageService } from '@app/storage';
+import { RedisService } from '@app/queue';
+import {
+  readEngagementMany,
+  type EngagementState,
+} from '@app/queue/engagement-buffer';
 import {
   diversifyByStore,
   exploreScore,
@@ -125,6 +128,14 @@ export interface FeedResponse {
   algorithm: string;
 }
 
+export interface ExploreCategoryFacet {
+  slug: string;
+  label: string;
+  group: string;
+  groupLabel: string;
+  count: number;
+}
+
 export interface ExploreParams {
   latitude?: number;
   longitude?: number;
@@ -166,11 +177,11 @@ export class FeedExploreService {
     private readonly mediaAssets: Repository<MediaAsset>,
     @InjectRepository(PostEngagement)
     private readonly engagementRepo: Repository<PostEngagement>,
-    private readonly engagementService: PostEngagementService,
     private readonly locationService: LocationService,
     private readonly mediaService: MediaService,
     private readonly storage: StorageService,
     private readonly config: ConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   // Category affinity is derived from durable likes, so a short in-process
@@ -182,6 +193,23 @@ export class FeedExploreService {
   >();
   private static readonly AFFINITY_TTL_MS = 5 * 60 * 1000;
   private static readonly AFFINITY_CACHE_MAX = 500;
+
+  // Anonymous visitors all request the same first pages. A very short shared
+  // cache turns a thundering herd into one ranking pass per key, and the
+  // per-visitor like state is patched on the way out. Authenticated feeds skip
+  // it because their ordering depends on personal affinity.
+  private readonly feedCache = new Map<
+    string,
+    { expiresAt: number; response: FeedResponse }
+  >();
+  private readonly feedInflight = new Map<string, Promise<FeedResponse>>();
+  private static readonly FEED_CACHE_TTL_MS = 20 * 1000;
+  private static readonly FEED_CACHE_MAX = 40;
+
+  // Explore filters change rarely and every visitor asks for them on load.
+  private categoriesCache:
+    { expiresAt: number; value: ExploreCategoryFacet[] } | undefined;
+  private static readonly CATEGORIES_TTL_MS = 60 * 1000;
 
   private normalizedCategories(params: ExploreParams): string[] {
     const values = [
@@ -365,7 +393,10 @@ export class FeedExploreService {
           : undefined;
 
       // Enrich with media and engagement
-      const enrichedItems = await this.enrichFeedItems(displayItems, userId);
+      const enrichedItems = await this.enrichFeedItems(displayItems, {
+        voterId: userId,
+        voterType: 'user',
+      });
 
       // Apply final ranking algorithm
       const rankedItems = this.rankFeedItems(enrichedItems, 'personalized');
@@ -423,6 +454,37 @@ export class FeedExploreService {
       categories: this.normalizedCategories(params),
     };
 
+    // Visitors share one ranked page; owners keep their personalised ordering.
+    const cacheable = viewer?.voterType === 'visitor';
+    const key = cacheable ? this.feedCacheKey(normalized, limit, cursor) : '';
+    if (cacheable) {
+      const cached = this.feedCache.get(key);
+      if (cached && cached.expiresAt > Date.now())
+        return this.patchViewerLikes(cached.response, viewer);
+      const pending = this.feedInflight.get(key);
+      if (pending) return this.patchViewerLikes(await pending, viewer);
+    }
+
+    const work = this.computeExploreFeed(normalized, viewer, limit, cursor);
+    if (!cacheable) return work;
+    // Single flight: the first visitor computes, everyone waiting shares it.
+    this.feedInflight.set(key, work);
+    try {
+      const response = await work;
+      this.storeFeedCache(key, response);
+      return response;
+    } finally {
+      this.feedInflight.delete(key);
+    }
+  }
+
+  private async computeExploreFeed(
+    normalized: ExploreParams,
+    viewer: ResolvedViewer | undefined,
+    limit: number,
+    cursor: string | undefined,
+  ): Promise<FeedResponse> {
+    const algorithm = normalized.algorithm ?? 'mixed';
     let items: FeedItem[] = [];
 
     switch (algorithm) {
@@ -454,6 +516,107 @@ export class FeedExploreService {
       nextCursor: paginated.nextCursor,
       algorithm,
     };
+  }
+
+  private feedCacheKey(
+    params: ExploreParams,
+    limit: number,
+    cursor?: string,
+  ): string {
+    return JSON.stringify([
+      params.algorithm ?? 'mixed',
+      params.categories ?? [],
+      params.city ?? '',
+      params.country ?? '',
+      // Nearby/mixed feeds depend on the coordinates, not just the radius.
+      params.latitude ?? '',
+      params.longitude ?? '',
+      params.radiusKm ?? '',
+      params.timeWindowHours ?? '',
+      limit,
+      cursor ?? '',
+    ]);
+  }
+
+  private storeFeedCache(key: string, response: FeedResponse): void {
+    // The entry is shared between visitors, so it must not carry one
+    // visitor's like state; every hit is patched for its own viewer.
+    const snapshot: FeedResponse = {
+      ...response,
+      items: response.items.map((item) => ({
+        ...item,
+        engagement: { ...item.engagement, viewerLiked: false },
+      })),
+    };
+    if (this.feedCache.size >= FeedExploreService.FEED_CACHE_MAX) {
+      const oldest = this.feedCache.keys().next().value;
+      if (oldest) this.feedCache.delete(oldest);
+    }
+    this.feedCache.set(key, {
+      expiresAt: Date.now() + FeedExploreService.FEED_CACHE_TTL_MS,
+      response: snapshot,
+    });
+  }
+
+  private async patchViewerLikes(
+    response: FeedResponse,
+    viewer?: ResolvedViewer,
+  ): Promise<FeedResponse> {
+    // A freshly minted visitor id cannot have liked anything yet, so first-time
+    // visitors (the bulk of a traffic spike) skip the extra lookup entirely.
+    if (!viewer || viewer.newVisitorId) return response;
+    const { liked } = await this.engagementSnapshot(
+      response.items.map((item) => item.id),
+      viewer,
+    );
+    return {
+      ...response,
+      items: response.items.map((item) => ({
+        ...item,
+        engagement: {
+          ...item.engagement,
+          viewerLiked: liked.has(item.id),
+        },
+      })),
+    };
+  }
+
+  /**
+   * Live like/view state plus the viewer's own likes, both read in a constant
+   * number of round trips. Redis holds activity that has not been flushed to
+   * MySQL yet; posts without a live entry fall back to the durable counters and
+   * one batched `post_likes` lookup.
+   */
+  private async engagementSnapshot(
+    postIds: string[],
+    viewer?: ResolvedViewer,
+  ): Promise<{ states: Map<string, EngagementState>; liked: Set<string> }> {
+    let states = new Map<string, EngagementState>();
+    try {
+      states = await readEngagementMany(this.redis, postIds);
+    } catch {
+      // A personalization/Redis outage must never break the public feed.
+    }
+    const liked = new Set<string>();
+    if (!viewer) return { states, liked };
+    const unresolved: string[] = [];
+    for (const postId of postIds) {
+      const state = states.get(postId);
+      if (!state) unresolved.push(postId);
+      else if (state.likes[viewer.voterId]) liked.add(postId);
+    }
+    if (unresolved.length > 0) {
+      try {
+        const rows = await this.showcases.manager.getRepository(PostLike).find({
+          where: { postId: In(unresolved), voterId: viewer.voterId },
+          select: { postId: true },
+        });
+        for (const row of rows) liked.add(row.postId);
+      } catch {
+        // Losing the viewer's like state only affects the heart icon.
+      }
+    }
+    return { states, liked };
   }
 
   /**
@@ -506,7 +669,7 @@ export class FeedExploreService {
       .getMany();
 
     // Enrich all items
-    const enrichedItems = await this.enrichFeedItems(rawItems, viewer?.voterId);
+    const enrichedItems = await this.enrichFeedItems(rawItems, viewer);
     const affinity = await this.getCategoryAffinity(viewer);
 
     // Apply mixed algorithm scoring
@@ -597,7 +760,7 @@ export class FeedExploreService {
       })
       .getMany();
 
-    const enriched = await this.enrichFeedItems(items, viewer?.voterId);
+    const enriched = await this.enrichFeedItems(items, viewer);
     const now = Date.now();
     const scored = enriched.map((item) => ({
       ...item,
@@ -645,7 +808,7 @@ export class FeedExploreService {
       })
       .getMany();
 
-    const enriched = await this.enrichFeedItems(items, viewer?.voterId);
+    const enriched = await this.enrichFeedItems(items, viewer);
     const scored = enriched.map((item) => ({
       ...item,
       _algorithmScore: popularityScore(item),
@@ -697,7 +860,7 @@ export class FeedExploreService {
       .take(Math.min(Math.max(limit * 8, 60), 300))
       .getMany();
 
-    const enriched = await this.enrichFeedItems(items, viewer?.voterId);
+    const enriched = await this.enrichFeedItems(items, viewer);
     return enriched.map((item) => ({
       ...item,
       _algorithmScore: recencyScore(item),
@@ -746,7 +909,7 @@ export class FeedExploreService {
       .take(Math.min(Math.max(limit * 8, 60), 300))
       .getMany();
 
-    const enriched = await this.enrichFeedItems(items, viewer?.voterId);
+    const enriched = await this.enrichFeedItems(items, viewer);
     const now = Date.now();
     return enriched.map((item) => ({
       ...item,
@@ -803,11 +966,16 @@ export class FeedExploreService {
   // ============================================
 
   /**
-   * Enrich showcase items with media and engagement data
+   * Enrich showcase items with media and engagement data.
+   *
+   * Every lookup here is batched: one query for media, one for variants, one
+   * for durable counters, one Redis MGET and at most one `post_likes` read.
+   * The previous implementation issued several queries per card, which made a
+   * single feed page hundreds of round trips and collapsed under load.
    */
   private async enrichFeedItems(
     showcases: Showcase[],
-    viewerId?: string,
+    viewer?: ResolvedViewer,
   ): Promise<FeedItem[]> {
     if (showcases.length === 0) return [];
 
@@ -826,19 +994,40 @@ export class FeedExploreService {
       order: { position: 'ASC' },
     });
 
-    // Fetch engagement data
-    const engagementData = await this.engagementRepo.findBy({
-      postId: In(showcaseIds),
-    });
+    // All variants of the page in one query, grouped by asset.
+    const assetIds = mediaAssets.map((asset) => asset.id);
+    const variants = assetIds.length
+      ? await this.mediaAssets.manager.getRepository(MediaVariant).find({
+          where: { assetId: In(assetIds) },
+          select: {
+            assetId: true,
+            label: true,
+            storageKey: true,
+            mimeType: true,
+            width: true,
+            height: true,
+          },
+        })
+      : [];
+    const variantsByAsset = new Map<string, MediaVariant[]>();
+    for (const variant of variants) {
+      const list = variantsByAsset.get(variant.assetId) ?? [];
+      list.push(variant);
+      variantsByAsset.set(variant.assetId, list);
+    }
 
-    // Fetch stores
-    const stores =
+    // Fetch engagement data: durable counters, live Redis state and the
+    // viewer's own likes, each in a single round trip.
+    const [engagementData, snapshot, stores] = await Promise.all([
+      this.engagementRepo.findBy({ postId: In(showcaseIds) }),
+      this.engagementSnapshot(showcaseIds, viewer),
       storeIds.length > 0
-        ? await this.stores.findBy({
+        ? this.stores.findBy({
             id: In(storeIds),
             ...publicWhere('store'),
           })
-        : [];
+        : Promise.resolve([]),
+    ]);
     const storeMap = new Map(stores.map((s) => [s.id, s]));
 
     // Shoppable post targets, resolved in two batched lookups. A link only
@@ -876,33 +1065,20 @@ export class FeedExploreService {
     // Group engagement by post
     const engagementMap = new Map(engagementData.map((e) => [e.postId, e]));
 
-    // Build enriched items
-    const viewer = viewerId
-      ? { voterId: viewerId, voterType: 'user' as const }
-      : undefined;
-
     const items: FeedItem[] = [];
     for (const showcase of showcases) {
       const media = await this.buildMediaUrls(
         mediaByShowcase.get(showcase.id) || [],
+        variantsByAsset,
       );
 
-      const engagement = engagementMap.get(showcase.id);
-      const likes = engagement?.likesCount ?? 0;
-      const views = engagement?.viewsCount ?? 0;
-
-      let viewerLiked = false;
-      if (viewer) {
-        try {
-          const engagementResult = await this.engagementService.getEngagement(
-            showcase.id,
-            viewer,
-          );
-          viewerLiked = engagementResult.viewerLiked;
-        } catch {
-          viewerLiked = false;
-        }
-      }
+      const live = snapshot.states.get(showcase.id);
+      const durable = engagementMap.get(showcase.id);
+      // Live state includes the durable baseline plus unflushed activity.
+      const likes = live
+        ? Object.keys(live.likes).length
+        : (durable?.likesCount ?? 0);
+      const views = live ? live.views : (durable?.viewsCount ?? 0);
 
       const store = showcase.storeId ? storeMap.get(showcase.storeId) : null;
 
@@ -972,7 +1148,11 @@ export class FeedExploreService {
           : undefined,
         media,
         ...(link ? { link } : {}),
-        engagement: { likes, views, viewerLiked },
+        engagement: {
+          likes,
+          views,
+          viewerLiked: snapshot.liked.has(showcase.id),
+        },
       });
     }
 
@@ -982,27 +1162,14 @@ export class FeedExploreService {
   /**
    * Build media URLs with variants
    */
-  private async buildMediaUrls(assets: MediaAsset[]): Promise<FeedMediaItem[]> {
+  private async buildMediaUrls(
+    assets: MediaAsset[],
+    variantsByAsset: Map<string, MediaVariant[]>,
+  ): Promise<FeedMediaItem[]> {
     const items: FeedMediaItem[] = [];
 
     for (const asset of assets) {
-      // Get variants for this asset using the repository - use getRawMany for proper typing
-      const variants = await this.mediaAssets.manager
-        .getRepository(MediaVariant)
-        .createQueryBuilder('variant')
-        .where('variant.assetId = :assetId', { assetId: asset.id })
-        .select('variant.label', 'label')
-        .addSelect('variant.storageKey', 'storageKey')
-        .addSelect('variant.mimeType', 'mimeType')
-        .addSelect('variant.width', 'width')
-        .addSelect('variant.height', 'height')
-        .getRawMany<{
-          label: string;
-          storageKey: string;
-          mimeType: string;
-          width: number | null;
-          height: number | null;
-        }>();
+      const variants = variantsByAsset.get(asset.id) ?? [];
 
       // Build variant URLs in parallel
       const variantUrls = await Promise.all(
@@ -1136,15 +1303,18 @@ export class FeedExploreService {
    * Get business categories that currently have public posts. Counts let the
    * filter hide empty shops types instead of showing a long dead list.
    */
-  async getExploreCategories(): Promise<
-    {
-      slug: string;
-      label: string;
-      group: string;
-      groupLabel: string;
-      count: number;
-    }[]
-  > {
+  async getExploreCategories(): Promise<ExploreCategoryFacet[]> {
+    if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now())
+      return this.categoriesCache.value;
+    const value = await this.loadExploreCategories();
+    this.categoriesCache = {
+      expiresAt: Date.now() + FeedExploreService.CATEGORIES_TTL_MS,
+      value,
+    };
+    return value;
+  }
+
+  private async loadExploreCategories(): Promise<ExploreCategoryFacet[]> {
     const result = await this.showcases
       .createQueryBuilder('showcase')
       .innerJoin('showcase.store', 'store')
@@ -1279,10 +1449,7 @@ export class FeedExploreService {
         : undefined;
 
     // Enrich with media and engagement
-    const enrichedItems = await this.enrichFeedItems(
-      displayItems,
-      viewer?.voterId,
-    );
+    const enrichedItems = await this.enrichFeedItems(displayItems, viewer);
 
     // Apply store-specific ranking (recency + engagement)
     const rankedItems = enrichedItems.map((item) => ({

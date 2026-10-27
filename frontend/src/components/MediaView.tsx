@@ -59,7 +59,12 @@ export function MediaView({
       <img
         src={media.kind === 'image' && jpeg ? assetUrl(jpeg.url) : preview}
         alt={title}
+        width={media.width || undefined}
+        height={media.height || undefined}
         loading={eager ? 'eager' : 'lazy'}
+        // The first card is the largest thing on the first screen; the rest
+        // load lazily so the browser spends its early connections there.
+        fetchPriority={eager ? 'high' : 'auto'}
         decoding="async"
         ref={(image) => {
           if (image?.complete && image.naturalWidth > 0) setLoaded(true);

@@ -9,7 +9,9 @@ export function useWebsiteSettings(applyMetadata = true, enabled = true) {
     queryFn: async ({ signal }) =>
       normalizeSettings(await getJson<unknown>('settings/website', signal)),
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    // Branding changes are rare; a five-minute refresh keeps every open tab in
+    // sync without a per-minute request from every visitor.
+    refetchInterval: 300_000,
     enabled,
   });
   const settings = settingsQuery.data ?? defaults;

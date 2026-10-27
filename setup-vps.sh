@@ -185,8 +185,40 @@ render_nginx() {
 # Add/replace these locations; never paste duplicate location blocks.
 # On subsequent runs with the same port, existing matching blocks can stay.
 # CloudPanel document root: $WEB_ROOT
+#
+# STEP 1 (once per server): published photos and videos are immutable URLs, so
+# Nginx can serve them from its own cache instead of asking the API for every
+# visitor. Add ONE line inside the http { } block of /etc/nginx/nginx.conf,
+# create the directory first, then reload Nginx:
+#   install -d -o www-data -g www-data /var/cache/nginx/matjary-media
+#   proxy_cache_path /var/cache/nginx/matjary-media levels=1:2 keys_zone=matjary_media:32m max_size=4g inactive=1d use_temp_path=off;
+# Private/owner responses are "private, no-store" and are never stored; only
+# published variants carry "public, max-age=...".
+#
+# STEP 2: add these locations to the site's HTTPS server block.
 location = /api/v1/internal/metrics { return 404; }
 location ^~ /api/v1/internal/metrics/ { return 404; }
+
+# Media bytes: let good caches absorb repeat views. Range requests (video
+# seeking) bypass the cache so partial responses are never stored.
+location ^~ /api/v1/uploads/ {
+    proxy_pass http://127.0.0.1:$API_PORT;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$remote_addr;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Connection "";
+    proxy_cache matjary_media;
+    proxy_cache_key "\$request_method\$host\$request_uri";
+    proxy_cache_lock on;
+    proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+    proxy_cache_bypass \$http_range;
+    proxy_no_cache \$http_range;
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 330s;
+    proxy_send_timeout 330s;
+}
 
 location ^~ /api/ {
     proxy_pass http://127.0.0.1:$API_PORT;
@@ -196,6 +228,10 @@ location ^~ /api/ {
     proxy_set_header X-Forwarded-For \$remote_addr;
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header Connection "";
+    # Feed JSON is text; compressing it keeps the first screen small.
+    gzip on;
+    gzip_types application/json;
+    gzip_min_length 1024;
     client_max_body_size 200m;
     proxy_request_buffering off;
     proxy_buffering off;

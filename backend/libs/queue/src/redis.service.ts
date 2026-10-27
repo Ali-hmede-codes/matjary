@@ -42,6 +42,16 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     return this.client.get(key);
   }
 
+  /**
+   * Read several keys in one round trip. Feed pages need the live counters of
+   * every card; issuing one GET per card turned a single page into dozens of
+   * sequential Redis calls under load.
+   */
+  async mget(keys: string[]): Promise<(string | null)[]> {
+    if (keys.length === 0) return [];
+    return this.client.mget(keys);
+  }
+
   async setWithTtl(key: string, value: string, seconds: number): Promise<void> {
     await this.client.set(key, value, 'EX', seconds);
   }

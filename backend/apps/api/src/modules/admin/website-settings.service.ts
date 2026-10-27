@@ -33,6 +33,8 @@ export class WebsiteSettingsService {
       if (!settings) throw new Error('Missing singleton');
       return this.publicValues(settings);
     } catch {
+      // A read failure must stay a sanitized 503 instead of serving a stale
+      // copy: an unavailable database is reported, never hidden.
       throw new ServiceUnavailableException(
         'Website settings are temporarily unavailable',
       );

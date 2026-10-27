@@ -1,5 +1,9 @@
 import { useDeferredValue, useEffect, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+} from '@tanstack/react-query';
 import {
   getFeedAds,
   getJson,
@@ -94,20 +98,6 @@ export function useDiscoveryFeed() {
       getJson<{ items: Store[] }>('stores?limit=7', signal),
     enabled: !demo,
   });
-  const categoriesQuery = useQuery({
-    queryKey: ['categories'],
-    queryFn: ({ signal }) =>
-      getJson<ShopCategoryFacet[]>('feed/explore/categories', signal),
-    enabled: !demo,
-    staleTime: 60_000,
-  });
-  const adsQuery = useQuery({
-    queryKey: ['boost', 'feed-ads'],
-    queryFn: ({ signal }) => getFeedAds(signal),
-    enabled: !demo,
-    staleTime: 120_000,
-    retry: 0,
-  });
   const categoryKey = [...categories].sort().join(',');
   const feed = useInfiniteQuery({
     queryKey: ['explore', algorithm, categoryKey, store?.slug],
@@ -124,6 +114,27 @@ export function useDiscoveryFeed() {
     },
     getNextPageParam: (page) => (page.hasMore ? page.nextCursor : undefined),
     enabled: !demo,
+    // Keep the current cards on screen while a filter change loads, and reuse
+    // a page for a moment when the visitor comes back to it.
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+  // Filters and sponsored cards never paint the first screen, so they wait for
+  // the feed instead of competing with it for the visitor's connection.
+  const feedSettled = demo || !feed.isPending;
+  const categoriesQuery = useQuery({
+    queryKey: ['categories'],
+    queryFn: ({ signal }) =>
+      getJson<ShopCategoryFacet[]>('feed/explore/categories', signal),
+    enabled: !demo && feedSettled,
+    staleTime: 60_000,
+  });
+  const adsQuery = useQuery({
+    queryKey: ['boost', 'feed-ads'],
+    queryFn: ({ signal }) => getFeedAds(signal),
+    enabled: !demo && feedSettled,
+    staleTime: 120_000,
+    retry: 0,
   });
   const stores = demo ? demoStores : (storesQuery.data?.items ?? []);
   const categoryFacets = demo ? sampleCategories : (categoriesQuery.data ?? []);
@@ -185,8 +196,7 @@ export function useDiscoveryFeed() {
   }
   const isLoading =
     settingsQuery.isLoading ||
-    (!demo &&
-      (feed.isLoading || storesQuery.isLoading || categoriesQuery.isLoading));
+    (!demo && (feed.isLoading || storesQuery.isLoading));
   const feedTitle =
     store?.name ||
     {

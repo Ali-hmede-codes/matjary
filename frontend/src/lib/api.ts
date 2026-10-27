@@ -112,6 +112,10 @@ export interface Media {
   kind: 'image' | 'video';
   primaryUrl: string;
   posterUrl: string | null;
+  // Intrinsic size of the processed asset; used to reserve space while the
+  // bytes are still in flight.
+  width?: number;
+  height?: number;
   variants: {
     url: string;
     width: number;
