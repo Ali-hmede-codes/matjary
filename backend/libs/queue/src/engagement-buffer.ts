@@ -143,3 +143,19 @@ export async function acknowledgeEngagement(
     [postId, batchId],
   );
 }
+
+/**
+ * Drops the buffered state of a post that no longer exists. The flusher locks
+ * the post row before staging, so a leftover dirty member would make every
+ * engagement flush retry a deleted post forever.
+ */
+export async function forgetEngagement(
+  redis: RedisService,
+  postId: string,
+): Promise<void> {
+  await redis.evaluate(
+    "redis.call('DEL', KEYS[1]); redis.call('SREM', KEYS[2], ARGV[1])",
+    [stateKey(postId), ENGAGEMENT_DIRTY],
+    [postId],
+  );
+}

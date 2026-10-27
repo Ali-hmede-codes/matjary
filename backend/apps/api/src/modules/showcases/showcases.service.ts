@@ -16,6 +16,8 @@ import {
   Store,
   StoreCategory,
   User,
+  MediaAsset,
+  MediaStatus,
   effectiveLimits,
   assertSubscriptionActive,
   assertQuota,
@@ -23,11 +25,16 @@ import {
   publicWhere,
   lockOwnerContent,
   chooseContentSlug,
+  purgeShowcaseRecords,
 } from '@app/database';
+import { StorageService } from '@app/storage';
+import { RedisService } from '@app/queue';
+import { forgetEngagement } from '@app/queue/engagement-buffer';
 import { CreateShowcaseDto } from './dto/create-showcase.dto';
 import { UpdateShowcaseDto } from './dto/update-showcase.dto';
 import { ShowcaseResponseDto } from './dto/showcase-response.dto';
 import { SeoService } from '../seo/seo.service';
+import { deleteStoredObjects } from '../media-cleanup';
 
 @Injectable()
 export class ShowcasesService {
@@ -43,6 +50,8 @@ export class ShowcasesService {
     @InjectRepository(StoreCategory)
     private readonly categories: Repository<StoreCategory>,
     private readonly seoService: SeoService,
+    private readonly storage: StorageService,
+    private readonly redis: RedisService,
   ) {}
 
   private sanitize(error: unknown): never {
@@ -367,6 +376,7 @@ export class ShowcasesService {
   }
 
   async remove(slug: string, userId: string): Promise<void> {
+    let deleted: { id: string; keys: string[] } | undefined;
     try {
       const showcase = await this.showcases.findOneBy({
         slug,
@@ -380,19 +390,39 @@ export class ShowcasesService {
         throw new ForbiddenException('You do not own this post');
       }
 
-      await this.showcases.manager.transaction(async (manager) => {
+      deleted = await this.showcases.manager.transaction(async (manager) => {
         await lockOwnerContent(manager, 'post', showcase.id, userId);
-        await manager.remove(showcase);
+        // An active encode keeps writing variants for the asset rows this
+        // deletion removes. Ask the owner to wait for that job instead of
+        // leaving orphaned files and a job that keeps failing.
+        const processing = await manager.countBy(MediaAsset, {
+          showcaseId: showcase.id,
+          status: MediaStatus.PROCESSING,
+        });
+        if (processing)
+          throw new ConflictException(
+            'Wait for media processing to finish before deleting this post',
+          );
+        const keys = await purgeShowcaseRecords(manager, showcase.id);
+        return { id: showcase.id, keys };
       });
     } catch (error) {
       if (
         error instanceof NotFoundException ||
-        error instanceof ForbiddenException
+        error instanceof ForbiddenException ||
+        error instanceof ConflictException
       ) {
         throw error;
       }
       this.sanitize(error);
     }
+    if (!deleted) return;
+    // Bytes and buffered engagement go only after the rows are gone, and a
+    // cleanup hiccup must not report a committed deletion as failed.
+    await deleteStoredObjects(this.storage, deleted.keys);
+    await forgetEngagement(this.redis, deleted.id).catch(() =>
+      this.logger.warn('Could not clear engagement state for a deleted post'),
+    );
   }
 
   private toResponseDto(

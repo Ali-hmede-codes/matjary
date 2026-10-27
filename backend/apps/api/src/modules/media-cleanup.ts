@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import type { StorageService } from '@app/storage';
 
-const logger = new Logger('StoreMediaCleanup');
+const logger = new Logger('MediaCleanup');
 
 // Runs after the database commit. A storage failure must not resurrect deleted
 // rows, and retrying individual keys is safer than failing the whole response.
-export async function deleteStoreObjects(
+export async function deleteStoredObjects(
   storage: StorageService,
   keys: Iterable<string>,
 ): Promise<void> {
@@ -13,7 +13,7 @@ export async function deleteStoreObjects(
     try {
       await storage.deleteObject(key);
     } catch {
-      logger.warn('Could not remove a deleted store media object');
+      logger.warn('Could not remove a deleted media object');
     }
   }
 }

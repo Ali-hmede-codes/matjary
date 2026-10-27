@@ -52,7 +52,7 @@ import {
 } from './services/location.service';
 import { SeoService } from '../seo/seo.service';
 import { AdminGuard } from '../auth/guards/auth.guards';
-import { deleteStoreObjects } from './store-media-cleanup';
+import { deleteStoredObjects } from '../media-cleanup';
 
 const MAX_BRANCHES = 10;
 const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -776,7 +776,7 @@ export class StoresService {
     } catch (error) {
       this.sanitize(error);
     }
-    await deleteStoreObjects(this.storage, keys);
+    await deleteStoredObjects(this.storage, keys);
   }
 
   private async transition(

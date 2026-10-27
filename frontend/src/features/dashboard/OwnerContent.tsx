@@ -114,6 +114,7 @@ function optionDrafts(
 }
 export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const { store, session } = useOwner();
+  const client = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState('');
   const [editor, setEditor] = useState<Content | null | undefined>();
@@ -121,6 +122,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
   const [statusBusy, setStatusBusy] = useState('');
+  const [deleting, setDeleting] = useState('');
   const product = kind === 'products';
   const categoryQuery = useQuery({
     queryKey: ['categories', store!.slug, 'my'],
@@ -177,6 +179,37 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
       setActionError(panelError(e));
     } finally {
       setStatusBusy('');
+    }
+  }
+  async function removePost(item: Content) {
+    if (deleting) return;
+    const name = item.title || 'this post';
+    if (
+      !window.confirm(
+        `Delete “${name}”? Its photos and videos are removed permanently, and this cannot be undone.`,
+      )
+    )
+      return;
+    setDeleting(item.id);
+    setNotice('');
+    setActionError('');
+    try {
+      await mutate(`posts/${encodeURIComponent(item.slug)}`, {}, 'DELETE');
+      setNotice(`“${name}” was deleted.`);
+      // The panel list, the dashboard counters, and public views all lose this
+      // post, so refresh every cache that may still show it.
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['panel', session.user.id] }),
+        client.invalidateQueries({ queryKey: ['storefront'] }),
+        client.invalidateQueries({ queryKey: ['storefront-posts'] }),
+        client.invalidateQueries({ queryKey: ['explore'] }),
+      ]);
+      // Deleting the only row on a later page would leave it empty.
+      if (items.length === 1 && offset > 0) setOffset(Math.max(0, offset - 20));
+    } catch (e) {
+      setActionError(panelError(e));
+    } finally {
+      setDeleting('');
     }
   }
   return (
@@ -304,6 +337,15 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                             : item.status === 'out_of_stock'
                               ? 'Mark in stock'
                               : 'Mark out of stock'}
+                        </button>
+                      )}
+                      {!product && (
+                        <button
+                          type="button"
+                          disabled={Boolean(deleting)}
+                          onClick={() => void removePost(item)}
+                        >
+                          {deleting === item.id ? 'Deleting…' : 'Delete'}
                         </button>
                       )}
                     </div>

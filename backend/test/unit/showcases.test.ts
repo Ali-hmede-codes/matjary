@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { QueryFailedError, FindOperator, type Repository } from 'typeorm';
 import {
+  MediaAsset,
   Product,
   Showcase,
   ShowcaseStatus,
@@ -41,7 +42,11 @@ function makeShowcase(overrides: Partial<Showcase> = {}): Showcase {
 class FakeRepository {
   items: Showcase[] = [];
   totalCount = 0;
+  processingCount = 0;
   locks: string[] = [];
+  statements: { sql: string; parameters: unknown[] }[] = [];
+  deletedKeys: string[] = [];
+  forgot: string[] = [];
   subscription: any = {
     startsAt: new Date(0),
     expiresAt: new Date('2999-01-01T00:00:00Z'),
@@ -69,14 +74,31 @@ class FakeRepository {
             return { find: async () => [this.subscription] };
           return { findOneBy: async () => null };
         },
-        countBy: async () => this.totalCount,
+        countBy: async (target: unknown) =>
+          target === MediaAsset ? this.processingCount : this.totalCount,
         findOneBy: (_target: unknown, where: Record<string, unknown>) =>
           this.findOneBy(where),
         create: (_target: unknown, value: unknown) => this.create(value),
         save: (value: unknown) => this.save(value),
         remove: (value: unknown) => this.remove(value),
+        query: (sql: string, parameters: unknown[] = []) =>
+          this.query(sql, parameters),
       }),
   };
+
+  async query(sql: string, parameters: unknown[]): Promise<unknown[]> {
+    this.statements.push({ sql, parameters });
+    if (sql.startsWith('SELECT id, original_key AS storageKey'))
+      return [
+        {
+          id: 'asset-1',
+          storageKey: 'originals/showcase-1/asset-1/source',
+        },
+      ];
+    if (sql.startsWith('SELECT variant.storage_key AS storageKey'))
+      return [{ storageKey: 'media/showcase-1/asset-1/webp-480.webp' }];
+    return [];
+  }
 
   private matches(item: Showcase, where: Record<string, unknown>): boolean {
     return Object.entries(where).every(([key, value]) => {
@@ -134,12 +156,29 @@ function serviceWith(fake: FakeRepository): ShowcasesService {
     autoGenerateShowcaseSeo: async () => {},
     notifyIndexNowOnChange: async () => {},
   } as any;
+  const storage = {
+    deleteObject: async (key: string) => {
+      fake.deletedKeys.push(key);
+    },
+  } as any;
+  const redis = {
+    evaluate: async (
+      _script: string,
+      _keys: string[],
+      arguments_: string[],
+    ) => {
+      fake.forgot.push(arguments_[0]!);
+      return 1;
+    },
+  } as any;
   return new ShowcasesService(
     fake as unknown as Repository<Showcase>,
     fake as unknown as Repository<Store>,
     fake as unknown as Repository<Product>,
     fake as unknown as Repository<StoreCategory>,
     seoService,
+    storage,
+    redis,
   );
 }
 
@@ -405,16 +444,54 @@ test('service.update throws NotFoundException for missing post', async () => {
 
 // ── Service: remove ──
 
-test('service.remove lets owner delete their post', async () => {
+test('service.remove deletes the post, its media, and related rows', async () => {
   const fake = new FakeRepository();
   fake.items.push(makeShowcase({ ownerId: 'user-1' }));
-  let removed = false;
-  fake.remove = async () => {
-    removed = true;
-  };
   const svc = serviceWith(fake);
   await svc.remove('my-post', 'user-1');
-  assert.equal(removed, true);
+  const statements = fake.statements.map(({ sql }) => sql);
+  for (const table of [
+    'media_processing_outbox',
+    'media_variants',
+    'media_assets',
+    'engagement_flush_receipts',
+    'post_engagement',
+    'post_likes',
+    'showcase_seo',
+    'boost_campaign_performance',
+    'boost_campaigns',
+    'showcases',
+  ])
+    assert.ok(
+      statements.some((sql) => sql.startsWith(`DELETE FROM ${table} `)),
+      table,
+    );
+  assert.equal(statements.at(-1), 'DELETE FROM showcases WHERE id = ?');
+  assert.deepEqual(fake.deletedKeys.sort(), [
+    'media/showcase-1/asset-1/avif-1080.avif',
+    'media/showcase-1/asset-1/avif-1600.avif',
+    'media/showcase-1/asset-1/avif-480.avif',
+    'media/showcase-1/asset-1/jpeg-1080.jpg',
+    'media/showcase-1/asset-1/jpeg-1600.jpg',
+    'media/showcase-1/asset-1/jpeg-480.jpg',
+    'media/showcase-1/asset-1/mp4-720.mp4',
+    'media/showcase-1/asset-1/poster-jpeg.jpg',
+    'media/showcase-1/asset-1/webp-1080.webp',
+    'media/showcase-1/asset-1/webp-1600.webp',
+    'media/showcase-1/asset-1/webp-480.webp',
+    'originals/showcase-1/asset-1/source',
+  ]);
+  assert.deepEqual(fake.forgot, ['showcase-1']);
+});
+
+test('service.remove waits for media processing to finish', async () => {
+  const fake = new FakeRepository();
+  fake.items.push(makeShowcase({ ownerId: 'user-1' }));
+  fake.processingCount = 1;
+  const svc = serviceWith(fake);
+  await assert.rejects(svc.remove('my-post', 'user-1'), ConflictException);
+  assert.ok(!fake.statements.some(({ sql }) => sql.startsWith('DELETE')));
+  assert.deepEqual(fake.deletedKeys, []);
 });
 
 test('service.remove rejects non-owner with ForbiddenException', async () => {
@@ -478,12 +555,12 @@ test('controller.update passes userId to service', async () => {
 test('controller.remove passes userId to service', async () => {
   const fake = new FakeRepository();
   fake.items.push(makeShowcase({ ownerId: 'user-1' }));
-  let removed = false;
-  fake.remove = async () => {
-    removed = true;
-  };
   const svc = serviceWith(fake);
   const ctrl = controllerWith(svc);
   await ctrl.remove('my-post', { user: { id: 'user-1' } } as any);
-  assert.equal(removed, true);
+  assert.ok(
+    fake.statements.some(
+      ({ sql }) => sql === 'DELETE FROM showcases WHERE id = ?',
+    ),
+  );
 });

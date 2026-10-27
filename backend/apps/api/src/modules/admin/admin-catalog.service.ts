@@ -39,7 +39,7 @@ import {
   AdminUserRoleDto,
 } from './admin.dto';
 import { SeoService } from '../seo/seo.service';
-import { deleteStoreObjects } from '../stores/store-media-cleanup';
+import { deleteStoredObjects } from '../media-cleanup';
 
 @Injectable()
 export class AdminCatalogService {
@@ -206,7 +206,7 @@ export class AdminCatalogService {
       await appendAdminAudit(manager, actor, 'stores', id, 'purge');
       return keys;
     });
-    await deleteStoreObjects(this.storage, keys);
+    await deleteStoredObjects(this.storage, keys);
     return { id };
   }
 
