@@ -1,4 +1,5 @@
 .storefront .shop-branches-panel {
+  position: relative;
   padding: 0;
   overflow: hidden;
 }
@@ -7,7 +8,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 22px;
-  padding: 26px 26px 0;
+  /* The right inset reserves the corner for the close button. */
+  padding: 26px 78px 0 26px;
 }
 .shop-branches-eyebrow {
   margin-bottom: 7px;
@@ -36,11 +38,17 @@
   gap: 8px;
   flex-shrink: 0;
 }
+/* Pinned to the panel's top-right corner, not part of the action row, so it
+   never sits under "Find nearest branch" on a phone. */
 .shop-branches-close-icon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--surface));
   border-radius: 50%;
@@ -92,6 +100,29 @@
   color: #73541d;
   font-size: 11px;
   line-height: 1.6;
+}
+/* Names the branch the visitor's coordinates resolved to, so the "nearest"
+   badge on the card is never the only cue. */
+.shop-geo-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 26px 0;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface));
+  color: color-mix(in srgb, var(--primary) 72%, var(--ink));
+  font-size: 12px;
+  line-height: 1.6;
+}
+.shop-geo-result svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.shop-geo-result strong {
+  color: var(--ink);
+  font-weight: 700;
 }
 .shop-branch-grid {
   display: grid;
@@ -163,6 +194,12 @@
   background: var(--surface);
   box-shadow: 0 6px 22px color-mix(in srgb, var(--ink) 3%, transparent);
 }
+/* The branch the visitor's position resolved to keeps a brand frame, so it is
+   findable at a glance even when every card is on screen. */
+.shop-branch-card.is-nearest {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--surface));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 14%, transparent);
+}
 .shop-branch-head {
   display: flex;
   flex-wrap: wrap;
@@ -195,6 +232,21 @@
   font-weight: 750;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+/* Solid brand chip: the nearest result must read even when three cards share
+   the screen on desktop. */
+.shop-branch-nearest {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 .shop-branch-address {
   display: flex;
@@ -459,6 +511,8 @@
   gap: 6px;
   max-width: 100%;
   min-height: 30px;
+  /* The pill never shrinks or wraps; neighbouring text yields instead. */
+  flex: 0 0 auto;
   padding: 5px 10px;
   border-radius: 999px;
   background: #f1f1ee;
@@ -480,6 +534,8 @@
 }
 .shop-hero-open-copy strong {
   font-weight: inherit;
+  /* "Open now" stays one word pair; only the hour detail may wrap. */
+  white-space: nowrap;
 }
 .shop-hero-open-copy small {
   color: inherit;
@@ -534,6 +590,14 @@
     gap: 14px;
     padding: 22px 18px 0;
   }
+  /* The close button floats in the corner, so only the copy steps aside. */
+  .shop-branches-head > div:first-child {
+    padding-right: 46px;
+  }
+  .shop-branches-close-icon {
+    top: 10px;
+    right: 10px;
+  }
   .shop-branches-tools {
     justify-content: flex-start;
     width: 100%;
@@ -542,7 +606,8 @@
     width: 100%;
     justify-content: center;
   }
-  .shop-geo-note {
+  .shop-geo-note,
+  .shop-geo-result {
     margin-inline: 18px;
   }
   .shop-branch-grid {
@@ -582,12 +647,15 @@
     padding: 8px 10px;
     font-size: 12px;
   }
+  /* The pill shares the name's line, so phones drop the secondary hour detail
+     and tighten the padding to stay beside the category pill. */
   .shop-hero-open {
-    flex: 1 1 220px;
-    font-size: 11px;
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    font-size: 10px;
   }
   .shop-hero-open-copy small {
-    font-size: 10px;
+    display: none;
   }
   .shop-branch-action {
     flex: 1 1 auto;
@@ -604,9 +672,6 @@
   .shop-branch-hours dd {
     padding-left: 0;
     text-align: left;
-  }
-  .shop-hero-open {
-    flex-basis: 100%;
   }
 }
 @media (prefers-reduced-motion: reduce) {

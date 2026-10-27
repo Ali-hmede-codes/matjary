@@ -1,48 +1,25 @@
-import type { ReactNode } from 'react';
 import {
-  Globe,
-  MessageCircle,
-  Music2,
-  Send,
-  type LucideIcon,
-} from 'lucide-react';
+  siFacebook,
+  siInstagram,
+  siTelegram,
+  siTiktok,
+  siWhatsapp,
+  siX,
+  siYoutube,
+} from 'simple-icons';
+import { Globe } from 'lucide-react';
 
-const socialIcons: Record<string, LucideIcon> = {
-  tiktok: Music2,
-  whatsapp: MessageCircle,
-  telegram: Send,
-  website: Globe,
-};
-
-// Brand marks stay local because the shared icon set has no brand icons.
-const socialMarks: Record<string, ReactNode> = {
-  instagram: (
-    <>
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <circle cx="12" cy="12" r="4" />
-      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-    </>
-  ),
-  facebook: (
-    <path
-      d="M14 22v-9h3l.5-4H14V7c0-1.2.4-2 2-2h2V1.4c-.7-.1-1.7-.2-3-.2C11.6 1.2 9 3.3 9 7v2H6v4h3v9Z"
-      fill="currentColor"
-      stroke="none"
-    />
-  ),
-  twitter: (
-    <path
-      d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3L12 14.6 5.5 22H2.3l7.3-8.4L1.6 2H8l4.5 6.8L18.9 2ZM17.8 20h1.7L7.1 4H5.3L17.8 20Z"
-      fill="currentColor"
-      stroke="none"
-    />
-  ),
-  youtube: (
-    <>
-      <rect x="2" y="5" width="20" height="14" rx="4" />
-      <path d="m10 9 6 3-6 3Z" fill="currentColor" stroke="none" />
-    </>
-  ),
+// Official brand glyphs (Simple Icons, CC0) instead of generic stand-ins: a
+// shop's links are recognisable at a glance, which a chat-bubble or note icon
+// never is. Solid marks read better than stroke art on the round tiles.
+const brandMarks: Record<string, { path: string } | undefined> = {
+  instagram: siInstagram,
+  facebook: siFacebook,
+  tiktok: siTiktok,
+  twitter: siX,
+  youtube: siYoutube,
+  telegram: siTelegram,
+  whatsapp: siWhatsapp,
 };
 
 export const socialNetworks = [
@@ -95,24 +72,21 @@ export function SocialIcon({
   network: string;
   size?: number;
 }) {
-  const mark = socialMarks[network];
+  const mark = brandMarks[network];
   if (mark)
     return (
       <svg
         width={size}
         height={size}
         viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        fill="currentColor"
         aria-hidden="true"
         focusable="false"
       >
-        {mark}
+        <path d={mark.path} />
       </svg>
     );
-  const Icon = socialIcons[network] ?? Globe;
-  return <Icon size={size} aria-hidden="true" />;
+  // Anything without a trademark (websites, unknown links) keeps the neutral
+  // outline globe so the tile never shows a wrong logo.
+  return <Globe size={size} aria-hidden="true" />;
 }

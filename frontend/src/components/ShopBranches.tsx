@@ -76,6 +76,7 @@ function BranchCard({
   position,
   openMap,
   active,
+  nearest,
   onToggleMap,
 }: {
   storeName: string;
@@ -83,6 +84,7 @@ function BranchCard({
   position: VisitorPosition | null;
   openMap: boolean;
   active: boolean;
+  nearest: boolean;
   onToggleMap: () => void;
 }) {
   const address = branchAddress(branch);
@@ -98,7 +100,9 @@ function BranchCard({
   );
 
   return (
-    <article className={`shop-branch-card ${active ? 'is-active' : ''}`}>
+    <article
+      className={`shop-branch-card ${active ? 'is-active' : ''} ${nearest ? 'is-nearest' : ''}`}
+    >
       <header className="shop-branch-head">
         <div>
           <h3>
@@ -115,6 +119,11 @@ function BranchCard({
           </p>
         </div>
         <div className="shop-branch-chips">
+          {nearest && (
+            <span className="shop-branch-nearest">
+              <Crosshair size={12} aria-hidden="true" /> Nearest to you
+            </span>
+          )}
           {distance !== undefined && (
             <span className="shop-branch-distance">
               <Navigation size={12} aria-hidden="true" />
@@ -237,6 +246,16 @@ export function ShopBranches({
     () => primaryBranch(branches)?.id ?? '',
   );
   const ordered = sortBranchesByDistance(branches, position);
+  // With a visitor position the list is nearest-first, so its head is the
+  // branch worth naming explicitly on both phone and desktop layouts. Without
+  // a measured distance nothing is labelled "nearest".
+  const nearestBranch = position ? ordered[0] : undefined;
+  const nearestDistance =
+    nearestBranch && position
+      ? branchDistance(nearestBranch, position)
+      : undefined;
+  const nearestBranchId =
+    nearestDistance === undefined ? undefined : nearestBranch?.id;
   const selectedBranch =
     ordered.find((branch) => branch.id === selectedBranchId) ?? ordered[0];
   const mapped = branches.filter((branch) => branchMap(branch)).length;
@@ -281,6 +300,17 @@ export function ShopBranches({
       ref={panelRef}
       tabIndex={-1}
     >
+      {/* The close control lives in the panel's top-right corner on every
+          screen, clear of the title and the "Find nearest branch" action. */}
+      <button
+        type="button"
+        className="shop-branches-close-icon"
+        aria-label="Close contact details"
+        title="Close"
+        onClick={onClose}
+      >
+        <X size={18} aria-hidden="true" />
+      </button>
       <header className="shop-branches-head">
         <div>
           <p className="shop-branches-eyebrow">Visit & contact</p>
@@ -320,21 +350,22 @@ export function ShopBranches({
               </button>
             </>
           )}
-          <button
-            type="button"
-            className="shop-branches-close-icon"
-            aria-label="Close contact details"
-            title="Close"
-            onClick={onClose}
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
         </div>
       </header>
 
       {geoError && (
         <p className="shop-geo-note" role="status">
           {geoError}
+        </p>
+      )}
+
+      {nearestBranch && nearestDistance !== undefined && (
+        <p className="shop-geo-result" role="status">
+          <Crosshair size={15} aria-hidden="true" />
+          <span>
+            Nearest branch is <strong>{nearestBranch.name}</strong>
+            {` · ${formatDistance(nearestDistance)}`}
+          </span>
         </p>
       )}
 
@@ -357,6 +388,7 @@ export function ShopBranches({
                     {branch.name}
                     {branch.isPrimary ? ' · Main' : ''}
                     {branch.city ? ` · ${branch.city}` : ''}
+                    {branch.id === nearestBranchId ? ' · nearest' : ''}
                   </option>
                 ))}
               </select>
@@ -378,6 +410,7 @@ export function ShopBranches({
               branch={branch}
               position={position}
               active={branch.id === selectedBranch?.id}
+              nearest={branch.id === nearestBranchId}
               openMap={openMap === branch.id}
               onToggleMap={() =>
                 setOpenMap((current) =>

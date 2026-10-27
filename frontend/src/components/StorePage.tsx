@@ -487,15 +487,35 @@ export function StorePage({ slug }: { slug: string | null }) {
                   <StoreAvatar store={store} large />
                 </div>
                 <div className="shop-intro">
-                  <h1 id="shop-title">
-                    <span>{store.name}</span>
-                    <StoreVerifiedBadge store={store} size={26} />
-                  </h1>
-                  {store.businessCategoryLabel && (
-                    <span className="shop-category">
-                      {store.businessCategoryLabel}
-                    </span>
-                  )}
+                  {/* Name, category and today's hours share one line so the
+                      shop's identity and whether it is open read at a glance. */}
+                  <div className="shop-title-row">
+                    <h1 id="shop-title">
+                      <span>{store.name}</span>
+                      <StoreVerifiedBadge store={store} size={26} />
+                    </h1>
+                    {store.businessCategoryLabel && (
+                      <span className="shop-category">
+                        {store.businessCategoryLabel}
+                      </span>
+                    )}
+                    {mainOpenState && (
+                      <span
+                        className={`shop-hero-open ${mainOpenState.open ? 'is-open' : ''}`}
+                        title={mainOpenState.label}
+                      >
+                        <span className="shop-state-dot" aria-hidden="true" />
+                        <span className="shop-hero-open-copy">
+                          <strong>
+                            {mainOpenState.open ? 'Open now' : 'Closed'}
+                          </strong>
+                          {mainOpenState.detail && (
+                            <small>{mainOpenState.detail}</small>
+                          )}
+                        </span>
+                      </span>
+                    )}
+                  </div>
                   {store.description?.trim() && (
                     <p className="shop-description">{store.description}</p>
                   )}
@@ -556,22 +576,6 @@ export function StorePage({ slug }: { slug: string | null }) {
                             aria-hidden="true"
                           />
                         </button>
-                      )}
-                      {mainOpenState && (
-                        <span
-                          className={`shop-hero-open ${mainOpenState.open ? 'is-open' : ''}`}
-                          title={mainOpenState.label}
-                        >
-                          <span className="shop-state-dot" aria-hidden="true" />
-                          <span className="shop-hero-open-copy">
-                            <strong>
-                              {mainOpenState.open ? 'Open now' : 'Closed'}
-                            </strong>
-                            {mainOpenState.detail && (
-                              <small>{mainOpenState.detail}</small>
-                            )}
-                          </span>
-                        </span>
                       )}
                     </div>
                   )}

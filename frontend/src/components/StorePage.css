@@ -246,17 +246,32 @@
   min-width: 0;
   padding-top: 18px;
 }
+/* Name, category and opening state share one line at every width. Nothing in
+   the row wraps: the category chip gives up its width first, then a very long
+   shop name ellipsizes, so the open pill always stays beside the category. */
+.shop-title-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 8px;
+}
 .shop-intro h1 {
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 8px;
+  margin: 0;
   font-size: clamp(26px, 2.5vw, 32px);
   letter-spacing: -1px;
   line-height: 1.2;
 }
 .shop-intro h1 > span:first-child {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .shop-description {
   max-width: 680px;
@@ -267,16 +282,22 @@
   white-space: pre-line;
 }
 .shop-category {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 2px;
+  /* Block layout, not flex: flex would make the label an anonymous flex item
+     and the ellipsis would never paint. */
+  display: block;
+  flex: 0 999 auto;
+  min-width: 56px;
   padding: 5px 10px;
   border-radius: 999px;
   background: var(--accent-wash);
   color: var(--primary);
   font-size: 11px;
   font-weight: 650;
+  line-height: 1.4;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .shop-meta {
   display: flex;
@@ -766,20 +787,25 @@
   gap: 8px;
   max-width: 100%;
 }
-.shop-socials a {
+/* The tiles wear the owner's chosen colour: a light tint at rest, solid brand
+   with on-brand glyphs on hover. The .storefront prefix is what lets these beat
+   the shared .shop-glass surface. */
+.storefront .shop-socials a {
   justify-content: center;
   width: 44px;
   height: 44px;
   flex: 0 0 44px;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, transparent);
   border-radius: 50%;
-  background: var(--surface);
-  color: var(--ink);
+  background-image: none;
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  color: var(--primary);
 }
-.shop-socials a:hover {
-  border-color: var(--ink);
-  background: var(--accent-wash);
+.storefront .shop-socials a:hover {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: var(--on-primary);
 }
 .shop-socials a:focus-visible,
 .shop-location-toggle:focus-visible {
@@ -981,11 +1007,17 @@
   .shop-intro {
     padding-top: 0;
   }
+  .shop-title-row {
+    gap: 6px 8px;
+  }
   .shop-intro h1 {
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 24px;
+    gap: 4px;
+    font-size: 22px;
     letter-spacing: -0.7px;
+  }
+  .shop-category {
+    padding: 4px 8px;
+    font-size: 10px;
   }
   .shop-intro h1 .store-verified-badge svg {
     width: 23px;
