@@ -207,6 +207,17 @@
   transform: translate(-50%, -50%);
   color: #fff;
 }
+/* The story clock does not start until the photo or clip is actually shown. */
+.story-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  background: #00000026;
+  color: #fff;
+  pointer-events: none;
+}
 .story-paused {
   width: 58px;
   height: 58px;

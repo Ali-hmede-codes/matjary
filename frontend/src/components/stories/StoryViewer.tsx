@@ -43,12 +43,17 @@ export function StoryViewer({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const image = useRef<HTMLImageElement>(null);
   const [removed, setRemoved] = useState<string[]>([]);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(true);
   const [blocked, setBlocked] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [progress, setProgress] = useState(0);
+  // A story starts only after its media is actually on screen, like Instagram:
+  // tracking the id avoids a stale "ready" flag flashing on the next story.
+  const [readyStoryId, setReadyStoryId] = useState<string>();
+  const [buffering, setBuffering] = useState(false);
   // Elapsed time survives a hold so the bar resumes where it stopped.
   const elapsed = useRef(0);
   const holdStart = useRef(0);
@@ -81,6 +86,11 @@ export function StoryViewer({
   const story = group?.stories[storyIndex];
   const isVideo = story?.media.kind === 'video';
   const duration = story ? storyDisplayMs(story) : 0;
+  const ready = Boolean(story && readyStoryId === story.id);
+  // The next photo warms up while this one is watched, so advancing feels instant.
+  const upcoming = group
+    ? (group.stories[storyIndex + 1] ?? queue[groupIndex + 1]?.stories[0])
+    : undefined;
 
   const advance = useCallback(
     (direction: 1 | -1) => {
@@ -135,7 +145,23 @@ export function StoryViewer({
     elapsed.current = 0;
     setProgress(0);
     setBlocked(false);
+    setBuffering(false);
   }, [groupIndex, storyIndex]);
+
+  // A cached image may finish before React attaches onLoad.
+  useEffect(() => {
+    const element = image.current;
+    if (story && !isVideo && element?.complete && element.naturalWidth > 0)
+      setReadyStoryId(story.id);
+  }, [isVideo, story]);
+
+  useEffect(() => {
+    if (!upcoming || upcoming.media.kind !== 'image') return;
+    const url = assetUrl(upcoming.media.primaryUrl);
+    if (!url) return;
+    const preload = new window.Image();
+    preload.src = url;
+  }, [upcoming]);
 
   useEffect(() => {
     if (!story) return;
@@ -144,7 +170,7 @@ export function StoryViewer({
 
   // Images advance on a timer; videos advance on `ended`.
   useEffect(() => {
-    if (!story || paused || story.media.kind === 'video') return;
+    if (!story || !ready || paused || story.media.kind === 'video') return;
     const started = Date.now() - elapsed.current;
     const timer = window.setInterval(() => {
       elapsed.current = Date.now() - started;
@@ -156,7 +182,7 @@ export function StoryViewer({
       }
     }, PROGRESS_TICK_MS);
     return () => window.clearInterval(timer);
-  }, [advance, duration, paused, story]);
+  }, [advance, duration, paused, ready, story]);
 
   useEffect(() => {
     const element = video.current;
@@ -304,6 +330,14 @@ export function StoryViewer({
               muted={muted}
               playsInline
               preload="auto"
+              onLoadedData={() => setReadyStoryId(story.id)}
+              onPlaying={() => {
+                setBuffering(false);
+                setReadyStoryId(story.id);
+              }}
+              onCanPlay={() => setBuffering(false)}
+              onWaiting={() => setBuffering(true)}
+              onStalled={() => setBuffering(true)}
               onTimeUpdate={(event) => {
                 const element = event.currentTarget;
                 if (!Number.isFinite(element.duration) || element.duration <= 0)
@@ -322,10 +356,23 @@ export function StoryViewer({
           ) : (
             <img
               key={story.id}
+              ref={image}
               src={assetUrl(story.media.primaryUrl)}
               alt=""
               draggable={false}
+              // The timer starts only once the photo is actually decoded.
+              onLoad={() => setReadyStoryId(story.id)}
+              onError={() => advance(1)}
             />
+          )}
+          {(!ready || buffering) && !blocked && (
+            <span
+              className="story-loading"
+              role="status"
+              aria-label="Loading story"
+            >
+              <LoaderCircle className="spin" size={28} aria-hidden="true" />
+            </span>
           )}
           {blocked && isVideo && (
             <button
