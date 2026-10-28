@@ -11,6 +11,8 @@ import { DataSource, In, IsNull } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
 import {
   Product,
+  Showcase,
+  ShowcaseStatus,
   Store,
   StoreCategory,
   publicWhere,
@@ -158,6 +160,24 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
             ),
           );
         }
+        // Posts live under their shop, so one shared link previews from a file
+        // this directory already serves. Shop-less posts keep the API route.
+        const posts = await manager.find(Showcase, {
+          where: {
+            storeId: store.id,
+            status: ShowcaseStatus.PUBLISHED,
+            ...publicWhere('post'),
+          },
+        });
+        for (const post of posts) {
+          pages += Number(
+            await this.writePage(
+              [store.slug, 'post', post.slug],
+              await this.seo.generateShowcaseMetaTags(post, store),
+              template,
+            ),
+          );
+        }
       }
       return pages;
     } finally {
@@ -197,9 +217,12 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
         (SELECT MAX(updated_at) FROM store_categories) AS categories_at,
         (SELECT COUNT(*) FROM products) AS products,
         (SELECT MAX(updated_at) FROM products) AS products_at,
-        (SELECT MAX(updated_at) FROM media_assets WHERE purpose IN ('store_logo', 'store_banner', 'product_image')) AS media_at,
+        (SELECT COUNT(*) FROM showcases) AS showcases,
+        (SELECT MAX(updated_at) FROM showcases) AS showcases_at,
+        (SELECT MAX(updated_at) FROM media_assets WHERE purpose IN ('store_logo', 'store_banner', 'product_image', 'post')) AS media_at,
         (SELECT MAX(updated_at) FROM store_seo) AS store_seo_at,
         (SELECT MAX(updated_at) FROM product_seo) AS product_seo_at,
+        (SELECT MAX(updated_at) FROM showcase_seo) AS showcase_seo_at,
         (SELECT MAX(updated_at) FROM seo_settings) AS settings_at`,
     );
     const stat = await fs.stat(this.templatePath).catch(() => undefined);

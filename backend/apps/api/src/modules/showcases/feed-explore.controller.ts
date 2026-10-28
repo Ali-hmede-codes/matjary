@@ -492,6 +492,26 @@ export class FeedExploreController {
   }
 
   // ============================================
+  // SINGLE POST
+  // ============================================
+
+  @Get('post/:slug')
+  @ApiOperation({
+    summary: 'Get one published post',
+    description:
+      'Backs the shared post page so the preview links to a post, not a media file',
+  })
+  @ApiResponse({ status: 200, description: 'Post feed item' })
+  @ApiResponse({ status: 404, description: 'Post not found' })
+  async getPost(
+    @Req() request: Request,
+    @Param('slug') slug: string,
+  ): Promise<FeedItem> {
+    const viewer = await this.resolveViewer(request);
+    return this.feedExploreService.getPostFeedItem(slug, viewer);
+  }
+
+  // ============================================
   // STORE-SPECIFIC FEED
   // ============================================
 

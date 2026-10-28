@@ -8,7 +8,7 @@ import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
 import { StoreStrip } from './components/StoreStrip';
 import { TrendingStores } from './components/TrendingStores';
-import { storefrontRouteFromPath } from './lib/storefront';
+import { storefrontRouteFromPath, postSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 
 import { lazy, Suspense } from 'react';
@@ -33,6 +33,13 @@ const StoreCategoryPage = lazy(() =>
 const StoreProductPage = lazy(() =>
   import('./components/StoreProductPage').then((module) => ({
     default: module.StoreProductPage,
+  })),
+);
+// A shared post link opens its own page, so previews and visitors have a
+// stable address instead of the media file behind the post.
+const PostPage = lazy(() =>
+  import('./components/PostPage').then((module) => ({
+    default: module.PostPage,
   })),
 );
 const PricingPage = lazy(() =>
@@ -75,6 +82,15 @@ function StoreRoute() {
   const { pathname } = useLocation();
   const route = storefrontRouteFromPath(pathname);
   const demo = new URLSearchParams(window.location.search).get('demo') === '1';
+  if (route?.postSlug)
+    return (
+      <PostPage
+        key={pathname}
+        shopSlug={route.shopSlug}
+        postSlug={route.postSlug}
+        demo={demo}
+      />
+    );
   if (route?.productSlug)
     return (
       <StoreProductPage
@@ -93,6 +109,10 @@ function StoreRoute() {
         demo={demo}
       />
     );
+  // Posts without a shop use the platform path.
+  const postSlug = postSlugFromPath(pathname);
+  if (postSlug)
+    return <PostPage key={pathname} postSlug={postSlug} demo={demo} />;
   return <StorePage key={pathname} slug={route?.shopSlug ?? null} />;
 }
 

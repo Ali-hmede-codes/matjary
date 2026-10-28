@@ -17,12 +17,15 @@ import {
   isStoreVerified,
   menuCategoryGroups,
   normalizeSlug,
+  postPath,
+  postSlugFromPath,
   productCategoryKey,
   productOptionSelection,
   productPriceLabel,
   slugDraft,
   storeCategoryPath,
   storeMenuPath,
+  storePostPath,
   storefrontRouteFromPath,
   storeMap,
   storeMediaUrl,
@@ -295,6 +298,14 @@ test('storefront routes resolve shop, category, and product slugs', () => {
     shopSlug: 'olive',
     productSlug: 'harvest-bowl',
   });
+  assert.deepEqual(storefrontRouteFromPath('/stores/olive/post/spring-drop'), {
+    shopSlug: 'olive',
+    postSlug: 'spring-drop',
+  });
+  assert.deepEqual(storefrontRouteFromPath('/stores/olive/post/spring-drop/'), {
+    shopSlug: 'olive',
+    postSlug: 'spring-drop',
+  });
   for (const path of [
     '/',
     '/stores',
@@ -303,10 +314,13 @@ test('storefront routes resolve shop, category, and product slugs', () => {
     '/stores/a/c/',
     '/stores/a/x/mains',
     '/stores/a/p/b/c',
+    '/stores/a/post/',
+    '/stores/a/post/b/c',
     '/stores/UPPER',
     '/stores/a/c/UPPER',
     '/stores/%2f',
     '/stores/%',
+    '/stores/a/post/UPPER',
   ])
     assert.equal(storefrontRouteFromPath(path), null);
 });
@@ -334,6 +348,24 @@ test('category slugs stay readable, stable, and unique for other scripts', () =>
     storeProductPath('olive', 'harvest-bowl', true),
     '/stores/olive/p/harvest-bowl?demo=1',
   );
+  assert.equal(
+    storePostPath('olive', 'spring-drop'),
+    '/stores/olive/post/spring-drop',
+  );
+  assert.equal(
+    storePostPath('olive', 'spring-drop', true),
+    '/stores/olive/post/spring-drop?demo=1',
+  );
+  // A shared post keeps its shop; a shop-less post uses the platform path.
+  assert.equal(
+    postPath({ slug: 'spring-drop', store: { slug: 'olive' } }),
+    '/stores/olive/post/spring-drop',
+  );
+  assert.equal(postPath({ slug: 'spring-drop' }), '/post/spring-drop');
+  assert.equal(postSlugFromPath('/post/spring-drop'), 'spring-drop');
+  assert.equal(postSlugFromPath('/post/spring-drop/'), 'spring-drop');
+  for (const path of ['/post', '/post/', '/post/a/b', '/post/UPPER'])
+    assert.equal(postSlugFromPath(path), null);
 });
 
 test('catalog layouts rotate by category position', () => {

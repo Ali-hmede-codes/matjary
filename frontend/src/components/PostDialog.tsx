@@ -222,12 +222,12 @@ function PostSlide({
           <aside className="reel-rail" aria-label={`Actions for ${post.title}`}>
             <PostActions
               post={post}
-              media={media}
               saved={saved}
               liking={liking}
               onLike={onLike}
               onSave={onSave}
               onNotice={onNotice}
+              demo={demo}
             />
             {post.store && (
               <a

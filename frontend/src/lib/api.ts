@@ -386,6 +386,11 @@ export function getTrendingBoostStores(signal?: AbortSignal) {
   return getJson<TrendingBoostStore[]>('boost/trending/stores?limit=6', signal);
 }
 
+/** One published post, addressed by the slug its shared link carries. */
+export function getPost(slug: string, signal?: AbortSignal) {
+  return getJson<Post>(`feed/post/${encodeURIComponent(slug)}`, signal);
+}
+
 // Ad telemetry is best effort: a tracking failure must never block the click
 // or interrupt someone browsing the feed.
 export async function trackAdEvent(

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Bookmark, Heart, Send } from 'lucide-react';
-import { assetUrl, type Media, type Post } from '../lib/api';
+import { postPath } from '../lib/storefront';
+import type { Post } from '../lib/api';
 
 export interface PostActionProps {
   post: Post;
@@ -13,25 +14,31 @@ export interface PostActionProps {
 
 export function PostActions({
   post,
-  media,
   saved,
   liking,
   onLike,
   onSave,
   onNotice,
-}: PostActionProps & { media?: Media }) {
+  demo = false,
+}: PostActionProps & { demo?: boolean }) {
   const [sharing, setSharing] = useState(false);
-  const shareUrl = assetUrl(media?.primaryUrl);
-  async function shareMedia() {
-    if (!shareUrl || sharing) return;
+  // A shared post links to its own page. The media file behind it has no title,
+  // preview image, or canonical URL for a link preview to read.
+  const shareUrl = `${window.location.origin}${postPath(post, demo)}`;
+
+  async function sharePost() {
+    if (sharing) return;
     setSharing(true);
     try {
-      const url = new URL(shareUrl, window.location.origin).href;
       if (navigator.share) {
-        await navigator.share({ title: post.title, url });
+        await navigator.share({
+          title: post.title,
+          text: post.description?.trim() || post.title,
+          url: shareUrl,
+        });
       } else {
-        await navigator.clipboard.writeText(url);
-        onNotice('Media link copied.');
+        await navigator.clipboard.writeText(shareUrl);
+        onNotice('Post link copied.');
       }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -41,6 +48,7 @@ export function PostActions({
       setSharing(false);
     }
   }
+
   return (
     <div className="post-actions">
       <button
@@ -57,9 +65,9 @@ export function PostActions({
       </button>
       <button
         className="icon-button"
-        aria-label={`Share ${media?.kind === 'video' ? 'video' : 'photo'} from ${post.title}`}
-        disabled={!shareUrl || sharing}
-        onClick={() => void shareMedia()}
+        aria-label={`Share ${post.title}`}
+        disabled={sharing}
+        onClick={() => void sharePost()}
       >
         <Send size={23} />
       </button>

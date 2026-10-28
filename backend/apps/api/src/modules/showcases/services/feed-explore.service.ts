@@ -1469,4 +1469,25 @@ export class FeedExploreService {
       algorithm: 'store',
     };
   }
+
+  /**
+   * One published post with the same shape as a feed card, so a shared link
+   * opens on the post itself instead of the media file behind it.
+   */
+  async getPostFeedItem(
+    slug: string,
+    viewer?: ResolvedViewer,
+  ): Promise<FeedItem> {
+    const showcase = await this.showcases.findOne({
+      where: {
+        slug,
+        status: ShowcaseStatus.PUBLISHED,
+        ...publicWhere('post'),
+      },
+    });
+    if (!showcase) throw new NotFoundException('Post not found');
+    const [item] = await this.enrichFeedItems([showcase], viewer);
+    if (!item) throw new NotFoundException('Post not found');
+    return item;
+  }
 }

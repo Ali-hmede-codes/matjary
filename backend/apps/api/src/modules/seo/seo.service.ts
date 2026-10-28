@@ -54,6 +54,7 @@ import {
   Showcase,
   ShowcaseStatus,
   MediaAsset,
+  MediaKind,
   MediaVariant,
   MediaStatus,
   PUBLIC_PRODUCT_STATUSES,
@@ -143,6 +144,12 @@ export interface IndexNowUrl {
   url: string;
   lastmod?: string;
 }
+
+// Shared links are matched only against slug shapes, so a malformed path can
+// never reach a query or the filesystem.
+const SHARE_STORE_ROUTE =
+  /^stores\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([cp])\/([a-z0-9]+(?:-[a-z0-9]+)*)|\/post\/([a-z0-9]+(?:-[a-z0-9]+)*))?$/u;
+const SHARE_POST_ROUTE = /^post\/([a-z0-9]+(?:-[a-z0-9]+)*)$/u;
 
 @Injectable()
 export class SeoService {
@@ -474,21 +481,45 @@ export class SeoService {
    */
   async renderShareHtml(path: string, userAgent?: string): Promise<string> {
     const target = path.replace(/[?#].*$/u, '').replace(/^\/+|\/+$/gu, '');
-    const route =
-      /^stores\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([cp])\/([a-z0-9]+(?:-[a-z0-9]+)*))?$/u.exec(
-        target,
-      );
-    if (!route?.[1]) throw new NotFoundException('Page not found');
-    const store = await this.dataSource.manager.findOneBy(Store, {
-      slug: route[1],
-      ...publicWhere('store'),
-    });
-    if (!store) throw new NotFoundException('Page not found');
-    const meta = await this.shareMetaFor(store, route[2], route[3]);
+    const route = SHARE_STORE_ROUTE.exec(target);
+    let meta: MetaTags;
+    if (route?.[1]) {
+      const store = await this.dataSource.manager.findOneBy(Store, {
+        slug: route[1],
+        ...publicWhere('store'),
+      });
+      if (!store) throw new NotFoundException('Page not found');
+      // Post links carry their shop, so the storefront route answers them too.
+      meta = route[4]
+        ? await this.generatePostShareMeta(route[4], store.id)
+        : await this.shareMetaFor(store, route[2], route[3]);
+    } else {
+      const post = SHARE_POST_ROUTE.exec(target);
+      if (!post?.[1]) throw new NotFoundException('Page not found');
+      meta = await this.generatePostShareMeta(post[1]);
+    }
     return renderShareDocument(
       meta,
       isShareCrawler(userAgent) ? undefined : meta.canonical,
     );
+  }
+
+  /** Published post metadata by its own slug, optionally scoped to a shop. */
+  private async generatePostShareMeta(
+    slug: string,
+    storeId?: string,
+  ): Promise<MetaTags> {
+    const showcase = await this.dataSource.manager.findOne(Showcase, {
+      where: {
+        slug,
+        status: ShowcaseStatus.PUBLISHED,
+        ...(storeId ? { storeId } : {}),
+        ...publicWhere('post'),
+      },
+      relations: ['store'],
+    });
+    if (!showcase) throw new NotFoundException('Page not found');
+    return this.generateShowcaseMetaTags(showcase, showcase.store ?? null);
   }
 
   private async shareMetaFor(
@@ -590,6 +621,20 @@ export class SeoService {
         image: ogImage,
       },
     };
+  }
+
+  /**
+   * One canonical shape for a shared post: shop posts stay inside the shop so
+   * the crawler rule and the prerendered shells cover them, while posts without
+   * a shop use the platform path.
+   */
+  postPath(
+    post: Pick<Showcase, 'slug'>,
+    store: Pick<Store, 'slug'> | null,
+  ): string {
+    return store
+      ? `/stores/${store.slug}/post/${post.slug}`
+      : `/post/${post.slug}`;
   }
 
   // Category rows have no slug column; mirror the storefront's name slug so a
@@ -1363,14 +1408,16 @@ export class SeoService {
     const title = seo.metaTitle || showcase.title;
     const description = seo.metaDescription || showcase.description || '';
     const canonical =
-      seo.canonicalUrl ||
-      (store
-        ? this.baseUrl + '/stores/' + store.slug + '/post/' + showcase.slug
-        : this.baseUrl + '/post/' + showcase.slug);
+      seo.canonicalUrl || this.baseUrl + this.postPath(showcase, store);
 
-    const ogImage = await this.buildImageUrl(
-      seo.ogImageKey ?? store?.logoKey ?? settings.defaultOgImageKey,
-    );
+    // The post's own photo identifies the share far better than the shop logo.
+    const ogImage =
+      (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
+      (await this.buildShowcaseImageUrl(showcase)) ??
+      (store ? await this.buildStoreShareImageUrl(store) : undefined) ??
+      (await this.buildImageUrl(
+        store?.bannerKey ?? store?.logoKey ?? settings.defaultOgImageKey,
+      ));
     const ogTitle = seo.ogTitle || showcase.title;
     const ogDescription =
       seo.ogDescription || showcase.description || description;
@@ -1622,7 +1669,11 @@ export class SeoService {
       '@type': 'Article',
       headline: showcase.title,
       description: showcase.description,
-      image: await this.buildImageUrl(seo?.ogImageKey),
+      // Structured data needs a real image; the post's own photo beats a logo.
+      image:
+        (seo?.ogImageKey
+          ? await this.buildImageUrl(seo.ogImageKey)
+          : undefined) ?? (await this.buildShowcaseImageUrl(showcase)),
       datePublished:
         seo?.articlePublishedTime?.toISOString() ||
         showcase.publishedAt?.toISOString() ||
@@ -1644,11 +1695,7 @@ export class SeoService {
       },
       mainEntityOfPage: {
         '@type': 'WebPage',
-        '@id':
-          this.baseUrl +
-          (store
-            ? '/shop/' + store.slug + '/post/' + showcase.slug
-            : '/post/' + showcase.slug),
+        '@id': this.baseUrl + this.postPath(showcase, store),
       },
       // 2026: Speakable schema for voice/AI assistants
       speakable: this.buildSpeakableSchema(showcase),
@@ -2114,11 +2161,14 @@ export class SeoService {
     if (!kind || kind === 'showcase') {
       for (const showcase of await manager.find(Showcase, {
         where: { status: ShowcaseStatus.PUBLISHED, ...publicWhere('post') },
+        relations: ['store'],
       })) {
         const seo = await this.getShowcaseSeo(showcase.id);
         if (!indexable(seo)) continue;
         urls.push({
-          url: seo?.canonicalUrl || `${this.baseUrl}/post/${showcase.slug}`,
+          url:
+            seo?.canonicalUrl ||
+            this.baseUrl + this.postPath(showcase, showcase.store ?? null),
           lastmod: showcase.updatedAt.toISOString().split('T')[0],
           changefreq: 'monthly',
           priority: 0.5,
@@ -2285,7 +2335,7 @@ export class SeoService {
    * logo card for shares; this is the fallback for shops without one.
    */
   private async buildOwnedImageUrl(
-    owner: { storeId?: string; productId?: string },
+    owner: { storeId?: string; productId?: string; showcaseId?: string },
     key: string | null | undefined,
   ): Promise<string | undefined> {
     if (!key) return undefined;
@@ -2295,6 +2345,7 @@ export class SeoService {
         asset: {
           ...(owner.storeId ? { storeId: owner.storeId } : {}),
           ...(owner.productId ? { productId: owner.productId } : {}),
+          ...(owner.showcaseId ? { showcaseId: owner.showcaseId } : {}),
           ...publicWhere('media'),
           status: MediaStatus.READY,
         },
@@ -2302,6 +2353,36 @@ export class SeoService {
     });
     if (!variant) return undefined;
     return this.buildPreviewVariantUrl(variant);
+  }
+
+  /** First READY photo of the post; video-only posts fall back to the shop. */
+  private async buildShowcaseImageUrl(
+    showcase: Showcase,
+  ): Promise<string | undefined> {
+    const assets = await this.dataSource.manager.find(MediaAsset, {
+      where: {
+        showcaseId: showcase.id,
+        kind: MediaKind.IMAGE,
+        status: MediaStatus.READY,
+        ...publicWhere('media'),
+      },
+      order: { position: 'ASC' },
+      take: 4,
+    });
+    for (const asset of assets) {
+      const variant = await this.dataSource.manager.findOne(MediaVariant, {
+        where: { assetId: asset.id },
+        order: { width: 'DESC' },
+      });
+      const url = variant
+        ? await this.buildOwnedImageUrl(
+            { showcaseId: showcase.id },
+            variant.storageKey,
+          )
+        : undefined;
+      if (url) return url;
+    }
+    return undefined;
   }
 
   /**

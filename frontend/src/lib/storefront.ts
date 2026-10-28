@@ -131,10 +131,33 @@ export function storeProductPath(
   return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}${demo ? '?demo=1' : ''}`;
 }
 
+export function storePostPath(
+  shopSlug: string,
+  postSlug: string,
+  demo = false,
+): string {
+  return `/stores/${encodeURIComponent(shopSlug)}/post/${encodeURIComponent(postSlug)}${demo ? '?demo=1' : ''}`;
+}
+
+/**
+ * Shared post link. Posts inside a shop keep the shop prefix so the crawler
+ * rule and the prerendered share shells cover them; a shop-less post uses the
+ * platform path.
+ */
+export function postPath(
+  post: { slug: string; store?: { slug: string } | null },
+  demo = false,
+): string {
+  return post.store
+    ? storePostPath(post.store.slug, post.slug, demo)
+    : `/post/${encodeURIComponent(post.slug)}${demo ? '?demo=1' : ''}`;
+}
+
 export interface StorefrontRoute {
   shopSlug: string;
   categorySlug?: string;
   productSlug?: string;
+  postSlug?: string;
 }
 
 const routeSlugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -154,21 +177,35 @@ function readRouteSlug(value: string | undefined): string | null {
  *   /stores/:shop
  *   /stores/:shop/c/:categorySlug
  *   /stores/:shop/p/:productSlug
+ *   /stores/:shop/post/:postSlug
  * Anything else belongs to another route and must not render a shop.
  */
 export function storefrontRouteFromPath(
   pathname: string,
 ): StorefrontRoute | null {
-  const match = /^\/stores\/([^/]+)(?:\/([cp])\/([^/]+))?\/?$/u.exec(pathname);
+  const match =
+    /^\/stores\/([^/]+)(?:\/([cp])\/([^/]+)|\/post\/([^/]+))?\/?$/u.exec(
+      pathname,
+    );
   if (!match?.[1]) return null;
   const shopSlug = readRouteSlug(match[1]);
   if (!shopSlug) return null;
+  if (match[4]) {
+    const postSlug = readRouteSlug(match[4]);
+    return postSlug ? { shopSlug, postSlug } : null;
+  }
   if (!match[2]) return { shopSlug };
   const slug = readRouteSlug(match[3]);
   if (!slug) return null;
   return match[2] === 'c'
     ? { shopSlug, categorySlug: slug }
     : { shopSlug, productSlug: slug };
+}
+
+/** Platform-level post path used by posts that do not belong to a shop. */
+export function postSlugFromPath(pathname: string): string | null {
+  const match = /^\/post\/([^/]+)\/?$/u.exec(pathname);
+  return match?.[1] ? readRouteSlug(match[1]) : null;
 }
 
 // Category rows have no slug column; their unique-per-shop name is the source.

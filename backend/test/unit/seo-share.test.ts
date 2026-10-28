@@ -17,6 +17,7 @@ import { ShareShellService } from '../../apps/api/src/modules/seo/share-shell.se
 import { choosePreviewImage } from '../../apps/api/src/modules/seo/preview-image';
 import {
   Product,
+  Showcase,
   Store,
   StoreCategory,
 } from '../../libs/database/src/entities';
@@ -179,6 +180,7 @@ test('the refresher writes one shell per public storefront page', async () => {
     const store = { id: 'store-1', slug: 'alabdalla' };
     const category = { id: 'category-1', name: 'Offers', sortOrder: 1 };
     const product = { id: 'product-1', slug: 'item-x' };
+    const post = { id: 'post-1', slug: 'spring-drop' };
     const manager = {
       find: async (target: unknown) =>
         target === Store
@@ -187,7 +189,9 @@ test('the refresher writes one shell per public storefront page', async () => {
             ? [category]
             : target === Product
               ? [product]
-              : [],
+              : target === Showcase
+                ? [post]
+                : [],
       count: async () => 0,
     };
     const seo = {
@@ -195,6 +199,7 @@ test('the refresher writes one shell per public storefront page', async () => {
       generateCategoryMetaTags: async () => meta,
       generateUncategorizedShareMeta: async () => meta,
       generateProductMetaTags: async () => meta,
+      generateShowcaseMetaTags: async () => meta,
       categoryPathSlug: (name: string) => name.toLowerCase(),
     };
     const config = new ConfigService({
@@ -208,11 +213,12 @@ test('the refresher writes one shell per public storefront page', async () => {
       seo as never,
       config as never,
     );
-    assert.equal(await service.refreshAll(), 3);
+    assert.equal(await service.refreshAll(), 4);
     for (const relative of [
       'alabdalla/index.html',
       'alabdalla/c/offers/index.html',
       'alabdalla/p/item-x/index.html',
+      'alabdalla/post/spring-drop/index.html',
     ]) {
       const html = await fs.readFile(path.join(root, relative), 'utf8');
       assert.match(html, /<meta property="og:title" content="Offers/u);

@@ -1,0 +1,184 @@
+/* The shared post page keeps the shop detail bar and a two-column reading
+   layout: the photo stays the stage on desktop, the words lead on phones. */
+.post-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px clamp(16px, 4vw, 40px);
+  color: #fff;
+  background: color-mix(in srgb, #171a1d 94%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.post-page-bar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+}
+.post-page-back {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.post-page-back:hover {
+  background: #ffffff1f;
+}
+.post-page-main {
+  display: grid;
+  justify-items: center;
+  padding: clamp(18px, 4vw, 44px) clamp(16px, 4vw, 40px) 72px;
+}
+.post-page-card {
+  display: grid;
+  grid-template-columns: minmax(0, 620px) minmax(280px, 380px);
+  align-items: start;
+  gap: clamp(20px, 3vw, 44px);
+  width: min(100%, 1080px);
+}
+.post-page-media {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--post-radius);
+  background: #171a1d;
+}
+.post-page-media .media-preview,
+.post-page-media .media-preview img,
+.post-page-media .media-placeholder {
+  width: 100%;
+  min-height: 0;
+}
+.post-page-media .media-preview img {
+  display: block;
+  max-height: min(78dvh, 780px);
+  object-fit: contain;
+}
+.post-page-media .auto-video {
+  border-radius: inherit;
+}
+.post-page-pager {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #ffffff1f;
+  border-radius: 999px;
+  background: #0b1a15a6;
+}
+.post-page-pager button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+}
+.post-page-pager button:hover:not(:disabled) {
+  background: #ffffff24;
+}
+.post-page-pager button:disabled {
+  opacity: 0.32;
+}
+.post-page-pager span {
+  padding: 0 5px;
+  color: #ffffffd0;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.post-page-info {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+.post-page-info h1 {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.28;
+}
+.post-page-date,
+.post-page-stats {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.post-page-description {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.post-page-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.post-page-link > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.post-page-link strong {
+  font-size: 13px;
+}
+.post-page-link small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.post-page-link:hover {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--surface));
+}
+.post-page-actions {
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.post-page-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--muted);
+  font-size: 12px;
+}
+.post-page-shop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+@media (max-width: 900px) {
+  .post-page-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .post-page-main {
+    padding-inline: 0;
+    padding-bottom: 56px;
+  }
+  .post-page-media {
+    border-radius: 0;
+  }
+  .post-page-info {
+    padding: 0 clamp(16px, 4vw, 24px);
+  }
+}
