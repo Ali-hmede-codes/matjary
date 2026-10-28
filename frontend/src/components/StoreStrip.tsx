@@ -1,20 +1,38 @@
+import { useState } from 'react';
 import { Compass, Plus } from 'lucide-react';
-import { loginUrl, type Post, type Store } from '../lib/api';
+import { loginUrl, type Post, type Store, type StoryGroup } from '../lib/api';
 import { enableMouseScrolling } from '../lib/website';
+import { liveStories, storyGroupUnseen } from '../lib/stories';
 import { storePath } from '../lib/storefront';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
+import { StoryAvatar } from './stories/StoryAvatar';
+import { StoreStorySheet } from './stories/StoreStorySheet';
 
 export function StoreStrip({
   stores,
   selectedStore,
   posts,
   demo,
+  storyGroups = [],
+  seen = [],
+  onOpenStory,
 }: {
   stores: Store[];
   selectedStore: Store | null;
   posts: Post[];
   demo: boolean;
+  storyGroups?: StoryGroup[];
+  seen?: readonly string[];
+  onOpenStory: (storeId: string) => void;
 }) {
+  // A shop with a live story asks what to open instead of jumping to the shop.
+  const [sheetStoreId, setSheetStoreId] = useState<string | null>(null);
+  const groupsByStore = new Map<string, StoryGroup>();
+  for (const group of storyGroups)
+    if (liveStories(group).length > 0) groupsByStore.set(group.store.id, group);
+  const sheetStore = stores.find((item) => item.id === sheetStoreId);
+  const sheetGroup = sheetStoreId ? groupsByStore.get(sheetStoreId) : undefined;
+
   return (
     <section
       className="store-strip"
@@ -38,25 +56,60 @@ export function StoreStrip({
         </span>
         <span>All stores</span>
       </a>
-      {stores.map((item) => (
-        <a
-          className={`story ${selectedStore?.id === item.id ? 'selected' : ''}`}
-          key={item.id}
-          href={storePath(item.slug, demo)}
-        >
-          <span className="story-ring">
-            <StoreAvatar
-              store={item}
-              large
-              preview={
-                posts.find((post) => post.store?.id === item.id)?.media[0]
-              }
-            />
-          </span>
-          <span>{item.name}</span>
-          <StoreVerifiedBadge store={item} size={22} />
-        </a>
-      ))}
+      {stores.map((item) => {
+        const group = groupsByStore.get(item.id);
+        if (group)
+          return (
+            <button
+              type="button"
+              key={item.id}
+              className={`story has-story ${selectedStore?.id === item.id ? 'selected' : ''}`}
+              aria-haspopup="dialog"
+              aria-label={`${item.name} story options`}
+              onClick={() => setSheetStoreId(item.id)}
+            >
+              <StoryAvatar
+                store={item}
+                large
+                state={storyGroupUnseen(group, seen) ? 'unseen' : 'seen'}
+              />
+              <span>{item.name}</span>
+              <StoreVerifiedBadge store={item} size={22} />
+            </button>
+          );
+        return (
+          <a
+            className={`story ${selectedStore?.id === item.id ? 'selected' : ''}`}
+            key={item.id}
+            href={storePath(item.slug, demo)}
+          >
+            <span className="story-ring">
+              <StoreAvatar
+                store={item}
+                large
+                preview={
+                  posts.find((post) => post.store?.id === item.id)?.media[0]
+                }
+              />
+            </span>
+            <span>{item.name}</span>
+            <StoreVerifiedBadge store={item} size={22} />
+          </a>
+        );
+      })}
+      {sheetStore && sheetGroup && (
+        <StoreStorySheet
+          store={sheetStore}
+          group={{ ...sheetGroup, stories: liveStories(sheetGroup) }}
+          demo={demo}
+          onViewStory={() => {
+            const storeId = sheetStore.id;
+            setSheetStoreId(null);
+            onOpenStory(storeId);
+          }}
+          onClose={() => setSheetStoreId(null)}
+        />
+      )}
     </section>
   );
 }

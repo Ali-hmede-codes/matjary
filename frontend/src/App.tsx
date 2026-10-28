@@ -10,8 +10,10 @@ import { StoreStrip } from './components/StoreStrip';
 import { TrendingStores } from './components/TrendingStores';
 import { storefrontRouteFromPath, postSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
+import { useSeenStories, useStoryGroups } from './hooks/useStories';
+import { StoryViewer } from './components/stories/StoryViewer';
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { LoginPage, ProtectedPanel } from './features/shared/PanelAuth';
 import { Loading } from './features/shared/PanelUI';
@@ -134,6 +136,15 @@ function StoreRoute() {
 
 function DiscoveryPage() {
   const discovery = useDiscoveryFeed();
+  // Only the chip ring and the viewer need stories on this page; there is no
+  // separate rail. Tapping a shop with a story asks what to open first.
+  const storiesQuery = useStoryGroups(undefined, !discovery.demo);
+  const { seen, markSeen } = useSeenStories();
+  const [storyStoreId, setStoryStoreId] = useState<string | null>(null);
+  const storyGroups = discovery.demo ? [] : (storiesQuery.data?.groups ?? []);
+  const openStoryGroup = storyGroups.find(
+    (group) => group.store.id === storyStoreId,
+  );
   const {
     settings,
     settingsQuery,
@@ -215,6 +226,9 @@ function DiscoveryPage() {
               selectedStore={store}
               posts={source}
               demo={demo}
+              storyGroups={storyGroups}
+              seen={seen}
+              onOpenStory={setStoryStoreId}
             />
             {!demo && storesQuery.isError && (
               <StatusBanner
@@ -249,6 +263,15 @@ function DiscoveryPage() {
         </main>
       </div>
       <Toast message={notice} />
+      {openStoryGroup && (
+        <StoryViewer
+          key={openStoryGroup.store.id}
+          groups={storyGroups}
+          initialStoreId={openStoryGroup.store.id}
+          onSeen={markSeen}
+          onClose={() => setStoryStoreId(null)}
+        />
+      )}
       {selected && (
         <PostDialog
           key={selected.id}

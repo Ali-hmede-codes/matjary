@@ -55,6 +55,20 @@
 .all-stores .story-ring {
   color: var(--primary);
 }
+.story.has-story:hover .story-avatar-ring {
+  transform: translateY(-2px);
+}
+.story.has-story.selected {
+  color: var(--primary);
+}
+/* A shop with a live story is a button, so it needs the link look. */
+.store-strip button.story {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
 .story > .store-verified-badge {
   position: absolute;
   top: 48px;
