@@ -5,7 +5,10 @@ import {
   categoryIndexGroups,
   categorySlug,
   findCategoryBySlug,
+  formatLbpPrice,
   formatProductPrice,
+  lbpPriceLabel,
+  lbpRateFor,
   readOwnerStoreId,
   rememberOwnerStore,
   selectOwnerStore,
@@ -21,6 +24,7 @@ import {
   postPath,
   postSlugFromPath,
   productCategoryKey,
+  productLbpPriceLabel,
   productOptionSelection,
   productPriceLabel,
   slugDraft,
@@ -561,6 +565,49 @@ test('catalog prices preserve cents even above safe integer limits', () => {
   );
   assert.equal(formatProductPrice('-1', 'USD'), 'Contact for price');
   assert.equal(formatProductPrice('100', 'invalid'), 'Contact for price');
+});
+
+test('LBP prices convert exact USD cents only when the shop opts in', () => {
+  assert.equal(formatLbpPrice('1050', 89_500), '939,750 LBP');
+  assert.equal(formatLbpPrice('0', 89_500), '0 LBP');
+  // A cent converts to a fractional pound; display rounds half up.
+  assert.equal(formatLbpPrice('1', 89_525), '895 LBP');
+  assert.equal(formatLbpPrice('999', 89_525), '894,355 LBP');
+  assert.equal(formatLbpPrice('-1', 89_500), null);
+  assert.equal(formatLbpPrice('100', 0), null);
+  assert.equal(lbpRateFor(89_500, { showPricesInLbp: true }), 89_500);
+  assert.equal(lbpRateFor(89_500, { showPricesInLbp: false }), null);
+  assert.equal(lbpRateFor(89_500, null), null);
+  assert.equal(lbpRateFor(0, { showPricesInLbp: true }), null);
+  assert.equal(lbpRateFor(1.5, { showPricesInLbp: true }), null);
+  assert.equal(lbpPriceLabel('1050', 'USD', 89_500), '939,750 LBP');
+  assert.equal(lbpPriceLabel('1050', 'EUR', 89_500), null);
+  assert.equal(lbpPriceLabel('1050', 'USD', null), null);
+});
+
+test('product LBP labels keep the lowest reachable price and the from prefix', () => {
+  const priced = {
+    priceCents: '1000',
+    currency: 'USD',
+    options: [
+      {
+        name: 'Size',
+        values: [
+          { label: 'S', priceCents: '500' },
+          { label: 'M', priceCents: '900' },
+        ],
+      },
+    ],
+  };
+  assert.equal(productLbpPriceLabel(priced, 89_500), 'from 447,500 LBP');
+  assert.equal(
+    productLbpPriceLabel({ priceCents: '1000', currency: 'USD' }, 89_500),
+    '895,000 LBP',
+  );
+  assert.equal(
+    productLbpPriceLabel({ priceCents: '1000', currency: 'USD' }, null),
+    null,
+  );
 });
 
 test('product slugs keep readable URLs while typing and trim on save', () => {

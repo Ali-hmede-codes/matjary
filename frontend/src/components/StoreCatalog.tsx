@@ -3,6 +3,7 @@ import { Ban, Check, Minus, Package, Plus } from 'lucide-react';
 import { assetUrl, type Product, type SelectedProductOption } from '../lib/api';
 import {
   productHasOptions,
+  productLbpPriceLabel,
   productPriceLabel,
   selectedOptionsKey,
   storeMediaUrl,
@@ -222,16 +223,37 @@ function StockBadge({
   return null;
 }
 
+// One price block: the USD amount with the owner's optional LBP line under it.
+function PriceLabels({
+  product,
+  lbpRate,
+  className,
+}: {
+  product: Product;
+  lbpRate?: number | null;
+  className?: string;
+}) {
+  const lbp = productLbpPriceLabel(product, lbpRate ?? null);
+  return (
+    <span className={`price-stack${className ? ` ${className}` : ''}`}>
+      <strong>{productPriceLabel(product)}</strong>
+      {lbp && <small className="price-lbp">{lbp}</small>}
+    </span>
+  );
+}
+
 // Layout 1: image-first menu row. Best for dishes with descriptions.
 function ListItem({
   product,
   cart,
   href,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
@@ -255,7 +277,7 @@ function ListItem({
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
-          <strong>{productPriceLabel(product)}</strong>
+          <PriceLabels product={product} lbpRate={lbpRate} />
           <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
@@ -268,11 +290,13 @@ function PhotoCard({
   product,
   cart,
   href,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
@@ -296,7 +320,7 @@ function PhotoCard({
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
-          <strong>{productPriceLabel(product)}</strong>
+          <PriceLabels product={product} lbpRate={lbpRate} />
           <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
@@ -309,11 +333,13 @@ function PriceRow({
   product,
   cart,
   href,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
@@ -333,9 +359,11 @@ function PriceRow({
         )}
       </div>
       <span className="shop-price-leader" aria-hidden="true" />
-      <strong className="shop-price-row-price">
-        {productPriceLabel(product)}
-      </strong>
+      <PriceLabels
+        product={product}
+        lbpRate={lbpRate}
+        className="shop-price-row-price"
+      />
       <AddToCart product={product} cart={cart} chooseHref={href} />
     </article>
   );
@@ -347,11 +375,13 @@ function MenuRow({
   product,
   cart,
   href,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
@@ -371,9 +401,11 @@ function MenuRow({
         )}
       </div>
       <span className="shop-price-leader" aria-hidden="true" />
-      <strong className="shop-price-row-price">
-        {productPriceLabel(product)}
-      </strong>
+      <PriceLabels
+        product={product}
+        lbpRate={lbpRate}
+        className="shop-price-row-price"
+      />
       <AddToCart product={product} cart={cart} chooseHref={href} />
     </article>
   );
@@ -385,11 +417,13 @@ function GalleryTile({
   product,
   cart,
   href,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
@@ -413,7 +447,7 @@ function GalleryTile({
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
-          <strong>{productPriceLabel(product)}</strong>
+          <PriceLabels product={product} lbpRate={lbpRate} />
           <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
@@ -426,11 +460,13 @@ function FeaturedItem({
   product,
   cart,
   href,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const unavailable = productCartLimit(product) === 0;
@@ -455,7 +491,7 @@ function FeaturedItem({
           <p title={product.description}>{product.description}</p>
         )}
         <div className="shop-product-bottom">
-          <strong>{productPriceLabel(product)}</strong>
+          <PriceLabels product={product} lbpRate={lbpRate} />
           <AddToCart product={product} cart={cart} chooseHref={href} />
         </div>
       </div>
@@ -469,6 +505,7 @@ export function CatalogItem({
   layout,
   shopSlug,
   demo,
+  lbpRate,
   showDescriptions = true,
 }: {
   product: Product;
@@ -476,6 +513,7 @@ export function CatalogItem({
   layout: CatalogLayout;
   shopSlug: string;
   demo: boolean;
+  lbpRate?: number | null;
   showDescriptions?: boolean;
 }) {
   const href = storeProductPath(shopSlug, product.slug, demo);
@@ -485,6 +523,7 @@ export function CatalogItem({
         product={product}
         cart={cart}
         href={href}
+        lbpRate={lbpRate}
         showDescriptions={showDescriptions}
       />
     );
@@ -494,6 +533,7 @@ export function CatalogItem({
         product={product}
         cart={cart}
         href={href}
+        lbpRate={lbpRate}
         showDescriptions={showDescriptions}
       />
     );
@@ -503,6 +543,7 @@ export function CatalogItem({
         product={product}
         cart={cart}
         href={href}
+        lbpRate={lbpRate}
         showDescriptions={showDescriptions}
       />
     );
@@ -512,6 +553,7 @@ export function CatalogItem({
         product={product}
         cart={cart}
         href={href}
+        lbpRate={lbpRate}
         showDescriptions={showDescriptions}
       />
     );
@@ -523,6 +565,7 @@ export function CatalogItem({
         product={product}
         cart={cart}
         href={href}
+        lbpRate={lbpRate}
         showDescriptions={showDescriptions}
       />
     );
@@ -531,6 +574,7 @@ export function CatalogItem({
       product={product}
       cart={cart}
       href={href}
+      lbpRate={lbpRate}
       showDescriptions={showDescriptions}
     />
   );
@@ -542,6 +586,7 @@ export function CatalogItems({
   layout,
   shopSlug,
   demo,
+  lbpRate,
   showImages = true,
   showDescriptions = true,
 }: {
@@ -550,6 +595,7 @@ export function CatalogItems({
   layout: CatalogLayout;
   shopSlug: string;
   demo: boolean;
+  lbpRate?: number | null;
   showImages?: boolean;
   showDescriptions?: boolean;
 }) {
@@ -568,6 +614,7 @@ export function CatalogItems({
       layout={variant}
       shopSlug={shopSlug}
       demo={demo}
+      lbpRate={lbpRate}
       showDescriptions={showDescriptions}
     />
   );
@@ -579,6 +626,7 @@ export function CatalogItems({
           product={first!}
           cart={cart}
           href={storeProductPath(shopSlug, first!.slug, demo)}
+          lbpRate={lbpRate}
           showDescriptions={showDescriptions}
         />
         <div className="shop-featured-grid">

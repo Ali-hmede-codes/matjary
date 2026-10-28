@@ -21,6 +21,7 @@ import {
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { SocialIcon, socialNetworks } from '../../components/SocialIcon';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 import { StoreLifecycleControls } from './StoreManager';
@@ -112,6 +113,7 @@ function normalizeSocialUrl(network: string, raw: string): string | undefined {
 
 export function StoreEditor({ store }: { store?: OwnerStore }) {
   const { summary, savedStore } = useOwner();
+  const { settings } = useWebsiteSettings(false);
   const navigate = useNavigate();
   const [name, setName] = useState(store?.name || '');
   const [type, setType] = useState<'ecommerce' | 'restaurant_menu'>(
@@ -141,6 +143,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       store?.enableWhatsAppCheckout && summary.limits.enableWhatsAppCheckout,
     ),
   );
+  const [lbpPrices, setLbpPrices] = useState(Boolean(store?.showPricesInLbp));
   const [busy, setBusy] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -192,6 +195,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     branches: branchDrafts.map((branch) => branchPayload(branch)),
     cart,
     whatsapp,
+    lbpPrices,
   });
   const [baseline, setBaseline] = useState(snapshot);
   const dirty = snapshot !== baseline;
@@ -313,6 +317,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               bannerKey: banner || null,
               enableCart: cart,
               enableWhatsAppCheckout: whatsapp,
+              showPricesInLbp: lbpPrices,
             }
           : {}),
         ...(store || branchBodies.length ? { branches: branchBodies } : {}),
@@ -558,6 +563,31 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               />
             </label>
           </section>
+          {store && (
+            <section className="panel-card panel-optional">
+              <h2>Prices</h2>
+              <p className="panel-muted">
+                Your items stay priced in US dollars. You can also show each
+                price in Lebanese pounds, in small text under the dollar price.
+              </p>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={lbpPrices}
+                  disabled={!settings.lbpExchangeRate}
+                  onChange={(e) => setLbpPrices(e.target.checked)}
+                />
+                Show prices in Lebanese pounds
+                <small>
+                  {settings.lbpExchangeRate
+                    ? `${new Intl.NumberFormat('en-US').format(
+                        settings.lbpExchangeRate,
+                      )} LBP = $1. Matjary sets this rate.`
+                    : 'You can turn this on once Matjary sets the LBP exchange rate.'}
+                </small>
+              </label>
+            </section>
+          )}
           <StoreBranchesEditor
             branches={branches}
             onChange={setBranches}

@@ -2,9 +2,12 @@ import { applyDecorators } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import {
   IsEmail,
+  IsInt,
   IsString,
   Length,
   Matches,
+  Max,
+  Min,
   ValidateBy,
   ValidateIf,
 } from 'class-validator';
@@ -106,4 +109,13 @@ export class UpdateWebsiteSettingsDto {
 
   @SettingText(500)
   footerText?: string | null;
+
+  // Whole Lebanese pounds per 1 US dollar. Zero turns LBP display off. Null is
+  // rejected on purpose: a cleared input must mean an explicit zero, never a
+  // silent database error.
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(10_000_000)
+  lbpExchangeRate?: number;
 }

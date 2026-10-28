@@ -113,6 +113,8 @@ export class StoreResponseDto {
   businessCategoryLabel!: string;
   enableCart!: boolean;
   enableWhatsAppCheckout!: boolean;
+  // Public opt-in: the storefront prints a small LBP price under each USD one.
+  showPricesInLbp!: boolean;
   socialMediaLinks!: SocialMediaLinks | null;
   logoKey!: string | null;
   bannerKey!: string | null;
@@ -187,6 +189,7 @@ export function toStoreResponseDto(
     businessCategoryLabel: businessCategoryLabel(store.businessCategory),
     enableCart: store.enableCart,
     enableWhatsAppCheckout: store.enableWhatsAppCheckout,
+    showPricesInLbp: store.showPricesInLbp,
     socialMediaLinks: store.socialMediaLinks,
     logoKey: store.logoKey,
     bannerKey: store.bannerKey,

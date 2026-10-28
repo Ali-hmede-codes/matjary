@@ -478,6 +478,10 @@ export class StoresService {
         if (dto.enableWhatsAppCheckout !== undefined)
           store.enableWhatsAppCheckout = dto.enableWhatsAppCheckout;
       }
+      // Display preference only: no plan gate, because the shop still sells in
+      // USD and the LBP line is generated from the platform rate.
+      if (dto.showPricesInLbp !== undefined)
+        store.showPricesInLbp = dto.showPricesInLbp;
       await assertMediaAttachment(
         this.stores.manager,
         userId,

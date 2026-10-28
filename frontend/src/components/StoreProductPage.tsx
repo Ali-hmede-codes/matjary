@@ -15,6 +15,8 @@ import {
   categoryIndexGroups,
   decimalPrice,
   formatProductPrice,
+  lbpPriceLabel,
+  lbpRateFor,
   menuCategoryGroups,
   productCategoryKey,
   productFromPriceCents,
@@ -218,6 +220,12 @@ export function StoreProductPage({
     null,
   );
   const displayPriceCents = chosenPriceCents ?? product.priceCents;
+  const lbpRate = lbpRateFor(settings.lbpExchangeRate, store);
+  const displayPriceLbp = lbpPriceLabel(
+    displayPriceCents,
+    product.currency,
+    lbpRate,
+  );
   return (
     <StoreDetailShell
       store={store}
@@ -225,6 +233,7 @@ export function StoreProductPage({
       cart={cart}
       products={[product]}
       notice={share.notice}
+      lbpRate={lbpRate}
     >
       <nav className="shop-crumbs" aria-label="Breadcrumb">
         <a href={storePath(shopSlug, demo)}>{store.name}</a>
@@ -280,6 +289,9 @@ export function StoreProductPage({
           <h1>{product.name}</h1>
           <p className="shop-product-detail-price">
             {formatProductPrice(displayPriceCents, product.currency)}
+            {displayPriceLbp && (
+              <small className="price-lbp">{displayPriceLbp}</small>
+            )}
           </p>
           {product.description && (
             <p className="shop-product-detail-description">
@@ -301,6 +313,14 @@ export function StoreProductPage({
                     {group.values.map((value) => {
                       const selected =
                         chosenOptions[group.name] === value.label;
+                      const valueLbp =
+                        value.priceCents && value.priceCents !== '0'
+                          ? lbpPriceLabel(
+                              value.priceCents,
+                              product.currency,
+                              lbpRate,
+                            )
+                          : null;
                       return (
                         <button
                           key={value.label}
@@ -320,6 +340,11 @@ export function StoreProductPage({
                               {formatProductPrice(
                                 value.priceCents,
                                 product.currency,
+                              )}
+                              {valueLbp && (
+                                <span className="price-lbp-inline">
+                                  · {valueLbp}
+                                </span>
                               )}
                             </small>
                           )}

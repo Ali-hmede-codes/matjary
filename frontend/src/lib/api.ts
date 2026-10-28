@@ -33,6 +33,8 @@ export interface Store {
   businessCategoryLabel?: string | null;
   // The owner's saved visual system; the storefront renders this exact look.
   designSettings?: DesignSettingsInput | null;
+  // Owner opt-in: prices also appear in LBP at the platform rate.
+  showPricesInLbp?: boolean;
   logoKey?: string | null;
   bannerKey?: string | null;
   socialMediaLinks?: Record<string, string> | null;

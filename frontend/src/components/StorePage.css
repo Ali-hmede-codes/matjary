@@ -606,7 +606,8 @@
   padding-top: 20px;
   font-size: 22px;
 }
-.shop-product-bottom > strong {
+.shop-product-bottom > strong,
+.shop-product-bottom .price-stack > strong {
   min-width: 0;
   max-width: 100%;
   font-weight: 700;

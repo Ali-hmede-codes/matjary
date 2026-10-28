@@ -22,6 +22,7 @@ import {
   normalizeSelectedOptions,
   resolveOptionUnitPriceCents,
   selectedOptionsKey,
+  WebsiteSettings,
 } from '@app/database';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
@@ -31,6 +32,7 @@ import {
   CheckoutResponseDto,
   toCartResponseDto,
   formatCurrency,
+  formatLbpCurrency,
 } from './dto/cart-response.dto';
 
 @Injectable()
@@ -46,6 +48,8 @@ export class CartsService {
     private readonly cartItems: Repository<CartItem>,
     @InjectRepository(StoreBranch)
     private readonly branches: Repository<StoreBranch>,
+    @InjectRepository(WebsiteSettings)
+    private readonly websiteSettings: Repository<WebsiteSettings>,
   ) {}
 
   private sanitize(error: unknown): never {
@@ -537,12 +541,20 @@ export class CartsService {
       const totalCents = subtotal.toString();
       const currency = cart.currency;
       const formattedTotal = formatCurrency(totalCents, currency);
+      const lbpRate =
+        currency.toUpperCase() === 'USD'
+          ? await this.lbpExchangeRate(store)
+          : 0;
+      const lbpTotal =
+        lbpRate > 0 ? formatLbpCurrency(totalCents, lbpRate) : null;
 
       // Build WhatsApp message
       const message = this.buildWhatsAppMessage(
         store.name,
         items,
         formattedTotal,
+        lbpTotal,
+        lbpRate,
         currency,
         dto.customerNotes ?? '',
         dto.customerName ?? '',
@@ -564,6 +576,7 @@ export class CartsService {
         message,
         totalCents,
         currency,
+        lbpTotal,
         branchId: branch?.id ?? null,
         branchName: branch?.name ?? null,
       };
@@ -577,6 +590,22 @@ export class CartsService {
         throw error;
       }
       this.sanitize(error);
+    }
+  }
+
+  /**
+   * The platform's USD->LBP rate for shops that opted into pound prices.
+   * This line is display-only, so an unreadable rate never blocks an order:
+   * the message simply stays in USD, exactly as before the feature existed.
+   */
+  private async lbpExchangeRate(store: Store): Promise<number> {
+    if (!store.showPricesInLbp) return 0;
+    try {
+      const settings = await this.websiteSettings.findOneBy({ id: 1 });
+      const rate = settings?.lbpExchangeRate ?? 0;
+      return Number.isInteger(rate) && rate > 0 ? rate : 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -598,6 +627,8 @@ export class CartsService {
     storeName: string,
     items: CartItem[],
     total: string,
+    lbpTotal: string | null,
+    lbpRate: number,
     currency: string,
     customerNotes: string,
     customerName: string,
@@ -629,8 +660,12 @@ export class CartsService {
     for (const item of items) {
       const lineTotal = BigInt(item.unitPriceCents) * BigInt(item.quantity);
       const formattedLineTotal = formatCurrency(lineTotal.toString(), currency);
+      const formattedLineLbp =
+        lbpRate > 0
+          ? ` (${formatLbpCurrency(lineTotal.toString(), lbpRate)})`
+          : '';
       lines.push(
-        `• ${item.productName} x${item.quantity} = ${formattedLineTotal}`,
+        `• ${item.productName} x${item.quantity} = ${formattedLineTotal}${formattedLineLbp}`,
       );
       if (item.selectedOptions?.length) {
         const optionLine = item.selectedOptions
@@ -649,7 +684,7 @@ export class CartsService {
       }
     }
     lines.push('');
-    lines.push(`*Total:* ${total}`);
+    lines.push(`*Total:* ${total}${lbpTotal ? ` (${lbpTotal})` : ''}`);
     lines.push('');
 
     if (customerNotes) {

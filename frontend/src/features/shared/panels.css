@@ -404,6 +404,24 @@
   gap: 22px;
   margin-bottom: 24px;
 }
+.lbp-rate-card {
+  margin-bottom: 24px;
+}
+.lbp-rate-card .panel-form {
+  gap: 14px;
+  margin-top: 18px;
+}
+.lbp-rate-save {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 4px;
+}
+.lbp-rate-save > span {
+  color: var(--panel-muted);
+  font-size: 11px;
+}
 .panel-feature {
   display: flex;
   flex-direction: column;

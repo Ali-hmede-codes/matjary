@@ -18,6 +18,8 @@ import { MediaView } from './MediaView';
 import {
   categorySlug,
   formatProductPrice,
+  lbpPriceLabel,
+  lbpRateFor,
   storeCategoryPath,
   storePath,
   storeProductPath,
@@ -26,6 +28,7 @@ import type { Post } from '../lib/api';
 import { resumeFeedPlayback, suspendFeedPlayback } from '../lib/video-playback';
 import { PostActions } from './PostActions';
 import { StoreAvatar } from './StoreAvatar';
+import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 
 export type PostDialogEngagement = {
   saved: string[];
@@ -71,6 +74,7 @@ function PostSlide({
   active,
   initialMediaIndex,
   demo,
+  lbpExchangeRate,
   notice,
   saved,
   liking,
@@ -84,6 +88,7 @@ function PostSlide({
   active: boolean;
   initialMediaIndex: number;
   demo: boolean;
+  lbpExchangeRate: number;
   notice?: string;
   saved: boolean;
   liking: boolean;
@@ -97,6 +102,14 @@ function PostSlide({
   const media = post.media[mediaIndex];
   const multiple = post.media.length > 1;
   const storeName = post.store?.name || 'Independent creator';
+  const linkLbp =
+    post.link?.priceCents && post.link.currency
+      ? lbpPriceLabel(
+          post.link.priceCents,
+          post.link.currency,
+          lbpRateFor(lbpExchangeRate, post.store),
+        )
+      : null;
   const location = demo
     ? 'Sample showcase'
     : post.store?.location?.city || 'Independent store';
@@ -197,6 +210,9 @@ function PostSlide({
                           post.link.priceCents,
                           post.link.currency,
                         )}
+                        {linkLbp && (
+                          <span className="price-lbp-inline">· {linkLbp}</span>
+                        )}
                       </small>
                     )}
                 </span>
@@ -264,6 +280,7 @@ export function PostDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const wheelLock = useRef(0);
+  const { settings } = useWebsiteSettings(false, !demo);
   const [startIndex] = useState(() =>
     Math.max(
       0,
@@ -416,6 +433,7 @@ export function PostDialog({
             active={index === active}
             initialMediaIndex={index === startIndex ? initialMediaIndex : 0}
             demo={demo}
+            lbpExchangeRate={settings.lbpExchangeRate}
             notice={notice}
             saved={saved.includes(post.id)}
             liking={liking}

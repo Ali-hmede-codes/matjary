@@ -36,6 +36,21 @@ test('branding uses public settings and rejects malformed values', () => {
   assert.deepEqual(normalizeSettings(null), defaults);
 });
 
+test('the LBP rate is only trusted as a whole in-range number', () => {
+  assert.equal(
+    normalizeSettings({ lbpExchangeRate: 89_500 }).lbpExchangeRate,
+    89_500,
+  );
+  assert.equal(normalizeSettings({ lbpExchangeRate: 0 }).lbpExchangeRate, 0);
+  for (const value of [-1, 1.5, 10_000_001, '89500', null, true]) {
+    assert.equal(
+      normalizeSettings({ lbpExchangeRate: value }).lbpExchangeRate,
+      defaults.lbpExchangeRate,
+      JSON.stringify(value),
+    );
+  }
+});
+
 test('media stays authorized through the proxy and preserves encoded keys', () => {
   assert.equal(
     mediaUrl(

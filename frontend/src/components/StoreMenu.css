@@ -485,6 +485,11 @@
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
 }
+/* A USD price with its LBP hint reads as one right-aligned price block. */
+.shop-price-row-price.price-stack {
+  align-items: flex-end;
+  text-align: right;
+}
 .shop-price-row .shop-add-to-cart,
 .shop-price-row .shop-qty-stepper {
   margin-left: 0;
@@ -874,6 +879,12 @@
 .shop-cart-dock-copy strong {
   font-size: 17px;
   font-variant-numeric: tabular-nums;
+}
+.shop-cart-dock-copy .price-lbp {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
 }
 .shop-cart-dock-action {
   display: inline-flex;

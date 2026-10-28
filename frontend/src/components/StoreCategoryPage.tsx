@@ -21,6 +21,7 @@ import {
   storeMenuPath,
   storePath,
   storePresentation,
+  lbpRateFor,
 } from '../lib/storefront';
 import { useShopCart } from '../hooks/useShopCart';
 import { brandingUrl } from '../lib/website';
@@ -184,6 +185,7 @@ export function StoreCategoryPage({
     );
 
   const presentation = storePresentation(store);
+  const lbpRate = lbpRateFor(settings.lbpExchangeRate, store);
   // The section page honours the same design and rhythm as the shop page.
   const layout = presentation.design
     ? resolveCategoryLayout(presentation.design, categoryPosition, group.key)
@@ -196,6 +198,7 @@ export function StoreCategoryPage({
       cart={cart}
       products={items}
       notice={share.notice}
+      lbpRate={lbpRate}
     >
       <nav className="shop-crumbs" aria-label="Breadcrumb">
         <a href={storePath(shopSlug, demo)}>{store.name}</a>
@@ -277,6 +280,7 @@ export function StoreCategoryPage({
           layout={layout}
           shopSlug={shopSlug}
           demo={demo}
+          lbpRate={lbpRate}
           showImages={presentation.design?.showProductImages}
           showDescriptions={presentation.design?.showProductDescriptions}
         />

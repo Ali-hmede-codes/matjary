@@ -42,6 +42,8 @@ export class CheckoutResponseDto {
   message!: string;
   totalCents!: string;
   currency!: string;
+  // Exact LBP total when the shop displays pounds; null keeps the message in USD.
+  lbpTotal!: string | null;
   branchId!: string | null;
   branchName!: string | null;
 }
@@ -109,4 +111,16 @@ export function formatCurrency(cents: string, currency: string): string {
     currency,
     minimumFractionDigits: 2,
   }).format(amount);
+}
+
+/**
+ * Exact pounds for a USD-cent amount, rounded half up. The pound has no
+ * subunit in daily use, so the label stays a whole number with separators.
+ * Display only: cart and order arithmetic remain in USD cents.
+ */
+export function formatLbpCurrency(usdCents: string, rate: number): string {
+  const pounds = (BigInt(usdCents) * BigInt(rate) + 50n) / 100n;
+  return `${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(pounds)} LBP`;
 }

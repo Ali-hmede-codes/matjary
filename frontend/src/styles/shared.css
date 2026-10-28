@@ -86,3 +86,28 @@
 .icon-button:hover {
   background: var(--wash);
 }
+/* Display-only currency hint under a USD price. The shop still sells in
+   dollars; the smaller LBP line only helps local shoppers read the amount. */
+.price-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.price-lbp {
+  display: block;
+  /* Inherit the price color: gallery tiles and cart rows use light and dark
+     surfaces, so a fixed muted tone would lose contrast on photos. */
+  color: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+.price-lbp-inline {
+  margin-left: 4px;
+  font-weight: 500;
+  opacity: 0.8;
+}

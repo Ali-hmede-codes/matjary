@@ -429,6 +429,56 @@ export function productPriceLabel(
   return productHasPricedOptions(product) ? `from ${price}` : price;
 }
 
+/**
+ * The platform rate to print under USD prices, or null when this shop keeps
+ * them in dollars. Both the owner opt-in and the administrator's rate must be
+ * present; anything else falls back to today's USD-only shopfront.
+ */
+export function lbpRateFor(
+  lbpExchangeRate: number | null | undefined,
+  shop: { showPricesInLbp?: boolean } | null | undefined,
+): number | null {
+  if (!shop?.showPricesInLbp) return null;
+  const rate = lbpExchangeRate ?? 0;
+  return Number.isInteger(rate) && rate > 0 && rate <= 10_000_000 ? rate : null;
+}
+
+/**
+ * Exact pounds for a USD-cent amount, rounded half up. The pound has no
+ * subunit in daily use, so the label is a whole number with separators.
+ * Display only: the shop still sells at the USD price.
+ */
+export function formatLbpPrice(usdCents: string, rate: number): string | null {
+  if (!/^\d+$/u.test(usdCents) || !Number.isInteger(rate) || rate <= 0)
+    return null;
+  const pounds = (BigInt(usdCents) * BigInt(rate) + 50n) / 100n;
+  return `${new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(pounds)} LBP`;
+}
+
+/** A small LBP label for a USD price, or null when the shop shows dollars only. */
+export function lbpPriceLabel(
+  usdCents: string,
+  currency: string,
+  rate: number | null | undefined,
+): string | null {
+  if (!rate || currency.toUpperCase() !== 'USD') return null;
+  return formatLbpPrice(usdCents, rate);
+}
+
+export function productLbpPriceLabel(
+  product: Pick<Product, 'options' | 'priceCents' | 'currency'>,
+  rate: number | null | undefined,
+): string | null {
+  const price = lbpPriceLabel(
+    productFromPriceCents(product),
+    product.currency,
+    rate,
+  );
+  return price && productHasPricedOptions(product) ? `from ${price}` : price;
+}
+
 export function priceInput(value: string): number | null {
   if (value.length > 32 || !/^\d+(?:\.\d{1,2})?$/.test(value.trim()))
     return null;

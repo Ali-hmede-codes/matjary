@@ -134,6 +134,11 @@ export class UpdateStoreDto {
   @IsBoolean()
   enableWhatsAppCheckout?: boolean;
 
+  // Display-only currency hint for the public shop. Stored prices stay in USD.
+  @IsOptional()
+  @IsBoolean()
+  showPricesInLbp?: boolean;
+
   @IsOptional()
   @IsString()
   @Length(1, 200)

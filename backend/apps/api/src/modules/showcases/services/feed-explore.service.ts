@@ -69,6 +69,8 @@ export interface FeedItem {
     slug: string;
     logoKey: string | null;
     brandColor: string | null;
+    // The shop's own LBP display choice for its linked post prices.
+    showPricesInLbp?: boolean;
     businessCategory: string;
     businessCategoryLabel: string;
     location?: {
@@ -1151,6 +1153,9 @@ export class FeedExploreService {
               slug: store.slug,
               logoKey: store.logoKey,
               brandColor: store.brandColor,
+              // Shoppable posts print the linked price; the card needs the
+              // shop's own display choice to add the LBP line.
+              showPricesInLbp: store.showPricesInLbp,
               businessCategory: businessCategoryDefinition(
                 store.businessCategory,
               ).slug,

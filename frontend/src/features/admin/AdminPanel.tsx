@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import {
@@ -41,6 +41,7 @@ import {
 } from '../../lib/storefront';
 import { BILLING_LABELS, PlanEditor, planSummary } from './PlanEditor';
 import { AdminBoost } from './AdminBoost';
+import type { WebsiteSettings } from '../../lib/website';
 
 type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
 export default function AdminPanel({ session }: { session: Session }) {
@@ -177,6 +178,7 @@ function Overview({ id }: { id: string }) {
           </Link>
         </section>
       </div>
+      <LbpRateCard id={id} />
       <div className="panel-note">
         <ShieldCheck size={20} />
         <p>
@@ -197,6 +199,98 @@ function SubscriptionTabs() {
       </NavLink>
       <NavLink to="/admin/subscriptions/plans">Plans</NavLink>
     </nav>
+  );
+}
+function LbpRateCard({ id }: { id: string }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ['panel', id, 'website-settings'],
+    queryFn: ({ signal }) =>
+      getJson<WebsiteSettings>('admin/website-settings', signal),
+  });
+  const [rate, setRate] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (query.data)
+      setRate(
+        query.data.lbpExchangeRate ? String(query.data.lbpExchangeRate) : '',
+      );
+  }, [query.data]);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const digits = rate.replace(/[,\s]/gu, '');
+    if (!/^\d{1,8}$/u.test(digits) || Number(digits) > 10_000_000) {
+      setError(
+        'Enter whole pounds per dollar, up to 10,000,000. Use 0 to turn LBP prices off.',
+      );
+      setNotice('');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const saved = await mutate<WebsiteSettings>(
+        'admin/website-settings',
+        { lbpExchangeRate: Number(digits) },
+        'PATCH',
+      );
+      setRate(saved.lbpExchangeRate ? String(saved.lbpExchangeRate) : '');
+      queryClient.setQueryData(['panel', id, 'website-settings'], saved);
+      // Storefront tabs read the public settings endpoint; refresh them too.
+      await queryClient.invalidateQueries({ queryKey: ['website-settings'] });
+      setNotice(
+        saved.lbpExchangeRate
+          ? `Saved. Shops can display prices at ${saved.lbpExchangeRate.toLocaleString('en-US')} LBP per $1.`
+          : 'Saved. LBP prices are off on every shop.',
+      );
+    } catch (reason) {
+      setError(panelError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel-card lbp-rate-card">
+      <h2>Lebanese pound exchange rate</h2>
+      <p className="panel-muted">
+        Shops that turn on LBP prices print this rate in small text under each
+        US dollar price. Stored prices and orders stay in USD. Set 0 to hide LBP
+        prices on every shop.
+      </p>
+      {query.isPending ? (
+        <Loading />
+      ) : query.isError ? (
+        <Retry error={query.error} retry={() => void query.refetch()} />
+      ) : (
+        <form className="panel-form" onSubmit={(e) => void submit(e)}>
+          <label>
+            LBP per $1
+            <input
+              inputMode="numeric"
+              value={rate}
+              placeholder="89500"
+              onChange={(event) => setRate(event.target.value)}
+            />
+          </label>
+          <div className="lbp-rate-save">
+            <span>
+              {query.data.lbpExchangeRate
+                ? `Current: ${query.data.lbpExchangeRate.toLocaleString('en-US')} LBP per $1`
+                : 'LBP prices are currently off.'}
+            </span>
+            <button className="panel-primary" disabled={busy}>
+              {busy ? 'Saving…' : 'Save rate'}
+            </button>
+          </div>
+        </form>
+      )}
+      {error && <Notice error>{error}</Notice>}
+      {notice && <Notice>{notice}</Notice>}
+    </section>
   );
 }
 function AdminPlans({ id }: { id: string }) {

@@ -478,6 +478,11 @@ export class Store extends BaseEntity {
   @Column({ name: 'enable_whatsapp_checkout', type: 'boolean', default: true })
   enableWhatsAppCheckout!: boolean;
 
+  // Display-only: the storefront also prints each USD price in Lebanese pounds
+  // when the administrator has set a platform rate. Never changes cart totals.
+  @Column({ name: 'show_prices_in_lbp', type: 'boolean', default: false })
+  showPricesInLbp!: boolean;
+
   // Design/theme settings (colors, layout, fonts, etc.)
   @Column({ name: 'design_settings', type: 'json', nullable: true })
   designSettings!: DesignSettings | null;

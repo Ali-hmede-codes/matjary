@@ -43,6 +43,8 @@ export interface CartCheckout {
   message: string;
   totalCents: string;
   currency: string;
+  // Exact LBP total when the shop displays pounds; null keeps the order in USD.
+  lbpTotal?: string | null;
   branchId?: string | null;
   branchName?: string | null;
 }

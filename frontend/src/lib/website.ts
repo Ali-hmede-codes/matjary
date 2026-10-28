@@ -11,6 +11,8 @@ export interface WebsiteSettings {
   bannerUrl: string | null;
   contactEmail: string | null;
   footerText: string | null;
+  // Whole Lebanese pounds per 1 USD. 0 means LBP display is off platform-wide.
+  lbpExchangeRate: number;
 }
 
 export const defaults: WebsiteSettings = {
@@ -26,6 +28,7 @@ export const defaults: WebsiteSettings = {
   bannerUrl: null,
   contactEmail: null,
   footerText: null,
+  lbpExchangeRate: 0,
 };
 
 export function safeUrl(value: string | null | undefined): string | undefined {
@@ -71,7 +74,15 @@ export function normalizeSettings(input: unknown): WebsiteSettings {
   if (!input || typeof input !== 'object') return result;
   for (const key of Object.keys(defaults) as (keyof WebsiteSettings)[]) {
     const value: unknown = Reflect.get(input, key);
-    if (key.endsWith('Color')) {
+    if (key === 'lbpExchangeRate') {
+      if (
+        typeof value === 'number' &&
+        Number.isInteger(value) &&
+        value >= 0 &&
+        value <= 10_000_000
+      )
+        Object.assign(result, { [key]: value });
+    } else if (key.endsWith('Color')) {
       if (typeof value === 'string' && /^#[0-9a-f]{6}$/iu.test(value))
         Object.assign(result, { [key]: value });
     } else if (key.endsWith('Url')) {

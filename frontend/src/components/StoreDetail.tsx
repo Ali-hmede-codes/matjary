@@ -38,6 +38,7 @@ export function StoreDetailShell({
   cart,
   products,
   notice,
+  lbpRate,
   children,
 }: {
   store: Store;
@@ -45,6 +46,7 @@ export function StoreDetailShell({
   cart: ShopCartController;
   products: Product[];
   notice?: string;
+  lbpRate?: number | null;
   children: ReactNode;
 }) {
   const presentation = storePresentation(store);
@@ -106,13 +108,14 @@ export function StoreDetailShell({
           Back to shop <ArrowUpRight size={15} aria-hidden="true" />
         </a>
       </footer>
-      <ShopCartDock cart={cart} />
+      <ShopCartDock cart={cart} lbpRate={lbpRate} />
       {cart.open && (
         <ShopCart
           store={store}
           products={products}
           controller={cart}
           demo={demo}
+          lbpRate={lbpRate}
           onBrowse={() => {
             cart.setOpen(false);
             window.location.assign(shopHref);

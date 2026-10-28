@@ -37,6 +37,7 @@ import {
   menuCategoryGroups,
   menuShareDescription,
   productCategoryKey,
+  lbpRateFor,
   storeCategoryPath,
   storeMediaUrl,
   storePath,
@@ -192,6 +193,8 @@ export function StorePage({ slug }: { slug: string | null }) {
     enabled: Boolean(store) && !demo && activeTab === 'posts',
   });
   const presentation = storePresentation(store ?? { brandColor: null });
+  // Prices stay in USD; this rate only adds the small LBP line the owner opted into.
+  const lbpRate = lbpRateFor(settings.lbpExchangeRate, store);
   const missing = notFound || (demo && !store);
   const loadingShop = !store && !missing && !storeQuery.isError;
   const share = useShare();
@@ -914,6 +917,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                               layout={layout}
                               shopSlug={store.slug}
                               demo={demo}
+                              lbpRate={lbpRate}
                               showImages={
                                 presentation.design?.showProductImages
                               }
@@ -1032,13 +1036,14 @@ export function StorePage({ slug }: { slug: string | null }) {
           </a>
         </div>
       </footer>
-      <ShopCartDock cart={cart} />
+      <ShopCartDock cart={cart} lbpRate={lbpRate} />
       {cart.open && store && (
         <ShopCart
           store={store}
           products={[]}
           controller={cart}
           demo={demo}
+          lbpRate={lbpRate}
           onBrowse={() => {
             cart.setOpen(false);
             selectTab('catalog');

@@ -13,7 +13,11 @@ import {
   X,
 } from 'lucide-react';
 import { assetUrl, type Product, type Store } from '../lib/api';
-import { formatProductPrice, storeMediaUrl } from '../lib/storefront';
+import {
+  formatProductPrice,
+  lbpPriceLabel,
+  storeMediaUrl,
+} from '../lib/storefront';
 import {
   branchAddress,
   branchWhatsAppHref,
@@ -41,6 +45,7 @@ export function ShopCart({
   products,
   controller,
   demo,
+  lbpRate,
   onBrowse,
   onContact,
 }: {
@@ -48,6 +53,7 @@ export function ShopCart({
   products: Product[];
   controller: ShopCartController;
   demo: boolean;
+  lbpRate?: number | null;
   onBrowse: () => void;
   onContact: () => void;
 }) {
@@ -168,6 +174,21 @@ export function ShopCart({
               <strong>
                 {formatProductPrice(checkout.totalCents, checkout.currency)}
               </strong>
+              {(checkout.lbpTotal ??
+                lbpPriceLabel(
+                  checkout.totalCents,
+                  checkout.currency,
+                  lbpRate,
+                )) && (
+                <small className="price-lbp">
+                  {checkout.lbpTotal ??
+                    lbpPriceLabel(
+                      checkout.totalCents,
+                      checkout.currency,
+                      lbpRate,
+                    )}
+                </small>
+              )}
               {checkout.branchName && (
                 <p className="shop-cart-branch-confirm">
                   <MapPin size={15} aria-hidden="true" />
@@ -246,6 +267,16 @@ export function ShopCart({
                   const product = products.find(
                     (entry) => entry.id === item.productId,
                   );
+                  const unitLbp = lbpPriceLabel(
+                    item.unitPriceCents,
+                    cart.currency,
+                    lbpRate,
+                  );
+                  const lineLbp = lbpPriceLabel(
+                    item.lineTotalCents,
+                    cart.currency,
+                    lbpRate,
+                  );
                   return (
                     <li key={item.id} className="shop-cart-item">
                       <CartThumbnail product={product} />
@@ -257,6 +288,9 @@ export function ShopCart({
                             cart.currency,
                           )}{' '}
                           each
+                          {unitLbp && (
+                            <small className="price-lbp">{unitLbp} each</small>
+                          )}
                         </p>
                         {item.selectedOptions?.length ? (
                           <p className="shop-cart-item-options">
@@ -328,9 +362,17 @@ export function ShopCart({
                           </button>
                         </div>
                       </div>
-                      <strong className="shop-cart-line-total">
-                        {formatProductPrice(item.lineTotalCents, cart.currency)}
-                      </strong>
+                      <span className="shop-cart-line-total">
+                        <strong>
+                          {formatProductPrice(
+                            item.lineTotalCents,
+                            cart.currency,
+                          )}
+                        </strong>
+                        {lineLbp && (
+                          <small className="price-lbp">{lineLbp}</small>
+                        )}
+                      </span>
                     </li>
                   );
                 })}
@@ -466,8 +508,13 @@ export function ShopCart({
           <footer className="shop-cart-footer">
             <div className="shop-cart-total" aria-live="polite">
               <span>Subtotal</span>
-              <strong>
+              <strong className="price-stack shop-cart-total-price">
                 {formatProductPrice(cart.subtotalCents, cart.currency)}
+                {lbpPriceLabel(cart.subtotalCents, cart.currency, lbpRate) && (
+                  <small className="price-lbp">
+                    {lbpPriceLabel(cart.subtotalCents, cart.currency, lbpRate)}
+                  </small>
+                )}
               </strong>
             </div>
             <p>

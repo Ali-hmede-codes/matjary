@@ -275,9 +275,17 @@
   font-variant-numeric: tabular-nums;
 }
 .shop-cart-line-total {
-  max-width: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  max-width: 150px;
   font-size: 13px;
   line-height: 1.5;
+  text-align: right;
+}
+.shop-cart-total-price {
+  align-items: flex-end;
   text-align: right;
 }
 .shop-cart-form {
@@ -389,6 +397,7 @@
   }
   .shop-cart-line-total {
     grid-column: 2;
+    align-items: flex-start;
     max-width: none;
     text-align: left;
   }

@@ -13,6 +13,8 @@ import { demoPosts } from '../lib/demo';
 import {
   categorySlug,
   formatProductPrice,
+  lbpPriceLabel,
+  lbpRateFor,
   postPath,
   storeCategoryPath,
   storePath,
@@ -139,6 +141,14 @@ export function PostPage({
   const multiple = post.media.length > 1;
   const published = sharedDate(post.publishedAt);
   const link = post.link;
+  const linkLbp =
+    link?.priceCents && link.currency
+      ? lbpPriceLabel(
+          link.priceCents,
+          link.currency,
+          lbpRateFor(settings.lbpExchangeRate, shop),
+        )
+      : null;
   return (
     <div className="app storefront storefront-detail post-page">
       <header className="post-page-bar">
@@ -246,6 +256,9 @@ export function PostPage({
                     link.currency && (
                       <small>
                         {formatProductPrice(link.priceCents, link.currency)}
+                        {linkLbp && (
+                          <span className="price-lbp-inline">· {linkLbp}</span>
+                        )}
                       </small>
                     )}
                 </span>

@@ -27,6 +27,7 @@ import {
 } from '@app/database';
 import { validateDatabaseEnvironment } from '../../libs/config/src/environment';
 import { WebsiteSettings1793659200000 } from '../../libs/database/src/migrations/1793659200000-WebsiteSettings';
+import { LbpPriceDisplay1794868800000 } from '../../libs/database/src/migrations/1794868800000-LbpPriceDisplay';
 import { AdminAccessService } from '../../apps/api/src/modules/admin/admin-access.service';
 import { WebsiteSettingsService } from '../../apps/api/src/modules/admin/website-settings.service';
 import { UpdateWebsiteSettingsDto } from '../../apps/api/src/modules/admin/website-settings.dto';
@@ -267,6 +268,17 @@ test('empty patches are valid but unknown/internal fields are rejected', () => {
     assert.ok(validate({ [field]: 'injected' }).length);
   }
 });
+test('the LBP rate accepts whole pounds in range and rejects everything else', () => {
+  for (const value of [0, 1507, 89_500, 10_000_000]) {
+    assert.equal(validate({ lbpExchangeRate: value }).length, 0, String(value));
+  }
+  for (const value of [-1, 1.5, 10_000_001, '89500', '', null, true, {}]) {
+    assert.ok(
+      validate({ lbpExchangeRate: value }).length,
+      JSON.stringify(value),
+    );
+  }
+});
 
 test('public defaults expose exactly the branding allowlist without writes', async () => {
   const f = fixture();
@@ -313,6 +325,7 @@ test('every setting can be saved and optional settings can be cleared', async ()
     bannerUrl: 'https://cdn.test/banner.jpg',
     contactEmail: 'contact@example.test',
     footerText: '© Café',
+    lbpExchangeRate: 89_500,
   };
   assert.deepEqual(await f.service.update(values, actor), values);
   const cleared = await f.service.update(
@@ -445,16 +458,22 @@ test('migration registration, singleton seed, reversibility, defaults and metada
   const ddl = queries[0]!;
   assert.match(ddl, /CHECK \(`id` = 1\)/);
   assert.equal(queries[1], 'INSERT INTO `website_settings` (`id`) VALUES (1)');
+  // Later migrations extend the table; the published schema must still match
+  // every entity column the API reads and writes.
+  const lbpMigration = new LbpPriceDisplay1794868800000();
+  await lbpMigration.up(runner);
+  const schemaDdl = queries.join('\n');
   for (const column of metadata.columns) {
     assert.ok(
-      ddl.includes('`' + column.databaseName + '`'),
+      schemaDdl.includes('`' + column.databaseName + '`'),
       column.propertyName,
     );
     if (typeof column.default === 'string')
-      assert.ok(ddl.includes("DEFAULT '" + column.default + "'"));
+      assert.ok(schemaDdl.includes("DEFAULT '" + column.default + "'"));
   }
+  await lbpMigration.down(runner);
   await migration.down(runner);
-  assert.equal(queries[2], 'DROP TABLE `website_settings`');
+  assert.equal(queries.at(-1), 'DROP TABLE `website_settings`');
 });
 test('website settings HTTP API uses real guards, validation, service, and audit boundary', async (t) => {
   const f = fixture();

@@ -6,15 +6,26 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatProductPrice } from '../lib/storefront';
+import { formatProductPrice, lbpPriceLabel } from '../lib/storefront';
 import type { ShopCartController } from '../hooks/useShopCart';
 
-export function ShopCartDock({ cart }: { cart: ShopCartController }) {
+export function ShopCartDock({
+  cart,
+  lbpRate,
+}: {
+  cart: ShopCartController;
+  lbpRate?: number | null;
+}) {
   const count = cart.cart?.itemCount ?? 0;
   if (count < 1 || cart.open) return null;
   const subtotal = formatProductPrice(
     cart.cart?.subtotalCents ?? '0',
     cart.cart?.currency ?? 'USD',
+  );
+  const lbpSubtotal = lbpPriceLabel(
+    cart.cart?.subtotalCents ?? '0',
+    cart.cart?.currency ?? 'USD',
+    lbpRate,
   );
   return (
     <div className="shop-cart-dock">
@@ -34,6 +45,7 @@ export function ShopCartDock({ cart }: { cart: ShopCartController }) {
             {count} {count === 1 ? 'item' : 'items'} in cart
           </small>
           <strong>{subtotal}</strong>
+          {lbpSubtotal && <small className="price-lbp">{lbpSubtotal}</small>}
         </span>
         <span className="shop-cart-dock-action" aria-hidden="true">
           View cart

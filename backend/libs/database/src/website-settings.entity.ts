@@ -76,6 +76,16 @@ export class WebsiteSettings {
   @Column({ name: 'footer_text', type: 'varchar', length: 500, nullable: true })
   footerText: string | null = null;
 
+  // Whole Lebanese pounds per 1 US dollar, set by an administrator. Zero (the
+  // default) turns LBP display off platform-wide; stored prices stay in USD.
+  @Column({
+    name: 'lbp_exchange_rate',
+    type: 'int',
+    unsigned: true,
+    default: 0,
+  })
+  lbpExchangeRate = 0;
+
   @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 6 })
   updatedAt!: Date;
 }
@@ -94,6 +104,7 @@ export const WEBSITE_SETTINGS_FIELDS = [
   'bannerUrl',
   'contactEmail',
   'footerText',
+  'lbpExchangeRate',
 ] as const;
 
 export type WebsiteSettingsValues = Pick<
