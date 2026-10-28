@@ -238,13 +238,12 @@
   background: var(--surface);
   box-shadow: 0 10px 24px #00000012;
 }
-/* The shop page keeps its circular portrait; the story ring follows that shape. */
-.shop-logo .story-avatar-ring {
+/* The shop page keeps its circular portrait; the story ring follows that shape.
+   The extra selector outranks the shared rounded-square rail ring. */
+.shop-logo .story-avatar-ring,
+.shop-logo .story-avatar.is-large .story-avatar-ring {
   padding: 4px;
   border-radius: 50%;
-}
-.shop-logo .story-avatar-owner .story-avatar-ring {
-  padding: 3px;
 }
 .shop-logo .story-avatar-ring > .store-avatar {
   box-shadow: 0 0 0 3px var(--surface);
@@ -252,6 +251,7 @@
 .shop-logo .story-avatar-ring .store-avatar.large {
   width: 104px;
   height: 104px;
+  border-radius: 50%;
 }
 .shop-story-trigger {
   display: grid;
@@ -261,6 +261,9 @@
   border-radius: 50%;
   background: none;
 }
+.shop-story-trigger:hover .story-avatar-ring {
+  transform: translateY(-2px);
+}
 .shop-story-add {
   position: absolute;
   right: 4px;
@@ -268,8 +271,8 @@
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 3px solid var(--surface);
   border-radius: 50%;

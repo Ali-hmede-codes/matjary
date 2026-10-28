@@ -648,9 +648,9 @@ export function StorePage({ slug }: { slug: string | null }) {
                         }
                       />
                     </button>
-                  ) : viewerIsOwner ? (
-                    <StoryAvatar store={store} large expandable state="owner" />
                   ) : (
+                    // The owner sees the plain circular portrait plus the "+"
+                    // button; no dashed placeholder frame around the logo.
                     <StoreAvatar store={store} large expandable />
                   )}
                   {viewerIsOwner && (

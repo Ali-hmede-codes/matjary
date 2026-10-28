@@ -70,6 +70,7 @@ import {
   storeShareCardKey,
 } from '../../libs/storage/src/share-card-key';
 import { OwnerMediaTargets1793832000000 } from '../../libs/database/src/migrations/1793832000000-OwnerMediaTargets';
+import { StoryMediaPurpose1795128000000 } from '../../libs/database/src/migrations/1795128000000-StoryMediaPurpose';
 import type { EntityManager, QueryRunner } from 'typeorm';
 
 test('store and product images require the correct owner, target, readiness and public attachment', async () => {
@@ -355,6 +356,31 @@ test('owner media migration preserves existing assets and refuses destructive re
   nonPostAssets = 0;
   await migration.down(runner);
   assert.match(statements.at(-1)!, /DROP CHECK chk_media_parent/);
+});
+
+test('story media migration admits store_story rows and refuses destructive reversal', async () => {
+  const statements: string[] = [];
+  let storyAssets = 0;
+  const runner = {
+    query: async (sql: string) => {
+      statements.push(sql);
+      return sql.includes('COUNT(*)') ? [{ count: storyAssets }] : [];
+    },
+  } as unknown as QueryRunner;
+  const migration = new StoryMediaPurpose1795128000000();
+  await migration.up(runner);
+  const up = statements.join(' ');
+  assert.match(up, /purpose = 'store_story'/);
+  assert.match(up, /DROP CHECK `chk_media_parent`/);
+  // Branding and product rows keep their image-only rules.
+  assert.match(up, /purpose IN \('store_logo', 'store_banner'\)/);
+  assert.match(up, /kind = 'image'/);
+  storyAssets = 1;
+  await assert.rejects(migration.down(runner), /Remove story media/);
+  storyAssets = 0;
+  await migration.down(runner);
+  assert.match(statements.at(-1)!, /ADD CONSTRAINT `chk_media_parent` CHECK/);
+  assert.doesNotMatch(statements.at(-1)!, /store_story/);
 });
 
 async function tempDirectory(): Promise<string> {

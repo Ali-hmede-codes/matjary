@@ -31,11 +31,6 @@
 .story-avatar-seen .story-avatar-ring {
   background: color-mix(in srgb, var(--ink) 22%, var(--surface));
 }
-.story-avatar-owner .story-avatar-ring {
-  padding: 1px;
-  border: 2px dashed color-mix(in srgb, var(--muted) 55%, var(--surface));
-  background: var(--surface);
-}
 .story-avatar-ring > .store-avatar {
   box-shadow: 0 0 0 2px var(--surface);
 }

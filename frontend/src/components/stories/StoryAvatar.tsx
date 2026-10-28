@@ -2,9 +2,9 @@ import { Plus } from 'lucide-react';
 import type { Store } from '../../lib/api';
 import { StoreAvatar } from '../StoreAvatar';
 
-// "unseen" wears the colored ring, "seen" goes quiet on this device, and
-// "owner" is the dashed placeholder shown before a shop has any live story.
-export type StoryRing = 'unseen' | 'seen' | 'owner';
+// "unseen" wears the colored ring and "seen" goes quiet once every live
+// story of the shop was watched on this device.
+export type StoryRing = 'unseen' | 'seen';
 
 export function StoryAvatar({
   store,

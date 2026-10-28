@@ -505,6 +505,10 @@ export class MediaService {
 
   private sanitize(error: unknown): never {
     if (error instanceof HttpException) throw error;
+    // Driver codes (never messages) make a 503 diagnosable from server logs.
+    const code = (error as { driverError?: { code?: string } }).driverError
+      ?.code;
+    this.logger.warn(`Media request failed${code ? ` (${code})` : ''}`);
     throw new ServiceUnavailableException(
       'Media storage is temporarily unavailable',
     );

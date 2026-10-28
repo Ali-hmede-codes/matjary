@@ -33,6 +33,7 @@ import {
   FREE_LIMITS,
   EXPIRED_LIMITS,
 } from '../../libs/database/src/subscription-policy';
+import { SAFE_SUBSCRIPTION_CODES } from '../../libs/database/src/subscription-errors';
 import { purgeStoryRecords } from '../../libs/database/src/story-purge';
 import { StoriesService } from '../../apps/api/src/modules/stories/stories.service';
 
@@ -169,6 +170,9 @@ test('story policy publishes for 24 hours and counts only live rows', () => {
   assert.equal(where.expiresAt.value, now);
   assert.equal(FREE_LIMITS.maxStories, 0);
   assert.equal(EXPIRED_LIMITS.maxStories, 0);
+  // The composer can only read codes the exception filter allows through.
+  assert.ok(SAFE_SUBSCRIPTION_CODES.has('STORY_LIMIT'));
+  assert.ok(SAFE_SUBSCRIPTION_CODES.has('STORY_STORE_OFFLINE'));
 });
 
 test('a story uses one free slot and answers with its media and live window', async () => {
