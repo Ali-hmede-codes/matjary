@@ -5,7 +5,6 @@ import { enableMouseScrolling } from '../lib/website';
 import { liveStories, storyGroupUnseen } from '../lib/stories';
 import { storePath } from '../lib/storefront';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
-import { StoryAvatar } from './stories/StoryAvatar';
 import { StoreStorySheet } from './stories/StoreStorySheet';
 
 export function StoreStrip({
@@ -58,21 +57,23 @@ export function StoreStrip({
       </a>
       {stores.map((item) => {
         const group = groupsByStore.get(item.id);
+        const preview = posts.find((post) => post.store?.id === item.id)
+          ?.media[0];
+        // A live story never changes the tile's shape: the shop keeps the
+        // strip's normal frame, and only the outline turns into a story ring.
         if (group)
           return (
             <button
               type="button"
               key={item.id}
-              className={`story has-story ${selectedStore?.id === item.id ? 'selected' : ''}`}
+              className={`story has-story ${storyGroupUnseen(group, seen) ? 'is-unseen' : 'is-seen'} ${selectedStore?.id === item.id ? 'selected' : ''}`}
               aria-haspopup="dialog"
               aria-label={`${item.name} story options`}
               onClick={() => setSheetStoreId(item.id)}
             >
-              <StoryAvatar
-                store={item}
-                large
-                state={storyGroupUnseen(group, seen) ? 'unseen' : 'seen'}
-              />
+              <span className="story-ring">
+                <StoreAvatar store={item} large preview={preview} />
+              </span>
               <span>{item.name}</span>
               <StoreVerifiedBadge store={item} size={22} />
             </button>
@@ -84,13 +85,7 @@ export function StoreStrip({
             href={storePath(item.slug, demo)}
           >
             <span className="story-ring">
-              <StoreAvatar
-                store={item}
-                large
-                preview={
-                  posts.find((post) => post.store?.id === item.id)?.media[0]
-                }
-              />
+              <StoreAvatar store={item} large preview={preview} />
             </span>
             <span>{item.name}</span>
             <StoreVerifiedBadge store={item} size={22} />

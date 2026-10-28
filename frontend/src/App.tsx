@@ -49,6 +49,18 @@ const PricingPage = lazy(() =>
     default: module.PricingPage,
   })),
 );
+// Legal pages are linked from the footer on every screen, but they are read
+// rarely, so they load as separate chunks.
+const TermsPage = lazy(() =>
+  import('./components/TermsPage').then((module) => ({
+    default: module.TermsPage,
+  })),
+);
+const PrivacyPage = lazy(() =>
+  import('./components/PrivacyPage').then((module) => ({
+    default: module.PrivacyPage,
+  })),
+);
 // The shop directory is a secondary destination; it ships on its own chunk so
 // the feed bundle stays untouched.
 const ShopsPage = lazy(() =>
@@ -73,6 +85,8 @@ export default function App() {
           <Route path="/shops" element={<ShopsPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/admin/*"

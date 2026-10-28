@@ -1,24 +1,40 @@
 import { Layers, Play } from 'lucide-react';
-import type { Post } from '../lib/api';
+import { assetUrl, type Post, type Story } from '../lib/api';
 import type { PostLayout } from '../lib/design.ts';
+import { storyTimeLabel } from '../lib/stories';
 import { MediaView } from './MediaView';
 
 /**
  * The shop's post wall. The owner picks the presentation in the design studio;
  * every layout renders the same tiles so the viewer, keyboard order and
- * analytics stay identical no matter how the wall looks.
+ * analytics stay identical no matter how the wall looks. A live story leads
+ * the wall, so scrolling the profile feed still surfaces today's story.
  */
 export function StorePostWall({
   posts,
   layout,
+  story,
+  storySeen = false,
   onOpen,
+  onOpenStory,
 }: {
   posts: Post[];
   layout: PostLayout;
+  story?: Story;
+  storySeen?: boolean;
   onOpen: (post: Post) => void;
+  onOpenStory?: () => void;
 }) {
   return (
     <div className={`shop-post-grid shop-post-wall layout-${layout}`}>
+      {story && onOpenStory && (
+        <StoryTile
+          story={story}
+          seen={storySeen}
+          list={layout === 'list'}
+          onOpen={onOpenStory}
+        />
+      )}
       {posts.map((post) => {
         const indicators = (
           <>
@@ -78,5 +94,68 @@ export function StorePostWall({
         );
       })}
     </div>
+  );
+}
+
+function StoryTile({
+  story,
+  seen,
+  list,
+  onOpen,
+}: {
+  story: Story;
+  seen: boolean;
+  list: boolean;
+  onOpen: () => void;
+}) {
+  // Videos preview through their generated poster, exactly like feed cards.
+  const preview = assetUrl(
+    story.media.kind === 'video'
+      ? story.media.posterUrl
+      : story.media.primaryUrl,
+  );
+  const ringClass = seen ? 'is-seen' : 'is-unseen';
+  if (list)
+    return (
+      <button
+        type="button"
+        className={`shop-post-tile shop-post-row shop-story-tile ${ringClass}`}
+        aria-label="Watch the shop's story"
+        aria-haspopup="dialog"
+        onClick={onOpen}
+      >
+        <span className="shop-post-row-thumb shop-story-row-thumb">
+          {preview && <img src={preview} alt="" loading="lazy" />}
+        </span>
+        <span className="shop-post-row-copy">
+          <strong>Story</strong>
+          <small>
+            {storyTimeLabel(story.createdAt)} · Tap to watch what the shop
+            shared today
+          </small>
+        </span>
+      </button>
+    );
+  return (
+    <button
+      type="button"
+      className={`shop-post-tile shop-story-tile ${ringClass}`}
+      aria-label="Watch the shop's story"
+      aria-haspopup="dialog"
+      onClick={onOpen}
+    >
+      <span className="shop-post-thumbnail" aria-hidden="true">
+        {preview ? (
+          <img src={preview} alt="" loading="lazy" />
+        ) : (
+          <span className="shop-story-tile-fallback">Story</span>
+        )}
+      </span>
+      <span className="shop-story-tile-shade" aria-hidden="true" />
+      <span className="shop-story-tile-copy">
+        <span>Story</span>
+        <small>{storyTimeLabel(story.createdAt)}</small>
+      </span>
+    </button>
   );
 }

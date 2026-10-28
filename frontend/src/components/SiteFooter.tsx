@@ -18,6 +18,8 @@ export function SiteFooter({
       </p>
       <div className="footer-links">
         <a href="/pricing">Plans & pricing</a>
+        <a href="/terms">Terms &amp; Conditions</a>
+        <a href="/privacy">Privacy Policy</a>
         {onToggleDemo && (
           <button className="text-button" onClick={onToggleDemo}>
             <Sparkles size={15} />

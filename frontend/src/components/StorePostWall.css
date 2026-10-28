@@ -29,20 +29,25 @@
   break-inside: avoid;
   border-radius: var(--shop-tile-radius, 14px);
 }
-.shop-post-wall.layout-masonry .shop-post-tile:nth-child(4n + 2) {
+.shop-post-wall.layout-masonry
+  .shop-post-tile:nth-child(4n + 2):not(.shop-story-tile) {
   aspect-ratio: 1 / 1;
 }
-.shop-post-wall.layout-masonry .shop-post-tile:nth-child(4n + 3) {
+.shop-post-wall.layout-masonry
+  .shop-post-tile:nth-child(4n + 3):not(.shop-story-tile) {
   aspect-ratio: 4 / 5;
 }
 
-/* Spotlight: the newest post takes a double frame, the rest follow. */
+/* Spotlight: the newest post takes a double frame, the rest follow. The
+   live-story tile is an extra lead item, so it never takes that frame. */
 @media (min-width: 900px) {
   .shop-post-wall.layout-spotlight {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-auto-flow: dense;
   }
-  .shop-post-wall.layout-spotlight .shop-post-tile:first-child {
+  .shop-post-wall.layout-spotlight
+    .shop-post-tile:first-child:not(.shop-story-tile),
+  .shop-post-wall.layout-spotlight .shop-story-tile + .shop-post-tile {
     grid-column: span 2;
     grid-row: span 2;
     aspect-ratio: 1 / 1;
@@ -57,12 +62,15 @@
     grid-auto-flow: dense;
     gap: 8px;
   }
-  .shop-post-wall.layout-mosaic .shop-post-tile:nth-child(5n + 1),
-  .shop-post-wall.layout-mosaic .shop-post-tile:nth-child(5n + 4) {
+  .shop-post-wall.layout-mosaic
+    .shop-post-tile:nth-child(5n + 1):not(.shop-story-tile),
+  .shop-post-wall.layout-mosaic
+    .shop-post-tile:nth-child(5n + 4):not(.shop-story-tile) {
     grid-column: span 2;
     border-radius: var(--shop-tile-radius, 14px);
   }
-  .shop-post-wall.layout-mosaic .shop-post-tile:nth-child(5n + 1) {
+  .shop-post-wall.layout-mosaic
+    .shop-post-tile:nth-child(5n + 1):not(.shop-story-tile) {
     aspect-ratio: 4 / 5;
   }
 }
@@ -189,7 +197,8 @@
 .shop-post-wall.layout-cover .shop-post-tile {
   border-radius: var(--shop-tile-radius, 12px);
 }
-.shop-post-wall.layout-cover .shop-post-tile:first-child {
+.shop-post-wall.layout-cover .shop-post-tile:first-child:not(.shop-story-tile),
+.shop-post-wall.layout-cover .shop-story-tile + .shop-post-tile {
   grid-column: 1 / -1;
   aspect-ratio: 16 / 7;
 }
@@ -222,4 +231,135 @@
     top: 12px;
     right: 12px;
   }
+}
+
+/* ---------- Live story lead tile ---------- */
+/* The story sits in the feed like any post, but wears the story ring around
+   its frame so it reads as today's story rather than an older post. */
+.shop-post-wall .shop-post-tile.shop-story-tile {
+  border-radius: var(--shop-tile-radius, 12px);
+  color: #fff;
+}
+.shop-post-tile.shop-story-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 3px;
+  background: conic-gradient(
+    from 210deg,
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* Everything watched on this device drops to a quiet outline. */
+.shop-post-tile.shop-story-tile.is-seen::after {
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+}
+.shop-story-tile .shop-post-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.shop-story-tile-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    140deg,
+    #feda75,
+    #fa7e1e 30%,
+    #d62976 65%,
+    #4f5bd5
+  );
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.shop-story-tile-shade {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  height: 54%;
+  background: linear-gradient(transparent, #06120db3);
+  pointer-events: none;
+}
+.shop-story-tile-copy {
+  position: absolute;
+  inset: auto 12px 11px;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 6px #00000080;
+  pointer-events: none;
+}
+.shop-story-tile-copy > span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 210deg,
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
+  );
+}
+.shop-story-tile-copy small {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+/* The list layout shows a row, so its ring wraps the thumbnail instead of
+   the whole card; the outer gradient frame would read as a second border. */
+.shop-post-wall.layout-list .shop-story-tile::after {
+  display: none;
+}
+.shop-story-row-thumb {
+  padding: 3px;
+  background: conic-gradient(
+    from 210deg,
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
+  );
+}
+.shop-story-row-thumb img {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--shop-tile-radius, 12px) - 5px);
+  object-fit: cover;
+}
+.shop-story-tile.is-seen .shop-story-row-thumb {
+  background: color-mix(in srgb, var(--ink) 30%, var(--surface));
 }

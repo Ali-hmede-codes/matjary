@@ -196,7 +196,6 @@
   right: 0;
   width: 68%;
 }
-.story-paused,
 .story-play {
   position: absolute;
   top: 50%;
@@ -204,7 +203,13 @@
   z-index: 4;
   display: grid;
   place-items: center;
+  width: 66px;
+  height: 66px;
   transform: translate(-50%, -50%);
+  padding: 0;
+  border: 1px solid #ffffff59;
+  border-radius: 50%;
+  background: #00000059;
   color: #fff;
 }
 /* The story clock does not start until the photo or clip is actually shown. */
@@ -217,21 +222,6 @@
   background: #00000026;
   color: #fff;
   pointer-events: none;
-}
-.story-paused {
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  background: #00000045;
-  pointer-events: none;
-}
-.story-play {
-  width: 66px;
-  height: 66px;
-  padding: 0;
-  border: 1px solid #ffffff59;
-  border-radius: 50%;
-  background: #00000059;
 }
 .story-viewer-foot {
   position: absolute;

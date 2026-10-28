@@ -212,9 +212,14 @@ export function StorePage({ slug }: { slug: string | null }) {
   const shopStoryGroup = storyGroups.data?.groups.find(
     (group) => group.store.id === store?.id,
   );
-  const hasLiveStory = Boolean(
-    shopStoryGroup && liveStories(shopStoryGroup).length > 0,
-  );
+  // Stories arrive oldest first, so the last live one is the newest; the feed
+  // tile previews it, and the ring quiets once this device watched it all.
+  const liveShopStories = shopStoryGroup ? liveStories(shopStoryGroup) : [];
+  const newestShopStory = liveShopStories[liveShopStories.length - 1];
+  const shopStorySeen = shopStoryGroup
+    ? !storyGroupUnseen(shopStoryGroup, seen)
+    : false;
+  const hasLiveStory = liveShopStories.length > 0;
   useEffect(() => {
     // Deleting or losing the last story closes the reel instead of leaving a
     // stale open flag behind for the next story.
@@ -908,6 +913,11 @@ export function StorePage({ slug }: { slug: string | null }) {
                       <StorePostWall
                         posts={shopPosts}
                         layout={presentation.design?.postsLayout ?? 'grid'}
+                        story={newestShopStory}
+                        storySeen={shopStorySeen}
+                        onOpenStory={
+                          hasLiveStory ? () => setStoryOpen(true) : undefined
+                        }
                         onOpen={openStorePost}
                       />
                       {!posts.length && (demo || postsQuery.isSuccess) && (

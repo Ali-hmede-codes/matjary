@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutGrid,
   LoaderCircle,
-  Pause,
   Play,
   ShoppingBag,
   Trash2,
@@ -387,11 +386,6 @@ export function StoryViewer({
             >
               <Play size={28} fill="currentColor" />
             </button>
-          )}
-          {paused && !blocked && (
-            <span className="story-paused" aria-hidden="true">
-              <Pause size={26} fill="currentColor" />
-            </span>
           )}
         </div>
         <button

@@ -55,8 +55,31 @@
 .all-stores .story-ring {
   color: var(--primary);
 }
-.story.has-story:hover .story-avatar-ring {
-  transform: translateY(-2px);
+/* A shop with a live story keeps the strip's square tile and frame size, so
+   the row stays uniform; the conic outline is the only story affordance. */
+.story.has-story {
+  --story-ring: conic-gradient(
+    from 210deg,
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
+  );
+}
+.story.has-story .story-ring {
+  border-color: transparent;
+  padding: 4px;
+  background: var(--story-ring);
+}
+/* The halo keeps a sliver of surface between the logo and the gradient, the
+   same gap the instagram-style circle leaves. */
+.story.has-story .story-ring > .store-avatar {
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.story.has-story.is-seen .story-ring {
+  background: color-mix(in srgb, var(--ink) 20%, var(--surface));
 }
 .story.has-story.selected {
   color: var(--primary);

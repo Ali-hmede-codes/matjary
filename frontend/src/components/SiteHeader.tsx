@@ -23,7 +23,7 @@ const navigation = [
 ] as const;
 
 type SiteHeaderProps = { settings: WebsiteSettings } & (
-  | { view: 'pricing' | 'shops' | 'favorites' }
+  | { view: 'pricing' | 'shops' | 'favorites' | 'legal' }
   | {
       view: View;
       search: string;
