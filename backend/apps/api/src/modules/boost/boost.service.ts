@@ -1449,13 +1449,16 @@ export class BoostService {
       qb.andWhere('campaign.userId != :userId', { userId });
     }
 
-    // Order by bid strategy and relevance
+    // Order by bid strategy and relevance. Raw ORDER BY expressions are used
+    // here, so paginate with limit(): take() runs TypeORM's distinct-id query,
+    // which parses raw ordering as alias.property and throws. The user join is
+    // many-to-one, so limit() returns the same rows.
     qb.orderBy(
       'CASE WHEN campaign.bid_strategy = "cpm" THEN 0 WHEN campaign.bid_strategy = "cpc" THEN 1 ELSE 2 END',
     )
       .addOrderBy('CAST(campaign.bid_amount_coins AS UNSIGNED)', 'DESC')
       .addOrderBy('campaign.createdAt', 'DESC')
-      .take(limit);
+      .limit(limit);
 
     const campaigns = await qb.getMany();
 
@@ -1551,9 +1554,11 @@ export class BoostService {
       `,
       )
       .andWhere(publicVisibilitySql('store', 'store'))
+      // Same pagination constraint as the feed ads query: limit(), not take(),
+      // because the raw ORDER BY expression is not an alias.property pair.
       .orderBy('CAST(campaign.bid_amount_coins AS UNSIGNED)', 'DESC')
       .addOrderBy('campaign.createdAt', 'DESC')
-      .take(Math.min(Math.max(limit * 4, limit), 50))
+      .limit(Math.min(Math.max(limit * 4, limit), 50))
       .getMany();
 
     const stores: Array<{
