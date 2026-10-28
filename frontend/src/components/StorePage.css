@@ -296,9 +296,11 @@
   min-width: 0;
   padding-top: 18px;
 }
-/* Name, category and opening state share one line at every width. Nothing in
-   the row wraps: the category chip gives up its width first, then a very long
-   shop name ellipsizes, so the open pill always stays beside the category. */
+/* Name, category and opening state share one line at every width. The row
+   itself never wraps: the category chip gives up its width first, then the
+   title shrinks (see useFittedShopTitle) and finally wraps inside its own
+   column, so a long name is never cut off and the open pill stays beside the
+   category. The ellipsis only covers the frame before the title is measured. */
 .shop-title-row {
   display: flex;
   flex-wrap: nowrap;

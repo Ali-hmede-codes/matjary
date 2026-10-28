@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import {
   useInfiniteQuery,
   useQuery,
@@ -85,6 +91,51 @@ import { absoluteMediaUrl } from './StoreDetail';
 // Catalog sections preview a fixed number of items; "View all" expands the
 // rest in place so the shop page stays scannable instead of becoming a wall.
 const CATALOG_SECTION_PREVIEW = 10;
+
+// A long shop name must stay whole beside its category and opening pill, so the
+// heading steps down to this floor; anything longer still wraps instead of
+// ending in an ellipsis.
+const SHOP_TITLE_MIN_FONT_PX = 15;
+
+function useFittedShopTitle(name: string | undefined) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  const label = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const headingElement = heading.current;
+    const labelElement = label.current;
+    if (!name || !headingElement || !labelElement) return;
+    const fit = () => {
+      if (!headingElement.isConnected) return;
+      // Measure from the stylesheet size every time so a resize can also grow
+      // the title back after a narrow window shrank it.
+      headingElement.style.removeProperty('font-size');
+      labelElement.style.removeProperty('white-space');
+      const base = Number.parseFloat(getComputedStyle(headingElement).fontSize);
+      if (!Number.isFinite(base)) return;
+      let size = base;
+      while (
+        size > SHOP_TITLE_MIN_FONT_PX &&
+        labelElement.scrollWidth > labelElement.clientWidth + 1
+      ) {
+        size -= 1;
+        headingElement.style.fontSize = `${size}px`;
+      }
+      // Below the floor the name wraps onto another line rather than being
+      // cut, which keeps the row's category and open pill in place.
+      if (labelElement.scrollWidth > labelElement.clientWidth + 1)
+        labelElement.style.whiteSpace = 'normal';
+    };
+    fit();
+    // The available width changes with the viewport, and the web font can
+    // land after the first paint and change every measured width.
+    window.addEventListener('resize', fit);
+    void document.fonts.ready.then(fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [name]);
+
+  return { heading, label };
+}
 
 function ShopCardsLoading({ label = 'Loading posts…' }: { label?: string }) {
   return (
@@ -225,6 +276,9 @@ export function StorePage({ slug }: { slug: string | null }) {
     // stale open flag behind for the next story.
     if (!hasLiveStory) setStoryOpen(false);
   }, [hasLiveStory]);
+  const { heading: shopTitle, label: shopTitleLabel } = useFittedShopTitle(
+    store?.name,
+  );
   const refreshStories = () => {
     void client.invalidateQueries({ queryKey: ['stories'] });
     if (store)
@@ -686,8 +740,8 @@ export function StorePage({ slug }: { slug: string | null }) {
                   {/* Name, category and today's hours share one line so the
                       shop's identity and whether it is open read at a glance. */}
                   <div className="shop-title-row">
-                    <h1 id="shop-title">
-                      <span>{store.name}</span>
+                    <h1 id="shop-title" ref={shopTitle}>
+                      <span ref={shopTitleLabel}>{store.name}</span>
                       <StoreVerifiedBadge store={store} size={26} />
                     </h1>
                     {store.businessCategoryLabel && (

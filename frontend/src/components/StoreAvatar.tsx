@@ -216,10 +216,15 @@ function LogoPreview({
       aria-label={`${name} logo`}
       onCancel={onClose}
       onContextMenu={(event) => event.preventDefault()}
-      onPointerDown={() => {
+      // The preview is portaled out of the avatar's DOM but stays under its
+      // React ancestors, so a closing tap would otherwise reach the shop logo
+      // button (or link) behind it and open the story reel or the shop.
+      onPointerDown={(event) => {
+        event.stopPropagation();
         pressedInside.current = true;
       }}
-      onClick={() => {
+      onClick={(event) => {
+        event.stopPropagation();
         if (pressedInside.current) onClose();
       }}
     >
