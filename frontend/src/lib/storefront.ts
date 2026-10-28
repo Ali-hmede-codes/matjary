@@ -382,6 +382,19 @@ export function storePresentation(
   };
 }
 
+/**
+ * Menu shops share as a menu. The menu line leads so preview truncation can
+ * never drop the signal; owner copy stays untouched otherwise.
+ */
+export function menuShareDescription(
+  description: string | null | undefined,
+  line: string,
+): string {
+  const clean = description?.trim() ?? '';
+  if (/\bmenus?\b/iu.test(clean)) return clean;
+  return clean ? `${line} ${clean}` : line;
+}
+
 export function formatProductPrice(cents: string, currency: string): string {
   if (!/^\d+$/u.test(cents) || !/^[A-Z]{3}$/u.test(currency))
     return 'Contact for price';

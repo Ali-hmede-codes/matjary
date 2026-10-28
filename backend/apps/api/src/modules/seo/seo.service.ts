@@ -49,6 +49,7 @@ import {
 } from './seo.entities';
 import {
   Store,
+  StoreType,
   StoreCategory,
   Product,
   Showcase,
@@ -591,7 +592,10 @@ export class SeoService {
       }),
     ]);
     const title = `${name} — ${store.name}`;
-    const description = `${count} ${count === 1 ? 'item' : 'items'} in ${name} at ${store.name}.`;
+    // Menu sections are shared as menu sections, matching the storefront label.
+    const description = this.isMenuStore(store)
+      ? `Explore ${count} ${count === 1 ? 'item' : 'items'} in ${name}, a menu section at ${store.name}.`
+      : `${count} ${count === 1 ? 'item' : 'items'} in ${name} at ${store.name}.`;
     const canonical = `${this.baseUrl}/stores/${store.slug}/c/${this.categoryPathSlug(name)}`;
     // The shop's logo card identifies the section; a dish photo is the fallback.
     const ogImage =
@@ -943,18 +947,26 @@ export class SeoService {
       seo = this.storeSeoRepo.create({ storeId: store.id });
     }
 
+    // A menu shop is shared as a menu, so its generated copy says so from the
+    // start instead of reading like a generic product shop.
+    const menu = this.isMenuStore(store);
+    const menuLine = menu ? await this.menuPreviewLine(store) : '';
+    const menuDescription = menu
+      ? this.withMenuLine(store.description ?? '', menuLine)
+      : store.description || '';
+
     // Auto-generate meta title from store name
     if (!seo.metaTitle) {
-      seo.metaTitle = this.generateMetaTitle(store.name, settings.siteName);
+      seo.metaTitle = this.generateMetaTitle(
+        menu ? this.withMenuTitle(store.name) : store.name,
+        settings.siteName,
+      );
       autoFields.push('metaTitle');
     }
 
     // Auto-generate meta description from store description
     if (!seo.metaDescription) {
-      seo.metaDescription = this.generateMetaDescription(
-        store.description || '',
-        160,
-      );
+      seo.metaDescription = this.generateMetaDescription(menuDescription, 160);
       autoFields.push('metaDescription');
     }
 
@@ -963,8 +975,7 @@ export class SeoService {
       seo.metaKeywords = this.generateKeywords([
         store.storeType,
         businessCategoryLabel(store.businessCategory),
-        'shop',
-        'online store',
+        ...(menu ? ['menu', 'restaurant', 'food'] : ['shop', 'online store']),
         settings.siteName,
       ]);
       autoFields.push('metaKeywords');
@@ -972,14 +983,11 @@ export class SeoService {
 
     // Auto-generate OG tags
     if (!seo.ogTitle) {
-      seo.ogTitle = store.name;
+      seo.ogTitle = menu ? this.withMenuTitle(store.name) : store.name;
       autoFields.push('ogTitle');
     }
     if (!seo.ogDescription) {
-      seo.ogDescription = this.generateMetaDescription(
-        store.description || '',
-        160,
-      );
+      seo.ogDescription = this.generateMetaDescription(menuDescription, 160);
       autoFields.push('ogDescription');
     }
     if (!seo.ogImageKey) {
@@ -1044,7 +1052,10 @@ export class SeoService {
     // Auto-generate meta description from product description
     if (!seo.metaDescription) {
       seo.metaDescription = this.generateMetaDescription(
-        product.description || `Buy ${product.name} from ${store.name}`,
+        product.description ||
+          (this.isMenuStore(store)
+            ? `Order ${product.name} from the ${store.name} menu.`
+            : `Buy ${product.name} from ${store.name}`),
         160,
       );
       autoFields.push('metaDescription');
@@ -1057,8 +1068,7 @@ export class SeoService {
         product.name,
         store.name,
         store.storeType,
-        'buy',
-        'shop',
+        ...(this.isMenuStore(store) ? ['menu', 'order food'] : ['buy', 'shop']),
       ]);
       autoFields.push('metaKeywords');
     }
@@ -1245,13 +1255,21 @@ export class SeoService {
     }
     const settings = await this.getSettings();
 
+    // A menu shop must read as a menu in every preview. Owner copy is kept and
+    // the menu line only joins it when the owner did not mention a menu.
+    const menu = this.isMenuStore(store);
+    const menuLine = menu ? await this.menuPreviewLine(store) : '';
     const title =
       seo.metaTitle || store.name || settings.defaultTitle || 'Matjary';
     const description =
       seo.metaDescription ||
       store.description ||
-      settings.defaultDescription ||
+      (menu ? '' : settings.defaultDescription) ||
       '';
+    const previewTitle = menu ? this.withMenuTitle(title) : title;
+    const previewDescription = menu
+      ? this.withMenuLine(description, menuLine)
+      : description;
     const canonical =
       seo.canonicalUrl || this.baseUrl + '/stores/' + store.slug;
 
@@ -1266,6 +1284,10 @@ export class SeoService {
       (await this.buildImageUrl(settings.defaultOgImageKey));
     const ogTitle = seo.ogTitle || store.name;
     const ogDescription = seo.ogDescription || store.description || description;
+    const previewOgTitle = menu ? this.withMenuTitle(ogTitle) : ogTitle;
+    const previewOgDescription = menu
+      ? this.withMenuLine(ogDescription, menuLine)
+      : ogDescription;
 
     // Build AI robots meta
     const aiRobots = this.buildAiRobotsMeta(
@@ -1274,14 +1296,14 @@ export class SeoService {
     );
 
     return {
-      title: this.truncate(title, 60),
-      description: this.truncate(description, 160),
+      title: this.truncate(previewTitle, 60),
+      description: this.truncate(previewDescription, 160),
       keywords: seo.metaKeywords ?? undefined,
       robots: seo.robots || RobotsDirective.INDEX_FOLLOW,
       canonical,
       og: {
-        title: this.truncate(ogTitle, 60),
-        description: this.truncate(ogDescription, 160),
+        title: this.truncate(previewOgTitle, 60),
+        description: this.truncate(previewOgDescription, 160),
         image: ogImage,
         type: seo.ogType || 'website',
         siteName: seo.ogSiteName || settings.siteName,
@@ -1292,8 +1314,8 @@ export class SeoService {
         card: seo.twitterCard || 'summary_large_image',
         site: seo.twitterSite ?? settings.twitterSite ?? undefined,
         creator: seo.twitterCreator ?? undefined,
-        title: this.truncate(ogTitle, 70),
-        description: this.truncate(ogDescription, 200),
+        title: this.truncate(previewOgTitle, 70),
+        description: this.truncate(previewOgDescription, 200),
         image: ogImage,
       },
       jsonLd: await this.buildStoreJsonLd(store, seo, settings),
@@ -1320,7 +1342,9 @@ export class SeoService {
     const description =
       seo.metaDescription ||
       product.description ||
-      `${product.name} at ${store.name}.`;
+      (this.isMenuStore(store)
+        ? `${product.name} on the menu at ${store.name}.`
+        : `${product.name} at ${store.name}.`);
     const canonical =
       seo.canonicalUrl ||
       `${this.baseUrl}/stores/${store.slug}/p/${product.slug}`;
@@ -2505,6 +2529,45 @@ export class SeoService {
     if (aiRobots) directives.push(aiRobots);
     if (aiTraining) directives.push(aiTraining);
     return directives.join(', ');
+  }
+
+  /** Restaurant-menu shops present themselves as a menu, not a catalogue. */
+  private isMenuStore(store: Pick<Store, 'storeType'>): boolean {
+    return store.storeType === StoreType.RESTAURANT_MENU;
+  }
+
+  /**
+   * Menu titles keep a reserved tail so 60-character previews cannot truncate
+   * the word that tells a reader this is a menu.
+   */
+  private withMenuTitle(title: string): string {
+    if (/\bmenus?\b/iu.test(title)) return title;
+    const label = ' — Menu';
+    return `${this.truncate(title, 60 - label.length)}${label}`;
+  }
+
+  /**
+   * The menu line leads the description so it survives preview truncation;
+   * owner copy follows unchanged when the owner did not mention a menu.
+   */
+  private withMenuLine(text: string, line: string): string {
+    const clean = text.trim();
+    if (!line || /\bmenus?\b/iu.test(clean)) return clean;
+    return clean ? `${line} ${clean}` : line;
+  }
+
+  /** Public item count; a menu preview should say how much there is to browse. */
+  private async menuPreviewLine(store: Store): Promise<string> {
+    const count = await this.dataSource.manager.count(Product, {
+      where: {
+        storeId: store.id,
+        status: In([...PUBLIC_PRODUCT_STATUSES]),
+        ...publicWhere('product'),
+      },
+    });
+    return count > 0
+      ? `Browse the menu — ${count} ${count === 1 ? 'item' : 'items'} with prices and photos.`
+      : 'Browse the menu with prices and photos.';
   }
 
   /**

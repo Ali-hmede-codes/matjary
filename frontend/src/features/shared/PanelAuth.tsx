@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Store } from 'lucide-react';
 import { ApiError } from '../../lib/api';
+import { brandingUrl } from '../../lib/website';
 import { getJson, mutate, panelError, type Session } from './panel-api';
 import { Empty, Loading, Notice, PanelBoundary, Retry } from './PanelUI';
 
@@ -192,7 +193,7 @@ export function LoginPage() {
     <div className="panel-app panel-login">
       <section className="panel-login-story">
         <Link to="/" className="panel-brand">
-          <img src="/logo.png" alt="" /> Matjary
+          <img src={brandingUrl('/logo.png')} alt="" /> Matjary
         </Link>
         <div>
           <p className="panel-eyebrow">YOUR NEXT CHAPTER</p>

@@ -19,6 +19,7 @@ import {
   storeProductPath,
 } from '../lib/storefront';
 import { usePageSeo } from '../hooks/usePageSeo';
+import { brandingUrl } from '../lib/website';
 import { usePostEngagement } from '../hooks/usePostEngagement';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { AutoplayVideo } from './AutoplayVideo';
@@ -83,7 +84,7 @@ export function PostPage({
   const previewImage =
     post?.media.find((item) => item.kind === 'image')?.primaryUrl ??
     post?.media[0]?.posterUrl ??
-    assetUrl(settings.logoUrl);
+    brandingUrl(assetUrl(settings.logoUrl));
 
   useEffect(() => {
     // Opening the shared page is the view; the hook dedupes per visit.

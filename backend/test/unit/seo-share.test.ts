@@ -9,6 +9,7 @@ import {
   renderShareDocument,
 } from '../../apps/api/src/modules/seo/share-document';
 import type { MetaTags } from '../../apps/api/src/modules/seo/seo.service';
+import { SeoService } from '../../apps/api/src/modules/seo/seo.service';
 import {
   renderShareShell,
   shareShellSegments,
@@ -20,6 +21,7 @@ import {
   Showcase,
   Store,
   StoreCategory,
+  StoreType,
 } from '../../libs/database/src/entities';
 
 const canonical = 'https://matjary.test/stores/alabdalla/c/offers';
@@ -164,6 +166,79 @@ test('share images prefer compact JPEGs that preview clients accept', () => {
     ])?.width,
     480,
   );
+});
+
+test('menu shops read as a menu in share metadata', async () => {
+  const settings = {
+    siteName: 'Matjary',
+    defaultTitle: null,
+    defaultDescription: 'Discover independent stores.',
+    defaultOgImageKey: null,
+    twitterSite: null,
+  };
+  const seoRow: Record<string, unknown> = {
+    metaTitle: null,
+    metaDescription: 'Home-style Syrian food.',
+    ogTitle: null,
+    ogDescription: null,
+    ogImageKey: null,
+    robots: 'index, follow',
+    aiRobots: null,
+    aiTraining: null,
+  };
+  const repository = {
+    findOneBy: async () => seoRow,
+    find: async () => [settings],
+  };
+  const manager = {
+    count: async () => 12,
+    find: async () => [],
+    findOne: async () => null,
+  };
+  const service = new SeoService(
+    repository as never,
+    repository as never,
+    repository as never,
+    repository as never,
+    repository as never,
+    new ConfigService({ APP_ORIGIN: 'https://matjary.test' }) as never,
+    { manager } as never,
+    {} as never,
+    {} as never,
+  );
+  const store = {
+    id: 'store-1',
+    slug: 'alabdalla',
+    name: 'Alabdalla',
+    description: 'Home-style Syrian food.',
+    storeType: StoreType.RESTAURANT_MENU,
+    logoKey: null,
+    bannerKey: null,
+  } as Store;
+
+  const menu = await service.generateStoreMetaTags(store);
+  assert.equal(menu.title, 'Alabdalla — Menu');
+  assert.equal(menu.og.title, 'Alabdalla — Menu');
+  assert.match(
+    menu.description,
+    /^Browse the menu — 12 items with prices and photos\. Home-style Syrian food\.$/u,
+  );
+  assert.match(menu.og.description, /^Browse the menu — 12 items/u);
+  assert.match(menu.twitter.description, /^Browse the menu — 12 items/u);
+
+  // Owner copy that already mentions the menu is never rewritten.
+  seoRow.metaDescription = 'Our menu changes every week.';
+  const ownerMenu = await service.generateStoreMetaTags(store);
+  assert.equal(ownerMenu.description, 'Our menu changes every week.');
+
+  // Retail shops keep the generic shop metadata.
+  seoRow.metaDescription = 'Home-style Syrian food.';
+  const retail = await service.generateStoreMetaTags({
+    ...store,
+    storeType: StoreType.ECOMMERCE,
+  });
+  assert.equal(retail.title, 'Alabdalla');
+  assert.equal(retail.description, 'Home-style Syrian food.');
 });
 
 test('the refresher writes one shell per public storefront page', async () => {

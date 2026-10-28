@@ -45,6 +45,27 @@ export function safeUrl(value: string | null | undefined): string | undefined {
   }
 }
 
+// Static branding files keep their public names between releases, so a browser
+// would keep serving a previously cached logo or favicon. Vite hashes those
+// files at build time, and every reference appends the same stamp.
+export const BRANDING_VERSION =
+  typeof __BRANDING_VERSION__ === 'string' ? __BRANDING_VERSION__ : '';
+
+export function brandingUrl(
+  value: string | null | undefined,
+  version = BRANDING_VERSION,
+): string | undefined {
+  const safe = safeUrl(value);
+  if (!safe) return undefined;
+  // Uploaded media keys embed the asset UUID and never change bytes; external
+  // URLs are not ours to rewrite. Only same-origin static files need the stamp.
+  if (!version || !safe.startsWith('/') || safe.startsWith('/api/'))
+    return safe;
+  const url = new URL(safe, 'https://branding.invalid');
+  url.searchParams.set('v', version);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export function normalizeSettings(input: unknown): WebsiteSettings {
   const result = { ...defaults };
   if (!input || typeof input !== 'object') return result;

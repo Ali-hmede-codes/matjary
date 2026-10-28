@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  brandingUrl,
   contrastColor,
   defaults,
   enableMouseScrolling,
@@ -65,6 +66,30 @@ test('media stays authorized through the proxy and preserves encoded keys', () =
     'https://user:password@example.com/image',
   ])
     assert.equal(safeUrl(unsafe), undefined);
+});
+
+test('branding files get a build stamp while media keys stay immutable', () => {
+  assert.equal(brandingUrl('/logo.png', 'abc123'), '/logo.png?v=abc123');
+  assert.equal(
+    brandingUrl('/favicon.svg?theme=dark', 'abc123'),
+    '/favicon.svg?theme=dark&v=abc123',
+  );
+  assert.equal(
+    brandingUrl('/apple-touch-icon.png#tab', 'abc123'),
+    '/apple-touch-icon.png?v=abc123#tab',
+  );
+  // Uploaded variants already carry a unique asset id in the key.
+  assert.equal(
+    brandingUrl('/api/v1/uploads/media%2Fasset%2Fwebp-480.webp', 'abc123'),
+    '/api/v1/uploads/media%2Fasset%2Fwebp-480.webp',
+  );
+  assert.equal(
+    brandingUrl('https://cdn.example.com/logo.png', 'abc123'),
+    'https://cdn.example.com/logo.png',
+  );
+  assert.equal(brandingUrl('/logo.png', ''), '/logo.png');
+  assert.equal(brandingUrl(null, 'abc123'), undefined);
+  assert.equal(brandingUrl('javascript:alert(1)', 'abc123'), undefined);
 });
 
 test('saved IDs tolerate blocked storage and malformed or oversized data', () => {

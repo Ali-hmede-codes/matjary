@@ -16,6 +16,7 @@ import {
   decimalPrice,
   isStoreVerified,
   menuCategoryGroups,
+  menuShareDescription,
   normalizeSlug,
   postPath,
   postSlugFromPath,
@@ -247,6 +248,26 @@ test('a saved design paints the shop while unsaved shops keep the legacy look', 
   assert.equal(
     storePresentation({ storeType: 'ecommerce', brandColor: null }).design,
     null,
+  );
+});
+
+test('menu shops keep a menu signal in share descriptions', () => {
+  const line = 'Browse the menu at Alabdalla — dishes, prices, and photos.';
+  // The menu line leads so a long owner description cannot truncate it away.
+  assert.equal(
+    menuShareDescription('Home-style Syrian food.', line),
+    `${line} Home-style Syrian food.`,
+  );
+  assert.equal(menuShareDescription('', line), line);
+  assert.equal(menuShareDescription(null, line), line);
+  // Owner copy that already mentions the menu is never rewritten.
+  assert.equal(
+    menuShareDescription('Our menu changes every week.', line),
+    'Our menu changes every week.',
+  );
+  assert.equal(
+    menuShareDescription('Menus for every table.', line),
+    'Menus for every table.',
   );
 });
 

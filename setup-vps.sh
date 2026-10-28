@@ -246,6 +246,15 @@ location = /index.html {
     try_files \$uri =404;
 }
 
+# Branding files keep their names between releases. Browsers must revalidate
+# them so a replaced logo, favicon, or manifest cannot keep showing the previous
+# icon; the built HTML also appends a content stamp to each URL. Keep this block
+# above CloudPanel's broad static-asset location, if one exists.
+location ~* ^/(?:logo\.png|favicon(?:-96x96)?\.(?:ico|png|svg)|apple-touch-icon\.png|web-app-manifest-[0-9]+x[0-9]+\.png|site\.webmanifest)\$ {
+    expires -1;
+    try_files \$uri =404;
+}
+
 # Social crawlers never run the SPA. Send only those user agents to the API's
 # Open Graph document so shared shop/category/product/post links show real
 # titles and images; browsers and search engine renderers keep the React app.

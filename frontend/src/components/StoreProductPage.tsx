@@ -26,6 +26,7 @@ import {
   storeProductPath,
 } from '../lib/storefront';
 import { productCartLimit } from '../lib/cart';
+import { brandingUrl } from '../lib/website';
 import { useShopCart } from '../hooks/useShopCart';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useShare } from '../hooks/useShare';
@@ -139,10 +140,12 @@ export function StoreProductPage({
           title: `${product.name} — ${store.name} — ${settings.siteName}`,
           description:
             product.description?.trim() ||
-            `Order ${product.name} from ${store.name}.`,
+            (store.storeType === 'restaurant_menu'
+              ? `Order ${product.name} from the ${store.name} menu.`
+              : `Order ${product.name} from ${store.name}.`),
           image:
             absoluteMedia(images[0] || store.logoKey) ??
-            assetUrl(settings.logoUrl),
+            brandingUrl(assetUrl(settings.logoUrl)),
           canonical: storeProductPath(shopSlug, productSlug, demo),
           type: 'product',
           siteName: settings.siteName,
@@ -356,7 +359,11 @@ export function StoreProductPage({
               onClick={() =>
                 void share.share({
                   title: `${product.name} — ${store.name}`,
-                  text: product.description ?? product.name,
+                  text:
+                    product.description ??
+                    (store.storeType === 'restaurant_menu'
+                      ? `Order ${product.name} from the ${store.name} menu.`
+                      : product.name),
                   url: shareUrl,
                 })
               }

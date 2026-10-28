@@ -10,6 +10,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { ArrowUpRight, Check, LogOut, Menu, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { mutate, panelError, type Session } from './panel-api';
+import { brandingUrl } from '../../lib/website';
 
 export function PanelShell({
   session,
@@ -72,7 +73,7 @@ export function PanelShell({
       </a>
       <header className="panel-mobile-bar">
         <Link to="/" className="panel-brand">
-          <img src="/logo.png" alt="" /> Matjary
+          <img src={brandingUrl('/logo.png')} alt="" /> Matjary
         </Link>
         <button
           aria-label={open ? 'Close navigation' : 'Open navigation'}
@@ -91,7 +92,7 @@ export function PanelShell({
       )}
       <aside className={`panel-sidebar ${open ? 'is-open' : ''}`}>
         <Link to="/" className="panel-brand">
-          <img src="/logo.png" alt="" /> Matjary
+          <img src={brandingUrl('/logo.png')} alt="" /> Matjary
           <span>{admin ? 'ADMIN' : 'STUDIO'}</span>
         </Link>
         <p className="panel-nav-label">

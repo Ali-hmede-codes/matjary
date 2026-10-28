@@ -1,6 +1,6 @@
 import { ArrowRight, ArrowUpRight, Bookmark } from 'lucide-react';
 import { assetUrl, type Store } from '../lib/api';
-import type { WebsiteSettings } from '../lib/website';
+import { brandingUrl, type WebsiteSettings } from '../lib/website';
 import { storePath } from '../lib/storefront';
 import { StoreAvatar } from './StoreAvatar';
 
@@ -62,7 +62,7 @@ export function DiscoveryRail({
       {settings.bannerUrl && (
         <img
           className="community-banner"
-          src={assetUrl(settings.bannerUrl)}
+          src={brandingUrl(assetUrl(settings.bannerUrl))}
           alt={`${settings.siteName} banner`}
           loading="lazy"
         />

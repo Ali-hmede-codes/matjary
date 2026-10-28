@@ -1,7 +1,12 @@
 import { useEffect, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { assetUrl, getJson } from '../lib/api';
-import { contrastColor, defaults, normalizeSettings } from '../lib/website';
+import {
+  brandingUrl,
+  contrastColor,
+  defaults,
+  normalizeSettings,
+} from '../lib/website';
 
 export function useWebsiteSettings(applyMetadata = true, enabled = true) {
   const settingsQuery = useQuery({
@@ -30,7 +35,11 @@ export function useWebsiteSettings(applyMetadata = true, enabled = true) {
       ?.setAttribute('content', settings.primaryColor);
     document
       .getElementById('site-favicon')
-      ?.setAttribute('href', assetUrl(settings.faviconUrl) || '/favicon.svg');
+      ?.setAttribute(
+        'href',
+        brandingUrl(assetUrl(settings.faviconUrl) || '/favicon.svg') ||
+          '/favicon.svg',
+      );
   }, [settings, applyMetadata]);
   const theme = {
     '--brand-primary': settings.primaryColor,

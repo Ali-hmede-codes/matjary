@@ -23,6 +23,7 @@ import {
   storePresentation,
 } from '../lib/storefront';
 import { useShopCart } from '../hooks/useShopCart';
+import { brandingUrl } from '../lib/website';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useShare } from '../hooks/useShare';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
@@ -119,10 +120,13 @@ export function StoreCategoryPage({
     store && group
       ? {
           title: `${group.name} — ${store.name} — ${settings.siteName}`,
-          description: `Explore ${group.count} ${group.count === 1 ? 'item' : 'items'} in ${group.name} at ${store.name}.`,
+          description:
+            store.storeType === 'restaurant_menu'
+              ? `Explore ${group.count} ${group.count === 1 ? 'item' : 'items'} in ${group.name}, a menu section at ${store.name}.`
+              : `Explore ${group.count} ${group.count === 1 ? 'item' : 'items'} in ${group.name} at ${store.name}.`,
           image:
             assetUrl(storeMediaUrl(store.bannerKey || store.logoKey)) ??
-            assetUrl(settings.logoUrl),
+            brandingUrl(assetUrl(settings.logoUrl)),
           canonical: storeCategoryPath(shopSlug, categoryParam, demo),
           siteName: settings.siteName,
           jsonLd: {
@@ -225,7 +229,10 @@ export function StoreCategoryPage({
           onClick={() =>
             void share.share({
               title: `${group.name} — ${store.name}`,
-              text: `${group.name} at ${store.name}`,
+              text:
+                store.storeType === 'restaurant_menu'
+                  ? `${group.name} — a menu section at ${store.name}`
+                  : `${group.name} at ${store.name}`,
               url: shareUrl,
             })
           }

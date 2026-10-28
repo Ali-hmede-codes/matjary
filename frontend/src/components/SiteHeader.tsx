@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { assetUrl, loginUrl } from '../lib/api';
 import type { View } from '../lib/feed';
-import type { WebsiteSettings } from '../lib/website';
+import { brandingUrl, type WebsiteSettings } from '../lib/website';
 
 const navigation = [
   { id: 'discover', label: 'Home', icon: House },
@@ -45,7 +45,10 @@ export function SiteHeader(props: SiteHeaderProps) {
         <a className="brand" href="/" aria-label={`${settings.siteName} home`}>
           <img
             className="brand-logo"
-            src={assetUrl(settings.logoUrl) || '/logo.png'}
+            src={
+              brandingUrl(assetUrl(settings.logoUrl)) ||
+              brandingUrl('/logo.png')
+            }
             alt=""
           />
           <span className="brand-name">{settings.siteName}</span>

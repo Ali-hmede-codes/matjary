@@ -35,6 +35,7 @@ import {
   categorySlug,
   catalogLayout,
   menuCategoryGroups,
+  menuShareDescription,
   productCategoryKey,
   storeCategoryPath,
   storeMediaUrl,
@@ -43,6 +44,7 @@ import {
   storeSocialLinks,
 } from '../lib/storefront';
 import { branchOpenState, primaryBranch, storeBranches } from '../lib/branches';
+import { brandingUrl } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { useShopCart } from '../hooks/useShopCart';
 import { usePageSeo } from '../hooks/usePageSeo';
@@ -209,20 +211,27 @@ export function StorePage({ slug }: { slug: string | null }) {
       ?.setAttribute(
         'href',
         assetUrl(storeMediaUrl(store?.logoKey)) ||
-          assetUrl(settings.faviconUrl) ||
+          brandingUrl(assetUrl(settings.faviconUrl)) ||
+          brandingUrl('/favicon.svg') ||
           '/favicon.svg',
       );
   }, [store, settings, presentation.theme['--brand-primary']]);
   usePageSeo(
     store
       ? {
-          title: `${store.name} — ${settings.siteName}`,
-          description:
-            store.description ||
-            `Explore ${store.name} on ${settings.siteName}.`,
+          title: presentation.restaurant
+            ? `${store.name} — Menu — ${settings.siteName}`
+            : `${store.name} — ${settings.siteName}`,
+          description: presentation.restaurant
+            ? menuShareDescription(
+                store.description,
+                `Browse the menu at ${store.name} — dishes, prices, and photos.`,
+              )
+            : store.description ||
+              `Explore ${store.name} on ${settings.siteName}.`,
           image:
             absoluteMediaUrl(store.bannerKey || store.logoKey) ??
-            assetUrl(settings.logoUrl),
+            brandingUrl(assetUrl(settings.logoUrl)),
           canonical: storePath(store.slug, demo),
           siteName: settings.siteName,
           jsonLd: {
@@ -233,7 +242,7 @@ export function StorePage({ slug }: { slug: string | null }) {
             description: store.description ?? undefined,
             image:
               absoluteMediaUrl(store.bannerKey || store.logoKey) ??
-              assetUrl(settings.logoUrl),
+              brandingUrl(assetUrl(settings.logoUrl)),
             url: `${window.location.origin}${storePath(store.slug, demo)}`,
           },
         }
@@ -443,8 +452,15 @@ export function StorePage({ slug }: { slug: string | null }) {
               disabled={share.sharing}
               onClick={() =>
                 void share.share({
-                  title: store.name,
-                  text: store.description ?? undefined,
+                  title: presentation.restaurant
+                    ? `${store.name} — Menu`
+                    : store.name,
+                  text: presentation.restaurant
+                    ? menuShareDescription(
+                        store.description,
+                        `Browse the menu at ${store.name} — dishes, prices, and photos.`,
+                      )
+                    : (store.description ?? undefined),
                   url: `${window.location.origin}${storePath(store.slug, demo)}`,
                 })
               }
