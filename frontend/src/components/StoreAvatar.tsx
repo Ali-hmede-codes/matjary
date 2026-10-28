@@ -57,6 +57,8 @@ export function StoreAvatar({
   const start = useRef<{ x: number; y: number } | undefined>(undefined);
   // A completed hold must not also follow the avatar's link.
   const swallowClick = useRef(false);
+  // Touch holds are the gesture's own; a mouse right-click still gets the menu.
+  const touchPress = useRef(false);
   const logoSrc = assetUrl(storeMediaUrl(store?.logoKey));
   const thumbnail =
     logoSrc ||
@@ -77,10 +79,12 @@ export function StoreAvatar({
   useEffect(() => stopHold, []);
 
   function beginHold(event: ReactPointerEvent<HTMLSpanElement>) {
-    if (!canExpand || event.button !== 0) return;
+    if (!canExpand) return;
+    touchPress.current = event.pointerType !== 'mouse';
     // A new gesture always starts clean, even if the previous one ended
     // inside the preview instead of on this avatar.
     swallowClick.current = false;
+    if (event.button !== 0) return;
     stopHold();
     start.current = { x: event.clientX, y: event.clientY };
     hold.current = setTimeout(() => {
@@ -111,8 +115,13 @@ export function StoreAvatar({
         onPointerLeave={stopHold}
         onPointerCancel={stopHold}
         onContextMenu={(event) => {
-          // Holding a logo on a phone opens the platform menu instead.
-          if (hold.current !== undefined || swallowClick.current)
+          // A phone hold must never open the platform's image menu, not even
+          // when its long-press fires before this gesture's own timer.
+          if (
+            touchPress.current ||
+            hold.current !== undefined ||
+            swallowClick.current
+          )
             event.preventDefault();
         }}
         onClick={(event) => {
@@ -135,6 +144,7 @@ export function StoreAvatar({
             src={thumbnail}
             alt=""
             loading="lazy"
+            draggable={false}
             onError={() => setFailedSrc(thumbnail)}
           />
         ) : (
@@ -176,12 +186,22 @@ function LogoPreview({
   useEffect(() => {
     const element = dialog.current;
     const previousOverflow = document.body.style.overflow;
+    // The finger that opened the preview is still down. Without this the phone
+    // offers its own "save image" menu for the picture just revealed, often
+    // targeting the avatar underneath, so the block listens on the document.
+    const blockContextMenu = (event: Event) => event.preventDefault();
+    document.addEventListener('contextmenu', blockContextMenu, {
+      capture: true,
+    });
     element?.showModal();
     element
       ?.querySelector<HTMLElement>('.logo-preview-close')
       ?.focus({ preventScroll: true });
     document.body.style.overflow = 'hidden';
     return () => {
+      document.removeEventListener('contextmenu', blockContextMenu, {
+        capture: true,
+      });
       element?.close();
       document.body.style.overflow = previousOverflow;
     };
@@ -193,6 +213,7 @@ function LogoPreview({
       className="logo-preview"
       aria-label={`${name} logo`}
       onCancel={onClose}
+      onContextMenu={(event) => event.preventDefault()}
       onPointerDown={() => {
         pressedInside.current = true;
       }}
@@ -201,7 +222,7 @@ function LogoPreview({
       }}
     >
       <figure className="logo-preview-card">
-        <img src={src} alt={`${name} logo`} />
+        <img src={src} alt={`${name} logo`} draggable={false} />
         <figcaption>{name}</figcaption>
       </figure>
       <button

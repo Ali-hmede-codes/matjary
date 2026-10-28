@@ -31,6 +31,10 @@
 }
 .store-avatar.is-expandable img {
   -webkit-user-drag: none;
+  /* iOS shows its own image callout unless the <img> opts out too. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Long-press preview: the logo on its own over a dimmed page. */
@@ -46,6 +50,10 @@
   overflow: visible;
   border: 0;
   background: transparent;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .logo-preview::backdrop {
   background: #0b1210db;
@@ -55,6 +63,9 @@
   justify-items: center;
   gap: 14px;
   margin: 0;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .logo-preview-card img {
   display: block;
