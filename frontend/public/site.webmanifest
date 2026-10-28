@@ -1,7 +1,6 @@
 {
-  "name": "Matjary",
-  "short_name": "Matjary",
-  "start_url": "/",
+  "name": "MyWebSite",
+  "short_name": "MySite",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -16,7 +15,7 @@
       "purpose": "maskable"
     }
   ],
-  "theme_color": "#254e40",
+  "theme_color": "#ffffff",
   "background_color": "#ffffff",
   "display": "standalone"
 }
