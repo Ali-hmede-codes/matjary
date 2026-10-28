@@ -10,6 +10,12 @@
   font-size: 14px;
   line-height: 1.55;
 }
+/* The storefront quick composer reuses the panel look inside a top-layer
+   dialog; the wrapper itself must not paint or reserve page space. */
+.panel-app.panel-embed {
+  min-height: 0;
+  background: transparent;
+}
 .store-manager-tabs,
 .store-lifecycle-actions {
   display: flex;

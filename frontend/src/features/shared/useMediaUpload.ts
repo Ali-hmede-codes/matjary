@@ -5,6 +5,11 @@ import { getJson, mutate, panelError } from './panel-api';
 export type UploadPurpose =
   'post' | 'store_logo' | 'store_banner' | 'product_image' | 'store_story';
 
+// A target can be resolved lazily: the shop-page composer creates the draft
+// post or product only when the owner actually picks a file, so an abandoned
+// form leaves nothing behind.
+export type UploadTarget = string | (() => string | Promise<string>);
+
 interface MediaStatus {
   id: string;
   status: string;
@@ -30,7 +35,7 @@ export function useMediaUpload({
   readyMessage = 'Ready. Save your changes to finish.',
   onReady,
 }: {
-  targetId: string;
+  targetId: UploadTarget;
   purpose: UploadPurpose;
   maxImageBytes?: number;
   maxVideoBytes?: number;
@@ -138,10 +143,14 @@ export function useMediaUpload({
     let negotiatedId: string | undefined;
     let uploaded = false;
     try {
+      // A lazily-created draft is reserved under the owner lock server-side;
+      // resolving it here keeps the picker useful on an unsaved form.
+      const target =
+        typeof targetId === 'function' ? await targetId() : targetId;
       const negotiated = await mutate<{ url: string; mediaId: string }>(
         'media/uploads',
         {
-          targetId,
+          targetId: target,
           purpose,
           fileName: file.name,
           fileType: file.type,

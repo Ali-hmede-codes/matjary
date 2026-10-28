@@ -471,6 +471,34 @@
   color: var(--muted);
   font-weight: 650;
 }
+/* The owner-only "+" is attached to the tab it publishes into, so the tab and
+   its shortcut read as one control instead of two unrelated actions. */
+.shop-tab-group {
+  flex: 1;
+  max-width: 250px;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+}
+.shop-tab-group > button[role='tab'] {
+  flex: 1;
+  max-width: none;
+}
+.shop-nav .shop-tab-add {
+  flex: 0 0 auto;
+  width: 38px;
+  max-width: none;
+  min-height: 56px;
+  padding: 0;
+  border-bottom-color: transparent;
+  color: var(--muted);
+}
+.shop-nav .shop-tab-add:hover {
+  color: var(--ink);
+  border-radius: 10px 10px 0 0;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
 .shop-nav button:hover {
   color: var(--ink);
 }
@@ -1109,6 +1137,11 @@
     min-height: 52px;
     padding: 12px 2px;
     gap: 7px;
+  }
+  .shop-nav .shop-tab-add {
+    width: 34px;
+    min-height: 52px;
+    padding: 0;
   }
   .shop-section {
     padding: 26px 0 32px;

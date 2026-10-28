@@ -2,7 +2,11 @@ import { useEffect } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { Notice } from './PanelUI';
 import { storeMediaUrl } from '../../lib/storefront';
-import { useMediaUpload, type UploadPurpose } from './useMediaUpload';
+import {
+  useMediaUpload,
+  type UploadPurpose,
+  type UploadTarget,
+} from './useMediaUpload';
 
 export type { UploadPurpose };
 
@@ -19,7 +23,7 @@ export function MediaUpload({
   allowVideo = false,
   disabled = false,
 }: {
-  targetId: string;
+  targetId: UploadTarget;
   purpose: UploadPurpose;
   label: string;
   keys?: string[];

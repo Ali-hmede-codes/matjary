@@ -71,6 +71,10 @@ import { StoryAvatar } from './stories/StoryAvatar';
 import { StoryComposer } from './stories/StoryComposer';
 import { StoryViewer } from './stories/StoryViewer';
 import {
+  QuickComposer,
+  type QuickComposerKind,
+} from '../features/shared/QuickComposer';
+import {
   useSeenStories,
   useMyStories,
   useStoryGroups,
@@ -144,6 +148,9 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [storyNotice, setStoryNotice] = useState('');
   const [storyOpen, setStoryOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  // The shop tabs carry an owner-only "+" that opens this quick composer.
+  const [quickKind, setQuickKind] = useState<QuickComposerKind | null>(null);
+  const [quickNotice, setQuickNotice] = useState('');
   const client = useQueryClient();
   // Stories are public and short-lived; the owner view adds the remaining slots.
   const storyGroups = useStoryGroups(
@@ -169,6 +176,11 @@ export function StorePage({ slug }: { slug: string | null }) {
     const timer = window.setTimeout(() => setStoryNotice(''), 4000);
     return () => window.clearTimeout(timer);
   }, [storyNotice]);
+  useEffect(() => {
+    if (!quickNotice) return;
+    const timer = window.setTimeout(() => setQuickNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [quickNotice]);
   // A restaurant opens on its menu; the choice only sticks once the shopper
   // switches tabs themselves, so a late store response cannot steal the tab.
   const tabChosen = useRef(initialView === 'catalog');
@@ -801,37 +813,72 @@ export function StorePage({ slug }: { slug: string | null }) {
                   aria-label="Shop content"
                 >
                   {tabs.map(({ id, label, Icon }) => (
-                    <button
+                    <div
+                      className="shop-tab-group"
                       key={id}
-                      id={`shop-tab-${id}`}
-                      type="button"
-                      role="tab"
-                      aria-controls={`shop-${id}`}
-                      aria-selected={activeTab === id}
-                      tabIndex={activeTab === id ? 0 : -1}
-                      onClick={() => selectTab(id)}
-                      onKeyDown={(event) => {
-                        const index = tabs.findIndex((tab) => tab.id === id);
-                        let nextIndex = index;
-                        if (event.key === 'Home') nextIndex = 0;
-                        else if (event.key === 'End')
-                          nextIndex = tabs.length - 1;
-                        else if (event.key === 'ArrowLeft')
-                          nextIndex = (index - 1 + tabs.length) % tabs.length;
-                        else if (event.key === 'ArrowRight')
-                          nextIndex = (index + 1) % tabs.length;
-                        else return;
-                        event.preventDefault();
-                        const next = tabs[nextIndex]?.id;
-                        if (next) {
-                          selectTab(next);
-                          document.getElementById(`shop-tab-${next}`)?.focus();
-                        }
-                      }}
+                      role="presentation"
                     >
-                      <Icon size={18} aria-hidden="true" />
-                      {label}
-                    </button>
+                      <button
+                        id={`shop-tab-${id}`}
+                        type="button"
+                        role="tab"
+                        aria-controls={`shop-${id}`}
+                        aria-selected={activeTab === id}
+                        tabIndex={activeTab === id ? 0 : -1}
+                        onClick={() => selectTab(id)}
+                        onKeyDown={(event) => {
+                          const index = tabs.findIndex((tab) => tab.id === id);
+                          let nextIndex = index;
+                          if (event.key === 'Home') nextIndex = 0;
+                          else if (event.key === 'End')
+                            nextIndex = tabs.length - 1;
+                          else if (event.key === 'ArrowLeft')
+                            nextIndex = (index - 1 + tabs.length) % tabs.length;
+                          else if (event.key === 'ArrowRight')
+                            nextIndex = (index + 1) % tabs.length;
+                          else return;
+                          event.preventDefault();
+                          const next = tabs[nextIndex]?.id;
+                          if (next) {
+                            selectTab(next);
+                            document
+                              .getElementById(`shop-tab-${next}`)
+                              ?.focus();
+                          }
+                        }}
+                      >
+                        <Icon size={18} aria-hidden="true" />
+                        {label}
+                      </button>
+                      {/* The owner's shortcut belongs to the same tab it
+                          publishes into; shoppers never see these buttons. */}
+                      {viewerIsOwner && (
+                        <button
+                          type="button"
+                          className="shop-tab-add"
+                          aria-haspopup="dialog"
+                          aria-label={
+                            id === 'posts'
+                              ? 'Add a post'
+                              : presentation.restaurant
+                                ? 'Add a menu item'
+                                : 'Add a product'
+                          }
+                          title={
+                            id === 'posts'
+                              ? 'Add a post'
+                              : presentation.restaurant
+                                ? 'Add a menu item'
+                                : 'Add a product'
+                          }
+                          onClick={() =>
+                            setQuickKind(id === 'posts' ? 'post' : 'product')
+                          }
+                        >
+                          <Plus size={16} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -864,9 +911,23 @@ export function StorePage({ slug }: { slug: string | null }) {
                         onOpen={openStorePost}
                       />
                       {!posts.length && (demo || postsQuery.isSuccess) && (
-                        <p className="shop-inline-state">
-                          This shop hasn’t shared any posts yet.
-                        </p>
+                        <div className="shop-inline-state">
+                          <p>
+                            {viewerIsOwner
+                              ? 'Your shop is ready for its first post.'
+                              : 'This shop hasn’t shared any posts yet.'}
+                          </p>
+                          {viewerIsOwner && (
+                            <button
+                              className="secondary-button"
+                              aria-haspopup="dialog"
+                              onClick={() => setQuickKind('post')}
+                            >
+                              <Plus size={16} aria-hidden="true" />
+                              Add your first post
+                            </button>
+                          )}
+                        </div>
                       )}
                       {!demo && postsQuery.hasNextPage && (
                         <button
@@ -1085,14 +1146,20 @@ export function StorePage({ slug }: { slug: string | null }) {
                             ? 'No matching items.'
                             : menuFilterKey !== 'all'
                               ? 'Nothing in this section yet.'
-                              : presentation.restaurant
-                                ? 'The menu is coming soon.'
-                                : 'New finds are on their way.'}
+                              : viewerIsOwner
+                                ? presentation.restaurant
+                                  ? 'Your menu is ready for its first item.'
+                                  : 'Your shop is ready for its first product.'
+                                : presentation.restaurant
+                                  ? 'The menu is coming soon.'
+                                  : 'New finds are on their way.'}
                         </h3>
                         <p>
                           {searchTerm
                             ? 'Try another search, or browse every section.'
-                            : 'Check back soon for the latest from this shop.'}
+                            : viewerIsOwner && menuFilterKey === 'all'
+                              ? 'Add it right here — it appears on your shop as soon as you publish.'
+                              : 'Check back soon for the latest from this shop.'}
                         </p>
                         {searchTerm ? (
                           <button
@@ -1101,13 +1168,25 @@ export function StorePage({ slug }: { slug: string | null }) {
                           >
                             Clear search
                           </button>
+                        ) : menuFilterKey !== 'all' ? (
+                          <button
+                            className="secondary-button"
+                            onClick={() => setMenuFilter('all')}
+                          >
+                            Show all items
+                          </button>
                         ) : (
-                          menuFilterKey !== 'all' && (
+                          viewerIsOwner && (
                             <button
                               className="secondary-button"
-                              onClick={() => setMenuFilter('all')}
+                              aria-haspopup="dialog"
+                              onClick={() => setQuickKind('product')}
                             >
-                              Show all items
+                              <Plus size={16} aria-hidden="true" />
+                              Add{' '}
+                              {presentation.restaurant
+                                ? 'a menu item'
+                                : 'a product'}
                             </button>
                           )
                         )}
@@ -1211,7 +1290,7 @@ export function StorePage({ slug }: { slug: string | null }) {
       )}
       <ShopToast
         cart={cart}
-        notice={share.notice || favoriteNotice || storyNotice}
+        notice={share.notice || favoriteNotice || storyNotice || quickNotice}
         noticeIcon={
           !share.notice && favoriteNotice ? (
             <Heart size={16} aria-hidden="true" />
@@ -1246,6 +1325,38 @@ export function StorePage({ slug }: { slug: string | null }) {
             setComposerOpen(false);
             refreshStories();
             setStoryNotice('Story shared · live for 24 hours.');
+          }}
+        />
+      )}
+      {quickKind && store && viewerIsOwner && (
+        <QuickComposer
+          key={`${quickKind}-${store.id}`}
+          store={store}
+          kind={quickKind}
+          onClose={() => setQuickKind(null)}
+          onPublished={(publishedKind, message) => {
+            setQuickKind(null);
+            setQuickNotice(message);
+            selectTab(publishedKind === 'product' ? 'catalog' : 'posts');
+            // The new item is public immediately, so every surface that may
+            // already have loaded this shop has to drop its cached copy.
+            void client.invalidateQueries({
+              queryKey: ['storefront-posts', store.slug],
+            });
+            void client.invalidateQueries({
+              queryKey: ['storefront-menu', store.slug],
+            });
+            void client.invalidateQueries({
+              queryKey: ['storefront-categories', store.slug],
+            });
+            void client.invalidateQueries({
+              queryKey: ['storefront', store.slug],
+            });
+            void client.invalidateQueries({ queryKey: ['panel'] });
+            void client.invalidateQueries({ queryKey: ['explore'] });
+            // Shop cards and the directory show post/product counts.
+            void client.invalidateQueries({ queryKey: ['stores'] });
+            void client.invalidateQueries({ queryKey: ['store-directory'] });
           }}
         />
       )}
