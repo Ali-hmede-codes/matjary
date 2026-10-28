@@ -1,10 +1,17 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   Check,
   Coffee,
   MapPin,
+  Settings2,
   Store as StoreIcon,
 } from 'lucide-react';
 import { getJson, type ShopCategoryCatalog } from '../../lib/api';
@@ -21,7 +28,6 @@ import {
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
-import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { SocialIcon, socialNetworks } from '../../components/SocialIcon';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 import { StoreLifecycleControls } from './StoreManager';
@@ -113,7 +119,6 @@ function normalizeSocialUrl(network: string, raw: string): string | undefined {
 
 export function StoreEditor({ store }: { store?: OwnerStore }) {
   const { summary, savedStore } = useOwner();
-  const { settings } = useWebsiteSettings(false);
   const navigate = useNavigate();
   const [name, setName] = useState(store?.name || '');
   const [type, setType] = useState<'ecommerce' | 'restaurant_menu'>(
@@ -135,23 +140,13 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
   const [branches, setBranches] = useState<BranchDraft[]>(() =>
     initialBranches(store),
   );
-  const [cart, setCart] = useState(
-    Boolean(store?.enableCart && summary.limits.enableCart),
-  );
-  const [whatsapp, setWhatsapp] = useState(
-    Boolean(
-      store?.enableWhatsAppCheckout && summary.limits.enableWhatsAppCheckout,
-    ),
-  );
-  const [lbpPrices, setLbpPrices] = useState(Boolean(store?.showPricesInLbp));
-  // Section switches: one section can be turned off so the other uses the
-  // combined plan allowance. A shop always keeps at least one section on.
-  const [postsSection, setPostsSection] = useState(
-    store?.enablePostsSection !== false,
-  );
-  const [productsSection, setProductsSection] = useState(
-    store?.enableProductsSection !== false,
-  );
+  // A shop needs an id before media can be negotiated. Choosing the first
+  // logo or cover creates the shop under the owner lock, so the creation
+  // screen can offer pictures without leaving an empty shop behind for a form
+  // that was never submitted.
+  const [created, setCreated] = useState<OwnerStore | null>(null);
+  const createdRef = useRef<OwnerStore | null>(null);
+  const creating = useRef<Promise<string> | null>(null);
   const [busy, setBusy] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -191,6 +186,8 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       controller.abort();
     };
   }, [catalogAttempt]);
+  // Once a picture created the shop, the same form keeps saving as an edit.
+  const existing = store ?? created;
   const snapshot = JSON.stringify({
     name,
     type,
@@ -201,11 +198,6 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     banner,
     socials,
     branches: branchDrafts.map((branch) => branchPayload(branch)),
-    cart,
-    whatsapp,
-    lbpPrices,
-    postsSection,
-    productsSection,
   });
   const [baseline, setBaseline] = useState(snapshot);
   const dirty = snapshot !== baseline;
@@ -218,20 +210,47 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     ...entry,
     value: socials[entry.network] ?? '',
   }));
-  const storeOrderWhatsApp = normalizeSocialUrl(
-    'whatsapp',
-    socials.whatsapp ?? '',
-  );
-  const branchWhatsAppMissing =
-    whatsapp &&
-    !storeOrderWhatsApp &&
-    !branchDrafts.some((branch) =>
-      /^\d{7,15}$/u.test(branchWhatsAppDigits(branch.whatsapp)),
-    );
+  const sectionName = type === 'restaurant_menu' ? 'Menu' : 'Products';
+  // The shop id is only needed to negotiate media, so pictures wait for the
+  // two fields the API needs to create it.
+  const readyForMedia = Boolean(name.trim() && businessCategory);
+
+  async function createShop(): Promise<string> {
+    const cleanName = name.trim();
+    if (!cleanName || !businessCategory) throw new Error('shop-name-required');
+    const request = (async () => {
+      const saved = await mutate<OwnerStore>('stores', {
+        name: cleanName,
+        storeType: type,
+        businessCategory,
+        brandColor: color,
+        description: description.trim() || null,
+      });
+      createdRef.current = saved;
+      setCreated(saved);
+      await savedStore(saved);
+      return saved.id;
+    })();
+    creating.current = request;
+    try {
+      return await request;
+    } finally {
+      creating.current = null;
+    }
+  }
+
+  // Media picks may fire before a shop exists; the first one creates it and
+  // later picks reuse the same shop instead of creating a second one.
+  function ensureShop(): string | Promise<string> {
+    if (createdRef.current) return createdRef.current.id;
+    if (creating.current) return creating.current;
+    return createShop();
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (busy || lifecycleBusy || uploading || processing) return;
+    if (busy || lifecycleBusy || uploading || processing || creating.current)
+      return;
     if (!name.trim()) {
       setError('Please enter a store name.');
       return;
@@ -303,17 +322,12 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
       }
       if (href) socialMediaLinks[entry.network] = href;
     }
-    if (whatsapp && branchWhatsAppMissing) {
-      setError(
-        'Add a WhatsApp number to a branch, or set the order WhatsApp link under Social links, so customers can send orders.',
-      );
-      return;
-    }
     setBusy(true);
     setError('');
     setNotice('');
     try {
       const branchBodies = branchDrafts.map((branch) => branchPayload(branch));
+      const target = store ?? createdRef.current;
       const body = {
         name: name.trim(),
         storeType: type,
@@ -321,23 +335,13 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
         brandColor: color,
         description: description.trim() || null,
         socialMediaLinks,
-        ...(store
-          ? {
-              logoKey: logo || null,
-              bannerKey: banner || null,
-              enableCart: cart,
-              enableWhatsAppCheckout: whatsapp,
-              showPricesInLbp: lbpPrices,
-              enablePostsSection: postsSection,
-              enableProductsSection: productsSection,
-            }
-          : {}),
-        ...(store || branchBodies.length ? { branches: branchBodies } : {}),
+        ...(target ? { logoKey: logo || null, bannerKey: banner || null } : {}),
+        ...(target || branchBodies.length ? { branches: branchBodies } : {}),
       };
       const updated = await mutate<OwnerStore>(
-        store ? `stores/${encodeURIComponent(store.slug)}` : 'stores',
+        target ? `stores/${encodeURIComponent(target.slug)}` : 'stores',
         body,
-        store ? 'PATCH' : 'POST',
+        target ? 'PATCH' : 'POST',
       );
       setBaseline(snapshot);
       await savedStore(updated);
@@ -353,17 +357,17 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
   return (
     <>
       <PageTitle
-        eyebrow={store ? 'YOUR STORE' : 'A SIMPLE FIRST STEP'}
-        title={store ? 'Make it feel like you.' : "Let's open your store."}
+        eyebrow={existing ? 'YOUR STORE' : 'A SIMPLE FIRST STEP'}
+        title={existing ? 'Make it feel like you.' : "Let's open your store."}
         description={
-          store
+          existing
             ? 'A few thoughtful touches. A space that is entirely yours.'
-            : 'Just a name and a store type. You can add everything else later.'
+            : 'Pick a name, a type and a face. Your logo and cover can go up right away.'
         }
         action={
-          store &&
-          store.status === 'active' && (
-            <Link className="panel-secondary" to={`/stores/${store.slug}`}>
+          existing &&
+          existing.status === 'active' && (
+            <Link className="panel-secondary" to={`/stores/${existing.slug}`}>
               View store <ArrowUpRight size={16} />
             </Link>
           )
@@ -524,44 +528,66 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               <Link to="/dashboard/design">Open shop design</Link>.
             </p>
           </section>
-          {store && (
-            <section className="panel-card">
-              <h2>Give your store a face</h2>
+          <section className="panel-card">
+            <h2>Give your store a face</h2>
+            <p className="panel-muted">
+              Optional. Your initials and chosen color look great too.
+            </p>
+            {created && !store && (
+              <Notice>
+                <strong>{created.name}</strong> is saved. Your pictures upload
+                straight to it — press Save changes when you’re done.
+              </Notice>
+            )}
+            {!existing && !readyForMedia && (
               <p className="panel-muted">
-                Optional. Your initials and chosen color look great too.
+                Add a store name and business category first — then choose your
+                logo and cover photo here.
               </p>
-              <MediaUpload
-                targetId={store.id}
-                purpose="store_logo"
-                label="Store logo"
-                keys={logo ? [logo] : []}
-                onChange={(keys) => setLogo(keys[0] || '')}
-                onBusy={setUploading}
-                onPending={setProcessing}
-                disabled={busy || lifecycleBusy || uploading || processing}
-                maxImageBytes={
-                  typeof summary.limits.maxImageSizeBytes === 'number'
-                    ? summary.limits.maxImageSizeBytes
-                    : undefined
-                }
-              />
-              <MediaUpload
-                targetId={store.id}
-                purpose="store_banner"
-                label="Cover photo"
-                keys={banner ? [banner] : []}
-                onChange={(keys) => setBanner(keys[0] || '')}
-                onBusy={setUploading}
-                onPending={setProcessing}
-                disabled={busy || lifecycleBusy || uploading || processing}
-                maxImageBytes={
-                  typeof summary.limits.maxImageSizeBytes === 'number'
-                    ? summary.limits.maxImageSizeBytes
-                    : undefined
-                }
-              />
-            </section>
-          )}
+            )}
+            <MediaUpload
+              targetId={ensureShop}
+              purpose="store_logo"
+              label="Store logo"
+              keys={logo ? [logo] : []}
+              onChange={(keys) => setLogo(keys[0] || '')}
+              onBusy={setUploading}
+              onPending={setProcessing}
+              disabled={
+                busy ||
+                lifecycleBusy ||
+                uploading ||
+                processing ||
+                (!existing && !readyForMedia)
+              }
+              maxImageBytes={
+                typeof summary.limits.maxImageSizeBytes === 'number'
+                  ? summary.limits.maxImageSizeBytes
+                  : undefined
+              }
+            />
+            <MediaUpload
+              targetId={ensureShop}
+              purpose="store_banner"
+              label="Cover photo"
+              keys={banner ? [banner] : []}
+              onChange={(keys) => setBanner(keys[0] || '')}
+              onBusy={setUploading}
+              onPending={setProcessing}
+              disabled={
+                busy ||
+                lifecycleBusy ||
+                uploading ||
+                processing ||
+                (!existing && !readyForMedia)
+              }
+              maxImageBytes={
+                typeof summary.limits.maxImageSizeBytes === 'number'
+                  ? summary.limits.maxImageSizeBytes
+                  : undefined
+              }
+            />
+          </section>
           <section className="panel-card panel-optional store-description-card">
             <h2>About your store</h2>
             <label>
@@ -575,29 +601,16 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               />
             </label>
           </section>
-          {store && (
-            <section className="panel-card panel-optional">
-              <h2>Prices</h2>
+          {existing && (
+            <section className="panel-card panel-optional store-settings-card">
+              <h2>Checkout, prices and sections</h2>
               <p className="panel-muted">
-                Your items stay priced in US dollars. You can also show each
-                price in Lebanese pounds, in small text under the dollar price.
+                Shopping cart, WhatsApp checkout, Lebanese pound prices and the
+                Posts / {sectionName} switches live together in Shop settings.
               </p>
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={lbpPrices}
-                  disabled={!settings.lbpExchangeRate}
-                  onChange={(e) => setLbpPrices(e.target.checked)}
-                />
-                Show prices in Lebanese pounds
-                <small>
-                  {settings.lbpExchangeRate
-                    ? `${new Intl.NumberFormat('en-US').format(
-                        settings.lbpExchangeRate,
-                      )} LBP = $1. Matjary sets this rate.`
-                    : 'You can turn this on once Matjary sets the LBP exchange rate.'}
-                </small>
-              </label>
+              <Link className="panel-secondary" to="/dashboard/settings">
+                <Settings2 size={16} /> Open shop settings
+              </Link>
             </section>
           )}
           <StoreBranchesEditor
@@ -652,93 +665,6 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               order WhatsApp link here receives checkout messages.
             </p>
           </section>
-          {store && (
-            <section className="panel-card panel-optional">
-              <h2>Shop sections</h2>
-              <p className="panel-muted">
-                Turn off a section you don’t use. Its unused plan allowance
-                moves to the section that stays on — for example, 10 posts and
-                10 products let your{' '}
-                {type === 'restaurant_menu' ? 'menu' : 'products'} use up to 20
-                items while Posts is off. Existing items stay saved; you just
-                can’t add new ones there.
-              </p>
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={postsSection}
-                  disabled={!productsSection}
-                  onChange={(e) => setPostsSection(e.target.checked)}
-                />
-                Posts
-                <small>
-                  The photo and video wall on your shop page. Turning it off
-                  gives its unused allowance to your{' '}
-                  {type === 'restaurant_menu' ? 'menu' : 'products'}.
-                </small>
-              </label>
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={productsSection}
-                  disabled={!postsSection}
-                  onChange={(e) => setProductsSection(e.target.checked)}
-                />
-                {type === 'restaurant_menu' ? 'Menu' : 'Products'}
-                <small>
-                  Your {type === 'restaurant_menu' ? 'menu items' : 'products'}.
-                  Turning it off gives its unused allowance to Posts.
-                </small>
-              </label>
-              {(!postsSection || !productsSection) && (
-                <p className="panel-muted">
-                  Turning a section back on only works while the combined
-                  allowance has room. If it’s full, delete some items first.
-                </p>
-              )}
-            </section>
-          )}
-          {store && (
-            <details className="panel-card panel-optional">
-              <summary>
-                Shopping options <span>Optional</span>
-              </summary>
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={cart}
-                  disabled={!summary.limits.enableCart}
-                  onChange={(e) => setCart(e.target.checked)}
-                />
-                Enable shopping cart{' '}
-                <small>
-                  {summary.limits.enableCart
-                    ? 'Let visitors collect their favorite items.'
-                    : 'Not included in your current plan.'}
-                </small>
-              </label>
-              <label className="panel-toggle">
-                <input
-                  type="checkbox"
-                  checked={whatsapp}
-                  disabled={!summary.limits.enableWhatsAppCheckout}
-                  onChange={(e) => setWhatsapp(e.target.checked)}
-                />
-                Enable WhatsApp checkout{' '}
-                <small>
-                  {summary.limits.enableWhatsAppCheckout
-                    ? 'Each order goes to the branch your customer chooses.'
-                    : 'Available with an eligible subscription.'}
-                </small>
-              </label>
-              {whatsapp && branchWhatsAppMissing && (
-                <p className="panel-field-error">
-                  Add a WhatsApp number to at least one branch, or set the order
-                  WhatsApp link above, before customers can check out.
-                </p>
-              )}
-            </details>
-          )}
           {error && <Notice error>{error}</Notice>}
           {notice && <Notice>{notice}</Notice>}
           <div className="panel-save-bar">
@@ -747,7 +673,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                 ? 'Finishing your upload…'
                 : dirty
                   ? 'You have unsaved changes'
-                  : store
+                  : existing
                     ? 'Everything is up to date'
                     : 'You can add branches and social links anytime'}
             </span>
@@ -757,10 +683,10 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
                 busy ||
                 uploading ||
                 processing ||
-                (store ? !dirty : !name.trim() || !businessCategory)
+                (existing ? !dirty : !name.trim() || !businessCategory)
               }
             >
-              {busy ? 'Saving…' : store ? 'Save changes' : 'Create my store'}
+              {busy ? 'Saving…' : existing ? 'Save changes' : 'Create my store'}
             </button>
           </div>
         </fieldset>

@@ -364,7 +364,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
               : 'Products are turned off for this shop.'
             : 'Posts are turned off for this shop.'}{' '}
           Existing items stay saved, and your plan’s other section can use their
-          allowance. <Link to="/dashboard/store">Turn it back on</Link>.
+          allowance. <Link to="/dashboard/settings">Turn it back on</Link>.
         </Notice>
       )}
       {notice && <Notice>{notice}</Notice>}

@@ -16,6 +16,7 @@ import {
   Package,
   Palette,
   Plus,
+  Settings2,
   Store as StoreIcon,
 } from 'lucide-react';
 import type { Store } from '../../lib/api';
@@ -40,6 +41,7 @@ import {
 } from '../shared/PanelUI';
 import { StoreEditor } from './StoreEditor.tsx';
 import { StoreDesignStudio } from './StoreDesignStudio';
+import { ShopSettings } from './ShopSettings';
 import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
 import { StoreManager } from './StoreManager';
@@ -287,6 +289,10 @@ export default function OwnerPanel({ session }: { session: Session }) {
               }
             />
             <Route
+              path="settings"
+              element={store ? <ShopSettings key={store.id} /> : <NoStore />}
+            />
+            <Route
               path="products"
               element={
                 store ? (
@@ -456,6 +462,12 @@ function OwnerHome() {
           <Palette />
           <strong>Refresh your look</strong>
           <span>Pick a look, layouts and per-section styles.</span>
+          <ArrowUpRight />
+        </Link>
+        <Link to="/dashboard/settings">
+          <Settings2 />
+          <strong>Shop settings</strong>
+          <span>Cart, checkout, prices and sections.</span>
           <ArrowUpRight />
         </Link>
         <Link to="/dashboard/boost">
