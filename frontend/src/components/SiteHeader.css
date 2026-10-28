@@ -140,6 +140,13 @@
   align-items: center;
   gap: 16px;
 }
+/* Pages without the search box (shops, pricing, favorites) would leave the
+   actions sitting beside the brand: the sidebar nav is fixed and therefore out
+   of the flex flow, so nothing else claims the leftover space. Feed pages keep
+   the search box as the push, since a second auto margin would center it. */
+.topbar:not(:has(.search-box)) .header-actions {
+  margin-left: auto;
+}
 .create-button,
 .profile-button {
   display: inline-flex;
