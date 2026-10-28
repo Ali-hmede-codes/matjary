@@ -773,7 +773,8 @@
 .panel-slug-preview small {
   margin: 0;
 }
-.panel-app .panel-option-editor {
+.panel-app .panel-option-editor,
+.panel-app .panel-settings-fieldset {
   display: grid;
   gap: 14px;
   padding: 18px;
@@ -781,14 +782,16 @@
   border-radius: 14px;
   background: #fbfcfa;
 }
-.panel-option-editor > legend {
+.panel-option-editor > legend,
+.panel-settings-fieldset > legend {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 6px;
   margin-bottom: 2px;
 }
-.panel-option-editor > legend span {
+.panel-option-editor > legend span,
+.panel-settings-fieldset > legend span {
   padding: 2px 7px;
   border-radius: 999px;
   background: #eef3ec;
@@ -798,10 +801,17 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.panel-option-editor > .panel-muted {
+.panel-option-editor > .panel-muted,
+.panel-settings-fieldset > .panel-muted {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
+}
+/* The fieldset's own grid gap already spaces these rows; the generic
+   fieldset child margin would double it. */
+.panel-app .panel-settings-fieldset > label,
+.panel-app .panel-settings-fieldset > .panel-two-fields {
+  margin-top: 0;
 }
 /* Availability has two explicit states: "out of stock" stays published but
    stops taking orders, so it must not look like archiving. */
@@ -2162,7 +2172,8 @@
   .panel-two-fields {
     gap: 12px;
   }
-  .panel-app .panel-option-editor {
+  .panel-app .panel-option-editor,
+  .panel-app .panel-settings-fieldset {
     padding: 14px;
   }
   .panel-option-group-head {

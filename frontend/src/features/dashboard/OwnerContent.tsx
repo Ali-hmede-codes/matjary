@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Copy, ImagePlus, Package, Plus, Trash2 } from 'lucide-react';
@@ -51,9 +51,14 @@ interface Content {
   category?: string;
   categoryId?: string | null;
   categoryName?: string | null;
+  sku?: string | null;
   stockQuantity?: number | null;
+  weightGrams?: number | null;
   imageKeys?: string[] | null;
+  tags?: string[] | null;
   options?: ProductOptionGroup[] | null;
+  sortOrder?: number;
+  requiresShipping?: boolean;
   // Posts carry their first ready media variant here; products use imageKeys.
   thumbnailKey?: string | null;
   // Shoppable posts point at one own product or one own section.
@@ -104,6 +109,141 @@ interface OptionValueWrite {
 interface OptionGroupWrite {
   name: string;
   values: OptionValueWrite[];
+}
+
+// Owner-authored search and social metadata. The API keeps these rows separate
+// from the product/post, so the editor loads them once and sends them back with
+// the same save that touches the content.
+interface ContentSeo {
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  robots?: string | null;
+  brand?: string | null;
+  gtin?: string | null;
+  mpn?: string | null;
+  articleAuthor?: string | null;
+  articleSection?: string | null;
+  articleTags?: string[] | null;
+}
+
+interface SeoDraft {
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+  ogTitle: string;
+  ogDescription: string;
+  brand: string;
+  gtin: string;
+  mpn: string;
+  articleAuthor: string;
+  articleSection: string;
+  articleTags: string;
+  hidden: boolean;
+}
+
+const emptySeo: SeoDraft = {
+  metaTitle: '',
+  metaDescription: '',
+  metaKeywords: '',
+  ogTitle: '',
+  ogDescription: '',
+  brand: '',
+  gtin: '',
+  mpn: '',
+  articleAuthor: '',
+  articleSection: '',
+  articleTags: '',
+  hidden: false,
+};
+
+function seoDraftFrom(seo: ContentSeo | null | undefined): SeoDraft {
+  return {
+    metaTitle: seo?.metaTitle ?? '',
+    metaDescription: seo?.metaDescription ?? '',
+    metaKeywords: seo?.metaKeywords ?? '',
+    ogTitle: seo?.ogTitle ?? '',
+    ogDescription: seo?.ogDescription ?? '',
+    brand: seo?.brand ?? '',
+    gtin: seo?.gtin ?? '',
+    mpn: seo?.mpn ?? '',
+    articleAuthor: seo?.articleAuthor ?? '',
+    articleSection: seo?.articleSection ?? '',
+    articleTags: (seo?.articleTags ?? []).join(', '),
+    // "noindex" is stored inside the directive, so a substring check keeps the
+    // toggle correct whichever follow rule the owner chose earlier.
+    hidden: Boolean(seo?.robots?.includes('noindex')),
+  };
+}
+
+function cleanSeo(draft: SeoDraft): SeoDraft {
+  const trim = (value: string) => value.trim();
+  return {
+    metaTitle: trim(draft.metaTitle),
+    metaDescription: trim(draft.metaDescription),
+    metaKeywords: trim(draft.metaKeywords),
+    ogTitle: trim(draft.ogTitle),
+    ogDescription: trim(draft.ogDescription),
+    brand: trim(draft.brand),
+    gtin: trim(draft.gtin),
+    mpn: trim(draft.mpn),
+    articleAuthor: trim(draft.articleAuthor),
+    articleSection: trim(draft.articleSection),
+    articleTags: trim(draft.articleTags),
+    hidden: draft.hidden,
+  };
+}
+
+// Owners type tags as one comma-separated line. The API accepts up to 20 short
+// strings, so trim duplicates here and reject what would be refused anyway.
+function tagList(value: string): string[] | null | undefined {
+  const tags = Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  );
+  if (!tags.length) return null;
+  if (tags.length > 20 || tags.some((tag) => tag.length > 100))
+    return undefined;
+  return tags;
+}
+
+// Optional whole-number fields share the same "blank means unset" rule.
+function wholeNumber(value: string, max: number): number | null | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= max
+    ? parsed
+    : undefined;
+}
+
+function seoWrite(draft: SeoDraft, product: boolean) {
+  const articleTags = tagList(draft.articleTags);
+  return {
+    metaTitle: draft.metaTitle || null,
+    metaDescription: draft.metaDescription || null,
+    metaKeywords: draft.metaKeywords || null,
+    ogTitle: draft.ogTitle || null,
+    ogDescription: draft.ogDescription || null,
+    robots: draft.hidden ? 'noindex, follow' : 'index, follow',
+    ...(product
+      ? {
+          brand: draft.brand || null,
+          gtin: draft.gtin || null,
+          mpn: draft.mpn || null,
+        }
+      : {
+          articleAuthor: draft.articleAuthor || null,
+          articleSection: draft.articleSection || null,
+          articleTags: Array.isArray(articleTags) ? articleTags : null,
+        }),
+  };
 }
 
 function optionDrafts(
@@ -557,6 +697,20 @@ function ContentEditor({
   const [stock, setStock] = useState(
     item?.stockQuantity == null ? '' : String(item.stockQuantity),
   );
+  const [sku, setSku] = useState(item?.sku ?? '');
+  const [weight, setWeight] = useState(
+    item?.weightGrams == null ? '' : String(item.weightGrams),
+  );
+  const [tags, setTags] = useState((item?.tags ?? []).join(', '));
+  const [sortOrder, setSortOrder] = useState(String(item?.sortOrder ?? 0));
+  const [shipping, setShipping] = useState(
+    item?.requiresShipping ?? store?.storeType !== 'restaurant_menu',
+  );
+  const [seo, setSeo] = useState<SeoDraft>(emptySeo);
+  const [seoBaseline, setSeoBaseline] = useState(JSON.stringify(emptySeo));
+  // The stored SEO row is loaded once per editor; user edits made before it
+  // arrives must never be replaced by the server copy.
+  const seoHydrated = useRef(false);
   const [description, setDescription] = useState(item?.description || '');
   // One value drives the picker: "p:<id>", "c:<id>" or empty for no link.
   const [linkValue, setLinkValue] = useState(
@@ -589,6 +743,11 @@ function ContentEditor({
     categoryId: string;
     availability: string;
     stock: string;
+    sku: string;
+    weight: string;
+    tags: string;
+    sortOrder: string;
+    shipping: boolean;
     description: string;
     keys: string[];
     options: OptionGroupDraft[];
@@ -601,13 +760,19 @@ function ContentEditor({
     categoryId,
     availability,
     stock,
+    sku,
+    weight,
+    tags,
+    sortOrder,
+    shipping,
     description,
     keys,
     options,
     link: linkValue,
   });
   const [baseline, setBaseline] = useState(snapshot);
-  const dirty = snapshot !== baseline;
+  const seoSnapshot = JSON.stringify(seo);
+  const dirty = snapshot !== baseline || seoSnapshot !== seoBaseline;
   useUnsaved(dirty || uploading || processing);
   const media = useQuery({
     queryKey: ['panel', session.user.id, 'post-media', record?.id],
@@ -660,6 +825,28 @@ function ContentEditor({
   const sourceProducts = (optionSources.data?.items ?? []).filter(
     (entry) => entry.id !== record?.id && Boolean(entry.options?.length),
   );
+  // Search and sharing settings are stored beside the content and can only be
+  // read once the record exists, so a new draft loads them after its first save.
+  const seoQuery = useQuery({
+    queryKey: ['panel', session.user.id, 'content-seo', kind, record?.id],
+    queryFn: ({ signal }) =>
+      getJson<ContentSeo | null>(
+        `seo/${product ? 'products' : 'showcases'}/${record!.id}`,
+        signal,
+      ),
+    enabled: Boolean(record),
+    retry: 0,
+  });
+  useEffect(() => {
+    if (seoHydrated.current || !seoQuery.isSuccess) return;
+    // Never replace text the owner typed while the stored settings were still
+    // loading; the editor is usable before the request finishes.
+    if (JSON.stringify(seo) !== JSON.stringify(emptySeo)) return;
+    seoHydrated.current = true;
+    const next = seoDraftFrom(seoQuery.data);
+    setSeo(next);
+    setSeoBaseline(JSON.stringify(next));
+  }, [seoQuery.isSuccess, seoQuery.data, seo]);
   const existingPending =
     !product &&
     media.data?.some(
@@ -880,6 +1067,39 @@ function ContentEditor({
       setOptionsError(validated.error);
       return;
     }
+    // Inventory fields are optional, but anything typed must be a whole number
+    // the API will accept; blank clears the stored value.
+    const stockQuantity = wholeNumber(stock, 4294967295);
+    if (product && stockQuantity === undefined) {
+      setError('Available stock must be a whole number, or left blank.');
+      return;
+    }
+    const weightGrams = wholeNumber(weight, 4294967295);
+    if (product && weightGrams === undefined) {
+      setError('Weight must be a whole number of grams, or left blank.');
+      return;
+    }
+    const sortOrderValue = wholeNumber(sortOrder, 4294967295);
+    if (product && sortOrderValue === undefined) {
+      setError('Sort order must be a whole number, or left blank.');
+      return;
+    }
+    const parsedTags = tagList(tags);
+    if (product && parsedTags === undefined) {
+      setError(
+        'Use up to 20 tags, each under 100 characters, separated by commas.',
+      );
+      return;
+    }
+    const nextSeo = cleanSeo(seo);
+    const nextSeoSnapshot = JSON.stringify(nextSeo);
+    const seoChanged = nextSeoSnapshot !== seoBaseline;
+    if (seoChanged && !product && tagList(nextSeo.articleTags) === undefined) {
+      setError(
+        'Use up to 20 article tags, each under 100 characters, separated by commas.',
+      );
+      return;
+    }
     setBusy(true);
     setError('');
     setPriceError('');
@@ -899,12 +1119,14 @@ function ContentEditor({
               priceCents: cents,
               currency,
               categoryId: categoryId || null,
-              stockQuantity: stock === '' ? null : Number(stock),
+              stockQuantity,
+              sku: sku.trim() || null,
+              weightGrams,
+              tags: parsedTags,
+              sortOrder: sortOrderValue ?? 0,
+              requiresShipping: shipping,
               ...(shouldSaveOptions ? { options: validated.groups } : {}),
               ...(record ? { imageKeys: keys } : {}),
-              ...(!record
-                ? { requiresShipping: store?.storeType !== 'restaurant_menu' }
-                : {}),
             }
           : {
               title: cleanName,
@@ -957,12 +1179,37 @@ function ContentEditor({
           categoryId,
           availability: nextAvailability,
           stock,
+          sku,
+          weight,
+          tags,
+          sortOrder,
+          shipping,
           description: cleanDescription,
           keys,
           options: nextOptions,
           link: savedLink,
         }),
       );
+      // Search settings are a separate row; save them with the same action so
+      // the owner never has to remember a second save just to update the link
+      // preview or the search result text.
+      let seoFailed = false;
+      if (seoChanged) {
+        try {
+          await mutate(
+            `seo/${product ? 'products' : 'showcases'}/${saved.id}`,
+            seoWrite(nextSeo, product),
+            'PUT',
+          );
+          setSeo(nextSeo);
+          setSeoBaseline(nextSeoSnapshot);
+        } catch (e) {
+          seoFailed = true;
+          setError(
+            `The ${product ? 'item' : 'post'} was saved, but its search and sharing settings were not. ${panelError(e)}`,
+          );
+        }
+      }
       await client.invalidateQueries({
         queryKey: ['panel', session.user.id, kind],
       });
@@ -972,6 +1219,7 @@ function ContentEditor({
       await client.invalidateQueries({
         queryKey: ['panel', session.user.id, 'product-option-sources'],
       });
+      if (seoFailed) return;
       if (stay)
         setNotice(
           'Draft saved. Add photos below, then publish whenever you’re ready.',
@@ -1048,6 +1296,20 @@ function ContentEditor({
             </small>
           </div>
         )}
+        <label>
+          {product ? 'Description' : 'Caption'}
+          <textarea
+            maxLength={3000}
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={
+              product
+                ? 'What makes this item special?'
+                : 'Say something about this moment…'
+            }
+          />
+        </label>
         {product && (
           <>
             <div className="panel-two-fields">
@@ -1153,6 +1415,90 @@ function ContentEditor({
                   </label>
                 ))}
               </div>
+            </fieldset>
+            <fieldset className="panel-settings-fieldset">
+              <legend>
+                Inventory &amp; shipping <span>Optional</span>
+              </legend>
+              <p className="panel-muted">
+                Stock, SKU and weight help you track what you sell. Tags and
+                sort order shape how this item appears in your shop.
+              </p>
+              <div className="panel-two-fields">
+                <label>
+                  Available stock
+                  <input
+                    type="number"
+                    min={0}
+                    max={4294967295}
+                    step={1}
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
+                    placeholder="Leave blank to skip stock tracking"
+                  />
+                </label>
+                <label>
+                  SKU
+                  <input
+                    maxLength={100}
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value)}
+                    placeholder="e.g. MUG-001"
+                  />
+                  <small>Your own code for this item.</small>
+                </label>
+              </div>
+              <div className="panel-two-fields">
+                <label>
+                  Weight (grams)
+                  <input
+                    type="number"
+                    min={0}
+                    max={4294967295}
+                    step={1}
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                    placeholder="Used for shipping"
+                  />
+                </label>
+                <label>
+                  Sort order
+                  <input
+                    type="number"
+                    min={0}
+                    max={4294967295}
+                    step={1}
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                  />
+                  <small>Lower numbers appear first in your shop.</small>
+                </label>
+              </div>
+              <label>
+                Tags
+                <input
+                  maxLength={2100}
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="e.g. handmade, ceramic, gift"
+                />
+                <small>
+                  Separate tags with commas. Up to 20 tags help shoppers find
+                  this item.
+                </small>
+              </label>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={shipping}
+                  onChange={(e) => setShipping(e.target.checked)}
+                />
+                This item needs shipping
+                <small>
+                  Turn off for pickups, digital goods, or dishes served at your
+                  place.
+                </small>
+              </label>
             </fieldset>
             <fieldset className="panel-option-editor">
               <legend>
@@ -1306,67 +1652,246 @@ function ContentEditor({
             </fieldset>
           </>
         )}
-        <details className="panel-optional">
-          <summary>
-            A few more details <span>Optional</span>
-          </summary>
+        {!product && (
           <label>
-            Description
-            <textarea
-              maxLength={3000}
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            Linked product or section
+            <select
+              value={linkValue}
+              onChange={(e) => setLinkValue(e.target.value)}
+            >
+              <option value="">Nothing linked</option>
+              {linkProducts.length > 0 && (
+                <optgroup label="Products">
+                  {linkProducts.map((entry) => (
+                    <option key={entry.id} value={`p:${entry.id}`}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {linkCategories.length > 0 && (
+                <optgroup label="Sections">
+                  {linkCategories.map((entry) => (
+                    <option key={entry.id} value={`c:${entry.id}`}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <small>
+              Shoppers see a small tag on this post that opens the product or
+              section page.
+            </small>
           </label>
-          {product && (
+        )}
+        {record ? (
+          <details className="panel-optional">
+            <summary>
+              Search &amp; sharing <span>Optional</span>
+            </summary>
+            <p className="panel-muted">
+              Leave a field blank to use the text Matjary writes from this{' '}
+              {product ? 'item' : 'post'}.
+            </p>
             <label>
-              Available stock
+              Page title
               <input
-                type="number"
-                min={0}
-                max={4294967295}
-                step={1}
-                value={stock}
-                onChange={(e) => setStock(e.target.value)}
-                placeholder="Leave blank to skip stock tracking"
+                maxLength={120}
+                value={seo.metaTitle}
+                onChange={(e) =>
+                  setSeo((current) => ({
+                    ...current,
+                    metaTitle: e.target.value,
+                  }))
+                }
+                placeholder={name || (product ? 'Item name' : 'Post title')}
               />
-            </label>
-          )}
-          {!product && (
-            <label>
-              Linked product or section
-              <select
-                value={linkValue}
-                onChange={(e) => setLinkValue(e.target.value)}
-              >
-                <option value="">Nothing linked</option>
-                {linkProducts.length > 0 && (
-                  <optgroup label="Products">
-                    {linkProducts.map((entry) => (
-                      <option key={entry.id} value={`p:${entry.id}`}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {linkCategories.length > 0 && (
-                  <optgroup label="Sections">
-                    {linkCategories.map((entry) => (
-                      <option key={entry.id} value={`c:${entry.id}`}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
               <small>
-                Shoppers see a small tag on this post that opens the product or
-                section page.
+                The title search results and browsers show. Up to 120
+                characters.
               </small>
             </label>
-          )}
-        </details>
+            <label>
+              Search description
+              <textarea
+                rows={3}
+                maxLength={320}
+                value={seo.metaDescription}
+                onChange={(e) =>
+                  setSeo((current) => ({
+                    ...current,
+                    metaDescription: e.target.value,
+                  }))
+                }
+                placeholder="A short sentence that makes people want to open it."
+              />
+            </label>
+            <label>
+              Keywords
+              <input
+                maxLength={500}
+                value={seo.metaKeywords}
+                onChange={(e) =>
+                  setSeo((current) => ({
+                    ...current,
+                    metaKeywords: e.target.value,
+                  }))
+                }
+                placeholder="e.g. handmade mug, ceramic gift"
+              />
+            </label>
+            <div className="panel-two-fields">
+              <label>
+                Social title
+                <input
+                  maxLength={120}
+                  value={seo.ogTitle}
+                  onChange={(e) =>
+                    setSeo((current) => ({
+                      ...current,
+                      ogTitle: e.target.value,
+                    }))
+                  }
+                  placeholder={name || 'Shown when shared'}
+                />
+              </label>
+              <label>
+                Social description
+                <input
+                  maxLength={320}
+                  value={seo.ogDescription}
+                  onChange={(e) =>
+                    setSeo((current) => ({
+                      ...current,
+                      ogDescription: e.target.value,
+                    }))
+                  }
+                  placeholder="Shown when shared"
+                />
+              </label>
+            </div>
+            {product ? (
+              <div className="panel-field-grid">
+                <label>
+                  Brand
+                  <input
+                    maxLength={100}
+                    value={seo.brand}
+                    onChange={(e) =>
+                      setSeo((current) => ({
+                        ...current,
+                        brand: e.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  GTIN / barcode
+                  <input
+                    maxLength={100}
+                    value={seo.gtin}
+                    onChange={(e) =>
+                      setSeo((current) => ({
+                        ...current,
+                        gtin: e.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  MPN
+                  <input
+                    maxLength={100}
+                    value={seo.mpn}
+                    onChange={(e) =>
+                      setSeo((current) => ({
+                        ...current,
+                        mpn: e.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            ) : (
+              <>
+                <div className="panel-two-fields">
+                  <label>
+                    Article author
+                    <input
+                      maxLength={100}
+                      value={seo.articleAuthor}
+                      onChange={(e) =>
+                        setSeo((current) => ({
+                          ...current,
+                          articleAuthor: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g. your shop name"
+                    />
+                  </label>
+                  <label>
+                    Article section
+                    <input
+                      maxLength={100}
+                      value={seo.articleSection}
+                      onChange={(e) =>
+                        setSeo((current) => ({
+                          ...current,
+                          articleSection: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g. New arrivals"
+                    />
+                  </label>
+                </div>
+                <label>
+                  Article tags
+                  <input
+                    maxLength={2100}
+                    value={seo.articleTags}
+                    onChange={(e) =>
+                      setSeo((current) => ({
+                        ...current,
+                        articleTags: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. summer, behind the scenes"
+                  />
+                  <small>Separate tags with commas.</small>
+                </label>
+              </>
+            )}
+            <label className="panel-toggle">
+              <input
+                type="checkbox"
+                checked={seo.hidden}
+                onChange={(e) =>
+                  setSeo((current) => ({
+                    ...current,
+                    hidden: e.target.checked,
+                  }))
+                }
+              />
+              Hide from search engines
+              <small>
+                Visitors with the link still see this page; search results stop
+                listing it.
+              </small>
+            </label>
+            {seoQuery.isError && (
+              <p className="panel-field-error">
+                The saved search settings could not be read. Saving replaces
+                them with the values above.
+              </p>
+            )}
+          </details>
+        ) : (
+          <p className="panel-muted">
+            Save this {product ? 'item' : 'post'} once to add search and sharing
+            settings.
+          </p>
+        )}
         {!record ? (
           <div className="panel-note">
             <ImagePlus size={24} />

@@ -130,12 +130,16 @@ export class UserProductSummaryDto {
   categoryId!: string | null;
   categoryName!: string | null;
   status!: 'draft' | 'active' | 'archived' | 'out_of_stock';
+  sku!: string | null;
   stockQuantity!: number | null;
+  weightGrams!: number | null;
   imageKeys!: string[] | null;
+  tags!: string[] | null;
   options!: ProductOptionGroup[] | null;
   storeId!: string;
   storeSlug!: string;
   sortOrder!: number;
+  requiresShipping!: boolean;
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -154,12 +158,16 @@ export class UserProductSummaryDto {
     dto.categoryId = product.categoryId ?? null;
     dto.categoryName = product.categoryRef?.name ?? null;
     dto.status = product.status;
+    dto.sku = product.sku ?? null;
     dto.stockQuantity = product.stockQuantity;
+    dto.weightGrams = product.weightGrams ?? null;
     dto.imageKeys = product.imageKeys;
+    dto.tags = product.tags ?? null;
     dto.options = readProductOptions(product.options);
     dto.storeId = product.storeId;
     dto.storeSlug = storeSlug;
     dto.sortOrder = product.sortOrder;
+    dto.requiresShipping = product.requiresShipping !== false;
     dto.createdAt = product.createdAt;
     dto.updatedAt = product.updatedAt;
     return dto;

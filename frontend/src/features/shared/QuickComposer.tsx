@@ -242,8 +242,8 @@ export function QuickComposer({
         <p className="panel-muted">
           {product ? 'Adding to' : 'Posting as'} <strong>{store.name}</strong>.{' '}
           {product
-            ? 'Add the basics now; options and stock stay in the full editor.'
-            : 'Add a photo and a caption; product links stay in the full editor.'}
+            ? 'Add the basics now; options, stock and the remaining settings stay in the full editor.'
+            : 'Add a photo and a caption; links, search and sharing settings stay in the full editor.'}
         </p>
         <form className="panel-form" onSubmit={(event) => void publish(event)}>
           {notice && <Notice>{notice}</Notice>}

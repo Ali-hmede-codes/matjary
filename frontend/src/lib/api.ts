@@ -116,10 +116,14 @@ export interface Product {
   category: string;
   categoryId?: string | null;
   categoryName?: string | null;
+  sku?: string | null;
   stockQuantity: number | null;
+  weightGrams?: number | null;
   imageKeys: string[] | null;
   tags: string[] | null;
   options?: ProductOptionGroup[] | null;
+  sortOrder?: number;
+  requiresShipping?: boolean;
 }
 
 export interface ProductList {
