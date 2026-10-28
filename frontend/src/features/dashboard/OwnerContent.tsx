@@ -153,6 +153,11 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
       ? 'menu item'
       : 'product'
     : 'post';
+  // A turned-off section stays editable (owners may delete items to make room)
+  // but cannot accept new items until it is switched back on.
+  const sectionOff = product
+    ? store!.enableProductsSection === false
+    : store!.enablePostsSection === false;
   // The quick toggle only applies to items that are already live: a draft or an
   // archived item is published (or not) through the editor instead.
   const isLive = (item: Content) =>
@@ -229,11 +234,24 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
             : 'Share photos and short videos with your community.'
         }
         action={
-          <button className="panel-primary" onClick={() => setEditor(null)}>
-            <Plus size={18} /> Add {label}
-          </button>
+          sectionOff ? undefined : (
+            <button className="panel-primary" onClick={() => setEditor(null)}>
+              <Plus size={18} /> Add {label}
+            </button>
+          )
         }
       />
+      {sectionOff && (
+        <Notice>
+          {product
+            ? store!.storeType === 'restaurant_menu'
+              ? 'Your menu section is turned off for this shop.'
+              : 'Products are turned off for this shop.'
+            : 'Posts are turned off for this shop.'}{' '}
+          Existing items stay saved, and your plan’s other section can use their
+          allowance. <Link to="/dashboard/store">Turn it back on</Link>.
+        </Notice>
+      )}
       {notice && <Notice>{notice}</Notice>}
       {actionError && <Notice error>{actionError}</Notice>}
       <div className="panel-toolbar">
@@ -356,9 +374,14 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
           ) : (
             <Empty title={`Your next ${label} starts here`}>
               <p>Keep it simple. You can always add more details later.</p>
-              <button className="panel-primary" onClick={() => setEditor(null)}>
-                Add {label}
-              </button>
+              {!sectionOff && (
+                <button
+                  className="panel-primary"
+                  onClick={() => setEditor(null)}
+                >
+                  Add {label}
+                </button>
+              )}
             </Empty>
           )}
           <Pagination total={total} offset={offset} onChange={setOffset} />

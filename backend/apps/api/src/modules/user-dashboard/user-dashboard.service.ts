@@ -20,6 +20,8 @@ import {
   ProductStatus,
   StoreType,
   MediaStatus,
+  contentSectionCaps,
+  ownerContentState,
   ownerWhere,
   ownerVisibilitySql,
   MEDIA_OWNER_ID,
@@ -104,6 +106,8 @@ export class UserDashboardService {
           subscriptionExpiresAt: true,
           enableCart: true,
           enableWhatsAppCheckout: true,
+          enablePostsSection: true,
+          enableProductsSection: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -197,6 +201,14 @@ export class UserDashboardService {
         await this.plansService.getSubscriptionState(userId);
       const effectiveLimits =
         await this.plansService.getEffectiveLimits(userId);
+      // Effective section caps after any turned-off section donates its unused
+      // allowance; the plan page must show the numbers the API enforces.
+      const contentState = await ownerContentState(this.stores.manager, userId);
+      const contentCaps = contentSectionCaps(
+        effectiveLimits,
+        contentState.usage,
+        contentState.availability,
+      );
 
       return {
         stores: storesWithCounts,
@@ -215,6 +227,18 @@ export class UserDashboardService {
           daysRemaining: subscriptionState.daysRemaining,
         },
         limits: effectiveLimits,
+        sections: {
+          posts: {
+            enabled: contentState.availability.posts,
+            used: contentState.usage.posts,
+            limit: contentCaps.posts,
+          },
+          products: {
+            enabled: contentState.availability.products,
+            used: contentState.usage.products,
+            limit: contentCaps.products,
+          },
+        },
         stats: {
           totalStores: userStores.length,
           totalPosts: Array.from(postsCountMap.values()).reduce(
@@ -265,6 +289,8 @@ export class UserDashboardService {
           subscriptionExpiresAt: true,
           enableCart: true,
           enableWhatsAppCheckout: true,
+          enablePostsSection: true,
+          enableProductsSection: true,
           createdAt: true,
           updatedAt: true,
         },

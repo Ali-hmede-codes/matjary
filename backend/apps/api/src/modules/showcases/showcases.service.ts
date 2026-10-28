@@ -21,6 +21,9 @@ import {
   effectiveLimits,
   assertSubscriptionActive,
   assertQuota,
+  contentSectionCaps,
+  ownerContentState,
+  SECTION_DISABLED_CODE,
   ownerWhere,
   publicWhere,
   lockOwnerContent,
@@ -191,17 +194,6 @@ export class ShowcasesService {
           });
           await assertSubscriptionActive(manager, ownerId);
           const limits = await effectiveLimits(manager, ownerId);
-          const total = await manager.countBy(Showcase, { ownerId });
-          assertQuota(total, limits.maxTotalPosts, 'Post');
-          const slug = await chooseContentSlug(dto.title, dto.slug, (value) =>
-            manager.getRepository(Showcase).findOneBy({ slug: value }),
-          );
-          const existing = await manager.findOneBy(Showcase, {
-            slug,
-          });
-          if (existing) {
-            throw new ConflictException('A post with this slug already exists');
-          }
 
           let store: Store | null = null;
           if (dto.storeId) {
@@ -215,6 +207,33 @@ export class ShowcasesService {
             if (store.ownerId !== ownerId) {
               throw new ForbiddenException('You do not own this store');
             }
+            if (!store.enablePostsSection) {
+              throw new ConflictException({ code: SECTION_DISABLED_CODE });
+            }
+          }
+
+          // A turned-off section donates only its unused allowance to the
+          // section that stays on. Posts without a shop follow the account-wide
+          // setting, so "off in every shop" also blocks them here.
+          const sections = await ownerContentState(manager, ownerId);
+          if (!store && !sections.availability.posts) {
+            throw new ConflictException({ code: SECTION_DISABLED_CODE });
+          }
+          const caps = contentSectionCaps(
+            limits,
+            sections.usage,
+            sections.availability,
+          );
+          assertQuota(sections.usage.posts, caps.posts, 'Post');
+
+          const slug = await chooseContentSlug(dto.title, dto.slug, (value) =>
+            manager.getRepository(Showcase).findOneBy({ slug: value }),
+          );
+          const existing = await manager.findOneBy(Showcase, {
+            slug,
+          });
+          if (existing) {
+            throw new ConflictException('A post with this slug already exists');
           }
 
           const link = await this.resolveLinks(

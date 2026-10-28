@@ -19,6 +19,9 @@ import {
   effectiveLimits,
   assertSubscriptionActive,
   assertQuota,
+  contentSectionCaps,
+  ownerContentState,
+  SECTION_DISABLED_CODE,
   ownerWhere,
   publicWhere,
   PUBLIC_PRODUCT_STATUSES,
@@ -183,11 +186,6 @@ export class ProductsService {
             lock: { mode: 'pessimistic_write' },
           });
           await assertSubscriptionActive(manager, userId);
-          const limits = await effectiveLimits(manager, userId);
-          const count = await manager.count(Product, {
-            where: { store: { ownerId: userId } },
-          });
-          assertQuota(count, limits.maxProducts, 'Product');
           const store = await manager.findOneBy(Store, {
             id: storeId,
             ...ownerWhere('store'),
@@ -198,6 +196,20 @@ export class ProductsService {
           if (store.ownerId !== userId) {
             throw new ForbiddenException('You do not own this store');
           }
+          if (!store.enableProductsSection) {
+            throw new ConflictException({ code: SECTION_DISABLED_CODE });
+          }
+
+          // The post allowance joins the product allowance only while posts
+          // are off in every shop; existing posts still count.
+          const limits = await effectiveLimits(manager, userId);
+          const sections = await ownerContentState(manager, userId);
+          const caps = contentSectionCaps(
+            limits,
+            sections.usage,
+            sections.availability,
+          );
+          assertQuota(sections.usage.products, caps.products, 'Product');
 
           const category = dto.categoryId
             ? await manager.findOneBy(StoreCategory, {

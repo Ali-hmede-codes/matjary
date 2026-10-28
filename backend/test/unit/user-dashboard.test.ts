@@ -507,7 +507,7 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
   const service = new UserDashboardService(
     {} as never,
     {
-      manager: { count: async () => 0 },
+      manager: { count: async () => 0, find: async () => [] },
       find: async ({
         where,
       }: {

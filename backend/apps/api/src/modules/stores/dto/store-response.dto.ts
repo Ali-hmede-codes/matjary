@@ -115,6 +115,10 @@ export class StoreResponseDto {
   enableWhatsAppCheckout!: boolean;
   // Public opt-in: the storefront prints a small LBP price under each USD one.
   showPricesInLbp!: boolean;
+  // The storefront hides a turned-off section; the dashboard uses the same
+  // flags to explain where the plan allowance went.
+  enablePostsSection!: boolean;
+  enableProductsSection!: boolean;
   socialMediaLinks!: SocialMediaLinks | null;
   logoKey!: string | null;
   bannerKey!: string | null;
@@ -190,6 +194,8 @@ export function toStoreResponseDto(
     enableCart: store.enableCart,
     enableWhatsAppCheckout: store.enableWhatsAppCheckout,
     showPricesInLbp: store.showPricesInLbp,
+    enablePostsSection: store.enablePostsSection,
+    enableProductsSection: store.enableProductsSection,
     socialMediaLinks: store.socialMediaLinks,
     logoKey: store.logoKey,
     bannerKey: store.bannerKey,

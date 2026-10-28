@@ -483,6 +483,16 @@ export class Store extends BaseEntity {
   @Column({ name: 'show_prices_in_lbp', type: 'boolean', default: false })
   showPricesInLbp!: boolean;
 
+  // A turned-off section keeps its rows (editable and counted) but disappears
+  // from the storefront and cannot receive new content. Once the same section is
+  // off in every live shop, its unused plan allowance moves to the section that
+  // stays on; see contentSectionCaps in subscription-policy.ts.
+  @Column({ name: 'enable_posts_section', type: 'boolean', default: true })
+  enablePostsSection: boolean = true;
+
+  @Column({ name: 'enable_products_section', type: 'boolean', default: true })
+  enableProductsSection: boolean = true;
+
   // Design/theme settings (colors, layout, fonts, etc.)
   @Column({ name: 'design_settings', type: 'json', nullable: true })
   designSettings!: DesignSettings | null;

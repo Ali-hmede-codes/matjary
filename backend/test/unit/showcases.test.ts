@@ -76,6 +76,10 @@ class FakeRepository {
         },
         countBy: async (target: unknown) =>
           target === MediaAsset ? this.processingCount : this.totalCount,
+        count: async (target: unknown) =>
+          target === Showcase ? this.totalCount : 0,
+        // No shops means both content sections keep their plan quotas.
+        find: async () => [],
         findOneBy: (_target: unknown, where: Record<string, unknown>) =>
           this.findOneBy(where),
         create: (_target: unknown, value: unknown) => this.create(value),

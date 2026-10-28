@@ -144,6 +144,14 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     ),
   );
   const [lbpPrices, setLbpPrices] = useState(Boolean(store?.showPricesInLbp));
+  // Section switches: one section can be turned off so the other uses the
+  // combined plan allowance. A shop always keeps at least one section on.
+  const [postsSection, setPostsSection] = useState(
+    store?.enablePostsSection !== false,
+  );
+  const [productsSection, setProductsSection] = useState(
+    store?.enableProductsSection !== false,
+  );
   const [busy, setBusy] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -196,6 +204,8 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     cart,
     whatsapp,
     lbpPrices,
+    postsSection,
+    productsSection,
   });
   const [baseline, setBaseline] = useState(snapshot);
   const dirty = snapshot !== baseline;
@@ -318,6 +328,8 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               enableCart: cart,
               enableWhatsAppCheckout: whatsapp,
               showPricesInLbp: lbpPrices,
+              enablePostsSection: postsSection,
+              enableProductsSection: productsSection,
             }
           : {}),
         ...(store || branchBodies.length ? { branches: branchBodies } : {}),
@@ -640,6 +652,52 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
               order WhatsApp link here receives checkout messages.
             </p>
           </section>
+          {store && (
+            <section className="panel-card panel-optional">
+              <h2>Shop sections</h2>
+              <p className="panel-muted">
+                Turn off a section you don’t use. Its unused plan allowance
+                moves to the section that stays on — for example, 10 posts and
+                10 products let your{' '}
+                {type === 'restaurant_menu' ? 'menu' : 'products'} use up to 20
+                items while Posts is off. Existing items stay saved; you just
+                can’t add new ones there.
+              </p>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={postsSection}
+                  disabled={!productsSection}
+                  onChange={(e) => setPostsSection(e.target.checked)}
+                />
+                Posts
+                <small>
+                  The photo and video wall on your shop page. Turning it off
+                  gives its unused allowance to your{' '}
+                  {type === 'restaurant_menu' ? 'menu' : 'products'}.
+                </small>
+              </label>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={productsSection}
+                  disabled={!postsSection}
+                  onChange={(e) => setProductsSection(e.target.checked)}
+                />
+                {type === 'restaurant_menu' ? 'Menu' : 'Products'}
+                <small>
+                  Your {type === 'restaurant_menu' ? 'menu items' : 'products'}.
+                  Turning it off gives its unused allowance to Posts.
+                </small>
+              </label>
+              {(!postsSection || !productsSection) && (
+                <p className="panel-muted">
+                  Turning a section back on only works while the combined
+                  allowance has room. If it’s full, delete some items first.
+                </p>
+              )}
+            </section>
+          )}
           {store && (
             <details className="panel-card panel-optional">
               <summary>

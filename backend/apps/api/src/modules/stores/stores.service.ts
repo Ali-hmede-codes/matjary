@@ -23,6 +23,11 @@ import {
   effectiveSubscription,
   assertSubscriptionActive,
   assertQuota,
+  contentSectionCaps,
+  ownerContentState,
+  sectionHasRoom,
+  SECTION_LAST_ENABLED_CODE,
+  SECTION_NO_ROOM_CODE,
   moderationWhere,
   ownerWhere,
   publicWhere,
@@ -574,6 +579,56 @@ export class StoresService {
         );
         store.status = current.status;
         store.trashedAt = current.trashedAt;
+
+        const nextPostsSection =
+          dto.enablePostsSection ?? current.enablePostsSection;
+        const nextProductsSection =
+          dto.enableProductsSection ?? current.enableProductsSection;
+        if (!nextPostsSection && !nextProductsSection)
+          throw new BadRequestException({ code: SECTION_LAST_ENABLED_CODE });
+        store.enablePostsSection = nextPostsSection;
+        store.enableProductsSection = nextProductsSection;
+
+        // Turning a section back on must leave room for at least one new item;
+        // otherwise the owner would re-open a section that can never accept
+        // content. Existing rows in the section keep it re-openable.
+        if (
+          (nextPostsSection && !current.enablePostsSection) ||
+          (nextProductsSection && !current.enableProductsSection)
+        ) {
+          const [limits, sections] = await Promise.all([
+            effectiveLimits(manager, userId),
+            ownerContentState(manager, userId),
+          ]);
+          // Evaluate the split as it will be after this save: other live shops
+          // may already keep a section on.
+          const availability = {
+            posts:
+              nextPostsSection ||
+              sections.shops.some(
+                (shop) => shop.id !== current.id && shop.enablePostsSection,
+              ),
+            products:
+              nextProductsSection ||
+              sections.shops.some(
+                (shop) => shop.id !== current.id && shop.enableProductsSection,
+              ),
+          };
+          const caps = contentSectionCaps(limits, sections.usage, availability);
+          if (
+            nextPostsSection &&
+            !current.enablePostsSection &&
+            !sectionHasRoom('posts', caps, sections.usage)
+          )
+            throw new ConflictException({ code: SECTION_NO_ROOM_CODE });
+          if (
+            nextProductsSection &&
+            !current.enableProductsSection &&
+            !sectionHasRoom('products', caps, sections.usage)
+          )
+            throw new ConflictException({ code: SECTION_NO_ROOM_CODE });
+        }
+
         const persisted = await manager.save(store);
         if (dto.branches !== undefined) {
           await this.replaceBranches(manager, persisted, dto.branches);

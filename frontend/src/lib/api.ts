@@ -35,6 +35,9 @@ export interface Store {
   designSettings?: DesignSettingsInput | null;
   // Owner opt-in: prices also appear in LBP at the platform rate.
   showPricesInLbp?: boolean;
+  // Section switches; a turned-off section is hidden on the shop page.
+  enablePostsSection?: boolean;
+  enableProductsSection?: boolean;
   logoKey?: string | null;
   bannerKey?: string | null;
   socialMediaLinks?: Record<string, string> | null;

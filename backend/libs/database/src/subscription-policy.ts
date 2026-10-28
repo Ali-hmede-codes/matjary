@@ -1,10 +1,14 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import {
+  Product,
+  Showcase,
+  Store,
   SubscriptionStatus,
   UserSubscription,
   type SubscriptionLimits,
 } from './entities';
+import { ownerWhere } from './visibility-policy';
 import { TRIAL_EXPIRED_CODE } from './subscription-errors';
 
 export const FREE_LIMITS: SubscriptionLimits = {
@@ -164,4 +168,136 @@ export function boundedLimit(
   planLimit: number | null | undefined,
 ): number {
   return planLimit == null ? hardLimit : Math.min(hardLimit, planLimit);
+}
+
+// Content sections are the two stores of plan allowance: posts and the
+// products/menu items. Owners may turn one off and let the other use the
+// unused part of the combined allowance.
+export type ContentSectionKind = 'posts' | 'products';
+
+export interface ContentSectionUsage {
+  posts: number;
+  products: number;
+}
+
+export interface ContentSectionAvailability {
+  posts: boolean;
+  products: boolean;
+}
+
+export interface ContentSectionCaps {
+  posts: number | null;
+  products: number | null;
+}
+
+export interface OwnerSectionShop {
+  id: string;
+  enablePostsSection: boolean;
+  enableProductsSection: boolean;
+}
+
+export interface OwnerContentState {
+  usage: ContentSectionUsage;
+  availability: ContentSectionAvailability;
+  shops: OwnerSectionShop[];
+}
+
+// The shared allowance exists only when both plan quotas are finite. An
+// unlimited section has no ceiling to donate, so the other side keeps its own.
+export function sharedContentAllowance(
+  limits: Pick<SubscriptionLimits, 'maxTotalPosts' | 'maxProducts'>,
+): number | null {
+  const posts = limits.maxTotalPosts;
+  const products = limits.maxProducts;
+  return posts != null && products != null ? posts + products : null;
+}
+
+// Caps are maximum allowed counts (assertQuota blocks when used >= cap). A
+// turned-off section donates only its unused quota: existing rows always keep
+// counting, so hiding a full section never creates free room elsewhere.
+export function contentSectionCaps(
+  limits: Pick<SubscriptionLimits, 'maxTotalPosts' | 'maxProducts'>,
+  usage: ContentSectionUsage,
+  availability: ContentSectionAvailability,
+): ContentSectionCaps {
+  const posts = limits.maxTotalPosts ?? null;
+  const products = limits.maxProducts ?? null;
+  const allowance = sharedContentAllowance(limits);
+  if (!availability.posts && !availability.products)
+    return { posts: 0, products: 0 };
+  if (!availability.posts)
+    return {
+      posts: 0,
+      products:
+        products == null || allowance == null
+          ? products
+          : products + Math.max(0, (posts ?? 0) - usage.posts),
+    };
+  if (!availability.products)
+    return {
+      posts:
+        posts == null || allowance == null
+          ? posts
+          : posts + Math.max(0, (products ?? 0) - usage.products),
+      products: 0,
+    };
+  // With both sections on, each keeps its plan quota while the shared ceiling
+  // still limits the total, so a section can only use what the other left.
+  return {
+    posts:
+      posts == null
+        ? null
+        : allowance == null
+          ? posts
+          : Math.min(posts, Math.max(0, allowance - usage.products)),
+    products:
+      products == null
+        ? null
+        : allowance == null
+          ? products
+          : Math.min(products, Math.max(0, allowance - usage.posts)),
+  };
+}
+
+// Re-opening a section must leave at least one free slot. A section that still
+// has rows can always be shown again; the rows already count toward the pool.
+export function sectionHasRoom(
+  section: ContentSectionKind,
+  caps: ContentSectionCaps,
+  usage: ContentSectionUsage,
+): boolean {
+  const cap = section === 'posts' ? caps.posts : caps.products;
+  const used = section === 'posts' ? usage.posts : usage.products;
+  return used > 0 || cap == null || cap > used;
+}
+
+// Section state for one owner: plan usage across every shop plus whether each
+// section is still on somewhere. With no live shop there is no section to turn
+// off, so both keep their plan quotas.
+export async function ownerContentState(
+  manager: EntityManager,
+  ownerId: string,
+): Promise<OwnerContentState> {
+  const [posts, products, shops] = await Promise.all([
+    manager.count(Showcase, { where: { ownerId } }),
+    manager.count(Product, { where: { store: { ownerId } } }),
+    manager.find(Store, {
+      where: { ownerId, ...ownerWhere('store') },
+      select: {
+        id: true,
+        enablePostsSection: true,
+        enableProductsSection: true,
+      },
+    }),
+  ]);
+  return {
+    usage: { posts, products },
+    availability: shops.length
+      ? {
+          posts: shops.some((shop) => shop.enablePostsSection),
+          products: shops.some((shop) => shop.enableProductsSection),
+        }
+      : { posts: true, products: true },
+    shops,
+  };
 }

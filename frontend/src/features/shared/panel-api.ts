@@ -104,6 +104,12 @@ export function panelError(error: unknown): string {
       return 'That web address is already used by another product. Choose a different one.';
     if (error.code === 'PRODUCT_OPTIONS_INVALID')
       return 'Check the options: every option needs a name and at least one value, and names must be unique.';
+    if (error.code === 'SECTION_DISABLED')
+      return 'This section is turned off for the shop. Turn it back on in the shop settings first.';
+    if (error.code === 'SECTION_NO_ROOM')
+      return 'Not enough plan allowance to turn this section back on. Delete some items first, then try again.';
+    if (error.code === 'SECTION_LAST_ENABLED')
+      return 'Keep at least one section on for this shop.';
     if (error.status === 401)
       return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'Your account cannot perform this action.';

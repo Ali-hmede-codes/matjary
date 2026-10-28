@@ -49,6 +49,9 @@ import {
   assertSubscriptionActive,
   boundedLimit,
   assertQuota,
+  contentSectionCaps,
+  sectionHasRoom,
+  sharedContentAllowance,
   FREE_LIMITS,
   EXPIRED_LIMITS,
 } from '../../libs/database/src/subscription-policy';
@@ -894,4 +897,88 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
   assert.equal(FREE_LIMITS.maxCategories, 10);
   assert.equal(EXPIRED_LIMITS.maxShops, 0);
   assert.equal(EXPIRED_LIMITS.maxCategories, 0);
+});
+
+test('a turned-off section trades only its unused allowance with the other section', () => {
+  const limits = { maxTotalPosts: 10, maxProducts: 10 };
+  const both = { posts: true, products: true };
+  assert.equal(sharedContentAllowance(limits), 20);
+  assert.equal(
+    sharedContentAllowance({ maxTotalPosts: null, maxProducts: 10 }),
+    null,
+  );
+
+  // Both sections on: each keeps its own quota, and the shared ceiling caps the
+  // section that stays under its own limit once the other one exceeds it.
+  assert.deepEqual(
+    contentSectionCaps(limits, { posts: 0, products: 0 }, both),
+    { posts: 10, products: 10 },
+  );
+  assert.deepEqual(
+    contentSectionCaps(limits, { posts: 0, products: 15 }, both),
+    { posts: 5, products: 10 },
+  );
+
+  // Posts off: the unused post quota joins products. Hidden posts still count,
+  // so a full post section never frees room elsewhere.
+  assert.deepEqual(
+    contentSectionCaps(
+      limits,
+      { posts: 0, products: 15 },
+      { posts: false, products: true },
+    ),
+    { posts: 0, products: 20 },
+  );
+  assert.deepEqual(
+    contentSectionCaps(
+      limits,
+      { posts: 7, products: 0 },
+      { posts: false, products: true },
+    ),
+    { posts: 0, products: 13 },
+  );
+  assert.deepEqual(
+    contentSectionCaps(
+      limits,
+      { posts: 12, products: 0 },
+      { posts: false, products: true },
+    ),
+    { posts: 0, products: 10 },
+  );
+  // Products off mirrors the same arithmetic.
+  assert.deepEqual(
+    contentSectionCaps(
+      limits,
+      { posts: 15, products: 0 },
+      { posts: true, products: false },
+    ),
+    { posts: 20, products: 0 },
+  );
+  // An unlimited side has no ceiling to donate.
+  assert.deepEqual(
+    contentSectionCaps(
+      { maxTotalPosts: null, maxProducts: 10 },
+      { posts: 0, products: 0 },
+      { posts: false, products: true },
+    ),
+    { posts: 0, products: 10 },
+  );
+
+  // Re-opening a section needs a free slot; rows that already exist keep the
+  // section re-openable even when the shared pool is full.
+  const full = contentSectionCaps(limits, { posts: 0, products: 20 }, both);
+  assert.equal(
+    sectionHasRoom('posts', full, { posts: 0, products: 20 }),
+    false,
+  );
+  const roomForFive = contentSectionCaps(
+    limits,
+    { posts: 0, products: 15 },
+    both,
+  );
+  assert.equal(
+    sectionHasRoom('posts', roomForFive, { posts: 0, products: 15 }),
+    true,
+  );
+  assert.equal(sectionHasRoom('posts', full, { posts: 3, products: 20 }), true);
 });

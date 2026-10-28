@@ -54,6 +54,12 @@ export interface OwnerStore extends Store {
 export interface OwnerSummary {
   stats: Record<string, number>;
   limits: Record<string, number | string | boolean | null>;
+  // Effective allowance per content section after a turned-off section donates
+  // its unused plan quota. Older API responses may omit this block.
+  sections?: {
+    posts: { enabled: boolean; used: number; limit: number | null };
+    products: { enabled: boolean; used: number; limit: number | null };
+  };
   subscription: {
     planName: string;
     expiresAt: string | null;
@@ -485,12 +491,50 @@ function OwnerPlan() {
           : summary.subscription
             ? `Expires ${dateLabel(summary.subscription.expiresAt)}`
             : 'A great place to start your business.';
-  const limits = [
-    ['Shops', 'maxShops', 'totalStores'],
-    ['Categories', 'maxCategories', 'totalCategories'],
-    ['Products', 'maxProducts', 'totalProducts'],
-    ['Total posts', 'maxTotalPosts', 'totalPosts'],
-  ] as const;
+  const sections = summary.sections;
+  const sectionLimits = [
+    {
+      label: 'Shops',
+      used: summary.stats.totalStores ?? 0,
+      limit:
+        typeof summary.limits.maxShops === 'number'
+          ? summary.limits.maxShops
+          : null,
+      enabled: true,
+    },
+    {
+      label: 'Categories',
+      used: summary.stats.totalCategories ?? 0,
+      limit:
+        typeof summary.limits.maxCategories === 'number'
+          ? summary.limits.maxCategories
+          : null,
+      enabled: true,
+    },
+    {
+      label: 'Products',
+      used: sections?.products.used ?? summary.stats.totalProducts ?? 0,
+      limit:
+        sections?.products.limit ??
+        (typeof summary.limits.maxProducts === 'number'
+          ? summary.limits.maxProducts
+          : null),
+      enabled: sections?.products.enabled ?? true,
+    },
+    {
+      label: 'Total posts',
+      used: sections?.posts.used ?? summary.stats.totalPosts ?? 0,
+      limit:
+        sections?.posts.limit ??
+        (typeof summary.limits.maxTotalPosts === 'number'
+          ? summary.limits.maxTotalPosts
+          : null),
+      enabled: sections?.posts.enabled ?? true,
+    },
+  ];
+  const sectionsOff = Boolean(
+    sections && (!sections.posts.enabled || !sections.products.enabled),
+  );
   return (
     <>
       <PageTitle
@@ -504,17 +548,25 @@ function OwnerPlan() {
           </span>
           <h2>{planName}</h2>
           <p>{planDetail}</p>
-          {limits.map(([label, limit, used]) => (
-            <div className="panel-usage" key={limit}>
+          {sectionLimits.map(({ label, used, limit, enabled }) => (
+            <div className="panel-usage" key={label}>
               <span>{label}</span>
               <strong>
-                {summary.stats[used] ?? 0} /{' '}
-                {summary.limits[limit] == null
-                  ? 'Unlimited'
-                  : String(summary.limits[limit])}
+                {enabled
+                  ? `${used} / ${limit == null ? 'Unlimited' : limit}`
+                  : `${used} saved · section off`}
               </strong>
             </div>
           ))}
+          {sectionsOff && sections && (
+            <p className="panel-muted">
+              {sections.posts.enabled
+                ? 'Products are turned off in all your shops, so their unused allowance is available for posts.'
+                : sections.products.enabled
+                  ? 'Posts are turned off in all your shops, so their unused allowance is available for products.'
+                  : 'Both sections are turned off.'}
+            </p>
+          )}
           <Link className="panel-primary" to="/pricing">
             {expired ? 'Choose a paid plan' : 'Explore plans'}{' '}
             <ArrowUpRight size={16} />

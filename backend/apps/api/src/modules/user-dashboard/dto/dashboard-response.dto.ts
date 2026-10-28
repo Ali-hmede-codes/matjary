@@ -26,6 +26,10 @@ export class UserStoreSummaryDto {
   productsCount!: number;
   enableCart!: boolean;
   enableWhatsAppCheckout!: boolean;
+  // Sections the owner turned off. The storefront hides them and the plan
+  // allowance moves to the section that stays on.
+  enablePostsSection!: boolean;
+  enableProductsSection!: boolean;
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -51,6 +55,8 @@ export class UserStoreSummaryDto {
     dto.productsCount = productsCount;
     dto.enableCart = store.enableCart;
     dto.enableWhatsAppCheckout = store.enableWhatsAppCheckout;
+    dto.enablePostsSection = store.enablePostsSection !== false;
+    dto.enableProductsSection = store.enableProductsSection !== false;
     dto.createdAt = store.createdAt;
     dto.updatedAt = store.updatedAt;
     return dto;
@@ -192,6 +198,19 @@ export class SubscriptionStateDto {
   daysRemaining!: number | null;
 }
 
+// Effective content allowance per section after trading a turned-off section's
+// unused quota. `used` matches the counts the API enforces on create.
+export class ContentSectionSummaryDto {
+  enabled!: boolean;
+  used!: number;
+  limit!: number | null;
+}
+
+export class ContentSectionsSummaryDto {
+  posts!: ContentSectionSummaryDto;
+  products!: ContentSectionSummaryDto;
+}
+
 export class DashboardSummaryDto {
   stores!: UserStoreSummaryDto[];
   posts!: UserPostSummaryDto[];
@@ -199,6 +218,7 @@ export class DashboardSummaryDto {
   subscription!: UserSubscriptionInfoDto | null;
   subscriptionState!: SubscriptionStateDto;
   limits!: SubscriptionLimits;
+  sections!: ContentSectionsSummaryDto;
   stats!: {
     totalStores: number;
     totalPosts: number;

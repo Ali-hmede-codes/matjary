@@ -139,6 +139,16 @@ export class UpdateStoreDto {
   @IsBoolean()
   showPricesInLbp?: boolean;
 
+  // Turning a section back on is subject to the shared allowance; the service
+  // rejects a re-open when the plan has no free slot left.
+  @IsOptional()
+  @IsBoolean()
+  enablePostsSection?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableProductsSection?: boolean;
+
   @IsOptional()
   @IsString()
   @Length(1, 200)
