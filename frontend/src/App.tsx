@@ -47,6 +47,20 @@ const PricingPage = lazy(() =>
     default: module.PricingPage,
   })),
 );
+// The shop directory is a secondary destination; it ships on its own chunk so
+// the feed bundle stays untouched.
+const ShopsPage = lazy(() =>
+  import('./components/ShopsPage').then((module) => ({
+    default: module.ShopsPage,
+  })),
+);
+// Favorite shops and their newest posts keep their own address so the header
+// shortcut works from every page.
+const FavoritesPage = lazy(() =>
+  import('./components/FavoritesPage').then((module) => ({
+    default: module.FavoritesPage,
+  })),
+);
 
 export default function App() {
   return (
@@ -54,6 +68,8 @@ export default function App() {
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<DiscoveryPage />} />
+          <Route path="/shops" element={<ShopsPage />} />
+          <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
@@ -146,8 +162,6 @@ function DiscoveryPage() {
     withLikes,
     setSearch,
     setSearchOpen,
-    setStore,
-    clearCategories,
     setSelected,
     setNotice,
   } = discovery;
@@ -201,10 +215,6 @@ function DiscoveryPage() {
               selectedStore={store}
               posts={source}
               demo={demo}
-              onClearStore={() => {
-                setStore(null);
-                clearCategories();
-              }}
             />
             {!demo && storesQuery.isError && (
               <StatusBanner

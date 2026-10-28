@@ -24,6 +24,7 @@ import {
   StoreResponseDto,
   StoreListResponseDto,
 } from './dto/store-response.dto';
+import { StoreDirectoryResponseDto } from './dto/store-directory.dto';
 import {
   AuthOriginGuard,
   AuthRateLimitGuard,
@@ -61,6 +62,12 @@ export class StoresController {
   @Get('categories')
   getBusinessCategories() {
     return this.stores.getBusinessCategoryCatalog();
+  }
+
+  // Every public shop in one slim response for the all-shops page.
+  @Get('directory')
+  listDirectory(): Promise<StoreDirectoryResponseDto> {
+    return this.stores.listDirectory();
   }
 
   @Get('my')

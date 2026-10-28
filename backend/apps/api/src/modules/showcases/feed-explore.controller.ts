@@ -24,6 +24,7 @@ import {
   FeedResponse,
   ExploreParams,
   StoreFeedParams,
+  StoresFeedParams,
 } from './services/feed-explore.service';
 import {
   PostEngagementService,
@@ -550,5 +551,46 @@ export class FeedExploreController {
     };
 
     return this.feedExploreService.getStoreFeed(params, viewer);
+  }
+
+  @Get('stores')
+  @ApiOperation({
+    summary: 'Get newest posts from several shops',
+    description:
+      'Backs the favorites page. Favorites live on the device, so the client sends shop slugs; only public shops and posts are returned.',
+  })
+  @ApiQuery({
+    name: 'shops',
+    required: true,
+    type: String,
+    description: 'Comma-separated shop slugs (max 12)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items (default 18, max 50)',
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description: 'Pagination cursor',
+  })
+  @ApiResponse({ status: 200, description: 'Posts from the requested shops' })
+  async getStoresFeed(
+    @Req() request: Request,
+    @Query('shops', new DefaultValuePipe('')) shops: string,
+    @Query('limit', new DefaultValuePipe(18), ParseIntPipe) limit: number,
+    @Query('cursor') cursor?: string,
+  ): Promise<FeedResponse> {
+    const safeLimit = Math.min(Math.max(limit, 1), 50);
+    const viewer = await this.resolveViewer(request);
+    const params: StoresFeedParams = {
+      storeSlugs: shops.split(','),
+      limit: safeLimit,
+      cursor,
+    };
+    return this.feedExploreService.getStoresFeed(params, viewer);
   }
 }

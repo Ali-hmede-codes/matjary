@@ -38,6 +38,10 @@
     0 8px 24px #101b161a;
   transform: translateY(-2px);
 }
+/* A favorited shop keeps a red heart on every shop theme. */
+.storefront .shop-glass[aria-pressed='true'] {
+  color: #ff7a70;
+}
 .shop-topbar {
   --shop-glass-solid: #27302c;
   --shop-glass-tint: #16231d82;

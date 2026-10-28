@@ -2,9 +2,11 @@ import {
   Bookmark,
   Film,
   Flame,
+  Heart,
   House,
   Plus,
   Search,
+  Store,
   Tag,
   UserRound,
   X,
@@ -21,7 +23,7 @@ const navigation = [
 ] as const;
 
 type SiteHeaderProps = { settings: WebsiteSettings } & (
-  | { view: 'pricing' }
+  | { view: 'pricing' | 'shops' | 'favorites' }
   | {
       view: View;
       search: string;
@@ -34,7 +36,9 @@ type SiteHeaderProps = { settings: WebsiteSettings } & (
 
 export function SiteHeader(props: SiteHeaderProps) {
   const { settings, view } = props;
-  const feed = props.view === 'pricing' ? null : props;
+  // Property presence narrows the union reliably; comparing view values does
+  // not, because one branch's view is itself a union.
+  const feed = 'search' in props ? props : null;
   return (
     <header className="site-header">
       <div className="topbar">
@@ -65,6 +69,14 @@ export function SiteHeader(props: SiteHeaderProps) {
               </a>
             ),
           )}
+          <a
+            href="/shops"
+            className={view === 'shops' ? 'active' : ''}
+            aria-current={view === 'shops' ? 'page' : undefined}
+          >
+            <Store size={19} aria-hidden="true" />
+            <span>Shops</span>
+          </a>
           <a
             href="/pricing"
             className={view === 'pricing' ? 'active' : ''}
@@ -106,6 +118,14 @@ export function SiteHeader(props: SiteHeaderProps) {
               {feed.searchOpen ? <X size={22} /> : <Search size={22} />}
             </button>
           )}
+          <a
+            className={`icon-button favorites-link ${view === 'favorites' ? 'active' : ''}`}
+            href="/favorites"
+            aria-label="Your favorite shops"
+            title="Your favorite shops"
+          >
+            <Heart size={21} aria-hidden="true" />
+          </a>
           <a
             className="create-button"
             href={loginUrl}

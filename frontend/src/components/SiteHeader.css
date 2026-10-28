@@ -166,6 +166,16 @@
 .header-actions .search-toggle {
   display: none;
 }
+.favorites-link {
+  color: var(--muted);
+}
+.favorites-link:hover {
+  color: var(--ink);
+}
+.favorites-link.active {
+  background: var(--accent-wash);
+  color: var(--primary);
+}
 @media (max-width: 900px) {
   /* A floating glass dock above the safe area, not a full-width bar. */
   .main-nav {
@@ -174,7 +184,8 @@
     width: min(calc(100% - 24px), 520px);
     margin-inline: auto;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    /* Home, Trending, Videos, Saved, Shops, Pricing. */
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 2px;
     padding: 7px;
     border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
@@ -218,7 +229,7 @@
     flex-wrap: wrap;
   }
   .brand {
-    max-width: calc(100% - 148px);
+    max-width: calc(100% - 190px);
     font-size: 23px;
     gap: 8px;
   }
@@ -237,6 +248,10 @@
   }
   .header-actions .search-toggle {
     display: inline-flex;
+  }
+  .header-actions .favorites-link {
+    width: 38px;
+    height: 38px;
   }
   .create-button {
     width: 38px;

@@ -5,6 +5,7 @@ import {
   Share2,
   ShoppingCart,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { formatProductPrice } from '../lib/storefront';
 import type { ShopCartController } from '../hooks/useShopCart';
 
@@ -50,9 +51,11 @@ export function ShopCartDock({ cart }: { cart: ShopCartController }) {
 export function ShopToast({
   cart,
   notice,
+  noticeIcon,
 }: {
   cart: ShopCartController;
   notice?: string;
+  noticeIcon?: ReactNode;
 }) {
   const toast = cart.flash
     ? {
@@ -75,7 +78,7 @@ export function ShopToast({
       ) : toast.tone === 'error' ? (
         <AlertCircle size={16} aria-hidden="true" />
       ) : (
-        <Share2 size={16} aria-hidden="true" />
+        (noticeIcon ?? <Share2 size={16} aria-hidden="true" />)
       )}
       {toast.text}
     </div>

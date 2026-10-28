@@ -31,11 +31,17 @@ export function LoadingBar() {
   );
 }
 
-export function Toast({ message }: { message: string }) {
+export function Toast({
+  message,
+  icon,
+}: {
+  message: string;
+  icon?: ReactNode;
+}) {
   if (!message) return null;
   return (
     <div className="toast" role="status">
-      <Bookmark size={16} />
+      {icon ?? <Bookmark size={16} />}
       {message}
     </div>
   );

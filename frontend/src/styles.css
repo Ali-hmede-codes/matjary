@@ -26,6 +26,7 @@
 @import './components/StoreMenu.css';
 @import './components/ShopBranches.css';
 @import './components/PricingPage.css';
+@import './components/ShopsPage.css';
 @import './styles/animations.css';
 
 /* Keep this after component rules so touch layouts hide horizontal scrollbars too. */

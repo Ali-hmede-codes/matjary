@@ -49,6 +49,10 @@ import { StoreBranchDto } from './dto/store-branch.dto';
 import { storedDesignSettings } from './store-design';
 import { StoreResponseDto, toStoreResponseDto } from './dto/store-response.dto';
 import {
+  StoreDirectoryResponseDto,
+  toStoreDirectoryItemDto,
+} from './dto/store-directory.dto';
+import {
   LocationService,
   LocationValidationResult,
 } from './services/location.service';
@@ -110,6 +114,64 @@ export class StoresService {
   >();
   private static readonly PUBLIC_LIST_TTL_MS = 30 * 1000;
   private static readonly PUBLIC_LIST_CACHE_MAX = 20;
+
+  // The directory reads the whole public catalogue at once; it shares the same
+  // short TTL so a busy page load cannot turn into one query per visitor.
+  private directoryCache?: {
+    expiresAt: number;
+    value: StoreDirectoryResponseDto;
+  };
+  // A ceiling keeps the response bounded; the page reports when it is reached.
+  private static readonly DIRECTORY_MAX_ITEMS = 1000;
+
+  // Every public shop in one slim response, so the directory filters locally
+  // instead of paying a request per keystroke.
+  async listDirectory(): Promise<StoreDirectoryResponseDto> {
+    const cached = this.directoryCache;
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    try {
+      const [rows, total] = await this.stores.findAndCount({
+        where: publicWhere('store'),
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          logoKey: true,
+          brandColor: true,
+          storeType: true,
+          businessCategory: true,
+          city: true,
+          country: true,
+          hasVerificationBadge: true,
+          verificationBadgeExpiresAt: true,
+        },
+        order: { name: 'ASC', id: 'ASC' },
+        take: StoresService.DIRECTORY_MAX_ITEMS,
+      });
+      const storeIds = rows.map((row) => row.id);
+      const [postsCounts, productsCounts] = await Promise.all([
+        this.getPostsCounts(storeIds),
+        this.getProductsCounts(storeIds),
+      ]);
+      const value: StoreDirectoryResponseDto = {
+        items: rows.map((row) =>
+          toStoreDirectoryItemDto(
+            row,
+            postsCounts[row.id],
+            productsCounts[row.id],
+          ),
+        ),
+        total,
+      };
+      this.directoryCache = {
+        expiresAt: Date.now() + StoresService.PUBLIC_LIST_TTL_MS,
+        value,
+      };
+      return value;
+    } catch (error) {
+      this.sanitize(error);
+    }
+  }
 
   // The catalog itself is static, so it can be served without touching MySQL.
   getBusinessCategoryCatalog() {

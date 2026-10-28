@@ -1,0 +1,555 @@
+.shops-main {
+  max-width: var(--content-max-width);
+  margin: auto;
+  padding: 24px var(--page-padding) 24px;
+}
+
+/* Hero: the same soft stage as pricing, but left-aligned around the search. */
+.shops-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 32px 30px 30px;
+  margin-bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--surface));
+  border-radius: 26px;
+  background:
+    radial-gradient(
+      90% 140% at 8% 0%,
+      color-mix(in srgb, var(--primary) 11%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      80% 130% at 100% 0%,
+      color-mix(in srgb, var(--secondary) 16%, transparent),
+      transparent 56%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--wash) 60%, var(--surface)),
+      var(--surface)
+    );
+}
+.shops-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--surface));
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.shops-hero h1 {
+  max-width: 620px;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -1.3px;
+  line-height: 1.08;
+}
+.shops-lede {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.shops-search-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+.shops-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 460px);
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: 0 16px 28px -28px color-mix(in srgb, var(--ink) 60%, transparent);
+}
+.shops-favorites-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--surface));
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.shops-favorites-link:hover {
+  background: var(--accent-wash);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+}
+.shops-favorites-link .shops-count {
+  opacity: 0.8;
+}
+.shops-search:focus-within {
+  border-color: var(--primary);
+}
+.shops-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+}
+.shops-search input::placeholder {
+  color: var(--muted);
+}
+.shops-search button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.shops-search button:hover {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+/* Filters */
+.shops-filters {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+}
+/* Chips scroll sideways on narrow screens instead of stacking into a wall. */
+.shops-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.shops-filter-row::-webkit-scrollbar {
+  display: none;
+}
+.shops-filter-row button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.shops-filter-row button:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  color: var(--ink);
+}
+.shops-filter-row button.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.shops-count {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.68;
+}
+.shops-subtypes button {
+  min-height: 30px;
+  padding: 0 11px;
+  background: var(--wash);
+  font-size: 11.5px;
+}
+/* A subtype stays outlined so the filled group chip still reads as the scope. */
+.shops-subtypes button.selected {
+  background: var(--accent-wash);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.shops-filter-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+.shops-city {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.shops-city select {
+  max-width: 190px;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.shops-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+/* Verification stays blue independently of the shop's editable brand colors. */
+.shops-verified svg {
+  color: #1683ff;
+}
+.shops-verified:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  color: var(--ink);
+}
+.shops-verified.selected {
+  border-color: var(--primary);
+  background: var(--accent-wash);
+  color: var(--primary);
+}
+.shops-reset {
+  min-height: 36px;
+  padding: 0 4px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.shops-reset:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shops-result {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (min-width: 901px) {
+  /* Wide screens have room for every filter at once; hiding chips behind a
+     horizontal scroll made whole shop types undiscoverable. */
+  .shops-filter-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+}
+
+/* Cards: compact rows that fit two or three per row without a cover image,
+   so the directory stays light even with hundreds of shops. */
+.shops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* The browser skips painting off-screen cards until they scroll into view;
+   that keeps a long directory cheap without shipping a virtual-list library. */
+.shops-grid li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 92px;
+}
+.shop-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Match the tallest card in the row so a one-line meta never breaks the grid. */
+  height: 100%;
+  min-height: 86px;
+  padding: 12px 10px 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  transition:
+    border-color 0.18s,
+    background 0.18s,
+    transform 0.18s;
+}
+.shop-tile:hover,
+.shop-tile:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--line));
+  background: color-mix(in srgb, var(--wash) 55%, var(--surface));
+  transform: translateY(-1px);
+}
+.shop-tile-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.shop-tile-favorite {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.shop-tile-favorite:hover {
+  background: var(--wash);
+  color: #b3261e;
+}
+/* A favorited heart keeps the familiar red, independent of the brand color. */
+.shop-tile-favorite[aria-pressed='true'] {
+  color: #c2413a;
+}
+.shop-tile .store-avatar.large {
+  width: 50px;
+  height: 50px;
+  border-radius: 15px;
+  font-size: 15px;
+}
+.shop-tile-body {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.shop-tile-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.shop-tile-name > span:first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.shop-tile-category {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.shop-tile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.shop-tile-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Favorites page */
+.favorites-section {
+  margin-top: 20px;
+}
+.favorites-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+.favorites-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.2px;
+}
+.favorites-heading h2 span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.favorites-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.favorites-more:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.favorites-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.favorites-note {
+  padding: 16px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.favorites-more-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+.favorite-post-tile {
+  position: relative;
+}
+.favorite-post-shop {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 18px 8px 7px;
+  overflow: hidden;
+  background: linear-gradient(transparent, #000000b8);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 650;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Loading and empty states */
+.shops-status {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.shops-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr));
+  gap: 10px;
+}
+.shops-skeleton span {
+  height: 86px;
+  border-radius: 16px;
+  background: linear-gradient(
+    100deg,
+    var(--wash) 30%,
+    color-mix(in srgb, var(--line) 70%, var(--wash)) 45%,
+    var(--wash) 60%
+  );
+  background-size: 220% 100%;
+  animation: shops-sheen 1.3s linear infinite;
+}
+@keyframes shops-sheen {
+  to {
+    background-position: -220% 0;
+  }
+}
+.shops-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 54px 22px;
+  text-align: center;
+  border: 1px dashed color-mix(in srgb, var(--ink) 18%, var(--surface));
+  border-radius: 22px;
+  color: var(--muted);
+}
+.shops-empty h2 {
+  color: var(--ink);
+  font-size: 16px;
+}
+.shops-empty p {
+  max-width: 320px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.shops-empty .primary-button {
+  margin-top: 6px;
+}
+.shops-note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shops-skeleton span {
+    animation: none;
+  }
+  .shop-tile:hover,
+  .shop-tile:focus-within {
+    transform: none;
+  }
+}
+@media (max-width: 900px) {
+  .shops-main {
+    padding: 16px 20px 24px;
+  }
+}
+@media (max-width: 600px) {
+  .shops-main {
+    padding: 10px 0 20px;
+  }
+  .shops-hero,
+  .shops-filters {
+    margin-inline: 12px;
+    border-radius: 22px;
+  }
+  .shops-hero {
+    padding: 24px 20px 22px;
+  }
+  .shops-grid,
+  .shops-skeleton {
+    grid-template-columns: 1fr;
+    padding-inline: 12px;
+  }
+  .shops-note,
+  .shops-empty,
+  .shops-status,
+  .favorites-heading,
+  .favorites-note,
+  .favorites-more-row {
+    margin-inline: 12px;
+  }
+}

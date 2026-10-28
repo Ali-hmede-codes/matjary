@@ -9,13 +9,11 @@ export function StoreStrip({
   selectedStore,
   posts,
   demo,
-  onClearStore,
 }: {
   stores: Store[];
   selectedStore: Store | null;
   posts: Post[];
   demo: boolean;
-  onClearStore: () => void;
 }) {
   return (
     <section
@@ -30,16 +28,16 @@ export function StoreStrip({
         </span>
         <span>Your store</span>
       </a>
-      <button
-        className={`story all-stores ${!selectedStore ? 'selected' : ''}`}
-        aria-pressed={!selectedStore}
-        onClick={onClearStore}
+      <a
+        className="story all-stores"
+        href="/shops"
+        title="Open the all shops page"
       >
         <span className="story-ring">
           <Compass size={25} />
         </span>
         <span>All stores</span>
-      </button>
+      </a>
       {stores.map((item) => (
         <a
           className={`story ${selectedStore?.id === item.id ? 'selected' : ''}`}

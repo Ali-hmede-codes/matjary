@@ -51,6 +51,32 @@ export interface Store {
   } | null;
 }
 
+// Compact shop record for the public directory. It omits the storefront design
+// payload on purpose, so listing every shop stays one small request.
+export interface StoreDirectoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  logoKey: string | null;
+  brandColor: string | null;
+  storeType: 'ecommerce' | 'restaurant_menu';
+  businessCategory: string;
+  businessCategoryLabel: string;
+  categoryGroup: string;
+  categoryGroupLabel: string;
+  city: string | null;
+  country: string | null;
+  hasVerificationBadge: boolean;
+  verificationBadgeExpiresAt: string | null;
+  postsCount: number;
+  productsCount: number;
+}
+
+export interface StoreDirectory {
+  items: StoreDirectoryItem[];
+  total: number;
+}
+
 export interface ProductOptionValue {
   label: string;
   // This value's own price in cents, or null when it uses the base price.

@@ -164,6 +164,25 @@ export interface StoreFeedParams {
   cursor?: string;
 }
 
+export interface StoresFeedParams {
+  // Slugs the client favorited on this device; resolved against public shops.
+  storeSlugs: string[];
+  limit: number;
+  cursor?: string;
+}
+
+const favoriteSlugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+// One request may cover every favorite, but the list stays bounded so a
+// tampered client cannot turn it into an unbounded IN (...) query.
+const MAX_FAVORITE_STORES = 12;
+
+export function normalizeStoreSlugs(values: readonly string[]): string[] {
+  const slugs = values
+    .map((value) => value.trim())
+    .filter((value) => value.length <= 191 && favoriteSlugPattern.test(value));
+  return [...new Set(slugs)].slice(0, MAX_FAVORITE_STORES);
+}
+
 @Injectable()
 export class FeedExploreService {
   private readonly logger = new Logger(FeedExploreService.name);
@@ -1467,6 +1486,72 @@ export class FeedExploreService {
       hasMore,
       nextCursor,
       algorithm: 'store',
+    };
+  }
+
+  /**
+   * Newest posts across a shopper's favorite shops. Favorites live on the
+   * device, so the client sends the shop slugs and the server only ever reads
+   * publicly visible shops and posts.
+   */
+  async getStoresFeed(
+    params: StoresFeedParams,
+    viewer?: ResolvedViewer,
+  ): Promise<FeedResponse> {
+    const storeSlugs = normalizeStoreSlugs(params.storeSlugs);
+    const empty: FeedResponse = {
+      items: [],
+      total: 0,
+      hasMore: false,
+      nextCursor: undefined,
+      algorithm: 'favorites',
+    };
+    if (!storeSlugs.length) return empty;
+
+    const stores = await this.stores.find({
+      where: { slug: In(storeSlugs), ...publicWhere('store') },
+      select: ['id'],
+    });
+    if (!stores.length) return empty;
+
+    let query = this.showcases
+      .createQueryBuilder('showcase')
+      .innerJoinAndSelect('showcase.store', 'store')
+      .where('showcase.status = :status', { status: ShowcaseStatus.PUBLISHED })
+      .andWhere(publicVisibilitySql('post', 'showcase'))
+      .andWhere('showcase.publishedAt IS NOT NULL')
+      .andWhere('showcase.storeId IN (:...storeIds)', {
+        storeIds: stores.map((store) => store.id),
+      })
+      .orderBy('showcase.publishedAt', 'DESC')
+      .addOrderBy('showcase.createdAt', 'DESC');
+
+    if (params.cursor) {
+      const cursorDate = new Date(params.cursor);
+      if (!Number.isNaN(cursorDate.getTime()))
+        query = query.andWhere('showcase.publishedAt < :cursorDate', {
+          cursorDate,
+        });
+    }
+
+    query = query.take(params.limit + 1);
+    const items = await query.getMany();
+    const hasMore = items.length > params.limit;
+    const displayItems = hasMore ? items.slice(0, params.limit) : items;
+    const lastItem = displayItems[displayItems.length - 1];
+    // Published times can repeat across shops; the extra row keeps paging safe.
+    const nextCursor =
+      hasMore && lastItem?.publishedAt
+        ? lastItem.publishedAt.toISOString()
+        : undefined;
+
+    const enrichedItems = await this.enrichFeedItems(displayItems, viewer);
+    return {
+      items: enrichedItems,
+      total: enrichedItems.length,
+      hasMore,
+      nextCursor,
+      algorithm: 'favorites',
     };
   }
 

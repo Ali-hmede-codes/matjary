@@ -5,6 +5,7 @@ import {
   ArrowUp,
   ArrowUpRight,
   ChevronDown,
+  Heart,
   Images,
   LayoutGrid,
   LoaderCircle,
@@ -47,6 +48,7 @@ import { useShopCart } from '../hooks/useShopCart';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { usePostEngagement } from '../hooks/usePostEngagement';
 import { useShare } from '../hooks/useShare';
+import { useShopFavorites } from '../hooks/useShopFavorites';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
 import { CatalogItems, CatalogLoading, ShopImage } from './StoreCatalog';
@@ -120,6 +122,8 @@ export function StorePage({ slug }: { slug: string | null }) {
   const contactDetails = useRef<HTMLElement>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [postNotice, setPostNotice] = useState('');
+  const [favoriteNotice, setFavoriteNotice] = useState('');
+  const shopFavorites = useShopFavorites(setFavoriteNotice);
   const { saved, liking, likePost, savePost, registerView, withLikes } =
     usePostEngagement({ demo, onNotice: setPostNotice });
   useEffect(() => {
@@ -127,6 +131,11 @@ export function StorePage({ slug }: { slug: string | null }) {
     const timer = window.setTimeout(() => setPostNotice(''), 4000);
     return () => window.clearTimeout(timer);
   }, [postNotice]);
+  useEffect(() => {
+    if (!favoriteNotice) return;
+    const timer = window.setTimeout(() => setFavoriteNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [favoriteNotice]);
   // A restaurant opens on its menu; the choice only sticks once the shopper
   // switches tabs themselves, so a late store response cannot steal the tab.
   const tabChosen = useRef(initialView === 'catalog');
@@ -386,6 +395,34 @@ export function StorePage({ slug }: { slug: string | null }) {
             role="group"
             aria-label="Shop quick actions"
           >
+            {!demo && (
+              <button
+                type="button"
+                className="shop-glass"
+                aria-pressed={shopFavorites.isFavorite(store.id)}
+                aria-label={
+                  shopFavorites.isFavorite(store.id)
+                    ? `Remove ${store.name} from favorite shops`
+                    : `Add ${store.name} to favorite shops`
+                }
+                title={
+                  shopFavorites.isFavorite(store.id)
+                    ? 'Remove from favorites'
+                    : 'Add to favorites'
+                }
+                onClick={() =>
+                  shopFavorites.toggleFavorite(store.id, store.name)
+                }
+              >
+                <Heart
+                  size={21}
+                  aria-hidden="true"
+                  fill={
+                    shopFavorites.isFavorite(store.id) ? 'currentColor' : 'none'
+                  }
+                />
+              </button>
+            )}
             <button
               type="button"
               className="shop-glass"
@@ -1021,7 +1058,15 @@ export function StorePage({ slug }: { slug: string | null }) {
           onClose={() => setSelectedPost(null)}
         />
       )}
-      <ShopToast cart={cart} notice={share.notice} />
+      <ShopToast
+        cart={cart}
+        notice={share.notice || favoriteNotice}
+        noticeIcon={
+          !share.notice && favoriteNotice ? (
+            <Heart size={16} aria-hidden="true" />
+          ) : undefined
+        }
+      />
     </div>
   );
 }

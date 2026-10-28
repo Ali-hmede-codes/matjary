@@ -1,9 +1,4 @@
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Bookmark,
-  Store as StoreIcon,
-} from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Bookmark } from 'lucide-react';
 import { assetUrl, type Store } from '../lib/api';
 import type { WebsiteSettings } from '../lib/website';
 import { storePath } from '../lib/storefront';
@@ -26,7 +21,10 @@ export function DiscoveryRail({
     <aside className="discovery-rail" aria-label="More to explore">
       <div className="rail-heading">
         <h2>Stores to explore</h2>
-        <StoreIcon size={18} />
+        <a className="rail-see-all" href="/shops">
+          All shops
+          <ArrowRight size={13} aria-hidden="true" />
+        </a>
       </div>
       {stores.slice(0, 5).map((item) => (
         <a
