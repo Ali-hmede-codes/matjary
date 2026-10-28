@@ -29,26 +29,15 @@ interface Facet {
   count: number;
 }
 
-interface CategoryFacet extends Facet {
-  group: string;
-}
-
 interface CityFacet {
   name: string;
   count: number;
 }
 
-// One pass over the loaded directory builds every facet the filters need, so
-// typing or switching a filter never costs another request.
-function buildFacets(items: StoreDirectoryItem[]): {
-  groups: Facet[];
-  categories: CategoryFacet[];
-} {
+// One pass over the loaded directory builds the group facets, so typing or
+// switching a filter never costs another request.
+function buildGroupFacets(items: StoreDirectoryItem[]): Facet[] {
   const groups = new Map<string, { label: string; count: number }>();
-  const categories = new Map<
-    string,
-    { label: string; group: string; count: number }
-  >();
   for (const item of items) {
     const group = groups.get(item.categoryGroup);
     if (group) group.count += 1;
@@ -57,23 +46,10 @@ function buildFacets(items: StoreDirectoryItem[]): {
         label: item.categoryGroupLabel,
         count: 1,
       });
-    const category = categories.get(item.businessCategory);
-    if (category) category.count += 1;
-    else
-      categories.set(item.businessCategory, {
-        label: item.businessCategoryLabel,
-        group: item.categoryGroup,
-        count: 1,
-      });
   }
-  return {
-    groups: [...groups.entries()]
-      .map(([slug, value]) => ({ slug, ...value }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
-    categories: [...categories.entries()]
-      .map(([slug, value]) => ({ slug, ...value }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
-  };
+  return [...groups.entries()]
+    .map(([slug, value]) => ({ slug, ...value }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
 function buildCities(items: StoreDirectoryItem[]): CityFacet[] {
@@ -117,7 +93,6 @@ export function ShopsPage() {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const [group, setGroup] = useState('');
-  const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [notice, setNotice] = useState('');
@@ -129,23 +104,10 @@ export function ShopsPage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const facets = useMemo(() => buildFacets(items), [items]);
-  // Categories narrow to the chosen group, so the chips match what is visible.
-  const visibleCategories = useMemo(
-    () =>
-      group
-        ? facets.categories.filter((entry) => entry.group === group)
-        : facets.categories,
-    [facets.categories, group],
-  );
+  const facets = useMemo(() => buildGroupFacets(items), [items]);
   const scopedItems = useMemo(
-    () =>
-      items.filter(
-        (item) =>
-          (!group || item.categoryGroup === group) &&
-          (!category || item.businessCategory === category),
-      ),
-    [items, group, category],
+    () => items.filter((item) => !group || item.categoryGroup === group),
+    [items, group],
   );
   const cities = useMemo(() => buildCities(scopedItems), [scopedItems]);
   // A narrower shop type can retire the chosen city; ignoring the stale value
@@ -165,27 +127,28 @@ export function ShopsPage() {
     });
   }, [scopedItems, cityFilter, verifiedOnly, deferredQuery]);
 
-  const hasFilters = Boolean(
-    query || group || category || cityFilter || verifiedOnly,
-  );
+  const hasFilters = Boolean(query || group || cityFilter || verifiedOnly);
 
-  function chooseGroup(next: string) {
-    setGroup(next);
-    // A category from another group would silently hide every remaining shop.
-    if (
-      category &&
-      !items.some(
-        (item) =>
-          item.categoryGroup === next && item.businessCategory === category,
-      )
-    )
-      setCategory('');
-  }
+  // Each category group becomes its own titled band, so a long directory reads
+  // like a menu instead of one wall of cards. Empty groups drop out entirely.
+  const sections = useMemo(() => {
+    const buckets = new Map<string, StoreDirectoryItem[]>();
+    for (const item of filtered) {
+      const bucket = buckets.get(item.categoryGroup);
+      if (bucket) bucket.push(item);
+      else buckets.set(item.categoryGroup, [item]);
+    }
+    return facets.flatMap((entry) => {
+      const groupItems = buckets.get(entry.slug);
+      return groupItems?.length
+        ? [{ slug: entry.slug, label: entry.label, items: groupItems }]
+        : [];
+    });
+  }, [filtered, facets]);
 
   function resetFilters() {
     setQuery('');
     setGroup('');
-    setCategory('');
     setCity('');
     setVerifiedOnly(false);
   }
@@ -205,8 +168,8 @@ export function ShopsPage() {
       <SiteHeader settings={settings} view="shops" />
       <div className="page-shell">
         <main className="shops-main" id="shops-directory" tabIndex={-1}>
-          <section className="shops-hero" aria-labelledby="shops-title">
-            <span className="shops-eyebrow">
+          <header className="shops-head">
+            <span className="shops-kicker">
               <Compass size={13} aria-hidden="true" /> Shop directory
             </span>
             <h1 id="shops-title">Every shop, in one place</h1>
@@ -246,63 +209,28 @@ export function ShopsPage() {
                 )}
               </a>
             </div>
-          </section>
-
-          <section
-            className="shops-filters"
-            aria-label="Filter shops"
-            aria-busy={directoryQuery.isPending}
-          >
             <div
-              className="shops-filter-row"
+              className="shops-toolbar"
               role="group"
-              aria-label="Shop type groups"
+              aria-label="Filter shops"
+              aria-busy={directoryQuery.isPending}
             >
-              <button
-                className={!group ? 'selected' : ''}
-                aria-pressed={!group}
-                onClick={() => chooseGroup('')}
-              >
-                All types
-                <span className="shops-count">{items.length}</span>
-              </button>
-              {facets.groups.map((entry) => (
-                <button
-                  key={entry.slug}
-                  className={group === entry.slug ? 'selected' : ''}
-                  aria-pressed={group === entry.slug}
-                  onClick={() => chooseGroup(entry.slug)}
+              <label className="shops-select">
+                <StoreIcon size={15} aria-hidden="true" />
+                <span className="sr-only">Shop type</span>
+                <select
+                  value={group}
+                  onChange={(event) => setGroup(event.target.value)}
                 >
-                  {entry.label}
-                  <span className="shops-count">{entry.count}</span>
-                </button>
-              ))}
-            </div>
-
-            {visibleCategories.length > 0 && (
-              <div
-                className="shops-filter-row shops-subtypes"
-                role="group"
-                aria-label="Shop types"
-              >
-                {visibleCategories.map((entry) => (
-                  <button
-                    key={entry.slug}
-                    className={category === entry.slug ? 'selected' : ''}
-                    aria-pressed={category === entry.slug}
-                    onClick={() =>
-                      setCategory(category === entry.slug ? '' : entry.slug)
-                    }
-                  >
-                    {entry.label}
-                    <span className="shops-count">{entry.count}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="shops-filter-meta">
-              <label className="shops-city">
+                  <option value="">All types ({items.length})</option>
+                  {facets.map((entry) => (
+                    <option key={entry.slug} value={entry.slug}>
+                      {entry.label} ({entry.count})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="shops-select">
                 <MapPin size={15} aria-hidden="true" />
                 <span className="sr-only">City</span>
                 <select
@@ -338,7 +266,7 @@ export function ShopsPage() {
                 </p>
               )}
             </div>
-          </section>
+          </header>
 
           {directoryQuery.isError && (
             <StatusBanner
@@ -397,21 +325,31 @@ export function ShopsPage() {
             </div>
           )}
 
-          {filtered.length > 0 && (
-            <ul className="shops-grid" aria-label="All shops">
-              {filtered.map((item) => (
-                <li key={item.id}>
-                  <ShopTile
-                    item={item}
-                    favorite={favorites.isFavorite(item.id)}
-                    onToggleFavorite={(shop) =>
-                      favorites.toggleFavorite(shop.id, shop.name)
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
+          {sections.map((section) => (
+            <section
+              className="shops-section"
+              key={section.slug}
+              aria-labelledby={`shops-group-${section.slug}`}
+            >
+              <div className="shops-section-head">
+                <h2 id={`shops-group-${section.slug}`}>{section.label}</h2>
+                <span>{plural(section.items.length, 'shop', 'shops')}</span>
+              </div>
+              <ul className="shops-grid" aria-label={section.label}>
+                {section.items.map((item) => (
+                  <li key={item.id}>
+                    <ShopTile
+                      item={item}
+                      favorite={favorites.isFavorite(item.id)}
+                      onToggleFavorite={(shop) =>
+                        favorites.toggleFavorite(shop.id, shop.name)
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
 
           {total > items.length && (
             <p className="shops-note">

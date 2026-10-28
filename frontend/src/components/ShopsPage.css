@@ -4,6 +4,33 @@
   padding: 24px var(--page-padding) 24px;
 }
 
+/* The directory sits flat on the page background; only the shop cards are
+   boxes. The hero styling below is kept for the favorites page. */
+.shops-head {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  padding-top: 4px;
+}
+.shops-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.shops-head h1 {
+  max-width: 620px;
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 800;
+  letter-spacing: -1.1px;
+  line-height: 1.08;
+}
+
 /* Hero: the same soft stage as pricing, but left-aligned around the search. */
 .shops-hero {
   position: relative;
@@ -67,17 +94,17 @@
   flex-wrap: wrap;
   gap: 10px;
   width: 100%;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 .shops-search {
   display: flex;
   align-items: center;
   gap: 10px;
   width: min(100%, 460px);
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--muted);
   box-shadow: 0 16px 28px -28px color-mix(in srgb, var(--ink) 60%, transparent);
@@ -86,10 +113,10 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--surface));
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--primary);
   font-size: 12.5px;
@@ -130,88 +157,30 @@
   color: var(--ink);
 }
 
-/* Filters */
-.shops-filters {
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--surface);
-}
-/* Chips scroll sideways on narrow screens instead of stacking into a wall. */
-.shops-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
-}
-.shops-filter-row::-webkit-scrollbar {
-  display: none;
-}
-.shops-filter-row button {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-}
-.shops-filter-row button:hover {
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
-  color: var(--ink);
-}
-.shops-filter-row button.selected {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
-}
-.shops-count {
-  font-size: 10px;
-  font-weight: 700;
-  opacity: 0.68;
-}
-.shops-subtypes button {
-  min-height: 30px;
-  padding: 0 11px;
-  background: var(--wash);
-  font-size: 11.5px;
-}
-/* A subtype stays outlined so the filled group chip still reads as the scope. */
-.shops-subtypes button.selected {
-  background: var(--accent-wash);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-.shops-filter-meta {
+/* Filters: one compact row of controls, not a panel. */
+.shops-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  width: 100%;
+  margin-top: 4px;
+  padding-bottom: 14px;
 }
-.shops-city {
+.shops-select {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 36px;
+  min-height: 34px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--surface);
+  border-radius: 10px;
   color: var(--muted);
 }
-.shops-city select {
+.shops-select:focus-within {
+  border-color: var(--primary);
+}
+.shops-select select {
   max-width: 190px;
   border: 0;
   outline: 0;
@@ -220,14 +189,19 @@
   font-size: 12px;
   font-weight: 600;
 }
+.shops-count {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.68;
+}
 .shops-verified {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 34px;
+  padding: 0 11px;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 10px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -246,7 +220,7 @@
   color: var(--primary);
 }
 .shops-reset {
-  min-height: 36px;
+  min-height: 34px;
   padding: 0 4px;
   color: var(--primary);
   font-size: 12px;
@@ -263,14 +237,28 @@
   font-weight: 600;
 }
 
-@media (min-width: 901px) {
-  /* Wide screens have room for every filter at once; hiding chips behind a
-     horizontal scroll made whole shop types undiscoverable. */
-  .shops-filter-row {
-    flex-wrap: wrap;
-    overflow-x: visible;
-    padding-bottom: 0;
-  }
+/* Group bands: each category group gets its name above its shops, like a
+   menu, so restaurants, cafes, and shops never blur into one list. */
+.shops-section {
+  margin-top: 18px;
+}
+.shops-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.shops-section-head h2 {
+  font-size: 14.5px;
+  font-weight: 750;
+  letter-spacing: -0.2px;
+}
+.shops-section-head span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 /* Cards: compact rows that fit two or three per row without a cover image,
@@ -531,12 +519,13 @@
   .shops-main {
     padding: 10px 0 20px;
   }
-  .shops-hero,
-  .shops-filters {
+  .shops-head,
+  .shops-section-head {
     margin-inline: 12px;
-    border-radius: 22px;
   }
   .shops-hero {
+    margin-inline: 12px;
+    border-radius: 22px;
     padding: 24px 20px 22px;
   }
   .shops-grid,
