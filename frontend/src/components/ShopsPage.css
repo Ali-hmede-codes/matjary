@@ -374,6 +374,46 @@
 .favorites-section {
   margin-top: 20px;
 }
+/* With no favorites there is nothing worth framing: the title, the invitation
+   and the action sit flat on the page as one calm screen, while the shops and
+   their posts keep their cards once favorites exist. */
+.favorites-main-empty {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 190px);
+}
+.favorites-empty {
+  display: grid;
+  flex: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 40px 20px;
+  text-align: center;
+}
+/* The eyebrow drops its pill here as well; nothing on this screen is boxed. */
+.favorites-empty .shops-eyebrow {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.favorites-empty h1 {
+  max-width: 560px;
+  font-size: clamp(30px, 4.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -1.4px;
+  line-height: 1.06;
+}
+.favorites-empty-lede {
+  max-width: 420px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.7;
+  text-wrap: balance;
+}
+.favorites-empty .primary-button {
+  margin-top: 10px;
+}
 .favorites-heading {
   display: flex;
   align-items: center;
@@ -513,6 +553,11 @@
 @media (max-width: 900px) {
   .shops-main {
     padding: 16px 20px 24px;
+  }
+  /* Leaves room for the header, the floating dock and the footer so the empty
+     state still reads as a single screen. */
+  .favorites-main-empty {
+    min-height: calc(100dvh - 300px);
   }
 }
 @media (max-width: 600px) {

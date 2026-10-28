@@ -124,38 +124,45 @@ export function FavoritesPage() {
       </a>
       <SiteHeader settings={settings} view="favorites" />
       <div className="page-shell">
-        <main className="shops-main" id="favorites-main" tabIndex={-1}>
-          <section
-            className="shops-hero favorites-hero"
-            aria-labelledby="favorites-title"
-          >
-            <span className="shops-eyebrow">
-              <Heart size={13} aria-hidden="true" /> Your favorites
-            </span>
-            <h1 id="favorites-title">Shops you love</h1>
-            <p className="shops-lede">
-              {favoriteShops.length > 0
-                ? `${plural(favoriteShops.length, 'shop', 'shops')} saved on this device, with their newest posts below.`
-                : hasFavorites
-                  ? 'Loading your favorite shops…'
-                  : 'Tap the heart on any shop to keep it and its newest posts here.'}
-            </p>
-          </section>
-
+        <main
+          className={`shops-main${hasFavorites ? '' : ' favorites-main-empty'}`}
+          id="favorites-main"
+          tabIndex={-1}
+        >
           {!hasFavorites ? (
-            <div className="shops-empty" role="status">
-              <StoreIcon size={26} aria-hidden="true" />
-              <h2>No favorite shops yet</h2>
-              <p>
-                Tap the heart on a shop in the directory, or on a shop page, and
-                it will appear here together with its latest posts.
+            <section
+              className="favorites-empty"
+              aria-labelledby="favorites-title"
+            >
+              <span className="shops-eyebrow">
+                <Heart size={13} aria-hidden="true" /> Your favorites
+              </span>
+              <h1 id="favorites-title">Shops you love</h1>
+              <p className="favorites-empty-lede">
+                Tap the heart on any shop, in the directory or on its page, and
+                it stays here together with its newest posts.
               </p>
               <a className="primary-button" href="/shops">
+                <StoreIcon size={16} aria-hidden="true" />
                 Browse all shops
               </a>
-            </div>
+            </section>
           ) : (
             <>
+              <section
+                className="shops-hero favorites-hero"
+                aria-labelledby="favorites-title"
+              >
+                <span className="shops-eyebrow">
+                  <Heart size={13} aria-hidden="true" /> Your favorites
+                </span>
+                <h1 id="favorites-title">Shops you love</h1>
+                <p className="shops-lede">
+                  {favoriteShops.length > 0
+                    ? `${plural(favoriteShops.length, 'shop', 'shops')} saved on this device, with their newest posts below.`
+                    : 'Loading your favorite shops…'}
+                </p>
+              </section>
               {directoryQuery.isError && (
                 <StatusBanner
                   action="Try again"
