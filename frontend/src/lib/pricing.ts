@@ -14,6 +14,7 @@ export interface SubscriptionPlan {
     maxTotalPosts?: number | null;
     maxShops?: number | null;
     maxProducts?: number | null;
+    maxStories?: number | null;
     maxCategories?: number | null;
     maxStorageBytes?: number | null;
     enableCart?: boolean;
@@ -67,6 +68,7 @@ export function planFeatures(plan: SubscriptionPlan) {
     { label: 'Max categories', value: quota(limits.maxCategories) },
     { label: 'Max posts', value: quota(limits.maxTotalPosts) },
     { label: 'Max products', value: quota(limits.maxProducts) },
+    { label: 'Story slots per shop', value: quota(limits.maxStories) },
     { label: 'Media storage', value: storageQuota(limits.maxStorageBytes) },
     { label: 'Shopping cart', value: limits.enableCart === true },
     {

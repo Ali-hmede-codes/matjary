@@ -1,0 +1,59 @@
+/* The ring around a shop avatar tells a shopper whether a story is waiting:
+   colored until watched here, quiet afterwards, dashed for an owner with none. */
+.story-avatar {
+  position: relative;
+  display: inline-grid;
+  flex-shrink: 0;
+}
+.story-avatar-ring {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border-radius: 15px;
+  background: var(--line);
+  transition: transform 180ms;
+}
+.story-avatar.is-large .story-avatar-ring {
+  padding: 3px;
+  border-radius: 22px;
+}
+.story-avatar-unseen .story-avatar-ring {
+  background: conic-gradient(
+    from 210deg,
+    #f6b93f,
+    #e0703d,
+    #b8497d,
+    #5f5ac9,
+    #2f9c8d,
+    #f6b93f
+  );
+}
+.story-avatar-seen .story-avatar-ring {
+  background: color-mix(in srgb, var(--ink) 22%, var(--surface));
+}
+.story-avatar-owner .story-avatar-ring {
+  padding: 1px;
+  border: 2px dashed color-mix(in srgb, var(--muted) 55%, var(--surface));
+  background: var(--surface);
+}
+.story-avatar-ring > .store-avatar {
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.story-avatar-add {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.story-avatar-add:hover {
+  transform: scale(1.06);
+}

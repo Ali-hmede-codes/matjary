@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   ArrowLeft,
   ArrowUp,
@@ -11,6 +15,7 @@ import {
   LoaderCircle,
   MapPin,
   Package,
+  Plus,
   Search,
   Share2,
   ShoppingBag,
@@ -20,6 +25,7 @@ import {
 import {
   ApiError,
   assetUrl,
+  deleteStory,
   getJson,
   type Feed,
   type Post,
@@ -61,6 +67,15 @@ import { SocialIcon } from './SocialIcon';
 import { LoadingBar, StatusBanner } from './Feedback';
 import { PostDialog } from './PostDialog';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
+import { StoryAvatar } from './stories/StoryAvatar';
+import { StoryComposer } from './stories/StoryComposer';
+import { StoryViewer } from './stories/StoryViewer';
+import {
+  useSeenStories,
+  useMyStories,
+  useStoryGroups,
+} from '../hooks/useStories';
+import { liveStories, storyGroupUnseen } from '../lib/stories';
 import { absoluteMediaUrl } from './StoreDetail';
 
 // Catalog sections preview a fixed number of items; "View all" expands the
@@ -126,6 +141,16 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [postNotice, setPostNotice] = useState('');
   const [favoriteNotice, setFavoriteNotice] = useState('');
+  const [storyNotice, setStoryNotice] = useState('');
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const client = useQueryClient();
+  // Stories are public and short-lived; the owner view adds the remaining slots.
+  const storyGroups = useStoryGroups(
+    slug ? [slug] : undefined,
+    Boolean(slug) && !demo,
+  );
+  const { seen, markSeen } = useSeenStories();
   const shopFavorites = useShopFavorites(setFavoriteNotice);
   const { saved, liking, likePost, savePost, registerView, withLikes } =
     usePostEngagement({ demo, onNotice: setPostNotice });
@@ -139,6 +164,11 @@ export function StorePage({ slug }: { slug: string | null }) {
     const timer = window.setTimeout(() => setFavoriteNotice(''), 4000);
     return () => window.clearTimeout(timer);
   }, [favoriteNotice]);
+  useEffect(() => {
+    if (!storyNotice) return;
+    const timer = window.setTimeout(() => setStoryNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [storyNotice]);
   // A restaurant opens on its menu; the choice only sticks once the shopper
   // switches tabs themselves, so a late store response cannot steal the tab.
   const tabChosen = useRef(initialView === 'catalog');
@@ -165,6 +195,24 @@ export function StorePage({ slug }: { slug: string | null }) {
     : demo
       ? demoStores.find((item) => item.slug === slug)
       : storeQuery.data;
+  const viewerIsOwner = Boolean(store?.viewerIsOwner) && !demo;
+  const myStories = useMyStories(store?.slug ?? null, viewerIsOwner);
+  const shopStoryGroup = storyGroups.data?.groups.find(
+    (group) => group.store.id === store?.id,
+  );
+  const hasLiveStory = Boolean(
+    shopStoryGroup && liveStories(shopStoryGroup).length > 0,
+  );
+  useEffect(() => {
+    // Deleting or losing the last story closes the reel instead of leaving a
+    // stale open flag behind for the next story.
+    if (!hasLiveStory) setStoryOpen(false);
+  }, [hasLiveStory]);
+  const refreshStories = () => {
+    void client.invalidateQueries({ queryKey: ['stories'] });
+    if (store)
+      void client.invalidateQueries({ queryKey: ['my-stories', store.slug] });
+  };
   // A section the owner turned off is not part of the shop page: its tab and
   // queries disappear, and the enabled section takes over the view.
   const postsSectionEnabled = store ? store.enablePostsSection !== false : true;
@@ -582,7 +630,40 @@ export function StorePage({ slug }: { slug: string | null }) {
               </div>
               <div className="shop-profile">
                 <div className="shop-logo">
-                  <StoreAvatar store={store} large expandable />
+                  {hasLiveStory && shopStoryGroup ? (
+                    <button
+                      type="button"
+                      className="shop-story-trigger"
+                      aria-label={`Watch ${store.name} story`}
+                      onClick={() => setStoryOpen(true)}
+                    >
+                      <StoryAvatar
+                        store={store}
+                        large
+                        expandable
+                        state={
+                          storyGroupUnseen(shopStoryGroup, seen)
+                            ? 'unseen'
+                            : 'seen'
+                        }
+                      />
+                    </button>
+                  ) : viewerIsOwner ? (
+                    <StoryAvatar store={store} large expandable state="owner" />
+                  ) : (
+                    <StoreAvatar store={store} large expandable />
+                  )}
+                  {viewerIsOwner && (
+                    <button
+                      type="button"
+                      className="shop-story-add"
+                      aria-label="Add a story"
+                      title="Add a story"
+                      onClick={() => setComposerOpen(true)}
+                    >
+                      <Plus size={16} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
                 <div className="shop-intro">
                   {/* Name, category and today's hours share one line so the
@@ -1130,13 +1211,44 @@ export function StorePage({ slug }: { slug: string | null }) {
       )}
       <ShopToast
         cart={cart}
-        notice={share.notice || favoriteNotice}
+        notice={share.notice || favoriteNotice || storyNotice}
         noticeIcon={
           !share.notice && favoriteNotice ? (
             <Heart size={16} aria-hidden="true" />
           ) : undefined
         }
       />
+      {storyOpen && shopStoryGroup && (
+        <StoryViewer
+          key={shopStoryGroup.store.id}
+          groups={storyGroups.data?.groups ?? []}
+          initialStoreId={store?.id ?? ''}
+          canManage={viewerIsOwner}
+          onSeen={markSeen}
+          onDelete={
+            viewerIsOwner
+              ? async (story) => {
+                  await deleteStory(story.id);
+                  refreshStories();
+                  setStoryNotice('Story deleted · the slot is free again.');
+                }
+              : undefined
+          }
+          onClose={() => setStoryOpen(false)}
+        />
+      )}
+      {composerOpen && store && (
+        <StoryComposer
+          store={store}
+          myStories={myStories.data}
+          onClose={() => setComposerOpen(false)}
+          onShared={() => {
+            setComposerOpen(false);
+            refreshStories();
+            setStoryNotice('Story shared · live for 24 hours.');
+          }}
+        />
+      )}
     </div>
   );
 }

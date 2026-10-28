@@ -105,6 +105,10 @@ export interface SubscriptionLimits {
   // Product limits (for ecommerce)
   maxProducts?: number | null; // null = unlimited (for ecommerce shops)
 
+  // Live stories a shop may have at once. Slots are per shop and free up as
+  // soon as a story is deleted or its 24 hours end.
+  maxStories?: number | null; // null = unlimited, 0 = no stories
+
   // Custom categories shared across every owned shop (menu or ecommerce).
   maxCategories?: number | null; // max categories across the account; null = unlimited
 
@@ -1115,7 +1119,8 @@ export class MediaAsset extends BaseEntity {
   product!: Relation<Product | null>;
 
   @Column({ type: 'varchar', length: 24, default: 'post' })
-  purpose!: 'post' | 'store_logo' | 'store_banner' | 'product_image';
+  purpose!:
+    'post' | 'store_logo' | 'store_banner' | 'product_image' | 'store_story';
 
   // Explicit cleanup must remove storage objects before metadata is deleted.
   @ManyToOne(() => Showcase, (showcase) => showcase.mediaAssets, {
@@ -1210,6 +1215,80 @@ export class MediaVariant extends BaseEntity {
 
   @Column({ name: 'duration_ms', type: 'int', unsigned: true, nullable: true })
   durationMs!: number | null;
+}
+
+// One 24-hour story per row. The media asset is owned by the shop (purpose
+// store_story) and referenced exactly once; the optional link follows the same
+// "one product or one section" rule as posts.
+@Entity({ name: 'store_stories', engine: 'InnoDB' })
+@Index('uq_store_stories_media', ['mediaAssetId'], { unique: true })
+@Index('idx_store_stories_store_expires', ['storeId', 'expiresAt'])
+@Index('idx_store_stories_expires', ['expiresAt'])
+@Index('idx_store_stories_owner', ['ownerId'])
+export class StoreStory extends BaseEntity {
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_store_stories_store',
+  })
+  store!: Relation<Store>;
+
+  // Denormalized like showcases.owner_id so owner listings stay one lookup.
+  @Column({ name: 'owner_id', type: 'varchar', length: 36 })
+  ownerId!: string;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'owner_id',
+    foreignKeyConstraintName: 'fk_store_stories_owner',
+  })
+  owner!: Relation<User>;
+
+  @Column({ name: 'media_asset_id', type: 'varchar', length: 36 })
+  mediaAssetId!: string;
+
+  @ManyToOne(() => MediaAsset, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'media_asset_id',
+    foreignKeyConstraintName: 'fk_store_stories_media',
+  })
+  media!: Relation<MediaAsset>;
+
+  @Column({
+    name: 'linked_product_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  linkedProductId!: string | null;
+
+  @ManyToOne(() => Product, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'linked_product_id',
+    foreignKeyConstraintName: 'fk_store_stories_product',
+  })
+  linkedProduct!: Relation<Product | null>;
+
+  @Column({
+    name: 'linked_category_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  linkedCategoryId!: string | null;
+
+  @ManyToOne(() => StoreCategory, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'linked_category_id',
+    foreignKeyConstraintName: 'fk_store_stories_category',
+  })
+  linkedCategory!: Relation<StoreCategory | null>;
+
+  @Column({ name: 'expires_at', type: 'datetime', precision: 6 })
+  expiresAt!: Date;
 }
 
 @Entity({ name: 'post_engagement', engine: 'InnoDB' })
@@ -1826,6 +1905,7 @@ export const databaseEntities = [
   CartItem,
   MediaAsset,
   MediaVariant,
+  StoreStory,
   PostEngagement,
   PostLike,
   SubscriptionPlan,

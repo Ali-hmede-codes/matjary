@@ -134,6 +134,10 @@ export class StoreResponseDto {
   verificationBadgeGrantedAt!: Date | null;
   verificationBadgeExpiresAt!: Date | null;
 
+  // True only for the signed-in owner of this shop; backs the story "+" on the
+  // storefront. Never a security check, the API still authorizes every write.
+  viewerIsOwner!: boolean;
+
   // Location fields
   location!: StoreLocationResponseDto | null;
 
@@ -212,6 +216,7 @@ export function toStoreResponseDto(
         store.verificationBadgeExpiresAt > new Date()),
     verificationBadgeGrantedAt: store.verificationBadgeGrantedAt,
     verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
+    viewerIsOwner: includeOwnerId,
     location: hasLocation
       ? {
           latitude: store.latitude,

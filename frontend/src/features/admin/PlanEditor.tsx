@@ -25,6 +25,7 @@ const PLATFORM_DEFAULTS: PlanLimits = {
   maxTotalPosts: 20,
   maxShops: 1,
   maxProducts: 10,
+  maxStories: 0,
   maxCategories: 10,
   // Storage is unlimited for every plan; only file/duration ceilings apply.
   maxStorageBytes: null,
@@ -60,6 +61,7 @@ function limitFields(plan?: PanelRecord) {
     maxShops: counted(limits.maxShops),
     maxCategories: counted(limits.maxCategories),
     maxProducts: counted(limits.maxProducts),
+    maxStories: counted(limits.maxStories),
     maxTotalPosts: counted(limits.maxTotalPosts),
     maxImageCount: counted(limits.maxImageCount),
     maxImageSize: megabytes(limits.maxImageSizeBytes),
@@ -156,6 +158,7 @@ export function planSummary(limits?: PlanLimits) {
     quotaText(merged.maxShops, 'shops'),
     quotaText(merged.maxCategories, 'categories'),
     quotaText(merged.maxProducts, 'products'),
+    quotaText(merged.maxStories, 'stories'),
     quotaText(merged.maxTotalPosts, 'posts'),
     'Unlimited storage',
   ].join(' · ');
@@ -214,6 +217,7 @@ export function PlanEditor({
       maxShops: quota(form.maxShops, 'Max shops', errors),
       maxCategories: quota(form.maxCategories, 'Max categories', errors),
       maxProducts: quota(form.maxProducts, 'Max products', errors),
+      maxStories: quota(form.maxStories, 'Max stories', errors, 0),
       // The legacy monthly quota is disabled; one total maximum is used.
       maxPostsPerMonth: null,
       maxTotalPosts: quota(form.maxTotalPosts, 'Max posts', errors),
@@ -424,6 +428,18 @@ export function PlanEditor({
                 value={form.maxProducts}
                 onChange={(e) => update({ maxProducts: e.target.value })}
               />
+            </label>
+            <label>
+              Live stories per shop
+              <input
+                inputMode="numeric"
+                value={form.maxStories}
+                onChange={(e) => update({ maxStories: e.target.value })}
+              />
+              <small>
+                Counts only stories that are still live; deleting one frees the
+                slot. 0 turns stories off.
+              </small>
             </label>
             <label>
               Max posts

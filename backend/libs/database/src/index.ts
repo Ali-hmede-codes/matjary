@@ -17,3 +17,5 @@ export * from './media-target';
 export * from './owner-write';
 export * from './store-purge';
 export * from './showcase-purge';
+export * from './story-policy';
+export * from './story-purge';

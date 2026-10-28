@@ -238,6 +238,47 @@
   background: var(--surface);
   box-shadow: 0 10px 24px #00000012;
 }
+/* The shop page keeps its circular portrait; the story ring follows that shape. */
+.shop-logo .story-avatar-ring {
+  padding: 4px;
+  border-radius: 50%;
+}
+.shop-logo .story-avatar-owner .story-avatar-ring {
+  padding: 3px;
+}
+.shop-logo .story-avatar-ring > .store-avatar {
+  box-shadow: 0 0 0 3px var(--surface);
+}
+.shop-logo .story-avatar-ring .store-avatar.large {
+  width: 104px;
+  height: 104px;
+}
+.shop-story-trigger {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+}
+.shop-story-add {
+  position: absolute;
+  right: 4px;
+  bottom: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.shop-story-add:hover {
+  transform: scale(1.06);
+}
 .shop-logo .store-avatar.large {
   width: 112px;
   height: 112px;

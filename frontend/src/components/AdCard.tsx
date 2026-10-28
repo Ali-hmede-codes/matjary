@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ArrowUpRight, Sparkles } from 'lucide-react';
 import { trackAdEvent, type AdCallToAction, type BoostAd } from '../lib/api';
 import { storePath, storeMediaUrl } from '../lib/storefront';
+import { StoreVerifiedBadge } from './StoreAvatar';
 
 const CTA_LABELS: Record<AdCallToAction, string> = {
   shop_now: 'Shop now',
@@ -67,7 +68,13 @@ export function AdCard({ ad }: { ad: BoostAd }) {
         <span className="ad-card-kicker">
           <Sparkles size={13} /> Sponsored · {ad.sponsoredBy}
         </span>
-        <strong>{ad.creative?.headline || ad.targetName}</strong>
+        <strong className="ad-card-title">
+          {ad.creative?.headline || ad.targetName}
+          <StoreVerifiedBadge
+            store={{ hasVerificationBadge: ad.targetHasVerificationBadge }}
+            size={15}
+          />
+        </strong>
         <span className="ad-card-copy">
           {ad.creative?.description ||
             (ad.targetType === 'store'

@@ -27,7 +27,7 @@ import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
 import { PostActions } from './PostActions';
-import { StoreAvatar } from './StoreAvatar';
+import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 import { StoreDetailLoading, StoreDetailMissing } from './StoreDetail';
 
 function sharedDate(value: string | null): string | null {
@@ -217,7 +217,10 @@ export function PostPage({
               >
                 <StoreAvatar store={shop} preview={media} expandable />
                 <span>
-                  <strong>{shop.name}</strong>
+                  <strong className="post-store-name">
+                    {shop.name}
+                    <StoreVerifiedBadge store={shop} size={15} />
+                  </strong>
                   <small>
                     {shop.location?.city ||
                       shop.businessCategoryLabel ||

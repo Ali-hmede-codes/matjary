@@ -23,7 +23,9 @@ export function StoreVerifiedBadge({
   store,
   size = 20,
 }: {
-  store?: Store;
+  // Every surface that prints a shop name can pass its badge fields, even when
+  // it is not holding a full store record (feed items, stories, ads).
+  store?: Pick<Store, 'hasVerificationBadge' | 'verificationBadgeExpiresAt'>;
   size?: number;
 }) {
   if (!isStoreVerified(store)) return null;

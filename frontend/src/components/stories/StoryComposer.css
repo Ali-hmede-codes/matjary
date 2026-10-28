@@ -1,0 +1,129 @@
+/* Owner sheet: pick one media file, add an optional link, share for 24 hours. */
+.story-composer {
+  width: min(94vw, 460px);
+  max-height: 92dvh;
+  padding: 22px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.story-composer::backdrop {
+  background: #0b1210b8;
+}
+.story-composer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.story-composer-head h2 {
+  margin: 4px 0 6px;
+  font-size: 20px;
+}
+.story-composer-head p {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.story-composer-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.story-composer-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.story-composer-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+.story-composer-pick {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 30px 18px;
+  border: 1.5px dashed color-mix(in srgb, var(--muted) 45%, var(--surface));
+  border-radius: 16px;
+  background: var(--wash);
+  text-align: center;
+  cursor: pointer;
+}
+.story-composer-pick.is-disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.story-composer-pick strong {
+  font-size: 13.5px;
+}
+.story-composer-pick small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.story-composer-pick input {
+  display: none;
+}
+.story-composer-preview {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.story-composer-preview img,
+.story-composer-preview video {
+  width: 100%;
+  max-height: 46dvh;
+  border-radius: 16px;
+  background: #0b1210;
+  object-fit: contain;
+}
+.story-composer-preview figcaption {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.story-composer-link {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.story-composer-link select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+}
+.story-composer-notice {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #b3261e 10%, var(--surface));
+  color: #8c1d18;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.story-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}

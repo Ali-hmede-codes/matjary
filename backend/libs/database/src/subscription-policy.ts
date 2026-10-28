@@ -25,6 +25,8 @@ export const FREE_LIMITS: SubscriptionLimits = {
   maxTotalPosts: 20,
   maxShops: 1,
   maxProducts: 10,
+  // Stories are a live-count quota, not a monthly one; the free plan has none.
+  maxStories: 0,
   // One category allowance covers every shop the owner creates.
   maxCategories: 10,
   // Storage is a platform resource, not a plan entitlement. Every plan is
@@ -53,6 +55,7 @@ export const EXPIRED_LIMITS: SubscriptionLimits = {
   maxTotalPosts: 0,
   maxShops: 0,
   maxProducts: 0,
+  maxStories: 0,
   maxCategories: 0,
   maxStorageBytes: 0,
   enableCart: false,

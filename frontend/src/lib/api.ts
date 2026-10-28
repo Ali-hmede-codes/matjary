@@ -26,6 +26,8 @@ export interface Store {
   slug: string;
   description?: string | null;
   brandColor: string | null;
+  // True only when the signed-in viewer owns this shop; shows the story "+".
+  viewerIsOwner?: boolean;
   hasVerificationBadge?: boolean;
   verificationBadgeExpiresAt?: string | null;
   storeType?: 'ecommerce' | 'restaurant_menu';
@@ -222,6 +224,7 @@ export interface BoostAd {
   targetSlug: string;
   targetStoreSlug?: string;
   targetImageKey?: string;
+  targetHasVerificationBadge?: boolean;
   creative?: {
     headline?: string;
     description?: string;
@@ -415,6 +418,110 @@ export function getFeedAds(signal?: AbortSignal) {
 
 export function getTrendingBoostStores(signal?: AbortSignal) {
   return getJson<TrendingBoostStore[]>('boost/trending/stores?limit=6', signal);
+}
+
+export interface StoryMedia {
+  id: string;
+  kind: 'image' | 'video';
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+  primaryUrl: string;
+  posterUrl: string | null;
+}
+
+// A story points at one product or one section, never both.
+export interface StoryLink {
+  type: 'product' | 'category';
+  name: string;
+  slug: string | null;
+  priceCents: string | null;
+  currency: string | null;
+}
+
+export interface Story {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  media: StoryMedia;
+  link?: StoryLink;
+}
+
+// The shop fields a story needs, shaped like a Store so every avatar/badge
+// helper accepts it unchanged.
+export interface StoryStore {
+  id: string;
+  name: string;
+  slug: string;
+  logoKey: string | null;
+  brandColor: string | null;
+  hasVerificationBadge: boolean;
+  verificationBadgeExpiresAt: string | null;
+  businessCategoryLabel: string;
+}
+
+export interface StoryGroup {
+  store: StoryStore;
+  stories: Story[];
+}
+
+export interface StoryList {
+  groups: StoryGroup[];
+  total: number;
+}
+
+export interface MyStories {
+  storeId: string;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  stories: Story[];
+}
+
+/** Live stories grouped per shop; `shops` narrows to known favorites or one shop. */
+export function getStories(shops?: string, signal?: AbortSignal) {
+  const query = shops ? `?shops=${encodeURIComponent(shops)}` : '';
+  return getJson<StoryList>(`stories${query}`, signal);
+}
+
+/** Owner view: live stories plus this shop's remaining slots. */
+export function getMyStories(storeSlug: string, signal?: AbortSignal) {
+  return getJson<MyStories>(
+    `stories/mine?storeSlug=${encodeURIComponent(storeSlug)}`,
+    signal,
+  );
+}
+
+async function sendJson<T>(
+  path: string,
+  method: 'POST' | 'DELETE',
+  body?: unknown,
+): Promise<T> {
+  const response = await fetch(`/api/v1/${path}`, {
+    method,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw await toApiError(response);
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export function createStory(body: {
+  storeSlug: string;
+  mediaId: string;
+  linkedProductId?: string;
+  linkedCategoryId?: string;
+}) {
+  return sendJson<Story>('stories', 'POST', body);
+}
+
+export function deleteStory(id: string) {
+  return sendJson<void>(`stories/${encodeURIComponent(id)}`, 'DELETE');
 }
 
 /** One published post, addressed by the slug its shared link carries. */

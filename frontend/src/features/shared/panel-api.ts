@@ -29,6 +29,7 @@ export interface PlanLimits {
   maxTotalPosts?: number | null;
   maxShops?: number | null;
   maxProducts?: number | null;
+  maxStories?: number | null;
   maxCategories?: number | null;
   maxStorageBytes?: number | null;
   enableCart?: boolean;
@@ -110,6 +111,10 @@ export function panelError(error: unknown): string {
       return 'Not enough plan allowance to turn this section back on. Delete some items first, then try again.';
     if (error.code === 'SECTION_LAST_ENABLED')
       return 'Keep at least one section on for this shop.';
+    if (error.code === 'STORY_LIMIT')
+      return 'Every live story slot for this shop is in use. Delete a story or wait for one to end.';
+    if (error.code === 'STORY_STORE_OFFLINE')
+      return 'Bring the shop online before sharing a story.';
     if (error.status === 401)
       return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'Your account cannot perform this action.';

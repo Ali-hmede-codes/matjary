@@ -2,7 +2,15 @@ import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Copy, ImagePlus, Package, Plus, Trash2 } from 'lucide-react';
-import type { ProductOptionGroup } from '../../lib/api';
+import {
+  assetUrl,
+  deleteStory,
+  type ProductOptionGroup,
+  type Store,
+} from '../../lib/api';
+import { storyTimeLabel } from '../../lib/stories';
+import { useMyStories } from '../../hooks/useStories';
+import { StoryComposer } from '../../components/stories/StoryComposer';
 import {
   getJson,
   mutate,
@@ -112,6 +120,113 @@ function optionDrafts(
     })),
   }));
 }
+// Live stories belong to the shop, not to the post list, so the panel shows the
+// remaining slots and lets the owner remove a story before its 24 hours end.
+function StoryPanel({ store }: { store: Store }) {
+  const client = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState('');
+  const stories = useMyStories(store.slug, true);
+  const data = stories.data;
+  const full =
+    data?.limit === 0 || (data?.remaining != null && data.remaining <= 0);
+
+  function refresh() {
+    void client.invalidateQueries({ queryKey: ['my-stories', store.slug] });
+    void client.invalidateQueries({ queryKey: ['stories'] });
+  }
+
+  async function remove(id: string) {
+    if (
+      !window.confirm(
+        'Delete this story? Its slot becomes free immediately and cannot be restored.',
+      )
+    )
+      return;
+    setDeleting(id);
+    setError('');
+    setNotice('');
+    try {
+      await deleteStory(id);
+      setNotice('Story deleted · the slot is free again.');
+      refresh();
+    } catch {
+      setError('Could not delete this story. Please try again.');
+    } finally {
+      setDeleting('');
+    }
+  }
+
+  return (
+    <section className="panel-card panel-stories">
+      <div className="panel-stories-head">
+        <div>
+          <h2>Stories</h2>
+          <p>
+            {data
+              ? data.limit == null
+                ? `${data.used} live · unlimited on this plan`
+                : `${data.used} of ${data.limit} live · a slot frees up after 24 hours or when you delete a story`
+              : 'One photo or short video, live for 24 hours.'}
+          </p>
+        </div>
+        <button
+          className="panel-primary"
+          disabled={full}
+          onClick={() => setOpen(true)}
+        >
+          <Plus size={16} /> Add a story
+        </button>
+      </div>
+      {notice && <Notice>{notice}</Notice>}
+      {error && <Notice error>{error}</Notice>}
+      {data && data.stories.length > 0 ? (
+        <ul className="panel-story-grid">
+          {data.stories.map((story) => (
+            <li key={story.id}>
+              <img
+                src={assetUrl(story.media.posterUrl ?? story.media.primaryUrl)}
+                alt=""
+                loading="lazy"
+              />
+              <span>{storyTimeLabel(story.createdAt)}</span>
+              <button
+                type="button"
+                aria-label="Delete this story"
+                title="Delete this story"
+                disabled={deleting === story.id}
+                onClick={() => void remove(story.id)}
+              >
+                <Trash2 size={15} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="panel-muted">
+          {data?.limit === 0
+            ? 'Stories are not included in this plan.'
+            : 'No live stories yet. Share one to show it on your shop and the home rail.'}
+        </p>
+      )}
+      {open && (
+        <StoryComposer
+          store={store}
+          myStories={data}
+          onClose={() => setOpen(false)}
+          onShared={() => {
+            setOpen(false);
+            setNotice('Story shared · live for 24 hours.');
+            refresh();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
 export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const { store, session } = useOwner();
   const client = useQueryClient();
@@ -254,6 +369,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
       )}
       {notice && <Notice>{notice}</Notice>}
       {actionError && <Notice error>{actionError}</Notice>}
+      {!product && <StoryPanel store={store!} />}
       <div className="panel-toolbar">
         <label>
           Status

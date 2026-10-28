@@ -20,11 +20,16 @@ import {
   MediaStatus,
   MediaVariant,
   MediaProcessingOutbox,
+  StoreStory,
   User,
   effectiveLimits,
   assertSubscriptionActive,
   boundedLimit,
   assertQuota,
+  liveStoryCount,
+  liveStoryWhere,
+  STORY_LIMIT_CODE,
+  STORY_MAX_DURATION_SECONDS,
   ownerWhere,
   StoreStatus,
   requireAdmin,
@@ -38,6 +43,13 @@ import { StorageService, mediaAssetIdFromKey } from '@app/storage';
 import { PresignedUrlDto, OwnerUploadDto } from './dto/presigned-url.dto';
 import { MediaCompleteDto } from './dto/media-complete.dto';
 import { randomUUID } from 'node:crypto';
+
+// Purposes whose media hangs off a shop instead of a post or a product.
+const STORE_SCOPED_PURPOSES: ReadonlyArray<MediaAsset['purpose']> = [
+  'store_logo',
+  'store_banner',
+  'store_story',
+];
 
 @Injectable()
 export class MediaService {
@@ -81,10 +93,9 @@ export class MediaService {
           throw new ForbiddenException('Account unavailable');
         const target = {
           showcaseId: dto.purpose === 'post' ? dto.targetId : null,
-          storeId:
-            dto.purpose === 'store_logo' || dto.purpose === 'store_banner'
-              ? dto.targetId
-              : null,
+          storeId: STORE_SCOPED_PURPOSES.includes(dto.purpose)
+            ? dto.targetId
+            : null,
           productId: dto.purpose === 'product_image' ? dto.targetId : null,
         };
         const parent = await mediaParent(manager, target);
@@ -93,40 +104,67 @@ export class MediaService {
         // Trial-expired owners cannot start new uploads. Completions of
         // uploads negotiated during the trial still succeed.
         await assertSubscriptionActive(manager, ownerId);
-        if (dto.purpose !== 'post' && dto.kind !== MediaKind.IMAGE)
+        // Stories are the only shop-scoped upload that may be a video.
+        if (
+          dto.purpose !== 'post' &&
+          dto.purpose !== 'store_story' &&
+          dto.kind !== MediaKind.IMAGE
+        )
           throw new BadRequestException('Choose an image');
         if (!dto.fileType.startsWith(`${dto.kind}/`))
           throw new BadRequestException('File type does not match media kind');
         const limits = await effectiveLimits(manager, ownerId);
-        const assets = manager
-          .getRepository(MediaAsset)
-          .createQueryBuilder('asset');
-        if (target.showcaseId)
-          assets.where('asset.showcaseId = :id', { id: target.showcaseId });
-        else if (target.productId)
-          assets.where('asset.productId = :id', { id: target.productId });
-        else
-          assets.where('asset.storeId = :id AND asset.purpose = :purpose', {
-            id: target.storeId,
-            purpose: dto.purpose,
+        if (dto.purpose === 'store_story') {
+          // Story slots are a live count per shop: published stories plus
+          // uploads still in flight. The image quota and the one-image cap for
+          // shop branding do not apply, because a story is neither.
+          const live = await liveStoryCount(manager, dto.targetId);
+          const pending = await manager
+            .getRepository(MediaAsset)
+            .createQueryBuilder('asset')
+            .where('asset.storeId = :storeId AND asset.purpose = :purpose', {
+              storeId: dto.targetId,
+              purpose: dto.purpose,
+            })
+            .andWhere('asset.status IN (:...statuses)', {
+              statuses: [MediaStatus.PENDING, MediaStatus.PROCESSING],
+            })
+            .andWhere('asset.uploadExpiresAt > :now', { now: new Date() })
+            .getCount();
+          // The storefront translates this code into slot copy.
+          if (limits.maxStories != null && live + pending >= limits.maxStories)
+            throw new ConflictException({ code: STORY_LIMIT_CODE });
+        } else {
+          const assets = manager
+            .getRepository(MediaAsset)
+            .createQueryBuilder('asset');
+          if (target.showcaseId)
+            assets.where('asset.showcaseId = :id', { id: target.showcaseId });
+          else if (target.productId)
+            assets.where('asset.productId = :id', { id: target.productId });
+          else
+            assets.where('asset.storeId = :id AND asset.purpose = :purpose', {
+              id: target.storeId,
+              purpose: dto.purpose,
+            });
+          assets.andWhere('asset.kind = :kind AND asset.status != :failed', {
+            kind: dto.kind,
+            failed: MediaStatus.FAILED,
           });
-        assets.andWhere('asset.kind = :kind AND asset.status != :failed', {
-          kind: dto.kind,
-          failed: MediaStatus.FAILED,
-        });
-        if (!target.showcaseId)
-          assets.andWhere('asset.status != :ready', {
-            ready: MediaStatus.READY,
-          });
-        const count = await assets.getCount();
-        if (dto.kind === MediaKind.IMAGE) {
-          const attached = parent.product?.imageKeys?.length ?? 0;
-          const limit = target.storeId
-            ? 1
-            : target.productId
-              ? boundedLimit(20, limits.maxImageCount)
-              : limits.maxImageCount;
-          assertQuota(count + attached, limit, 'Image');
+          if (!target.showcaseId)
+            assets.andWhere('asset.status != :ready', {
+              ready: MediaStatus.READY,
+            });
+          const count = await assets.getCount();
+          if (dto.kind === MediaKind.IMAGE) {
+            const attached = parent.product?.imageKeys?.length ?? 0;
+            const limit = target.storeId
+              ? 1
+              : target.productId
+                ? boundedLimit(20, limits.maxImageCount)
+                : limits.maxImageCount;
+            assertQuota(count + attached, limit, 'Image');
+          }
         }
         if (limits.maxStorageBytes != null) {
           const usage = (await manager.query(
@@ -184,12 +222,23 @@ export class MediaService {
           uploadExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
           processingLimits: {
             maxBytes,
-            maxDurationSeconds: boundedLimit(
-              this.config.get('MEDIA_MAX_VIDEO_DURATION_SECONDS', {
-                infer: true,
-              }),
-              limits.maxVideoDurationSeconds,
-            ),
+            maxDurationSeconds:
+              dto.purpose === 'store_story'
+                ? Math.min(
+                    STORY_MAX_DURATION_SECONDS,
+                    boundedLimit(
+                      this.config.get('MEDIA_MAX_VIDEO_DURATION_SECONDS', {
+                        infer: true,
+                      }),
+                      limits.maxVideoDurationSeconds,
+                    ),
+                  )
+                : boundedLimit(
+                    this.config.get('MEDIA_MAX_VIDEO_DURATION_SECONDS', {
+                      infer: true,
+                    }),
+                    limits.maxVideoDurationSeconds,
+                  ),
             maxWidth:
               dto.kind === MediaKind.IMAGE
                 ? boundedLimit(20000, limits.maxImageWidth)
@@ -418,9 +467,17 @@ export class MediaService {
           : Boolean(
               store && (belongs(store.logoKey) || belongs(store.bannerKey)),
             );
+      // A story's processed media is public only while the story is live and
+      // its shop is active; an expired or deleted story stops serving bytes.
+      const storyAttached =
+        !attached &&
+        variant.asset.purpose === 'store_story' &&
+        (await this.mediaAssets.manager.exists(StoreStory, {
+          where: { mediaAssetId: variant.assetId, ...liveStoryWhere() },
+        }));
       const visible =
         variant.asset.status === MediaStatus.READY &&
-        attached &&
+        (attached || storyAttached) &&
         (!store || store.status === StoreStatus.ACTIVE);
       if (visible || actualOwner === ownerId)
         return { mimeType: variant.mimeType, public: visible };

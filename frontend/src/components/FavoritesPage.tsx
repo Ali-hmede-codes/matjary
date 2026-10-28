@@ -9,6 +9,7 @@ import {
 import { getJson, type Feed, type Post, type StoreDirectory } from '../lib/api';
 import { postPath } from '../lib/storefront';
 import { usePageSeo } from '../hooks/usePageSeo';
+import { useSeenStories, useStoryGroups } from '../hooks/useStories';
 import { useShopFavorites } from '../hooks/useShopFavorites';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { StatusBanner, Toast } from './Feedback';
@@ -16,6 +17,9 @@ import { MediaView } from './MediaView';
 import { ShopTile } from './ShopTile';
 import { SiteFooter } from './SiteFooter';
 import { SiteHeader } from './SiteHeader';
+import { StoreVerifiedBadge } from './StoreAvatar';
+import { StoryRail } from './stories/StoryRail';
+import { StoryViewer } from './stories/StoryViewer';
 
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
@@ -34,7 +38,12 @@ function FavoritePostTile({ post, eager }: { post: Post; eager: boolean }) {
         eager={eager}
         sizes="(max-width: 600px) 33vw, (max-width: 900px) 25vw, 200px"
       />
-      {shop && <span className="favorite-post-shop">{shop}</span>}
+      {shop && (
+        <span className="favorite-post-shop">
+          {shop}
+          <StoreVerifiedBadge store={post.store} size={12} />
+        </span>
+      )}
     </a>
   );
 }
@@ -69,6 +78,14 @@ export function FavoritesPage() {
     });
   }, [items, favorites.favorites]);
   const shopSlugs = favoriteShops.map((item) => item.slug).join(',');
+  // The favorites page is where a shopper expects the shops they kept to keep
+  // talking; the same live stories surface here as on the home rail.
+  const storySlugs = favoriteShops.slice(0, 12).map((item) => item.slug);
+  const { seen, markSeen } = useSeenStories();
+  const storyGroups = useStoryGroups(storySlugs, storySlugs.length > 0);
+  const groups = storyGroups.data?.groups ?? [];
+  const [openStoreId, setOpenStoreId] = useState<string | null>(null);
+  const openGroup = groups.find((group) => group.store.id === openStoreId);
 
   const postsQuery = useInfiniteQuery({
     queryKey: ['favorite-posts', shopSlugs],
@@ -157,6 +174,8 @@ export function FavoritesPage() {
                   Website settings are unavailable. Default branding is shown.
                 </StatusBanner>
               )}
+
+              <StoryRail groups={groups} seen={seen} onOpen={setOpenStoreId} />
 
               <section
                 className="favorites-section"
@@ -286,6 +305,15 @@ export function FavoritesPage() {
         </main>
       </div>
       <Toast message={notice} icon={<Heart size={16} aria-hidden="true" />} />
+      {openGroup && (
+        <StoryViewer
+          key={openGroup.store.id}
+          groups={groups}
+          initialStoreId={openGroup.store.id}
+          onSeen={markSeen}
+          onClose={() => setOpenStoreId(null)}
+        />
+      )}
     </div>
   );
 }

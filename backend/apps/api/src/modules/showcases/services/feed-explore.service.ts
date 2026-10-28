@@ -69,6 +69,10 @@ export interface FeedItem {
     slug: string;
     logoKey: string | null;
     brandColor: string | null;
+    // Verification travels with every post so the badge renders in the feed,
+    // the reel, shared post pages and explore tiles, not only on the shop page.
+    hasVerificationBadge: boolean;
+    verificationBadgeExpiresAt: Date | null;
     // The shop's own LBP display choice for its linked post prices.
     showPricesInLbp?: boolean;
     businessCategory: string;
@@ -1153,6 +1157,11 @@ export class FeedExploreService {
               slug: store.slug,
               logoKey: store.logoKey,
               brandColor: store.brandColor,
+              hasVerificationBadge:
+                store.hasVerificationBadge &&
+                (!store.verificationBadgeExpiresAt ||
+                  store.verificationBadgeExpiresAt > new Date()),
+              verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
               // Shoppable posts print the linked price; the card needs the
               // shop's own display choice to add the LBP line.
               showPricesInLbp: store.showPricesInLbp,

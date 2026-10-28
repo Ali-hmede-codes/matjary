@@ -83,6 +83,13 @@ export class CreateSubscriptionLimitsDto implements Partial<SubscriptionLimits> 
   @Min(0)
   maxProducts?: number | null;
 
+  // Live stories a shop may keep at once; 0 = no stories, null = unlimited.
+  @IsOptional()
+  @IsInt()
+  @Max(Number.MAX_SAFE_INTEGER)
+  @Min(0)
+  maxStories?: number | null;
+
   // Maximum custom categories across every owned shop.
   @IsOptional()
   @IsInt()

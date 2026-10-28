@@ -26,6 +26,11 @@ import {
   MediaKind,
   MediaStatus,
   ShowcaseStatus,
+  StoreStory,
+  SubscriptionPlan,
+  SubscriptionStatus,
+  User,
+  UserSubscription,
 } from '../../libs/database/src/entities';
 import { MediaService } from '../../apps/api/src/modules/showcases/media.service';
 import {
@@ -53,7 +58,11 @@ import {
   type EncodingOptions,
 } from '../../libs/media-processing/src/encode';
 
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Product, ProductStatus } from '../../libs/database/src/entities';
 import { assertMediaAttachment } from '../../libs/database/src/media-target';
 import {
@@ -868,4 +877,175 @@ test('FFmpeg smoke: valid MP4/poster, overlong rejection and bounded deadlines',
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+function storySubscription(
+  ownerId: string,
+  limits: Record<string, unknown>,
+  slug = 'basic',
+) {
+  const plan = Object.assign(new SubscriptionPlan(), {
+    id: 'plan',
+    name: 'Basic',
+    slug,
+    limits,
+  });
+  return Object.assign(new UserSubscription(), {
+    id: 'subscription',
+    userId: ownerId,
+    planId: plan.id,
+    status: SubscriptionStatus.ACTIVE,
+    startsAt: new Date(0),
+    // The free plan is a trial, so it needs a bounded window to be effective.
+    expiresAt: slug === 'free' ? new Date(Date.now() + 3_600_000) : null,
+    plan,
+  });
+}
+
+test('story uploads accept video, cap the duration at 30s and count live slots', async () => {
+  const ownerId = 'owner';
+  const storeId = '11111111-1111-4111-8111-111111111111';
+  const store = Object.assign(new Store(), {
+    id: storeId,
+    ownerId,
+    status: StoreStatus.ACTIVE,
+    adminArchivedAt: null,
+  });
+  let live = 1;
+  let pending = 0;
+  let limits: Record<string, unknown> = {
+    maxStories: 2,
+    maxVideoDurationSeconds: 60,
+    maxVideoSizeBytes: 50_000_000,
+  };
+  let planSlug = 'basic';
+  const created: MediaAsset[] = [];
+  const manager = {
+    findOneOrFail: async (target: unknown) =>
+      target === User ? { id: ownerId, suspendedAt: null } : {},
+    findOneBy: async (target: unknown) => (target === Store ? store : null),
+    count: async () => live,
+    create: (_target: unknown, value: Partial<MediaAsset>) =>
+      Object.assign(new MediaAsset(), value),
+    save: async (value: MediaAsset) => {
+      created.push(value);
+      return value;
+    },
+    getRepository: (target: unknown) => {
+      if (target === UserSubscription)
+        return {
+          find: async () => [storySubscription(ownerId, limits, planSlug)],
+        };
+      const builder = {
+        where: () => builder,
+        andWhere: () => builder,
+        getCount: async () => pending,
+      };
+      return { createQueryBuilder: () => builder };
+    },
+    transaction: async (work: (entityManager: unknown) => Promise<unknown>) =>
+      work(manager),
+  };
+  const media = new MediaService(
+    {} as never,
+    {} as never,
+    { manager } as never,
+    { presignedPutUrl: async () => ({ url: '/api/v1/uploads/key' }) } as never,
+    {} as never,
+    configuration('.tmp'),
+  );
+  const dto = {
+    targetId: storeId,
+    purpose: 'store_story' as const,
+    fileName: 'clip.mp4',
+    fileType: 'video/mp4',
+    fileSize: 1000,
+    kind: MediaKind.VIDEO,
+  };
+  await media.negotiate(dto, ownerId);
+  const asset = created.at(-1)!;
+  assert.equal(asset.storeId, storeId);
+  assert.equal(asset.purpose, 'store_story');
+  assert.equal(
+    asset.processingLimits?.maxDurationSeconds,
+    30,
+    'the platform story ceiling wins over a longer plan limit',
+  );
+
+  live = 1;
+  pending = 1;
+  await assert.rejects(media.negotiate(dto, ownerId), ConflictException);
+
+  live = 2;
+  pending = 0;
+  await assert.rejects(media.negotiate(dto, ownerId), ConflictException);
+
+  live = 0;
+  limits = { maxStories: 0 };
+  planSlug = 'free';
+  await assert.rejects(media.negotiate(dto, ownerId), ConflictException);
+
+  // Branding stays image-only; only stories accept video.
+  live = 0;
+  limits = { maxStories: 2 };
+  planSlug = 'basic';
+  await assert.rejects(
+    media.negotiate({ ...dto, purpose: 'store_logo' }, ownerId),
+    BadRequestException,
+  );
+});
+
+test('story media is public only while its story is live', async () => {
+  const store = Object.assign(new Store(), {
+    id: 'store',
+    ownerId: 'owner',
+    status: StoreStatus.ACTIVE,
+    adminArchivedAt: null,
+    logoKey: null,
+    bannerKey: null,
+  });
+  const asset = Object.assign(new MediaAsset(), {
+    id: 'asset',
+    showcaseId: null,
+    storeId: store.id,
+    productId: null,
+    purpose: 'store_story',
+    kind: MediaKind.IMAGE,
+    status: MediaStatus.READY,
+    adminArchivedAt: null,
+  });
+  const variant = Object.assign(new MediaVariant(), {
+    asset,
+    assetId: asset.id,
+    storageKey: 'story-image',
+    mimeType: 'image/webp',
+  });
+  let live = true;
+  const manager = {
+    findOne: async (
+      _target: unknown,
+      options: { where: { storageKey?: string } },
+    ) => (options.where.storageKey === variant.storageKey ? variant : null),
+    findOneBy: async (target: unknown) => (target === Store ? store : null),
+    exists: async (target: unknown) => target === StoreStory && live,
+    getRepository: () => ({ findOne: async () => variant }),
+  } as unknown as EntityManager;
+  const media = new MediaService(
+    {} as never,
+    {} as never,
+    { manager, findOne: async () => null } as never,
+    {} as never,
+    {} as never,
+    configuration('.tmp'),
+  );
+  assert.equal((await media.authorizeDownload('story-image')).public, true);
+  live = false;
+  await assert.rejects(
+    media.authorizeDownload('story-image'),
+    NotFoundException,
+  );
+  assert.deepEqual(await media.authorizeDownload('story-image', 'owner'), {
+    mimeType: 'image/webp',
+    public: false,
+  });
 });

@@ -10,9 +10,11 @@ import {
   Showcase,
   PostEngagement,
   PostLike,
+  StoreStory,
 } from '@app/database';
 import { MediaProcessor } from './jobs/media.process';
 import { MediaRecovery } from './jobs/media.recovery';
+import { StorySweeper } from './jobs/story.sweeper';
 import { EngagementFlusher } from './jobs/engagement.flush';
 import { WorkerHeartbeat } from './worker-heartbeat';
 import { ObservabilityModule } from '@app/observability';
@@ -36,11 +38,13 @@ import { ObservabilityModule } from '@app/observability';
       Showcase,
       PostEngagement,
       PostLike,
+      StoreStory,
     ]),
   ],
   providers: [
     MediaProcessor,
     MediaRecovery,
+    StorySweeper,
     EngagementFlusher,
     WorkerHeartbeat,
   ],

@@ -1380,6 +1380,8 @@ export class BoostService {
       targetSlug: string;
       targetStoreSlug?: string;
       targetImageKey?: string;
+      // Store ads print the shop name, so the verified badge travels with it.
+      targetHasVerificationBadge?: boolean;
       creative?: BoostCreative;
       sponsoredBy: string;
       sponsoredById: string;
@@ -1469,6 +1471,7 @@ export class BoostService {
       let targetSlug = '';
       let targetStoreSlug: string | undefined;
       let targetImageKey: string | undefined;
+      let targetHasVerificationBadge = false;
 
       if (campaign.targetType === BoostTargetType.SHOWCASE) {
         const showcase = await this.showcaseRepo.findOne({
@@ -1480,6 +1483,11 @@ export class BoostService {
         targetName = showcase.title;
         targetSlug = showcase.slug;
         targetStoreSlug = showcase.store?.slug;
+        targetHasVerificationBadge = Boolean(
+          showcase.store?.hasVerificationBadge &&
+          (!showcase.store.verificationBadgeExpiresAt ||
+            showcase.store.verificationBadgeExpiresAt > new Date()),
+        );
         targetImageKey = await this.postPreviewKey(showcase.id);
       } else {
         const store = await this.storeRepo.findOne({
@@ -1489,6 +1497,10 @@ export class BoostService {
         targetName = store.name;
         targetSlug = store.slug;
         targetStoreSlug = store.slug;
+        targetHasVerificationBadge =
+          store.hasVerificationBadge &&
+          (!store.verificationBadgeExpiresAt ||
+            store.verificationBadgeExpiresAt > new Date());
         targetImageKey = store.logoKey || undefined;
       }
 
@@ -1500,6 +1512,7 @@ export class BoostService {
         targetSlug,
         targetStoreSlug,
         targetImageKey,
+        targetHasVerificationBadge,
         creative: campaign.creative as BoostCreative | undefined,
         sponsoredBy: campaign.user?.displayName || 'Unknown',
         sponsoredById: campaign.userId,

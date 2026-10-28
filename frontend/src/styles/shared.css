@@ -111,3 +111,19 @@
   font-weight: 500;
   opacity: 0.8;
 }
+
+/* A shop name that also carries its verification badge keeps one baseline. */
+.post-store-name,
+.reel-store-name,
+.ad-card-title,
+.rail-store-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.favorite-post-shop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

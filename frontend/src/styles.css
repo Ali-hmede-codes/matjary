@@ -27,6 +27,11 @@
 @import './components/ShopBranches.css';
 @import './components/PricingPage.css';
 @import './components/ShopsPage.css';
+@import './components/StoriesPage.css';
+@import './components/stories/StoryAvatar.css';
+@import './components/stories/StoryRail.css';
+@import './components/stories/StoryViewer.css';
+@import './components/stories/StoryComposer.css';
 @import './styles/animations.css';
 
 /* Keep this after component rules so touch layouts hide horizontal scrollbars too. */

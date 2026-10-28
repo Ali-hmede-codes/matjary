@@ -27,7 +27,7 @@ import {
 import type { Post } from '../lib/api';
 import { resumeFeedPlayback, suspendFeedPlayback } from '../lib/video-playback';
 import { PostActions } from './PostActions';
-import { StoreAvatar } from './StoreAvatar';
+import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 
 export type PostDialogEngagement = {
@@ -150,7 +150,10 @@ function PostSlide({
           >
             <StoreAvatar store={post.store} preview={media} expandable />
             <span>
-              <strong>{storeName}</strong>
+              <strong className="reel-store-name">
+                {storeName}
+                <StoreVerifiedBadge store={post.store} size={15} />
+              </strong>
               <small>{location}</small>
             </span>
           </a>

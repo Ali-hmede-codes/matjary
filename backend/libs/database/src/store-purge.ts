@@ -29,6 +29,13 @@ export async function purgeStoreRecords(
     ),
   ];
 
+  // Stories reference the shop, its catalogue rows, and their media assets, so
+  // they go before any of them. Their bytes are covered by the shop-wide asset
+  // scope below.
+  await manager.query('DELETE FROM store_stories WHERE store_id = ?', [
+    storeId,
+  ]);
+
   // Media rows first: assets are referenced by variants, the outbox, and
   // three parent tables.
   await manager.query(

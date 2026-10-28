@@ -5,9 +5,10 @@ const VARIANT_FORMATS = ['avif', 'webp', 'jpeg'] as const;
 
 // The encoder writes every derivative to a deterministic path before its row
 // commits. A post deleted mid-flight would otherwise strand those bytes, so
-// the purge claims them too; deleting a missing object is a no-op.
-function encodedVariantKeys(showcaseId: string, assetId: string): string[] {
-  const directory = `media/${showcaseId}/${assetId}`;
+// the purge claims them too; deleting a missing object is a no-op. Stories
+// reuse the same layout with the shop id as the parent.
+export function encodedMediaKeys(parentId: string, assetId: string): string[] {
+  const directory = `media/${parentId}/${assetId}`;
   return [
     ...VARIANT_WIDTHS.flatMap((width) =>
       VARIANT_FORMATS.map(
@@ -40,7 +41,7 @@ export async function purgeShowcaseRecords(
   const keys = new Set<string>();
   for (const asset of assets) {
     if (asset.storageKey) keys.add(asset.storageKey);
-    for (const key of encodedVariantKeys(showcaseId, asset.id)) keys.add(key);
+    for (const key of encodedMediaKeys(showcaseId, asset.id)) keys.add(key);
   }
   for (const variant of variants)
     if (variant.storageKey) keys.add(variant.storageKey);

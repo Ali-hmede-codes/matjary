@@ -465,6 +465,7 @@ export class SubscriptionPlansService {
       'maxTotalPosts',
       'maxShops',
       'maxProducts',
+      'maxStories',
       'maxCategories',
       'maxStorageBytes',
     ];

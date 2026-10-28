@@ -2325,3 +2325,72 @@
 .boost-campaign .panel-record-info h3 {
   flex-wrap: wrap;
 }
+
+/* Owner stories: a live slot list beside the post list. */
+.panel-stories {
+  display: grid;
+  gap: 14px;
+}
+.panel-stories-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.panel-stories-head h2 {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.panel-stories-head p {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--panel-muted);
+}
+.panel-story-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.panel-story-grid li {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.panel-story-grid img {
+  width: 100%;
+  aspect-ratio: 9 / 14;
+  border-radius: 8px;
+  background: #0b1210;
+  object-fit: cover;
+}
+.panel-story-grid span {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--panel-muted);
+  text-align: center;
+}
+.panel-story-grid button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #0b1210b3;
+  color: #fff;
+}
+.panel-story-grid button:hover {
+  background: #b3261e;
+}

@@ -2,7 +2,7 @@ import { ArrowRight, ArrowUpRight, Bookmark } from 'lucide-react';
 import { assetUrl, type Store } from '../lib/api';
 import { brandingUrl, type WebsiteSettings } from '../lib/website';
 import { storePath } from '../lib/storefront';
-import { StoreAvatar } from './StoreAvatar';
+import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
 export function DiscoveryRail({
   stores,
@@ -34,7 +34,10 @@ export function DiscoveryRail({
         >
           <StoreAvatar store={item} />
           <span>
-            <strong>{item.name}</strong>
+            <strong className="rail-store-name">
+              {item.name}
+              <StoreVerifiedBadge store={item} size={14} />
+            </strong>
             <small>{item.location?.city || 'Explore store'}</small>
           </span>
           <ArrowUpRight size={17} />

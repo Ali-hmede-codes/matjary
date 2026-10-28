@@ -45,6 +45,6 @@ export class OwnerUploadDto extends PresignedUrlDto {
   @IsUUID('4')
   targetId!: string;
 
-  @IsIn(['post', 'store_logo', 'store_banner', 'product_image'])
+  @IsIn(['post', 'store_logo', 'store_banner', 'product_image', 'store_story'])
   purpose!: MediaAsset['purpose'];
 }

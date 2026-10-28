@@ -14,6 +14,7 @@ import { AbsoluteProductOptionPrices1794696000000 } from './migrations/179469600
 import { PostLinks1794782400000 } from './migrations/1794782400000-PostLinks';
 import { LbpPriceDisplay1794868800000 } from './migrations/1794868800000-LbpPriceDisplay';
 import { SectionAllowanceTrading1794955200000 } from './migrations/1794955200000-SectionAllowanceTrading';
+import { StoreStories1795041600000 } from './migrations/1795041600000-StoreStories';
 import { OwnerMediaTargets1793832000000 } from './migrations/1793832000000-OwnerMediaTargets';
 import { AddUserRoles1793745600000 } from './migrations/1793745600000-AddUserRoles';
 import { WebsiteSettings1793659200000 } from './migrations/1793659200000-WebsiteSettings';
@@ -88,6 +89,7 @@ export function createDatabaseOptions(
       PostLinks1794782400000,
       LbpPriceDisplay1794868800000,
       SectionAllowanceTrading1794955200000,
+      StoreStories1795041600000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

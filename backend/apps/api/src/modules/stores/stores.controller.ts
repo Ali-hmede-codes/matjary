@@ -29,6 +29,7 @@ import {
   AuthOriginGuard,
   AuthRateLimitGuard,
   SessionGuard,
+  OptionalSessionGuard,
   AdminGuard,
   AuthenticatedRequest,
 } from '../auth/guards/auth.guards';
@@ -100,8 +101,14 @@ export class StoresController {
   }
 
   @Get(':slug')
-  async getOne(@Param('slug') slug: string): Promise<StoreResponseDto> {
-    return this.stores.findOneBySlug(slug, undefined);
+  @UseGuards(OptionalSessionGuard)
+  async getOne(
+    @Param('slug') slug: string,
+    @Req() request: { user?: { id: string } },
+  ): Promise<StoreResponseDto> {
+    // The optional session only decides whether the owner's story controls are
+    // offered; the shop itself stays public.
+    return this.stores.findOneBySlug(slug, request.user?.id);
   }
 
   @Post()

@@ -895,8 +895,12 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
   // expired state closes both of them.
   assert.equal(FREE_LIMITS.maxShops, 1);
   assert.equal(FREE_LIMITS.maxCategories, 10);
+  // Stories are a live-count entitlement; the free plan has no slots and an
+  // expired subscription cannot create one either.
+  assert.equal(FREE_LIMITS.maxStories, 0);
   assert.equal(EXPIRED_LIMITS.maxShops, 0);
   assert.equal(EXPIRED_LIMITS.maxCategories, 0);
+  assert.equal(EXPIRED_LIMITS.maxStories, 0);
 });
 
 test('a turned-off section trades only its unused allowance with the other section', () => {

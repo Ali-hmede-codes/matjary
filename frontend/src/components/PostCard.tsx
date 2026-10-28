@@ -10,7 +10,7 @@ import { storePath } from '../lib/storefront';
 import { AutoplayVideo } from './AutoplayVideo';
 import { MediaView } from './MediaView';
 import { PostActions, type PostActionProps } from './PostActions';
-import { StoreAvatar } from './StoreAvatar';
+import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
 export function PostCard({
   post,
@@ -50,7 +50,10 @@ export function PostCard({
         >
           <StoreAvatar store={post.store} expandable />
           <span>
-            <strong>{post.store?.name || 'Independent creator'}</strong>
+            <strong className="post-store-name">
+              {post.store?.name || 'Independent creator'}
+              <StoreVerifiedBadge store={post.store} size={15} />
+            </strong>
             <small>
               {demo
                 ? 'Sample showcase'
