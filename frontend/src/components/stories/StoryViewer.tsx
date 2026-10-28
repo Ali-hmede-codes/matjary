@@ -213,6 +213,7 @@ export function StoryViewer({
       tabIndex={-1}
       onCancel={onClose}
       onContextMenu={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
       onKeyDown={(event) => {
         if (event.key === 'ArrowRight') {
           event.preventDefault();

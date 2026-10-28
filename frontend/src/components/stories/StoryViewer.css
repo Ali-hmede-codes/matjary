@@ -12,9 +12,22 @@
   background: #05090a;
   color: #fff;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .story-viewer::backdrop {
   background: #05090a;
+}
+/* Holding a story must pause it, never select or drag the photo. */
+.story-viewer,
+.story-viewer * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.story-viewer img,
+.story-viewer video {
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 .story-viewer:focus {
   outline: none;
@@ -26,6 +39,31 @@
   margin: 0 auto;
   overflow: hidden;
   background: #0b1210;
+}
+/* A story card expands into place when it opens. */
+.story-viewer[open] .story-viewer-shell {
+  animation: story-open 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.story-viewer[open]::backdrop {
+  animation: story-backdrop 220ms ease-out;
+}
+@keyframes story-open {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes story-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .story-viewer-bars {
   position: absolute;
@@ -129,6 +167,17 @@
   height: 100%;
   object-fit: contain;
   background: #000;
+  animation: story-media-in 240ms ease-out;
+}
+@keyframes story-media-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 .story-nav {
   position: absolute;
@@ -216,4 +265,12 @@
 .story-play:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-viewer[open] .story-viewer-shell,
+  .story-viewer[open]::backdrop,
+  .story-viewer-media img,
+  .story-viewer-media video {
+    animation: none;
+  }
 }

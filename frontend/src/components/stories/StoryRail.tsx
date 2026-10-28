@@ -1,12 +1,11 @@
-import { ArrowRight } from 'lucide-react';
 import type { StoryGroup } from '../../lib/api';
 import { storyGroupUnseen } from '../../lib/stories';
 import { enableMouseScrolling } from '../../lib/website';
 import { StoreVerifiedBadge } from '../StoreAvatar';
 import { StoryAvatar } from './StoryAvatar';
 
-// The Instagram-style rail above the feed: one ring per shop with live
-// stories, colored until this device watched them.
+// The Instagram-style strip on the favorites page: one ring per saved shop
+// with live stories, colored until this device watched them.
 export function StoryRail({
   groups,
   seen,
@@ -21,10 +20,6 @@ export function StoryRail({
     <section className="story-rail" aria-label="Shop stories">
       <div className="story-rail-head">
         <h2>Stories</h2>
-        <a href="/stories">
-          All stories
-          <ArrowRight size={14} aria-hidden="true" />
-        </a>
       </div>
       <div className="story-rail-track" ref={enableMouseScrolling} tabIndex={0}>
         {groups.map((group) => (

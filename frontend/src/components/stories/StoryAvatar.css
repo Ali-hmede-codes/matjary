@@ -1,5 +1,5 @@
-/* The ring around a shop avatar tells a shopper whether a story is waiting:
-   colored until watched here, quiet afterwards, dashed for an owner with none. */
+/* Instagram-style story ring: a circular gradient outline with a small gap
+   between the ring and the round photo. Watched shops drop to a quiet gray. */
 .story-avatar {
   position: relative;
   display: inline-grid;
@@ -8,31 +8,32 @@
 .story-avatar-ring {
   display: grid;
   place-items: center;
-  padding: 2px;
-  border-radius: 15px;
+  padding: 5px;
+  border-radius: 50%;
   background: var(--line);
   transition: transform 180ms;
 }
 .story-avatar.is-large .story-avatar-ring {
-  padding: 3px;
-  border-radius: 22px;
+  padding: 6px;
 }
 .story-avatar-unseen .story-avatar-ring {
   background: conic-gradient(
     from 210deg,
-    #f6b93f,
-    #e0703d,
-    #b8497d,
-    #5f5ac9,
-    #2f9c8d,
-    #f6b93f
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
   );
 }
 .story-avatar-seen .story-avatar-ring {
-  background: color-mix(in srgb, var(--ink) 22%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 18%, var(--surface));
 }
+/* The photo is round and separated from the ring by the page surface. */
 .story-avatar-ring > .store-avatar {
-  box-shadow: 0 0 0 2px var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--surface);
 }
 .story-avatar-add {
   position: absolute;

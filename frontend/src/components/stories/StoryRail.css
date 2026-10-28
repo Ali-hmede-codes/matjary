@@ -16,14 +16,6 @@
   text-transform: uppercase;
   color: var(--muted);
 }
-.story-rail-head a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--primary);
-}
 .story-rail-track {
   display: flex;
   gap: 16px;

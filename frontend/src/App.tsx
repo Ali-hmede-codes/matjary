@@ -10,11 +10,8 @@ import { StoreStrip } from './components/StoreStrip';
 import { TrendingStores } from './components/TrendingStores';
 import { storefrontRouteFromPath, postSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
-import { useSeenStories, useStoryGroups } from './hooks/useStories';
-import { StoryRail } from './components/stories/StoryRail';
-import { StoryViewer } from './components/stories/StoryViewer';
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { LoginPage, ProtectedPanel } from './features/shared/PanelAuth';
 import { Loading } from './features/shared/PanelUI';
@@ -64,12 +61,6 @@ const FavoritesPage = lazy(() =>
     default: module.FavoritesPage,
   })),
 );
-// The stories page lists every shop with a live story today.
-const StoriesPage = lazy(() =>
-  import('./components/StoriesPage').then((module) => ({
-    default: module.StoriesPage,
-  })),
-);
 
 export default function App() {
   return (
@@ -79,7 +70,6 @@ export default function App() {
           <Route path="/" element={<DiscoveryPage />} />
           <Route path="/shops" element={<ShopsPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
-          <Route path="/stories" element={<StoriesPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
@@ -144,13 +134,6 @@ function StoreRoute() {
 
 function DiscoveryPage() {
   const discovery = useDiscoveryFeed();
-  const storyGroups = useStoryGroups(undefined, !discovery.demo);
-  const { seen, markSeen } = useSeenStories();
-  const [storyStoreId, setStoryStoreId] = useState<string | null>(null);
-  const groups = discovery.demo ? [] : (storyGroups.data?.groups ?? []);
-  const openStoryGroup = groups.find(
-    (group) => group.store.id === storyStoreId,
-  );
   const {
     settings,
     settingsQuery,
@@ -227,7 +210,6 @@ function DiscoveryPage() {
               </StatusBanner>
             )}
             <h1 className="sr-only">{settings.siteName} social feed</h1>
-            <StoryRail groups={groups} seen={seen} onOpen={setStoryStoreId} />
             <StoreStrip
               stores={stores}
               selectedStore={store}
@@ -267,15 +249,6 @@ function DiscoveryPage() {
         </main>
       </div>
       <Toast message={notice} />
-      {openStoryGroup && (
-        <StoryViewer
-          key={openStoryGroup.store.id}
-          groups={groups}
-          initialStoreId={openStoryGroup.store.id}
-          onSeen={markSeen}
-          onClose={() => setStoryStoreId(null)}
-        />
-      )}
       {selected && (
         <PostDialog
           key={selected.id}
