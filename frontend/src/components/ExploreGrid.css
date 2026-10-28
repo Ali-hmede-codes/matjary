@@ -1,5 +1,5 @@
-/* Instagram-style explore: three square tiles per row on phones, four on
-   desktop. Tiles carry only the visual; details live in the viewer. */
+/* Instagram-style explore: three 3:4 portrait tiles per row on phones, four
+   on desktop. Tiles carry only the visual; details live in the viewer. */
 .explore-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -10,7 +10,7 @@
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 4;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -48,7 +48,7 @@
 .explore-skeleton {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 4;
   border-radius: 8px;
   background: var(--wash);
 }
