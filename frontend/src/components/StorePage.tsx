@@ -488,7 +488,7 @@ export function StorePage({ slug }: { slug: string | null }) {
               </div>
               <div className="shop-profile">
                 <div className="shop-logo">
-                  <StoreAvatar store={store} large />
+                  <StoreAvatar store={store} large expandable />
                 </div>
                 <div className="shop-intro">
                   {/* Name, category and today's hours share one line so the

@@ -22,6 +22,93 @@
   height: 100%;
   object-fit: cover;
 }
+/* A hold must read as a gesture, not as selecting or dragging the logo. */
+.store-avatar.is-expandable {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.store-avatar.is-expandable img {
+  -webkit-user-drag: none;
+}
+
+/* Long-press preview: the logo on its own over a dimmed page. */
+.logo-preview {
+  position: fixed;
+  inset: 0;
+  width: fit-content;
+  height: fit-content;
+  max-width: min(92vw, 460px);
+  max-height: 100dvh;
+  margin: auto;
+  padding: 44px 0 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+.logo-preview::backdrop {
+  background: #0b1210db;
+}
+.logo-preview-card {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin: 0;
+}
+.logo-preview-card img {
+  display: block;
+  /* Leave room for the caption and close control on short screens. */
+  width: min(86vw, 400px, 56dvh);
+  height: min(86vw, 400px, 56dvh);
+  border-radius: 24px;
+  background: #ffffff14;
+  object-fit: cover;
+  box-shadow: 0 24px 70px #0007;
+  animation: logo-preview-pop 200ms ease-out;
+}
+.logo-preview-card figcaption {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: center;
+}
+.logo-preview-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #ffffff3d;
+  border-radius: 50%;
+  background: #ffffff1f;
+  color: #fff;
+}
+.logo-preview-close:hover {
+  background: #ffffff33;
+}
+.logo-preview :focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+@keyframes logo-preview-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-preview-card img {
+    animation: none;
+  }
+}
 
 /* Verification stays blue independently of the shop's editable brand colors. */
 .store-verified-badge {

@@ -48,7 +48,7 @@ export function PostCard({
           className="store-identity"
           href={post.store ? storePath(post.store.slug, demo) : undefined}
         >
-          <StoreAvatar store={post.store} />
+          <StoreAvatar store={post.store} expandable />
           <span>
             <strong>{post.store?.name || 'Independent creator'}</strong>
             <small>

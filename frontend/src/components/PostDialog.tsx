@@ -135,7 +135,7 @@ function PostSlide({
             className="reel-store"
             href={post.store ? storePath(post.store.slug, demo) : undefined}
           >
-            <StoreAvatar store={post.store} preview={media} />
+            <StoreAvatar store={post.store} preview={media} expandable />
             <span>
               <strong>{storeName}</strong>
               <small>{location}</small>

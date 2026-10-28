@@ -204,7 +204,7 @@ export function PostPage({
                 href={storePath(shop.slug, demo)}
                 aria-label={`Visit ${shop.name}`}
               >
-                <StoreAvatar store={shop} preview={media} />
+                <StoreAvatar store={shop} preview={media} expandable />
                 <span>
                   <strong>{shop.name}</strong>
                   <small>
