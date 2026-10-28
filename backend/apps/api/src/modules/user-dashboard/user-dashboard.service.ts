@@ -1,4 +1,5 @@
 import {
+  HttpException,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -24,6 +25,8 @@ import {
   ownerContentState,
   ownerWhere,
   ownerVisibilitySql,
+  assertStoreAccess,
+  storeAccess,
   MEDIA_OWNER_ID,
   MEDIA_OWNER_JOINS,
 } from '@app/database';
@@ -77,19 +80,35 @@ export class UserDashboardService {
   ) {}
 
   private sanitize(error: unknown): never {
+    if (error instanceof HttpException) throw error;
     throw new ServiceUnavailableException(
       'Dashboard data is temporarily unavailable',
     );
   }
 
   /**
-   * Get complete dashboard summary for a user - optimized with batch queries
+   * Get complete dashboard summary for a user - optimized with batch queries.
+   * A storeId scopes the summary to one shop the user owns or helps with; the
+   * plan itself always belongs to that shop's owner account.
    */
-  async getDashboard(userId: string): Promise<DashboardSummaryDto> {
+  async getDashboard(
+    userId: string,
+    requestedStoreId?: string,
+  ): Promise<DashboardSummaryDto> {
     try {
-      // 1. Get user's stores (single query)
+      let summaryUserId = userId;
+      if (requestedStoreId) {
+        summaryUserId = (
+          await assertStoreAccess(this.stores.manager, userId, requestedStoreId)
+        ).ownerId;
+      }
+      // 1. Get the stores in scope (single query)
       const userStores = await this.stores.find({
-        where: { ownerId: userId, ...ownerWhere('store') },
+        where: {
+          ownerId: summaryUserId,
+          ...(requestedStoreId ? { id: requestedStoreId } : {}),
+          ...ownerWhere('store'),
+        },
         order: { createdAt: 'DESC' },
         select: {
           id: true,
@@ -124,7 +143,7 @@ export class UserDashboardService {
           "SUM(CASE WHEN sc.status = 'published' THEN 1 ELSE 0 END)",
           'published',
         )
-        .where('sc.ownerId = :userId', { userId })
+        .where('sc.ownerId = :userId', { userId: summaryUserId })
         .andWhere(ownerVisibilitySql('post', 'sc'))
         .groupBy('sc.storeId')
         .getRawMany();
@@ -145,7 +164,7 @@ export class UserDashboardService {
           "SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END)",
           'active',
         )
-        .where('store.ownerId = :userId', { userId })
+        .where('store.ownerId = :userId', { userId: summaryUserId })
         .andWhere(ownerVisibilitySql('product', 'p'))
         .groupBy('p.storeId')
         .getRawMany();
@@ -157,16 +176,19 @@ export class UserDashboardService {
       );
 
       // Count all owned media targets without double-counting product/store joins.
+      // A single-shop summary narrows the same accounting to that shop.
       const [totalMediaResult] = await this.mediaAssets.manager.query(
-        `SELECT COUNT(*) AS totalMedia FROM media_assets a ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ? AND a.status = 'ready' AND ${ownerVisibilitySql('media', 'a')}`,
-        [userId],
+        `SELECT COUNT(*) AS totalMedia FROM media_assets a ${MEDIA_OWNER_JOINS} WHERE ${MEDIA_OWNER_ID} = ? AND a.status = 'ready' AND ${ownerVisibilitySql('media', 'a')}${requestedStoreId ? ' AND COALESCE(a.store_id, media_product.store_id, media_post.store_id) = ?' : ''}`,
+        requestedStoreId ? [summaryUserId, requestedStoreId] : [summaryUserId],
       );
       const totalMedia = totalMediaResult?.totalMedia
         ? parseInt(totalMediaResult.totalMedia, 10)
         : 0;
       // Categories are account-wide, matching the maxCategories plan quota.
       const totalCategories = await this.stores.manager.count(StoreCategory, {
-        where: { store: { ownerId: userId } },
+        where: requestedStoreId
+          ? { storeId: requestedStoreId }
+          : { store: { ownerId: summaryUserId } },
       });
 
       // 5. Build stores with counts
@@ -185,25 +207,36 @@ export class UserDashboardService {
       );
 
       // 6. Get recent posts with BATCHED engagement & media counts (max 10 for dashboard)
-      const recentPostsResult = await this.getUserPostsOptimized(userId, {
-        limit: 10,
-      });
+      const recentPostsResult = await this.getUserPostsOptimized(
+        summaryUserId,
+        {
+          limit: 10,
+          ...(requestedStoreId ? { storeId: requestedStoreId } : {}),
+        },
+      );
       const posts = recentPostsResult.items;
 
       // 7. Get recent products (max 10 for dashboard)
-      const recentProductsResult = await this.getUserProductsOptimized(userId, {
-        limit: 10,
-      });
+      const recentProductsResult = await this.getUserProductsOptimized(
+        summaryUserId,
+        {
+          limit: 10,
+          ...(requestedStoreId ? { storeId: requestedStoreId } : {}),
+        },
+      );
       const products = recentProductsResult.items;
 
       // 8. Get subscription & limits
       const subscriptionState =
-        await this.plansService.getSubscriptionState(userId);
+        await this.plansService.getSubscriptionState(summaryUserId);
       const effectiveLimits =
-        await this.plansService.getEffectiveLimits(userId);
+        await this.plansService.getEffectiveLimits(summaryUserId);
       // Effective section caps after any turned-off section donates its unused
       // allowance; the plan page must show the numbers the API enforces.
-      const contentState = await ownerContentState(this.stores.manager, userId);
+      const contentState = await ownerContentState(
+        this.stores.manager,
+        summaryUserId,
+      );
       const contentCaps = contentSectionCaps(
         effectiveLimits,
         contentState.usage,
@@ -377,7 +410,10 @@ export class UserDashboardService {
     hasMore: boolean;
     total: number;
   }> {
-    const result = await this.getUserPostsOptimized(userId, options);
+    // A shop listing is shared with the team; the owner's account remains the
+    // scope of every row and quota.
+    const scopeUserId = await this.contentScope(userId, options?.storeId);
+    const result = await this.getUserPostsOptimized(scopeUserId, options);
     // Owners list these through the same { items, total } envelope as every
     // other panel endpoint; renaming the key here broke the React list.
     return {
@@ -620,7 +656,8 @@ export class UserDashboardService {
     hasMore: boolean;
     total: number;
   }> {
-    const result = await this.getUserProductsOptimized(userId, options);
+    const scopeUserId = await this.contentScope(userId, options?.storeId);
+    const result = await this.getUserProductsOptimized(scopeUserId, options);
     return {
       items: result.items,
       nextCursor: result.nextCursor ?? null,
@@ -745,7 +782,20 @@ export class UserDashboardService {
   }
 
   /**
-   * Get media for a specific showcase (owned by user)
+   * Resolves the owner account that content rows belong to. Without a store the
+   * caller must be that account; with a store the caller may be a team member.
+   */
+  private async contentScope(
+    userId: string,
+    storeId: string | undefined,
+  ): Promise<string> {
+    if (!storeId) return userId;
+    return (await assertStoreAccess(this.stores.manager, userId, storeId))
+      .ownerId;
+  }
+
+  /**
+   * Get media for a specific showcase (owned by the account or its shop team)
    */
   async getShowcaseMedia(
     userId: string,
@@ -753,12 +803,18 @@ export class UserDashboardService {
   ): Promise<MediaAsset[]> {
     try {
       const showcase = await this.showcases.findOne({
-        where: { id: showcaseId, ownerId: userId, ...ownerWhere('post') },
+        where: { id: showcaseId, ...ownerWhere('post') },
       });
 
       if (!showcase) {
         throw new NotFoundException('Showcase not found');
       }
+      const accessible = showcase.storeId
+        ? Boolean(
+            await storeAccess(this.showcases.manager, userId, showcase.storeId),
+          )
+        : showcase.ownerId === userId;
+      if (!accessible) throw new NotFoundException('Showcase not found');
 
       return this.mediaAssets.find({
         where: { showcaseId, ...ownerWhere('media') },

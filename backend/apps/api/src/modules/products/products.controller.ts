@@ -34,11 +34,7 @@ import {
   ProductCategory,
   PUBLIC_PRODUCT_STATUSES,
 } from '@app/database';
-import {
-  BadRequestException,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -95,9 +91,6 @@ export class ProductsController {
     if (!store) {
       throw new NotFoundException('Store not found');
     }
-    if (store.ownerId !== request.user.id) {
-      throw new ForbiddenException('You do not own this store');
-    }
     return this.products.getStoreProducts(store.id, request.user.id);
   }
 
@@ -122,9 +115,6 @@ export class ProductsController {
     const store = await this.stores.findStoreEntityBySlug(storeSlug);
     if (!store) {
       throw new NotFoundException('Store not found');
-    }
-    if (store.ownerId !== request.user.id) {
-      throw new ForbiddenException('You do not own this store');
     }
     return this.products.create(dto, store.id, request.user.id);
   }

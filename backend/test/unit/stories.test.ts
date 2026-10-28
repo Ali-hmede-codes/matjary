@@ -315,6 +315,16 @@ test('a suspended owner and an offline shop cannot publish stories', async () =>
 
   const manager = {
     findOne: async () => ({ id: ownerId, suspendedAt: new Date() }),
+    findOneBy: async (target: unknown) =>
+      target === Store
+        ? Object.assign(new Store(), {
+            id: storeId,
+            ownerId,
+            slug: 'cedar-shop',
+            status: StoreStatus.ACTIVE,
+            adminArchivedAt: null,
+          })
+        : null,
     transaction: async (work: (entityManager: unknown) => Promise<unknown>) =>
       work(manager),
   };

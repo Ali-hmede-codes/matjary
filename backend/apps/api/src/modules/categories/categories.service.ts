@@ -26,6 +26,7 @@ import {
   publicWhere,
   publicVisibilitySql,
   PUBLIC_PRODUCT_STATUSES,
+  storeAccessBySlug,
 } from '@app/database';
 import {
   CategoryListResponseDto,
@@ -133,14 +134,18 @@ export class CategoriesService {
     userId: string,
   ): Promise<CategoryListResponseDto> {
     try {
-      const store = await this.ownedStore(this.stores.manager, slug, userId);
+      // Reading the section list is part of authoring a product, so the shop
+      // team shares it. Renaming and deleting stay with the owner.
+      const access = await storeAccessBySlug(this.stores.manager, userId, slug);
+      if (!access) throw new NotFoundException('Store not found');
+      const store = access.store;
       const [items, counts, limits] = await Promise.all([
         this.categories.find({
           where: { storeId: store.id },
           order: { sortOrder: 'ASC', name: 'ASC' },
         }),
         this.productCounts(store.id),
-        effectiveLimits(this.stores.manager, userId),
+        effectiveLimits(this.stores.manager, access.ownerId),
       ]);
       return {
         items: items.map((category) =>

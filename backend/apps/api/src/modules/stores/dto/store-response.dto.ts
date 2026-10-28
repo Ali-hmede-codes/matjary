@@ -134,9 +134,14 @@ export class StoreResponseDto {
   verificationBadgeGrantedAt!: Date | null;
   verificationBadgeExpiresAt!: Date | null;
 
-  // True only for the signed-in owner of this shop; backs the story "+" on the
-  // storefront. Never a security check, the API still authorizes every write.
+  // True when the signed-in viewer can manage this shop (owner or team);
+  // backs the story "+" on the storefront. Never a security check, the API
+  // still authorizes every write.
   viewerIsOwner!: boolean;
+
+  // Set by the owner panel for shops a user helps with. Public responses omit
+  // it; "member" hides account-level controls in the UI.
+  teamRole?: 'owner' | 'member';
 
   // Location fields
   location!: StoreLocationResponseDto | null;

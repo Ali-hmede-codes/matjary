@@ -71,6 +71,7 @@ import {
   businessCategoryLabel,
   productFromPriceCents,
   readProductOptions,
+  storeAccess,
   type AdminActor,
 } from '@app/database';
 
@@ -359,8 +360,12 @@ export class SeoService {
     );
   }
 
-  private async ownedEntity(kind: SeoKind, id: string, actorId: string) {
-    const manager = this.dataSource.manager;
+  private async ownedEntity(
+    kind: SeoKind,
+    id: string,
+    actorId: string,
+    manager: EntityManager = this.dataSource.manager,
+  ) {
     if (kind === 'store') {
       const store = await manager.findOneBy(Store, {
         id,
@@ -368,26 +373,47 @@ export class SeoService {
         ...ownerWhere('store'),
       });
       if (!store) throw new NotFoundException('Store not found');
-      return { store, product: null, showcase: null };
+      return { store, product: null, showcase: null, ownerId: actorId };
     }
     if (kind === 'product') {
       const product = await manager.findOne(Product, {
-        where: {
-          id,
-          store: { ownerId: actorId },
-          ...ownerWhere('product'),
-        },
+        where: { id, ...ownerWhere('product') },
         relations: ['store'],
       });
       if (!product) throw new NotFoundException('Product not found');
-      return { store: product.store, product, showcase: null };
+      // Team members author the shop's metadata for the owner's account.
+      const access = await storeAccess(manager, actorId, product.storeId);
+      if (!access) throw new NotFoundException('Product not found');
+      return {
+        store: product.store,
+        product,
+        showcase: null,
+        ownerId: access.ownerId,
+      };
     }
     const showcase = await manager.findOne(Showcase, {
-      where: { id, ownerId: actorId, ...ownerWhere('post') },
+      where: { id, ...ownerWhere('post') },
       relations: ['store'],
     });
     if (!showcase) throw new NotFoundException('Post not found');
-    return { store: showcase.store ?? null, product: null, showcase };
+    if (showcase.storeId) {
+      const access = await storeAccess(manager, actorId, showcase.storeId);
+      if (!access) throw new NotFoundException('Post not found');
+      return {
+        store: showcase.store ?? null,
+        product: null,
+        showcase,
+        ownerId: access.ownerId,
+      };
+    }
+    if (showcase.ownerId !== actorId)
+      throw new NotFoundException('Post not found');
+    return {
+      store: null,
+      product: null,
+      showcase,
+      ownerId: actorId,
+    };
   }
 
   async getOwnedSeo(kind: SeoKind, id: string, actorId: string) {
@@ -404,14 +430,16 @@ export class SeoService {
     work: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
     return this.dataSource.transaction(async (manager) => {
+      // The shop owner owns the metadata row even when a team member saves it.
+      const { ownerId } = await this.ownedEntity(kind, id, actorId, manager);
       await lockOwnerContent(
         manager,
         kind === 'showcase' ? 'post' : kind,
         id,
-        actorId,
+        ownerId,
       );
       // Tenant SEO is owner-authored content and is read-only after expiry.
-      await assertSubscriptionActive(manager, actorId);
+      await assertSubscriptionActive(manager, ownerId);
       return work(manager);
     });
   }
@@ -422,6 +450,7 @@ export class SeoService {
         kind,
         id,
         actorId,
+        manager,
       );
       const scoped = this.scoped(manager);
       if (showcase) return scoped.autoGenerateShowcaseSeo(showcase, store);
@@ -791,10 +820,14 @@ export class SeoService {
     data: ProductSeoDto,
     actorId: string,
   ): Promise<ProductSeo> {
-    const { product } = await this.ownedEntity('product', productId, actorId);
+    const { product, ownerId } = await this.ownedEntity(
+      'product',
+      productId,
+      actorId,
+    );
     const storeId = product!.storeId;
     data = await this.validated(ProductSeoDto, data);
-    await this.checkMetadata(data, actorId);
+    await this.checkMetadata(data, ownerId);
     let seo = await this.productSeoRepo.findOneBy({ productId });
     if (!seo) {
       seo = this.productSeoRepo.create({ productId, storeId, ...data });
@@ -828,14 +861,14 @@ export class SeoService {
     data: ShowcaseSeoDto,
     actorId: string,
   ): Promise<ShowcaseSeo> {
-    const { showcase } = await this.ownedEntity(
+    const { showcase, ownerId } = await this.ownedEntity(
       'showcase',
       showcaseId,
       actorId,
     );
     const storeId = showcase!.storeId;
     data = await this.validated(ShowcaseSeoDto, data);
-    await this.checkMetadata(data, actorId);
+    await this.checkMetadata(data, ownerId);
     let seo = await this.showcaseSeoRepo.findOneBy({ showcaseId });
     if (!seo) {
       seo = this.showcaseSeoRepo.create({ showcaseId, storeId, ...data });

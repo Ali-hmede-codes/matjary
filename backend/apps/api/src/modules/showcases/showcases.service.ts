@@ -29,6 +29,8 @@ import {
   lockOwnerContent,
   chooseContentSlug,
   purgeShowcaseRecords,
+  assertStoreAccess,
+  storeAccess,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { RedisService } from '@app/queue';
@@ -153,23 +155,29 @@ export class ShowcasesService {
         ...publicWhere('post'),
       };
       const showcase = await this.showcases.findOneBy(
-        userId
-          ? [publicItem, { slug, ownerId: userId, ...ownerWhere('post') }]
-          : publicItem,
+        userId ? { slug, ...ownerWhere('post') } : publicItem,
       );
       if (!showcase) {
         throw new NotFoundException('Post not found');
       }
 
-      // Public viewers only see published posts. Owners see their own posts.
+      // Published posts are public. Drafts stay private to the owner and the
+      // shop team that authors them.
+      let canManage = userId != null && showcase.ownerId === userId;
       if (
+        !canManage &&
+        userId &&
         showcase.status !== ShowcaseStatus.PUBLISHED &&
-        showcase.ownerId !== userId
-      ) {
+        showcase.storeId
+      )
+        canManage = Boolean(
+          await storeAccess(this.showcases.manager, userId, showcase.storeId),
+        );
+      if (showcase.status !== ShowcaseStatus.PUBLISHED && !canManage) {
         throw new NotFoundException('Post not found');
       }
 
-      return this.toResponseDto(showcase, userId === showcase.ownerId);
+      return this.toResponseDto(showcase, canManage);
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -183,34 +191,34 @@ export class ShowcasesService {
 
   async create(
     dto: CreateShowcaseDto,
-    ownerId: string,
+    userId: string,
   ): Promise<ShowcaseResponseDto> {
     try {
       const { saved, store } = await this.showcases.manager.transaction(
         async (manager) => {
+          let store: Store | null = null;
+          let ownerId = userId;
+          if (dto.storeId) {
+            // A team member authors for the shop owner, so the plan quota and
+            // the stored post belong to that account.
+            const access = await assertStoreAccess(
+              manager,
+              userId,
+              dto.storeId,
+            );
+            store = access.store;
+            ownerId = access.ownerId;
+            if (!store.enablePostsSection) {
+              throw new ConflictException({ code: SECTION_DISABLED_CODE });
+            }
+          }
+
           await manager.findOneOrFail(User, {
             where: { id: ownerId },
             lock: { mode: 'pessimistic_write' },
           });
           await assertSubscriptionActive(manager, ownerId);
           const limits = await effectiveLimits(manager, ownerId);
-
-          let store: Store | null = null;
-          if (dto.storeId) {
-            store = await manager.findOneBy(Store, {
-              id: dto.storeId,
-              ...ownerWhere('store'),
-            });
-            if (!store) {
-              throw new NotFoundException('Store not found');
-            }
-            if (store.ownerId !== ownerId) {
-              throw new ForbiddenException('You do not own this store');
-            }
-            if (!store.enablePostsSection) {
-              throw new ConflictException({ code: SECTION_DISABLED_CODE });
-            }
-          }
 
           // A turned-off section donates only its unused allowance to the
           // section that stays on. Posts without a shop follow the account-wide
@@ -306,9 +314,18 @@ export class ShowcasesService {
         throw new NotFoundException('Post not found');
       }
 
-      if (showcase.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this post');
-      }
+      const ownerId = showcase.storeId
+        ? (
+            await assertStoreAccess(
+              this.showcases.manager,
+              userId,
+              showcase.storeId,
+            )
+          ).ownerId
+        : showcase.ownerId === userId
+          ? userId
+          : null;
+      if (!ownerId) throw new ForbiddenException('You do not own this post');
 
       if (dto.title !== undefined) showcase.title = dto.title;
       if (dto.description !== undefined) showcase.description = dto.description;
@@ -349,8 +366,8 @@ export class ShowcasesService {
 
       const saved = await this.showcases.manager.transaction(
         async (manager) => {
-          await lockOwnerContent(manager, 'post', showcase.id, userId);
-          await assertSubscriptionActive(manager, userId);
+          await lockOwnerContent(manager, 'post', showcase.id, ownerId);
+          await assertSubscriptionActive(manager, ownerId);
           return manager.save(showcase);
         },
       );
@@ -405,12 +422,21 @@ export class ShowcasesService {
         throw new NotFoundException('Post not found');
       }
 
-      if (showcase.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this post');
-      }
+      const ownerId = showcase.storeId
+        ? (
+            await assertStoreAccess(
+              this.showcases.manager,
+              userId,
+              showcase.storeId,
+            )
+          ).ownerId
+        : showcase.ownerId === userId
+          ? userId
+          : null;
+      if (!ownerId) throw new ForbiddenException('You do not own this post');
 
       deleted = await this.showcases.manager.transaction(async (manager) => {
-        await lockOwnerContent(manager, 'post', showcase.id, userId);
+        await lockOwnerContent(manager, 'post', showcase.id, ownerId);
         // An active encode keeps writing variants for the asset rows this
         // deletion removes. Ask the owner to wait for that job instead of
         // leaving orphaned files and a job that keeps failing.

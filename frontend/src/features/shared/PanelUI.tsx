@@ -15,10 +15,12 @@ import { brandingUrl } from '../../lib/website';
 export function PanelShell({
   session,
   admin,
+  member = false,
   children,
 }: {
   session: Session;
   admin?: boolean;
+  member?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -33,7 +35,7 @@ export function PanelShell({
     return () => window.removeEventListener('keydown', escape);
   }, []);
   const base = admin ? '/admin' : '/dashboard';
-  const nav = admin
+  const nav: Array<[string, string]> = admin
     ? [
         ['', 'Overview'],
         ['/users', 'Users'],
@@ -44,17 +46,25 @@ export function PanelShell({
         ['/subscriptions/plans', 'Plans'],
         ['/verification', 'Verification'],
       ]
-    : [
-        ['', 'Home'],
-        ['/stores', 'My stores'],
-        ['/store', 'Store editor'],
-        ['/design', 'Shop design'],
-        ['/settings', 'Shop settings'],
-        ['/products', 'Products / menu'],
-        ['/posts', 'Posts'],
-        ['/boost', 'Boost'],
-        ['/plan', 'My plan'],
-      ];
+    : member
+      ? [
+          ['', 'Home'],
+          ['/stores', 'My shops'],
+          ['/products', 'Products / menu'],
+          ['/posts', 'Posts'],
+        ]
+      : [
+          ['', 'Home'],
+          ['/stores', 'My stores'],
+          ['/store', 'Store editor'],
+          ['/design', 'Shop design'],
+          ['/settings', 'Shop settings'],
+          ['/products', 'Products / menu'],
+          ['/posts', 'Posts'],
+          ['/boost', 'Boost'],
+          ['/plan', 'My plan'],
+          ['/team', 'Team'],
+        ];
   async function logout() {
     setBusy(true);
     setError('');

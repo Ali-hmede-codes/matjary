@@ -68,7 +68,12 @@ export function QuickComposer({
 
   const summary = useQuery({
     queryKey: ['quick-composer', 'summary', store.id],
-    queryFn: ({ signal }) => getJson<DashboardLimits>('dashboard', signal),
+    // Scoped to this shop so a team member sees the owner's plan limits.
+    queryFn: ({ signal }) =>
+      getJson<DashboardLimits>(
+        `dashboard?storeId=${encodeURIComponent(store.id)}`,
+        signal,
+      ),
     staleTime: 5 * 60_000,
     retry: 0,
   });

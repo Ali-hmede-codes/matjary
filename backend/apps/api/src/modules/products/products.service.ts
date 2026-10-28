@@ -31,6 +31,8 @@ import {
   assertMediaAttachment,
   normalizeProductOptions,
   PRODUCT_SLUG_TAKEN_CODE,
+  assertStoreAccess,
+  storeAccess,
 } from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -141,10 +143,7 @@ export class ProductsService {
       };
       const product = await this.products.findOne({
         where: userId
-          ? [
-              publicItem,
-              { slug, store: { ownerId: userId }, ...ownerWhere('product') },
-            ]
+          ? [{ slug, ...ownerWhere('product') }, publicItem]
           : publicItem,
         relations: ['categoryRef'],
       });
@@ -155,11 +154,12 @@ export class ProductsService {
       // Drafts and archived items are owner-only; out of stock stays public so
       // shoppers can still open it and see that it is unavailable.
       if (!isPublicProductStatus(product.status)) {
-        const store = await this.stores.findOneBy({
-          id: product.storeId,
-          ...ownerWhere('store'),
-        });
-        if (!store || store.ownerId !== userId) {
+        const access = await storeAccess(
+          this.products.manager,
+          userId!,
+          product.storeId,
+        );
+        if (!access) {
           throw new NotFoundException('Product not found');
         }
       }
@@ -179,13 +179,8 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto> {
     try {
-      const { saved, store, categoryName } =
+      const { saved, categoryName, ownerId } =
         await this.products.manager.transaction(async (manager) => {
-          await manager.findOneOrFail(User, {
-            where: { id: userId },
-            lock: { mode: 'pessimistic_write' },
-          });
-          await assertSubscriptionActive(manager, userId);
           const store = await manager.findOneBy(Store, {
             id: storeId,
             ...ownerWhere('store'),
@@ -193,17 +188,23 @@ export class ProductsService {
           if (!store) {
             throw new NotFoundException('Store not found');
           }
-          if (store.ownerId !== userId) {
-            throw new ForbiddenException('You do not own this store');
-          }
+          // A team member authors for the shop, so every quota, lock, and
+          // stored row belongs to the shop owner's account.
+          const ownerId = (await assertStoreAccess(manager, userId, storeId))
+            .ownerId;
+          await manager.findOneOrFail(User, {
+            where: { id: ownerId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          await assertSubscriptionActive(manager, ownerId);
           if (!store.enableProductsSection) {
             throw new ConflictException({ code: SECTION_DISABLED_CODE });
           }
 
           // The post allowance joins the product allowance only while posts
           // are off in every shop; existing posts still count.
-          const limits = await effectiveLimits(manager, userId);
-          const sections = await ownerContentState(manager, userId);
+          const limits = await effectiveLimits(manager, ownerId);
+          const sections = await ownerContentState(manager, ownerId);
           const caps = contentSectionCaps(
             limits,
             sections.usage,
@@ -256,12 +257,21 @@ export class ProductsService {
           });
 
           const saved = await manager.save(product);
-          return { saved, store, categoryName: category?.name ?? null };
+          return {
+            saved,
+            store,
+            ownerId,
+            categoryName: category?.name ?? null,
+          };
         });
 
       // Auto-generate SEO for the new product
       try {
-        await this.seoService.autoGenerateOwnedSeo('product', saved.id, userId);
+        await this.seoService.autoGenerateOwnedSeo(
+          'product',
+          saved.id,
+          ownerId,
+        );
       } catch (error) {
         // SEO generation failure shouldn't break product creation
         this.logger.warn('Failed to auto-generate product SEO:', error);
@@ -304,18 +314,15 @@ export class ProductsService {
         throw new NotFoundException('Product not found');
       }
 
-      // Verify user owns the store
-      const store = await this.stores.findOneBy({
-        id: product.storeId,
-        ...ownerWhere('store'),
-      });
-      if (!store || store.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this product');
-      }
+      // Verify the signed-in account can author for this shop: its owner or an
+      // invited team member.
+      const ownerId = (
+        await assertStoreAccess(this.products.manager, userId, product.storeId)
+      ).ownerId;
 
       await assertMediaAttachment(
         this.products.manager,
-        userId,
+        ownerId,
         'product_image',
         product.id,
         dto.imageKeys ?? [],
@@ -352,8 +359,8 @@ export class ProductsService {
 
       const { saved, categoryName } = await this.products.manager.transaction(
         async (manager) => {
-          await lockOwnerContent(manager, 'product', product.id, userId);
-          await assertSubscriptionActive(manager, userId);
+          await lockOwnerContent(manager, 'product', product.id, ownerId);
+          await assertSubscriptionActive(manager, ownerId);
           let categoryName: string | null = null;
           if (dto.categoryId === null) {
             product.categoryId = null;
@@ -383,7 +390,11 @@ export class ProductsService {
 
       // Auto-regenerate SEO if content changed and notify IndexNow
       try {
-        await this.seoService.autoGenerateOwnedSeo('product', saved.id, userId);
+        await this.seoService.autoGenerateOwnedSeo(
+          'product',
+          saved.id,
+          ownerId,
+        );
         await this.seoService.notifyIndexNowOnChange('product', saved);
       } catch (error) {
         // SEO generation failure shouldn't break product update
@@ -423,17 +434,14 @@ export class ProductsService {
         throw new NotFoundException('Product not found');
       }
 
-      // Verify user owns the store
-      const store = await this.stores.findOneBy({
-        id: product.storeId,
-        ...ownerWhere('store'),
-      });
-      if (!store || store.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this product');
-      }
+      // Verify the signed-in account can author for this shop: its owner or an
+      // invited team member.
+      const ownerId = (
+        await assertStoreAccess(this.products.manager, userId, product.storeId)
+      ).ownerId;
 
       await this.products.manager.transaction(async (manager) => {
-        await lockOwnerContent(manager, 'product', product.id, userId);
+        await lockOwnerContent(manager, 'product', product.id, ownerId);
         await manager.remove(product);
       });
     } catch (error) {
@@ -452,16 +460,9 @@ export class ProductsService {
     userId: string,
   ): Promise<ProductResponseDto[]> {
     try {
-      const store = await this.stores.findOneBy({
-        id: storeId,
-        ...ownerWhere('store'),
-      });
-      if (!store) {
-        throw new NotFoundException('Store not found');
-      }
-      if (store.ownerId !== userId) {
-        throw new ForbiddenException('You do not own this store');
-      }
+      // Members list the same catalogue as the owner so the panel works the
+      // same for everyone with access.
+      await assertStoreAccess(this.stores.manager, userId, storeId);
 
       const products = await this.products.find({
         where: { storeId, ...ownerWhere('product') },

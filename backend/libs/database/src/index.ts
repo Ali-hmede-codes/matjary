@@ -15,6 +15,7 @@ export * from './content-input';
 export * from './product-options';
 export * from './media-target';
 export * from './owner-write';
+export * from './store-team';
 export * from './store-purge';
 export * from './showcase-purge';
 export * from './story-policy';

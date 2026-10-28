@@ -195,7 +195,7 @@ export function StoreLifecycleControls({
 }
 
 export function StoreManager() {
-  const { stores, summary } = useOwner();
+  const { stores, summary, store: selected } = useOwner();
   const [params, setParams] = useSearchParams();
   const tab =
     params.get('tab') === 'archived'
@@ -206,13 +206,17 @@ export function StoreManager() {
   const matches = (store: OwnerStore, value: string) =>
     value === 'current' ? isCurrentStore(store) : store.status === value;
   const visible = stores.filter((store) => matches(store, tab));
-  const usedSlots = stores.filter((store) => store.status !== 'trashed').length;
+  // Team shops are helped with, not owned: they never consume the owner's own
+  // shop slots and they offer no lifecycle controls here.
+  const usedSlots = stores.filter(
+    (store) => store.teamRole !== 'member' && store.status !== 'trashed',
+  ).length;
   const maxShops = summary.limits.maxShops;
   return (
     <>
       <PageTitle
         eyebrow="YOUR BUSINESSES"
-        title="My stores"
+        title="My shops"
         description="Keep things current, take a break, or start again. You're in control."
         action={
           <Link className="panel-primary" to="/dashboard/store/new">
@@ -221,9 +225,11 @@ export function StoreManager() {
         }
       />
       <p className="panel-muted">
-        {maxShops == null
-          ? 'Your plan includes unlimited shops.'
-          : `${usedSlots} of ${String(maxShops)} shop slots in use. Trashed shops do not count.`}
+        {selected?.teamRole === 'member'
+          ? 'You are a team member of this shop. It does not use one of your own shop slots.'
+          : maxShops == null
+            ? 'Your plan includes unlimited shops.'
+            : `${usedSlots} of ${String(maxShops)} shop slots in use. Trashed shops do not count.`}
       </p>
       <div className="store-manager-tabs" role="group" aria-label="Store lists">
         {(
@@ -291,27 +297,50 @@ export function StoreManager() {
                 >
                   {storeStatusLabel[store.status]}
                 </span>
+                {store.teamRole === 'member' && (
+                  <span className="panel-pill muted">Team access</span>
+                )}
                 {store.restricted && (
                   <span className="panel-pill muted">
                     Administrator restriction
                   </span>
                 )}
               </div>
-              {store.status !== 'trashed' && !store.restricted && (
-                <Link
-                  className="panel-primary"
-                  to={`/dashboard/store?store=${encodeURIComponent(store.id)}`}
-                >
-                  Edit store
-                </Link>
+              {store.teamRole === 'member' ? (
+                <div className="store-lifecycle-actions">
+                  <Link
+                    className="panel-primary"
+                    to={`/dashboard/products?store=${encodeURIComponent(store.id)}`}
+                  >
+                    Add products
+                  </Link>
+                  <Link
+                    className="panel-secondary"
+                    to={`/dashboard/posts?store=${encodeURIComponent(store.id)}`}
+                  >
+                    Posts & stories
+                  </Link>
+                </div>
+              ) : (
+                store.status !== 'trashed' &&
+                !store.restricted && (
+                  <Link
+                    className="panel-primary"
+                    to={`/dashboard/store?store=${encodeURIComponent(store.id)}`}
+                  >
+                    Edit store
+                  </Link>
+                )
               )}
-              {store.restricted && (
+              {store.restricted && store.teamRole !== 'member' && (
                 <p className="panel-muted">
                   Contact the administrator about this restriction. You can
                   still archive this store or move it to Trash.
                 </p>
               )}
-              <StoreLifecycleControls store={store} />
+              {store.teamRole !== 'member' && (
+                <StoreLifecycleControls store={store} />
+              )}
             </article>
           ))}
         </div>

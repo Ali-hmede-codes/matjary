@@ -115,6 +115,14 @@ export function panelError(error: unknown): string {
       return 'Every live story slot for this shop is in use. Delete a story or wait for one to end.';
     if (error.code === 'STORY_STORE_OFFLINE')
       return 'Bring the shop online before sharing a story.';
+    if (error.code === 'TEAM_LIMIT')
+      return 'This shop already has the maximum number of team members. Remove someone before adding another.';
+    if (error.code === 'TEAM_ALREADY_MEMBER')
+      return 'This person already has access to this shop.';
+    if (error.code === 'TEAM_OWN_EMAIL')
+      return 'That is your own account. Team access is for other people.';
+    if (error.code === 'TEAM_ACCOUNT_UNAVAILABLE')
+      return 'This account cannot be added right now.';
     if (error.status === 401)
       return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'Your account cannot perform this action.';

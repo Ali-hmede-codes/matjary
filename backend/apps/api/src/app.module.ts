@@ -6,6 +6,7 @@ import { HealthModule } from './modules/health/health.module';
 import { MediaModule } from './modules/media/media.module';
 import { ShowcasesModule } from './modules/showcases/showcases.module';
 import { StoriesModule } from './modules/stories/stories.module';
+import { TeamModule } from './modules/team/team.module';
 import { UsersModule } from './modules/users/users.module';
 import { StorageModule } from '@app/storage';
 import { StoresModule } from './modules/stores/stores.module';
@@ -31,6 +32,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     UsersModule,
     ShowcasesModule,
     StoriesModule,
+    TeamModule,
     MediaModule,
     HealthModule,
     StoresModule,

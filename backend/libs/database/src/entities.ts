@@ -1891,6 +1891,81 @@ export class BoostSetting {
   // No user relation to avoid circular deps
 }
 
+// Team access is deliberately narrow: a member authors shop content, while the
+// owner keeps every account-level control (settings, design, plan, deletion).
+export enum StoreMemberRole {
+  EDITOR = 'editor',
+}
+
+@Entity({ name: 'store_members', engine: 'InnoDB' })
+@Index('uq_store_members_store_user', ['storeId', 'userId'], { unique: true })
+@Index('idx_store_members_user', ['userId'])
+export class StoreMember extends BaseEntity {
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_store_members_store',
+  })
+  store!: Relation<Store>;
+
+  @Column({ name: 'user_id', type: 'varchar', length: 36 })
+  userId!: string;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'user_id',
+    foreignKeyConstraintName: 'fk_store_members_user',
+  })
+  user!: Relation<User>;
+
+  @Column({
+    type: 'enum',
+    enum: StoreMemberRole,
+    default: StoreMemberRole.EDITOR,
+  })
+  role: StoreMemberRole = StoreMemberRole.EDITOR;
+}
+
+// Only pending invitations are stored: accepting, declining, or cancelling
+// removes the row, so the same Gmail address can be invited again later.
+@Entity({ name: 'store_invitations', engine: 'InnoDB' })
+@Index('uq_store_invitations_store_email', ['storeId', 'email'], {
+  unique: true,
+})
+@Index('idx_store_invitations_email', ['email'])
+@Index('idx_store_invitations_expires', ['expiresAt'])
+export class StoreInvitation extends BaseEntity {
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_store_invitations_store',
+  })
+  store!: Relation<Store>;
+
+  // Always stored trimmed and lower-cased, matching a Google account email.
+  @Column({ type: 'varchar', length: 254 })
+  email!: string;
+
+  @Column({ name: 'invited_by_id', type: 'varchar', length: 36 })
+  invitedById!: string;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'invited_by_id',
+    foreignKeyConstraintName: 'fk_store_invitations_invited_by',
+  })
+  invitedBy!: Relation<User>;
+
+  @Column({ name: 'expires_at', type: 'datetime', precision: 6 })
+  expiresAt!: Date;
+}
+
 export const databaseEntities = [
   WebsiteSettings,
   AdminAuditLog,
@@ -1899,6 +1974,8 @@ export const databaseEntities = [
   Showcase,
   Store,
   StoreBranch,
+  StoreMember,
+  StoreInvitation,
   StoreCategory,
   Product,
   Cart,

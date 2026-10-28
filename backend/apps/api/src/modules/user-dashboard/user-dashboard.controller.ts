@@ -20,12 +20,13 @@ export class UserDashboardController {
   @UseGuards(SessionGuard)
   async getDashboard(
     @Req() request: AuthenticatedRequest,
+    @Query('storeId') storeId?: string,
   ): Promise<DashboardSummaryDto> {
     const userId = request.user?.id;
     if (!userId) {
       throw new Error('User not authenticated');
     }
-    return this.dashboard.getDashboard(userId);
+    return this.dashboard.getDashboard(userId, storeId || undefined);
   }
 
   @Get('stores')

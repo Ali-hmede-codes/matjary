@@ -1193,6 +1193,110 @@
   gap: 15px;
   font-size: 13px;
 }
+/* Shop team: one email form, a compact list, and a copy-ready invitation. */
+.panel-team-invite {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.panel-team-invite h2,
+.panel-team-columns h2,
+.panel-team-access h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+.panel-team-invite form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+}
+.panel-team-invite form label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.panel-invite-draft {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed var(--panel-line);
+  border-radius: 13px;
+  background: #f8faf7;
+}
+.panel-invite-draft textarea {
+  resize: vertical;
+  font-size: 13px;
+}
+.panel-team-columns {
+  margin-bottom: 24px;
+}
+.panel-team-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.panel-team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--panel-line);
+}
+.panel-team-row:last-child {
+  border-bottom: 0;
+}
+.panel-team-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+.panel-team-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.panel-team-identity > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.panel-team-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.panel-team-permissions {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 16px;
+  padding-left: 18px;
+  font-size: 14px;
+}
+.panel-team-access {
+  margin-top: 10px;
+}
+.panel-invite-banner {
+  border-color: #cfe0d1;
+  background: #f2f8f2;
+}
+.panel-invite-banner strong {
+  color: var(--panel-green);
+}
+@media (max-width: 720px) {
+  .panel-team-invite form {
+    grid-template-columns: 1fr;
+  }
+}
 .panel-editor-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);

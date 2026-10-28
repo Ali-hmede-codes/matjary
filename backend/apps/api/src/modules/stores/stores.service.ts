@@ -16,6 +16,7 @@ import {
   StoreCategory,
   StoreSubscriptionTier,
   StoreType,
+  StoreMember,
   Product,
   SubscriptionPlan,
   User,
@@ -46,6 +47,7 @@ import {
   BUSINESS_CATEGORY_GROUPS,
   defaultBusinessCategoryForStoreType,
   isBusinessCategory,
+  canManageStore,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
@@ -269,13 +271,16 @@ export class StoresService {
         throw new NotFoundException('Store not found');
       }
 
-      const isOwner = userId === store.ownerId;
+      // The storefront shows its story "+" to the owner and the shop team.
+      const canManage = userId
+        ? await canManageStore(this.stores.manager, userId, store)
+        : false;
       const [postsCount, productsCount] = await Promise.all([
         this.getPostsCount(store.id),
         this.getProductsCount(store.id),
       ]);
 
-      return toStoreResponseDto(store, isOwner, postsCount, productsCount);
+      return toStoreResponseDto(store, canManage, postsCount, productsCount);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -982,27 +987,55 @@ export class StoresService {
     includeTrashed = false,
   ): Promise<StoreResponseDto[]> {
     try {
-      const stores = await this.stores.find({
-        where: {
-          ownerId: userId,
-          ...(includeTrashed ? {} : { status: Not(StoreStatus.TRASHED) }),
-        },
-        relations: { branches: true },
+      // Owned shops and shops where this account is an invited team member.
+      const memberRows = await this.stores.manager.find(StoreMember, {
+        where: { userId },
+        select: { storeId: true },
       });
+      const memberIds = [
+        ...new Set(memberRows.map((member) => member.storeId)),
+      ];
+      const [owned, joined] = await Promise.all([
+        this.stores.find({
+          where: {
+            ownerId: userId,
+            ...(includeTrashed ? {} : { status: Not(StoreStatus.TRASHED) }),
+          },
+          relations: { branches: true },
+        }),
+        memberIds.length
+          ? this.stores.find({
+              where: {
+                id: In(memberIds),
+                // A trashed shop stays out of the member's panel even when the
+                // owner asked to include their own trash.
+                status: Not(StoreStatus.TRASHED),
+                ...ownerWhere('store'),
+              },
+              relations: { branches: true },
+            })
+          : Promise.resolve([]),
+      ]);
+      const ownedIds = new Set(owned.map((store) => store.id));
+      const stores = [
+        ...owned,
+        ...joined.filter((store) => !ownedIds.has(store.id)),
+      ];
       const storeIds = stores.map((s) => s.id);
       const [postsCounts, productsCounts] = await Promise.all([
         this.getPostsCounts(storeIds),
         this.getProductsCounts(storeIds),
       ]);
 
-      return stores.map((store, index) =>
-        toStoreResponseDto(
+      return stores.map((store) => ({
+        ...toStoreResponseDto(
           store,
-          true,
+          store.ownerId === userId,
           postsCounts[store.id],
           productsCounts[store.id],
         ),
-      );
+        teamRole: store.ownerId === userId ? 'owner' : 'member',
+      }));
     } catch (error) {
       this.sanitize(error);
     }

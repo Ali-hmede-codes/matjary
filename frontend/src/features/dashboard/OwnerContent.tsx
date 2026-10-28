@@ -379,6 +379,9 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   const [statusBusy, setStatusBusy] = useState('');
   const [deleting, setDeleting] = useState('');
   const product = kind === 'products';
+  // Categories are account-level sections; the shop team reads them while
+  // authoring products but does not rename or delete them.
+  const member = store?.teamRole === 'member';
   const categoryQuery = useQuery({
     queryKey: ['categories', store!.slug, 'my'],
     queryFn: ({ signal }) =>
@@ -504,7 +507,14 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
               : 'Products are turned off for this shop.'
             : 'Posts are turned off for this shop.'}{' '}
           Existing items stay saved, and your plan’s other section can use their
-          allowance. <Link to="/dashboard/settings">Turn it back on</Link>.
+          allowance.{' '}
+          {member ? (
+            'Ask the shop owner to turn it back on.'
+          ) : (
+            <>
+              <Link to="/dashboard/settings">Turn it back on</Link>.
+            </>
+          )}
         </Notice>
       )}
       {notice && <Notice>{notice}</Notice>}
@@ -529,12 +539,12 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
             {product && <option value="out_of_stock">Out of stock</option>}
           </select>
         </label>
-        {product && (
+        {product && !member && (
           <button type="button" onClick={() => setCategoriesOpen(true)}>
             Manage categories
           </button>
         )}
-        <Link to="/dashboard/plan">View my plan limits</Link>
+        {!member && <Link to="/dashboard/plan">View my plan limits</Link>}
       </div>
       {query.isPending ? (
         <Loading />

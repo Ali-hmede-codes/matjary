@@ -98,6 +98,10 @@ function lifecycleFixture() {
         return null;
       return Object.assign(new Store(), store);
     },
+    async find() {
+      // The owner has no team memberships in this fixture.
+      return [];
+    },
     async query(sql: string, values: unknown[]) {
       assert.match(sql, /^UPDATE stores SET status = \?/);
       assert.doesNotMatch(
@@ -664,7 +668,24 @@ test('owner content lists return the panel { items, total } envelope', async () 
   };
   const service = new UserDashboardService(
     {} as never,
-    {} as never,
+    {
+      // Team access resolves through the store/owner lookup; this fixture has
+      // an owner-only shop.
+      manager: {
+        async findOneBy(target: unknown) {
+          return target === Store
+            ? Object.assign(new Store(), {
+                id: store.id,
+                slug: store.slug,
+                name: store.name,
+                ownerId,
+                status: StoreStatus.ACTIVE,
+                adminArchivedAt: null,
+              })
+            : null;
+        },
+      },
+    } as never,
     repository(post) as never,
     repository(product) as never,
     mediaAssets as never,

@@ -26,8 +26,11 @@ export interface Store {
   slug: string;
   description?: string | null;
   brandColor: string | null;
-  // True only when the signed-in viewer owns this shop; shows the story "+".
+  // True when the signed-in viewer can manage this shop (owner or team);
+  // backs the story and quick-add controls on the storefront.
   viewerIsOwner?: boolean;
+  // Set in the owner panel: "member" shops are helped with, not owned.
+  teamRole?: 'owner' | 'member';
   hasVerificationBadge?: boolean;
   verificationBadgeExpiresAt?: string | null;
   storeType?: 'ecommerce' | 'restaurant_menu';

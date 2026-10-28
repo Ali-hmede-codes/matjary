@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import type { Repository } from 'typeorm';
+import type { EntityManager, Repository } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
 import {
   Showcase,
@@ -34,6 +34,7 @@ import {
   StoreStatus,
   requireAdmin,
   mediaParent,
+  storeAccess,
   MEDIA_OWNER_JOINS,
   MEDIA_OWNER_ID,
   type AdminActor,
@@ -65,32 +66,59 @@ export class MediaService {
     private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
 
-  async presignedUrl(dto: PresignedUrlDto, slug: string, ownerId: string) {
+  async presignedUrl(dto: PresignedUrlDto, slug: string, userId: string) {
     const post = await this.showcases.findOneBy({
       slug,
       ...ownerWhere('post'),
     });
     if (!post) throw new NotFoundException('Post not found');
+    await this.assertPostAccess(post, userId);
     if (dto.storeId && dto.storeId !== post.storeId)
       throw new BadRequestException('Store must match the post');
     return this.negotiate(
       { ...dto, targetId: post.id, purpose: 'post' },
-      ownerId,
+      userId,
     );
+  }
+
+  // Shop posts are authored by the owner and their team; standalone posts stay
+  // private to the account that wrote them.
+  private async assertPostAccess(
+    post: Showcase,
+    userId: string,
+  ): Promise<void> {
+    if (post.ownerId === userId) return;
+    if (
+      post.storeId &&
+      (await storeAccess(this.showcases.manager, userId, post.storeId))
+    )
+      return;
+    throw new NotFoundException('Post not found');
+  }
+
+  // An asset is reachable through its shop (direct, product, or shop post).
+  // Team members share that reach for content, but branding (logo/banner) stays
+  // an owner-only upload even though it hangs off the same shop.
+  private async canManageParent(
+    manager: EntityManager,
+    parent: { ownerId: string; store: Store | null },
+    userId: string | undefined,
+    purpose?: MediaAsset['purpose'],
+  ): Promise<boolean> {
+    if (!userId) return false;
+    if (purpose === 'store_logo' || purpose === 'store_banner')
+      return parent.ownerId === userId;
+    if (parent.ownerId === userId) return true;
+    if (!parent.store) return false;
+    return Boolean(await storeAccess(manager, userId, parent.store.id));
   }
 
   async negotiate(
     dto: OwnerUploadDto,
-    ownerId: string,
+    actorId: string,
   ): Promise<{ url: string; mediaId: string; key: string }> {
     try {
       return await this.mediaAssets.manager.transaction(async (manager) => {
-        const user = await manager.findOneOrFail(User, {
-          where: { id: ownerId },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (user.suspendedAt)
-          throw new ForbiddenException('Account unavailable');
         const target = {
           showcaseId: dto.purpose === 'post' ? dto.targetId : null,
           storeId: STORE_SCOPED_PURPOSES.includes(dto.purpose)
@@ -99,8 +127,19 @@ export class MediaService {
           productId: dto.purpose === 'product_image' ? dto.targetId : null,
         };
         const parent = await mediaParent(manager, target);
-        if (parent.ownerId !== ownerId)
+        if (
+          !(await this.canManageParent(manager, parent, actorId, dto.purpose))
+        )
           throw new ForbiddenException('You do not own this content');
+        // The asset belongs to the shop owner even when a team member uploads
+        // it, keeping plans, storage accounting, and public visibility stable.
+        const ownerId = parent.ownerId;
+        const user = await manager.findOneOrFail(User, {
+          where: { id: ownerId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (user.suspendedAt)
+          throw new ForbiddenException('Account unavailable');
         // Trial-expired owners cannot start new uploads. Completions of
         // uploads negotiated during the trial still succeed.
         await assertSubscriptionActive(manager, ownerId);
@@ -268,35 +307,51 @@ export class MediaService {
   async mediaComplete(
     dto: MediaCompleteDto,
     slug: string,
-    ownerId: string,
+    userId: string,
   ): Promise<void> {
     const post = await this.showcases.findOneBy({
       slug,
       ...ownerWhere('post'),
     });
     if (!post) throw new NotFoundException('Post not found');
-    const asset = await this.ownedAsset(dto.mediaId, ownerId);
+    await this.assertPostAccess(post, userId);
+    const asset = await this.ownedAsset(dto.mediaId, userId);
     if (asset.showcaseId !== post.id)
       throw new NotFoundException('Media asset not found');
-    await this.complete(dto.mediaId, ownerId);
+    await this.complete(dto.mediaId, userId);
   }
 
-  private async ownedAsset(id: string, ownerId: string): Promise<MediaAsset> {
+  private async ownedAsset(id: string, userId: string): Promise<MediaAsset> {
+    return (await this.resolvedAsset(id, userId)).asset;
+  }
+
+  // Resolves the asset plus the account that owns its content. A shop team
+  // member may finish or cancel an upload they started for that shop.
+  private async resolvedAsset(
+    id: string,
+    userId: string,
+  ): Promise<{ asset: MediaAsset; ownerId: string }> {
     const asset = await this.mediaAssets.findOneBy({
       id,
       ...ownerWhere('media'),
     });
+    if (!asset) throw new NotFoundException('Media asset not found');
+    const parent = await mediaParent(this.mediaAssets.manager, asset);
     if (
-      !asset ||
-      (await mediaParent(this.mediaAssets.manager, asset)).ownerId !== ownerId
+      !(await this.canManageParent(
+        this.mediaAssets.manager,
+        parent,
+        userId,
+        asset.purpose,
+      ))
     )
       throw new NotFoundException('Media asset not found');
-    return asset;
+    return { asset, ownerId: parent.ownerId };
   }
 
-  async complete(id: string, ownerId: string): Promise<void> {
+  async complete(id: string, userId: string): Promise<void> {
     try {
-      const asset = await this.ownedAsset(id, ownerId);
+      const { asset, ownerId } = await this.resolvedAsset(id, userId);
       if ([MediaStatus.PROCESSING, MediaStatus.READY].includes(asset.status))
         return;
       this.pending(asset);
@@ -355,8 +410,8 @@ export class MediaService {
     }
   }
 
-  async abandon(id: string, ownerId: string): Promise<void> {
-    const asset = await this.ownedAsset(id, ownerId);
+  async abandon(id: string, userId: string): Promise<void> {
+    const { asset, ownerId } = await this.resolvedAsset(id, userId);
     if (asset.status !== MediaStatus.PENDING)
       throw new ConflictException('Upload cannot be abandoned');
     try {
@@ -378,8 +433,8 @@ export class MediaService {
     }
   }
 
-  async status(id: string, ownerId: string) {
-    const asset = await this.ownedAsset(id, ownerId);
+  async status(id: string, userId: string) {
+    const { asset } = await this.resolvedAsset(id, userId);
     const variants =
       asset.status === MediaStatus.READY
         ? await this.mediaAssets.manager.find(MediaVariant, {
@@ -409,14 +464,20 @@ export class MediaService {
       throw new ConflictException('Upload is no longer pending');
   }
 
-  async authorizeUpload(key: string, ownerId: string): Promise<MediaAsset> {
+  async authorizeUpload(key: string, userId: string): Promise<MediaAsset> {
     this.requireLocal();
     const asset = await this.mediaAssets.findOne({
       where: { originalKey: key, ...ownerWhere('media') },
     });
+    if (!asset) throw new NotFoundException('Media asset not found');
+    const parent = await mediaParent(this.mediaAssets.manager, asset);
     if (
-      !asset ||
-      (await mediaParent(this.mediaAssets.manager, asset)).ownerId !== ownerId
+      !(await this.canManageParent(
+        this.mediaAssets.manager,
+        parent,
+        userId,
+        asset.purpose,
+      ))
     )
       throw new NotFoundException('Media asset not found');
     this.pending(asset);
@@ -425,7 +486,7 @@ export class MediaService {
 
   async authorizeDownload(
     key: string,
-    ownerId?: string,
+    userId?: string,
     administrator?: AdminActor,
   ): Promise<{ mimeType: string; public: boolean }> {
     this.requireLocal();
@@ -479,7 +540,13 @@ export class MediaService {
         variant.asset.status === MediaStatus.READY &&
         (attached || storyAttached) &&
         (!store || store.status === StoreStatus.ACTIVE);
-      if (visible || actualOwner === ownerId)
+      const manageable = await this.canManageParent(
+        this.mediaAssets.manager,
+        { ownerId: actualOwner, store },
+        userId,
+        variant.asset.purpose,
+      );
+      if (visible || manageable)
         return { mimeType: variant.mimeType, public: visible };
     }
     const original = await this.mediaAssets.findOne({
@@ -488,13 +555,19 @@ export class MediaService {
         ...(administrator ? {} : ownerWhere('media')),
       },
     });
-    if (
-      original &&
-      (administrator ||
-        (await mediaParent(this.mediaAssets.manager, original)).ownerId ===
-          ownerId)
-    )
-      return { mimeType: original.mimeType, public: false };
+    if (original) {
+      const parent = await mediaParent(this.mediaAssets.manager, original);
+      if (
+        administrator ||
+        (await this.canManageParent(
+          this.mediaAssets.manager,
+          parent,
+          userId,
+          original.purpose,
+        ))
+      )
+        return { mimeType: original.mimeType, public: false };
+    }
     throw new NotFoundException('Media asset not found');
   }
 

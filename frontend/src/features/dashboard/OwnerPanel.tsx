@@ -18,6 +18,7 @@ import {
   Plus,
   Settings2,
   Store as StoreIcon,
+  Users,
 } from 'lucide-react';
 import type { Store } from '../../lib/api';
 import {
@@ -30,11 +31,18 @@ import {
   storeStatusLabel,
   type StoreLifecycleStatus,
 } from '../../lib/storefront';
-import { getJson, dateLabel, type Session } from '../shared/panel-api';
+import {
+  getJson,
+  dateLabel,
+  mutate,
+  panelError,
+  type Session,
+} from '../shared/panel-api';
 import {
   Empty,
   Loading,
   Modal,
+  Notice,
   PageTitle,
   PanelShell,
   Retry,
@@ -45,6 +53,7 @@ import { ShopSettings } from './ShopSettings';
 import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
 import { StoreManager } from './StoreManager';
+import { TeamPanel } from './TeamPanel';
 
 export interface OwnerStore extends Store {
   status: StoreLifecycleStatus;
@@ -83,6 +92,12 @@ interface OwnerState {
   savedStore: (store: OwnerStore, lifecycle?: boolean) => Promise<void>;
   removedStore: (store: OwnerStore) => Promise<void>;
 }
+interface TeamInvitationSummary {
+  id: string;
+  store: { id: string; name: string; slug: string; logoKey: string | null };
+  invitedByName: string;
+  expiresAt: string;
+}
 const panelQueryPrefixes = [
   'panel',
   'stores',
@@ -120,10 +135,6 @@ export default function OwnerPanel({ session }: { session: Session }) {
     queryFn: ({ signal }) =>
       getJson<OwnerStore[]>('stores/my?includeTrashed=true', signal),
   });
-  const summary = useQuery({
-    queryKey: ['panel', session.user.id, 'summary'],
-    queryFn: ({ signal }) => getJson<OwnerSummary>('dashboard', signal),
-  });
   const requested = params.get('store');
   useEffect(() => {
     if (!requested) return;
@@ -136,6 +147,25 @@ export default function OwnerPanel({ session }: { session: Session }) {
   const store = requested
     ? selectOwnerStore(available, requested)
     : (selectOwnerStore(available, selected) ?? selectOwnerStore(available));
+  const member = store?.teamRole === 'member';
+  // A member's summary is scoped to the shop they help with; its plan belongs
+  // to the owner, so the request asks for that shop explicitly.
+  const summary = useQuery({
+    queryKey: ['panel', session.user.id, 'summary', member ? store!.id : 'all'],
+    queryFn: ({ signal }) =>
+      getJson<OwnerSummary>(
+        member
+          ? `dashboard?storeId=${encodeURIComponent(store!.id)}`
+          : 'dashboard',
+        signal,
+      ),
+    enabled: stores.isSuccess,
+  });
+  const invitations = useQuery({
+    queryKey: ['panel', session.user.id, 'team-invitations'],
+    queryFn: ({ signal }) =>
+      getJson<TeamInvitationSummary[]>('team/invitations', signal),
+  });
   const selectable = available.filter(
     (s) => !s.restricted && (isCurrentStore(s) || s.id === store?.id),
   );
@@ -194,10 +224,8 @@ export default function OwnerPanel({ session }: { session: Session }) {
     await refresh();
   }
   return (
-    <PanelShell session={session}>
-      {stores.isPending || summary.isPending ? (
-        <Loading />
-      ) : stores.isError || summary.isError ? (
+    <PanelShell session={session} member={member}>
+      {stores.isError || summary.isError ? (
         <Retry
           error={stores.error || summary.error}
           retry={() => {
@@ -205,6 +233,8 @@ export default function OwnerPanel({ session }: { session: Session }) {
             void summary.refetch();
           }}
         />
+      ) : stores.isPending || summary.isPending ? (
+        <Loading />
       ) : (
         <OwnerContext.Provider
           value={{
@@ -218,7 +248,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
         >
           {selectable.length > 1 && (
             <label className="panel-store-switch">
-              Your store
+              {member ? 'Your shop' : 'Your store'}
               <select
                 value={store?.id}
                 onChange={(e) => {
@@ -267,7 +297,13 @@ export default function OwnerPanel({ session }: { session: Session }) {
               </div>
             </Modal>
           )}
-          <PlanBanner />
+          {invitations.data && invitations.data.length > 0 && (
+            <InvitationBanner
+              items={invitations.data}
+              onResolved={() => void refresh()}
+            />
+          )}
+          {!member && <PlanBanner />}
           <Routes>
             <Route index element={<OwnerHome />} />
             <Route path="stores" element={<StoreManager />} />
@@ -276,7 +312,11 @@ export default function OwnerPanel({ session }: { session: Session }) {
               path="store"
               element={
                 store ? (
-                  <StoreEditor key={store.id} store={store} />
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <StoreEditor key={store.id} store={store} />
+                  )
                 ) : (
                   <NoStore />
                 )
@@ -285,12 +325,30 @@ export default function OwnerPanel({ session }: { session: Session }) {
             <Route
               path="design"
               element={
-                store ? <StoreDesignStudio key={store.id} /> : <NoStore />
+                store ? (
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <StoreDesignStudio key={store.id} />
+                  )
+                ) : (
+                  <NoStore />
+                )
               }
             />
             <Route
               path="settings"
-              element={store ? <ShopSettings key={store.id} /> : <NoStore />}
+              element={
+                store ? (
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <ShopSettings key={store.id} />
+                  )
+                ) : (
+                  <NoStore />
+                )
+              }
             />
             <Route
               path="products"
@@ -312,10 +370,37 @@ export default function OwnerPanel({ session }: { session: Session }) {
                 )
               }
             />
-            <Route path="plan" element={<OwnerPlan />} />
+            <Route
+              path="plan"
+              element={member ? <OwnerOnly /> : <OwnerPlan />}
+            />
             <Route
               path="boost"
-              element={store ? <OwnerBoost key={store.id} /> : <NoStore />}
+              element={
+                store ? (
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <OwnerBoost key={store.id} />
+                  )
+                ) : (
+                  <NoStore />
+                )
+              }
+            />
+            <Route
+              path="team"
+              element={
+                store ? (
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <TeamPanel key={store.id} />
+                  )
+                ) : (
+                  <NoStore />
+                )
+              }
             />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
@@ -325,7 +410,9 @@ export default function OwnerPanel({ session }: { session: Session }) {
   );
 }
 function PlanBanner() {
-  const { summary } = useOwner();
+  const { summary, store } = useOwner();
+  // The plan belongs to the shop owner; a team member never decides it.
+  if (store?.teamRole === 'member') return null;
   const state = summary.subscriptionState;
   if (!state) return null;
   const expired = state.state === 'expired';
@@ -374,20 +461,170 @@ function NoStore() {
     </>
   );
 }
-function OwnerHome() {
-  const { store, session, summary } = useOwner();
-  if (!store) return <NoStore />;
+function OwnerOnly() {
   return (
     <>
       <PageTitle
-        eyebrow="YOUR PERSONAL STUDIO"
+        title="This part belongs to the shop owner."
+        description="Your team access covers the content, not the shop account."
+      />
+      <Empty title="Owner-only settings">
+        <p>
+          You can still add and edit products, posts, and stories for this shop.
+        </p>
+        <Link className="panel-primary" to="/dashboard/products">
+          <Package size={17} /> Go to products
+        </Link>
+        <Link className="panel-secondary" to="/dashboard/posts">
+          Go to posts
+        </Link>
+      </Empty>
+    </>
+  );
+}
+function InvitationBanner({
+  items,
+  onResolved,
+}: {
+  items: TeamInvitationSummary[];
+  onResolved: () => void;
+}) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  async function accept(item: TeamInvitationSummary) {
+    setBusy(item.id);
+    setError('');
+    try {
+      const result = await mutate<{ store: { id: string; name: string } }>(
+        `team/invitations/${item.id}/accept`,
+      );
+      onResolved();
+      navigate(`/dashboard?store=${encodeURIComponent(result.store.id)}`);
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy('');
+    }
+  }
+  async function decline(item: TeamInvitationSummary) {
+    setBusy(item.id);
+    setError('');
+    try {
+      await mutate(`team/invitations/${item.id}/decline`, {}, 'POST');
+      onResolved();
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy('');
+    }
+  }
+  return (
+    <>
+      {items.map((item) => (
+        <section
+          className="panel-plan-banner panel-invite-banner"
+          key={item.id}
+        >
+          <div>
+            <strong>You're invited to help with {item.store.name}.</strong>
+            <span>
+              {item.invitedByName} invited your Gmail. Accept to add products,
+              posts, and stories for this shop.
+            </span>
+            {error && <span role="alert">{error}</span>}
+          </div>
+          <div className="store-lifecycle-actions">
+            <button
+              type="button"
+              className="panel-secondary"
+              disabled={busy === item.id}
+              onClick={() => void decline(item)}
+            >
+              Decline
+            </button>
+            <button
+              type="button"
+              className="panel-primary"
+              disabled={busy === item.id}
+              onClick={() => void accept(item)}
+            >
+              {busy === item.id ? 'Joining…' : 'Accept invitation'}
+            </button>
+          </div>
+        </section>
+      ))}
+    </>
+  );
+}
+function TeamAccessCard({ store }: { store: OwnerStore }) {
+  const client = useQueryClient();
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function leave() {
+    if (
+      !window.confirm(
+        `Leave ${store.name}? You will lose access to its products, posts, and stories.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate(`team/memberships/${store.id}`, {}, 'DELETE');
+      await client.invalidateQueries({ queryKey: ['panel'] });
+      await client.invalidateQueries({ queryKey: ['stores'] });
+      navigate('/dashboard', { replace: true });
+    } catch (e) {
+      setError(panelError(e));
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel-card panel-team-access">
+      <h2>
+        <Users size={20} /> Team access
+      </h2>
+      {error && <Notice error>{error}</Notice>}
+      <p className="panel-muted">
+        You can add and edit products, posts, and stories here. Only the shop
+        owner can change settings, design, plan, or delete the shop.
+      </p>
+      <button
+        type="button"
+        className="panel-secondary"
+        disabled={busy}
+        onClick={() => void leave()}
+      >
+        {busy ? 'Leaving…' : 'Leave this shop'}
+      </button>
+    </section>
+  );
+}
+function OwnerHome() {
+  const { store, session, summary } = useOwner();
+  if (!store) return <NoStore />;
+  const member = store.teamRole === 'member';
+  return (
+    <>
+      <PageTitle
+        eyebrow={member ? 'SHOP TEAM' : 'YOUR PERSONAL STUDIO'}
         title={`Welcome back, ${session.user.displayName.split(' ')[0] || 'there'}.`}
-        description="A little update can make a big difference."
+        description={
+          member
+            ? `You're helping ${store.name} grow.`
+            : 'A little update can make a big difference.'
+        }
         action={
           store.status === 'active' ? (
             <Link className="panel-secondary" to={`/stores/${store.slug}`}>
-              View my store <ArrowUpRight size={16} />
+              View {member ? 'shop' : 'my store'} <ArrowUpRight size={16} />
             </Link>
+          ) : member ? (
+            <span className="panel-pill muted">
+              {storeStatusLabel[store.status]}
+            </span>
           ) : (
             <Link className="panel-secondary" to="/dashboard/stores">
               Manage store status
@@ -398,7 +635,8 @@ function OwnerHome() {
       <section className="panel-store-hero">
         <div>
           <span className="panel-pill">
-            YOUR STORE · {storeStatusLabel[store.status]}
+            {member ? 'SHOP TEAM' : 'YOUR STORE'} ·{' '}
+            {storeStatusLabel[store.status]}
           </span>
           <h2>
             {store.name} {isStoreVerified(store) && <BadgeCheck size={25} />}
@@ -407,9 +645,15 @@ function OwnerHome() {
             {store.description ||
               'Your space to share what makes your business special.'}
           </p>
-          <Link className="panel-primary" to="/dashboard/store">
-            Make it yours <Palette size={17} />
-          </Link>
+          {member ? (
+            <Link className="panel-primary" to="/dashboard/products">
+              Add a product <Package size={17} />
+            </Link>
+          ) : (
+            <Link className="panel-primary" to="/dashboard/store">
+              Make it yours <Palette size={17} />
+            </Link>
+          )}
         </div>
         <div
           className="panel-hero-art"
@@ -440,7 +684,7 @@ function OwnerHome() {
           <div className="panel-stat" key={key}>
             <span>{label}</span>
             <strong>{summary.stats[key!] ?? 0}</strong>
-            <small>Across your stores</small>
+            <small>{member ? 'For this shop' : 'Across your stores'}</small>
           </div>
         ))}
       </div>
@@ -458,29 +702,39 @@ function OwnerHome() {
           <span>A photo, a moment, a new arrival.</span>
           <ArrowUpRight />
         </Link>
-        <Link to="/dashboard/design">
-          <Palette />
-          <strong>Refresh your look</strong>
-          <span>Pick a look, layouts and per-section styles.</span>
-          <ArrowUpRight />
-        </Link>
-        <Link to="/dashboard/settings">
-          <Settings2 />
-          <strong>Shop settings</strong>
-          <span>Cart, checkout, prices and sections.</span>
-          <ArrowUpRight />
-        </Link>
-        <Link to="/dashboard/boost">
-          <Megaphone />
-          <strong>Boost a post</strong>
-          <span>Use coins to reach more people.</span>
-          <ArrowUpRight />
-        </Link>
+        {!member && (
+          <Link to="/dashboard/design">
+            <Palette />
+            <strong>Refresh your look</strong>
+            <span>Pick a look, layouts and per-section styles.</span>
+            <ArrowUpRight />
+          </Link>
+        )}
+        {!member && (
+          <Link to="/dashboard/settings">
+            <Settings2 />
+            <strong>Shop settings</strong>
+            <span>Cart, checkout, prices and sections.</span>
+            <ArrowUpRight />
+          </Link>
+        )}
+        {!member && (
+          <Link to="/dashboard/boost">
+            <Megaphone />
+            <strong>Boost a post</strong>
+            <span>Use coins to reach more people.</span>
+            <ArrowUpRight />
+          </Link>
+        )}
       </div>
-      <p className="panel-muted">
-        Growing another business?{' '}
-        <Link to="/dashboard/store/new">Create another store</Link>
-      </p>
+      {member ? (
+        <TeamAccessCard store={store} />
+      ) : (
+        <p className="panel-muted">
+          Growing another business?{' '}
+          <Link to="/dashboard/store/new">Create another store</Link>
+        </p>
+      )}
     </>
   );
 }

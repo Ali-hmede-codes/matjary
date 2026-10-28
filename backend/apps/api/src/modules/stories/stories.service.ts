@@ -33,6 +33,8 @@ import {
   storyExpiresAt,
   STORY_LIMIT_CODE,
   STORY_OFFLINE_CODE,
+  assertStoreAccess,
+  storeAccessBySlug,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { deleteStoredObjects } from '../media-cleanup';
@@ -156,22 +158,27 @@ export class StoriesService {
     }
   }
 
-  /** Owner view: live stories plus the shop's remaining slots. */
-  async mine(storeSlug: string, ownerId: string): Promise<MyStoriesResponse> {
+  /** Owner and team view: live stories plus the shop's remaining slots. */
+  async mine(storeSlug: string, userId: string): Promise<MyStoriesResponse> {
     try {
-      const store = await this.stores.findOneBy({
-        slug: storeSlug,
-        ...ownerWhere('store'),
-      });
-      if (!store || store.ownerId !== ownerId)
-        throw new NotFoundException('Store not found');
+      const access = await storeAccessBySlug(
+        this.stores.manager,
+        userId,
+        storeSlug,
+      );
+      if (!access) throw new NotFoundException('Store not found');
+      const store = access.store;
 
       const now = new Date();
       const stories = await this.stories.find({
         where: { storeId: store.id, ...liveStoryWhere(now) },
         order: { createdAt: 'ASC' },
       });
-      const limits = await effectiveLimits(this.stores.manager, ownerId, now);
+      const limits = await effectiveLimits(
+        this.stores.manager,
+        access.ownerId,
+        now,
+      );
       const limit = limits.maxStories ?? null;
       const storyDtos = await this.toStoryDtos(stories);
 
@@ -191,9 +198,21 @@ export class StoriesService {
   }
 
   /** Publishes an already processed upload as a live story. */
-  async create(dto: CreateStoryDto, ownerId: string): Promise<StoryDto> {
+  async create(dto: CreateStoryDto, userId: string): Promise<StoryDto> {
     try {
       const story = await this.stories.manager.transaction(async (manager) => {
+        const store = await manager.findOneBy(Store, {
+          slug: dto.storeSlug,
+          ...ownerWhere('store'),
+        });
+        if (!store) throw new NotFoundException('Store not found');
+
+        // Members publish for the shop owner, so the plan allowance and the
+        // story row belong to the owner's account.
+        const ownerId = (await assertStoreAccess(manager, userId, store.id))
+          .ownerId;
+        if (store.status !== StoreStatus.ACTIVE)
+          throw new ConflictException({ code: STORY_OFFLINE_CODE });
         const user = await manager.findOne(User, {
           where: { id: ownerId },
           lock: { mode: 'pessimistic_write' },
@@ -201,16 +220,6 @@ export class StoriesService {
         if (!user || user.suspendedAt)
           throw new ForbiddenException('Account unavailable');
         await assertSubscriptionActive(manager, ownerId);
-
-        const store = await manager.findOneBy(Store, {
-          slug: dto.storeSlug,
-          ...ownerWhere('store'),
-        });
-        if (!store) throw new NotFoundException('Store not found');
-        if (store.ownerId !== ownerId)
-          throw new ForbiddenException('You do not own this store');
-        if (store.status !== StoreStatus.ACTIVE)
-          throw new ConflictException({ code: STORY_OFFLINE_CODE });
 
         const limits = await effectiveLimits(manager, ownerId);
         const live = await liveStoryCount(manager, store.id);
@@ -288,13 +297,17 @@ export class StoriesService {
   }
 
   /** Removes a story immediately; the slot is free for the next publish. */
-  async remove(id: string, ownerId: string): Promise<void> {
+  async remove(id: string, userId: string): Promise<void> {
     let keys: string[] = [];
     try {
       const story = await this.stories.findOneBy({ id });
       if (!story) throw new NotFoundException('Story not found');
-      if (story.ownerId !== ownerId)
-        throw new ForbiddenException('You do not own this story');
+      const access = await assertStoreAccess(
+        this.stories.manager,
+        userId,
+        story.storeId,
+      );
+      const ownerId = access.ownerId;
 
       keys = await this.stories.manager.transaction(async (manager) => {
         const user = await manager.findOne(User, {
