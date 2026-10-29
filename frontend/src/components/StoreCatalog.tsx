@@ -668,9 +668,6 @@ function RowCard({
             {product.description}
           </p>
         )}
-        {unavailable && (
-          <span className="shop-price-row-stock">Out of stock</span>
-        )}
       </div>
       <span className="shop-price-leader" aria-hidden="true" />
       <PriceLabels
@@ -772,9 +769,6 @@ function NumberedRow({
             {product.description}
           </p>
         )}
-        {unavailable && (
-          <span className="shop-price-row-stock">Out of stock</span>
-        )}
       </div>
       <PriceLabels
         product={product}
@@ -857,33 +851,35 @@ function CatalogRibbon({
   const shift = `${100 / copies}%`;
   return (
     <div className={`shop-catalog-ribbon${stopped ? ' is-stopped' : ''}`}>
-      <div
-        className="shop-catalog-ribbon-track"
-        style={
-          {
-            '--ribbon-duration': `${duration}s`,
-            '--ribbon-shift': shift,
-          } as CSSProperties
-        }
-      >
-        {Array.from({ length: copies }, (_, copy) => (
-          <div
-            className="shop-catalog-ribbon-set"
-            key={copy}
-            aria-hidden={copy > 0 || undefined}
-          >
-            {products.map((product) => (
-              <RibbonTile
-                key={product.id}
-                product={product}
-                cart={cart}
-                href={storeProductPath(shopSlug, product.slug, demo)}
-                lbpRate={lbpRate}
-                clone={copy > 0}
-              />
-            ))}
-          </div>
-        ))}
+      <div className="shop-catalog-ribbon-window">
+        <div
+          className="shop-catalog-ribbon-track"
+          style={
+            {
+              '--ribbon-duration': `${duration}s`,
+              '--ribbon-shift': shift,
+            } as CSSProperties
+          }
+        >
+          {Array.from({ length: copies }, (_, copy) => (
+            <div
+              className="shop-catalog-ribbon-set"
+              key={copy}
+              aria-hidden={copy > 0 || undefined}
+            >
+              {products.map((product) => (
+                <RibbonTile
+                  key={product.id}
+                  product={product}
+                  cart={cart}
+                  href={storeProductPath(shopSlug, product.slug, demo)}
+                  lbpRate={lbpRate}
+                  clone={copy > 0}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
       <button
         type="button"
@@ -974,7 +970,7 @@ function ShelfRail({
   };
 
   return (
-    <div className="shop-catalog-rail">
+    <div className={`shop-catalog-rail is-${variant}`}>
       <div
         className={`shop-catalog-items layout-${variant}`}
         ref={attachRail}
