@@ -55,7 +55,6 @@ import {
   Showcase,
   ShowcaseStatus,
   MediaAsset,
-  MediaKind,
   MediaVariant,
   MediaStatus,
   PUBLIC_PRODUCT_STATUSES,
@@ -1209,11 +1208,10 @@ export class SeoService {
       );
       autoFields.push('ogDescription');
     }
-    if (!seo.ogImageKey) {
-      // Try to get first media asset image
-      seo.ogImageKey = store?.logoKey || settings.defaultOgImageKey || null;
-      autoFields.push('ogImageKey');
-    }
+    // ogImageKey stays empty on purpose: generateShowcaseMetaTags resolves the
+    // post's first photo or video poster at render time, so reordered media
+    // never leaves a stale key behind. The shop logo is only a last-resort
+    // fallback there.
 
     // Article-specific auto-generation
     if (!seo.articleAuthor) {
@@ -1467,9 +1465,18 @@ export class SeoService {
     const canonical =
       seo.canonicalUrl || this.baseUrl + this.postPath(showcase, store);
 
-    // The post's own photo identifies the share far better than the shop logo.
+    // A post previews with its own media. An explicitly saved image only
+    // counts while it still belongs to this post: auto-generated rows from
+    // older releases stored the shop logo here, and that must never outrank
+    // the post's own photo or video poster.
+    const preferredImageKey =
+      seo.ogImageKey && (await this.showcaseOwnsImage(showcase, seo.ogImageKey))
+        ? seo.ogImageKey
+        : undefined;
     const ogImage =
-      (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
+      (preferredImageKey
+        ? await this.buildImageUrl(preferredImageKey)
+        : undefined) ??
       (await this.buildShowcaseImageUrl(showcase)) ??
       (store ? await this.buildStoreShareImageUrl(store) : undefined) ??
       (await this.buildImageUrl(
@@ -1506,7 +1513,7 @@ export class SeoService {
         description: this.truncate(ogDescription, 200),
         image: ogImage,
       },
-      jsonLd: await this.buildArticleJsonLd(showcase, store, seo),
+      jsonLd: await this.buildArticleJsonLd(showcase, store, seo, ogImage),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
@@ -1718,6 +1725,7 @@ export class SeoService {
     showcase: Showcase,
     store: Store | null,
     seo: ShowcaseSeo | null,
+    image?: string,
   ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
 
@@ -1726,11 +1734,9 @@ export class SeoService {
       '@type': 'Article',
       headline: showcase.title,
       description: showcase.description,
-      // Structured data needs a real image; the post's own photo beats a logo.
-      image:
-        (seo?.ogImageKey
-          ? await this.buildImageUrl(seo.ogImageKey)
-          : undefined) ?? (await this.buildShowcaseImageUrl(showcase)),
+      // Structured data needs a real image; the caller resolved the post's own
+      // photo or video poster, which beats a logo.
+      image,
       datePublished:
         seo?.articlePublishedTime?.toISOString() ||
         showcase.publishedAt?.toISOString() ||
@@ -1779,11 +1785,7 @@ export class SeoService {
     }
     breadcrumbs.push({
       name: showcase.title,
-      url:
-        this.baseUrl +
-        (store
-          ? '/shop/' + store.slug + '/post/' + showcase.slug
-          : '/post/' + showcase.slug),
+      url: this.baseUrl + this.postPath(showcase, store),
     });
     jsonLd.push(this.buildBreadcrumbJsonLd(breadcrumbs));
 
@@ -2412,14 +2414,18 @@ export class SeoService {
     return this.buildPreviewVariantUrl(variant);
   }
 
-  /** First READY photo of the post; video-only posts fall back to the shop. */
+  /**
+   * First shareable frame of the post, in the order the post shows its media:
+   * a photo, or the poster the worker cuts from a video. Covering videos here
+   * keeps a shared post previewing with its own thumbnail instead of the shop
+   * logo, which says nothing about what was posted.
+   */
   private async buildShowcaseImageUrl(
     showcase: Showcase,
   ): Promise<string | undefined> {
     const assets = await this.dataSource.manager.find(MediaAsset, {
       where: {
         showcaseId: showcase.id,
-        kind: MediaKind.IMAGE,
         status: MediaStatus.READY,
         ...publicWhere('media'),
       },
@@ -2427,19 +2433,34 @@ export class SeoService {
       take: 4,
     });
     for (const asset of assets) {
-      const variant = await this.dataSource.manager.findOne(MediaVariant, {
+      // A video asset has no image variant of its own; its JPEG poster is the
+      // only frame a preview client can render.
+      const variants = await this.dataSource.manager.find(MediaVariant, {
         where: { assetId: asset.id },
         order: { width: 'DESC' },
+        take: 12,
       });
-      const url = variant
-        ? await this.buildOwnedImageUrl(
-            { showcaseId: showcase.id },
-            variant.storageKey,
-          )
-        : undefined;
+      const image = choosePreviewImage(variants);
+      if (!image) continue;
+      const url = await this.buildOwnedImageUrl(
+        { showcaseId: showcase.id },
+        image.storageKey,
+      );
       if (url) return url;
     }
     return undefined;
+  }
+
+  /** True when a variant key belongs to one of the post's own media assets. */
+  private async showcaseOwnsImage(
+    showcase: Showcase,
+    key: string,
+  ): Promise<boolean> {
+    const assetId = mediaAssetIdFromKey(key);
+    if (!assetId) return false;
+    return this.dataSource.manager.exists(MediaAsset, {
+      where: { id: assetId, showcaseId: showcase.id },
+    });
   }
 
   /**

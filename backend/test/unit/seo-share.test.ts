@@ -17,8 +17,11 @@ import {
 import { ShareShellService } from '../../apps/api/src/modules/seo/share-shell.service';
 import { choosePreviewImage } from '../../apps/api/src/modules/seo/preview-image';
 import {
+  MediaAsset,
+  MediaVariant,
   Product,
   Showcase,
+  ShowcaseStatus,
   Store,
   StoreCategory,
   StoreType,
@@ -165,6 +168,153 @@ test('share images prefer compact JPEGs that preview clients accept', () => {
       { mimeType: 'image/jpeg', width: 480, sizeBytes: '0' },
     ])?.width,
     480,
+  );
+});
+
+test('a shared post previews with its own photo or video poster', async () => {
+  const logoAsset = '11111111-1111-4111-8111-111111111111';
+  const videoAsset = '22222222-2222-4222-8222-222222222222';
+  const photoAsset = '33333333-3333-4333-8333-333333333333';
+  const storeLogoKey = `media/store-1/${logoAsset}/jpeg-1080.jpg`;
+  const photoKey = `media/post-1/${photoAsset}/jpeg-1080.jpg`;
+  const posterKey = `media/post-1/${videoAsset}/poster-jpeg.jpg`;
+  const settings = {
+    siteName: 'Matjary',
+    defaultTitle: null,
+    defaultDescription: null,
+    defaultOgImageKey: null,
+    twitterSite: null,
+  };
+  // Legacy auto-generation stored the shop logo in a post's ogImageKey, which
+  // then outranked the post's media in every preview.
+  const seoRow: Record<string, unknown> = {
+    metaTitle: null,
+    metaDescription: null,
+    canonicalUrl: null,
+    ogTitle: null,
+    ogDescription: null,
+    ogImageKey: storeLogoKey,
+    robots: 'index, follow',
+    aiRobots: null,
+    aiTraining: null,
+    articleTags: null,
+  };
+  const videoVariants = [
+    {
+      assetId: videoAsset,
+      storageKey: `media/post-1/${videoAsset}/mp4-720.mp4`,
+      mimeType: 'video/mp4',
+      width: 1280,
+      height: 720,
+      sizeBytes: '900000',
+    },
+    {
+      assetId: videoAsset,
+      storageKey: posterKey,
+      mimeType: 'image/jpeg',
+      width: 1280,
+      height: 720,
+      sizeBytes: '120000',
+    },
+  ];
+  let assets: { id: string }[] = [{ id: videoAsset }];
+  let variants = videoVariants;
+  const manager = {
+    find: async (target: unknown) =>
+      target === MediaAsset ? assets : target === MediaVariant ? variants : [],
+    findOne: async (
+      target: unknown,
+      options?: { where?: { storageKey?: string } },
+    ) => {
+      if (target !== MediaVariant) return null;
+      return (
+        variants.find(
+          (variant) => variant.storageKey === options?.where?.storageKey,
+        ) ?? null
+      );
+    },
+    // Only this post's own media counts; the shop logo belongs elsewhere.
+    exists: async (_target: unknown, options?: { where?: { id?: string } }) =>
+      assets.some((asset) => asset.id === options?.where?.id),
+  };
+  const repository = {
+    findOneBy: async () => seoRow,
+    find: async () => [settings],
+  };
+  const storage = {
+    presignedGetUrl: async (key: string) =>
+      `https://matjary.test/api/v1/uploads/${encodeURIComponent(key)}`,
+    statObject: async () => {
+      throw new Error('no card');
+    },
+  };
+  const service = new SeoService(
+    repository as never,
+    repository as never,
+    repository as never,
+    repository as never,
+    repository as never,
+    new ConfigService({ APP_ORIGIN: 'https://matjary.test' }) as never,
+    { manager } as never,
+    {} as never,
+    storage as never,
+  );
+  const post = {
+    id: 'post-1',
+    slug: 'spring-drop',
+    title: 'Spring drop',
+    description: 'New arrivals',
+    status: ShowcaseStatus.PUBLISHED,
+    storeId: 'store-1',
+    publishedAt: new Date('2026-10-01T10:00:00Z'),
+    createdAt: new Date('2026-10-01T10:00:00Z'),
+    updatedAt: new Date('2026-10-01T10:00:00Z'),
+  } as Showcase;
+  const store = {
+    id: 'store-1',
+    slug: 'olive',
+    name: 'Olive',
+    logoKey: storeLogoKey,
+    bannerKey: null,
+  } as Store;
+
+  // A video-only post previews with the poster frame the feed shows.
+  const videoOnly = await service.generateShowcaseMetaTags(post, store);
+  assert.equal(
+    videoOnly.og.image,
+    `https://matjary.test/api/v1/uploads/${encodeURIComponent(posterKey)}`,
+  );
+  assert.equal(videoOnly.twitter.image, videoOnly.og.image);
+  assert.equal(
+    videoOnly.jsonLd?.[0]?.image,
+    `https://matjary.test/api/v1/uploads/${encodeURIComponent(posterKey)}`,
+  );
+
+  // An owner-saved post image is honored while it still belongs to the post.
+  assets = [{ id: photoAsset }];
+  variants = [
+    {
+      assetId: photoAsset,
+      storageKey: photoKey,
+      mimeType: 'image/jpeg',
+      width: 1080,
+      height: 1080,
+      sizeBytes: '180000',
+    },
+    {
+      assetId: photoAsset,
+      storageKey: `media/post-1/${photoAsset}/avif-1600.avif`,
+      mimeType: 'image/avif',
+      width: 1600,
+      height: 1600,
+      sizeBytes: '90000',
+    },
+  ];
+  seoRow.ogImageKey = photoKey;
+  const withSavedImage = await service.generateShowcaseMetaTags(post, store);
+  assert.equal(
+    withSavedImage.og.image,
+    `https://matjary.test/api/v1/uploads/${encodeURIComponent(photoKey)}`,
   );
 });
 
