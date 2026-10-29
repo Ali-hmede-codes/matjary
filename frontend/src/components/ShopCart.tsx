@@ -117,7 +117,7 @@ export function ShopCart({
             </span>
             <div>
               <h2 id="shop-cart-title">Your cart</h2>
-              <p>{store.name}</p>
+              <p className="notranslate">{store.name}</p>
             </div>
           </div>
           <button
@@ -192,7 +192,8 @@ export function ShopCart({
               {checkout.branchName && (
                 <p className="shop-cart-branch-confirm">
                   <MapPin size={15} aria-hidden="true" />
-                  Order for <strong>{checkout.branchName}</strong>
+                  Order for{' '}
+                  <strong className="notranslate">{checkout.branchName}</strong>
                 </p>
               )}
               {checkout.whatsappUrl ? (
@@ -281,7 +282,7 @@ export function ShopCart({
                     <li key={item.id} className="shop-cart-item">
                       <CartThumbnail product={product} />
                       <div className="shop-cart-item-copy">
-                        <h3>{item.productName}</h3>
+                        <h3 className="notranslate">{item.productName}</h3>
                         <p>
                           {formatProductPrice(
                             item.unitPriceCents,
@@ -295,7 +296,10 @@ export function ShopCart({
                         {item.selectedOptions?.length ? (
                           <p className="shop-cart-item-options">
                             {item.selectedOptions.map((option) => (
-                              <span key={`${option.name}:${option.value}`}>
+                              <span
+                                className="notranslate"
+                                key={`${option.name}:${option.value}`}
+                              >
                                 {option.name}: <strong>{option.value}</strong>
                                 {option.priceCents &&
                                   option.priceCents !== '0' && (
@@ -311,7 +315,11 @@ export function ShopCart({
                             ))}
                           </p>
                         ) : null}
-                        {item.notes && <p>{item.notes}</p>}
+                        {item.notes && (
+                          <p className="notranslate" dir="auto">
+                            {item.notes}
+                          </p>
+                        )}
                         <div className="shop-cart-item-actions">
                           <div
                             className="shop-cart-quantity"
@@ -488,8 +496,9 @@ export function ShopCart({
                 </span>
                 <h3>Your cart is waiting</h3>
                 <p>
-                  Add something you love from {store.name}. Each shop has its
-                  own cart.
+                  Add something you love from{' '}
+                  <span className="notranslate">{store.name}</span>. Each shop
+                  has its own cart.
                 </p>
                 <button
                   type="button"

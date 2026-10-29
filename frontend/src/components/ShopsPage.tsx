@@ -239,7 +239,11 @@ export function ShopsPage() {
                 >
                   <option value="">All cities</option>
                   {cities.map((entry) => (
-                    <option key={entry.name} value={entry.name}>
+                    <option
+                      className="notranslate"
+                      key={entry.name}
+                      value={entry.name}
+                    >
                       {entry.name} ({entry.count})
                     </option>
                   ))}

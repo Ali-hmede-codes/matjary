@@ -51,18 +51,26 @@ export function PostCard({
           <StoreAvatar store={post.store} expandable />
           <span>
             <strong className="post-store-name">
-              {post.store?.name || 'Independent creator'}
+              {post.store?.name ? (
+                <span className="notranslate">{post.store.name}</span>
+              ) : (
+                'Independent creator'
+              )}
               <StoreVerifiedBadge store={post.store} size={15} />
             </strong>
             <small>
-              {demo
-                ? 'Sample showcase'
-                : [
+              {demo ? (
+                'Sample showcase'
+              ) : (
+                <span className="notranslate">
+                  {[
                     post.store?.businessCategoryLabel,
                     post.store?.location?.city,
                   ]
                     .filter(Boolean)
                     .join(' · ') || 'Independent store'}
+                </span>
+              )}
             </small>
           </span>
         </a>
@@ -102,7 +110,7 @@ export function PostCard({
             ) : (
               <LayoutGrid size={14} aria-hidden="true" />
             )}
-            <span>{post.link.name}</span>
+            <span className="notranslate">{post.link.name}</span>
           </span>
         )}
         {post.media.length > 1 && (
@@ -140,14 +148,14 @@ export function PostCard({
           onNotice={onNotice}
           demo={demo}
         />
-        <p className="post-caption">
+        <p className="post-caption" dir="auto">
           <a
-            className="post-caption-author"
+            className="post-caption-author notranslate"
             href={post.store ? storePath(post.store.slug, demo) : undefined}
           >
             {post.store?.name || 'Independent creator'}
           </a>{' '}
-          {post.description || post.title}
+          <span className="notranslate">{post.description || post.title}</span>
         </p>
       </div>
     </article>

@@ -535,8 +535,9 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
             </p>
             {created && !store && (
               <Notice>
-                <strong>{created.name}</strong> is saved. Your pictures upload
-                straight to it — press Save changes when you’re done.
+                <strong className="notranslate">{created.name}</strong> is
+                saved. Your pictures upload straight to it — press Save changes
+                when you’re done.
               </Notice>
             )}
             {!existing && !readyForMedia && (

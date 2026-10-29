@@ -88,7 +88,7 @@
   color: var(--on-primary);
   box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 24%, transparent);
 }
-.shop-menu-chips button > span {
+.shop-menu-chips button > .shop-chip-count {
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--wash);
@@ -97,7 +97,7 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.shop-menu-chips button.is-active > span {
+.shop-menu-chips button.is-active > .shop-chip-count {
   background: color-mix(in srgb, var(--on-primary) 24%, transparent);
   color: var(--on-primary);
 }
@@ -128,7 +128,7 @@
   letter-spacing: -0.5px;
   line-height: 1.3;
 }
-.shop-menu-section-head h3 > span {
+.shop-menu-section-head h3 > .shop-menu-count {
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--accent-wash);
@@ -313,7 +313,7 @@
   background: var(--primary);
   color: var(--on-primary);
 }
-.shop-category-switcher a span {
+.shop-category-switcher a .shop-chip-count {
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--wash);
@@ -322,7 +322,7 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.shop-category-switcher a.is-active span {
+.shop-category-switcher a.is-active .shop-chip-count {
   background: color-mix(in srgb, var(--on-primary) 24%, transparent);
   color: var(--on-primary);
 }
@@ -619,7 +619,7 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-.shop-product-option-group legend span {
+.shop-product-option-group legend .shop-option-required {
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--accent-wash);

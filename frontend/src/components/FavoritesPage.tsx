@@ -40,7 +40,7 @@ function FavoritePostTile({ post, eager }: { post: Post; eager: boolean }) {
       />
       {shop && (
         <span className="favorite-post-shop">
-          {shop}
+          <span className="notranslate">{shop}</span>
           <StoreVerifiedBadge store={post.store} size={12} />
         </span>
       )}

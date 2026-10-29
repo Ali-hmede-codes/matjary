@@ -248,7 +248,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   return (
     <>
       <PageTitle
-        eyebrow={store!.name}
+        eyebrow={<span className="notranslate">{store!.name}</span>}
         title={
           product
             ? store!.storeType === 'restaurant_menu'
@@ -349,7 +349,7 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                     </span>
                   </div>
                   <div className="panel-content-body">
-                    <h2>{item.name || item.title}</h2>
+                    <h2 className="notranslate">{item.name || item.title}</h2>
                     <p className="panel-content-meta">
                       {product ? (
                         <strong>
@@ -372,11 +372,23 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                         <span>
                           {item.options.length}{' '}
                           {item.options.length === 1 ? 'option' : 'options'} ·{' '}
-                          {item.options.map((option) => option.name).join(', ')}
+                          <span className="notranslate">
+                            {item.options
+                              .map((option) => option.name)
+                              .join(', ')}
+                          </span>
                         </span>
                       ) : (
                         !product && (
-                          <span>{item.description || 'Your next story.'}</span>
+                          <span>
+                            {item.description ? (
+                              <span className="notranslate">
+                                {item.description}
+                              </span>
+                            ) : (
+                              'Your next story.'
+                            )}
+                          </span>
                         )
                       )}
                     </p>

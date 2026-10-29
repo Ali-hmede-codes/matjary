@@ -201,9 +201,13 @@ export function StoreCategoryPage({
       lbpRate={lbpRate}
     >
       <nav className="shop-crumbs" aria-label="Breadcrumb">
-        <a href={storePath(shopSlug, demo)}>{store.name}</a>
+        <a className="notranslate" href={storePath(shopSlug, demo)}>
+          {store.name}
+        </a>
         <span aria-hidden="true">/</span>
-        <span aria-current="page">{group.name}</span>
+        <span className="notranslate" aria-current="page">
+          {group.name}
+        </span>
       </nav>
       <header className="shop-detail-hero">
         <div className="shop-detail-hero-copy">
@@ -217,7 +221,9 @@ export function StoreCategoryPage({
             {categoryPosition + 1} of {groups.length}
           </p>
           <div className="shop-detail-title-row">
-            <h1>{group.name}</h1>
+            <h1 className="notranslate" dir="auto">
+              {group.name}
+            </h1>
             <span className="shop-count-pill">
               {group.count} {group.count === 1 ? 'item' : 'items'}
             </span>
@@ -257,8 +263,8 @@ export function StoreCategoryPage({
               aria-current={active ? 'page' : undefined}
               className={active ? 'is-active' : undefined}
             >
-              {entry.name}
-              <span>{entry.count}</span>
+              <span className="notranslate">{entry.name}</span>
+              <span className="shop-chip-count">{entry.count}</span>
             </a>
           );
         })}
@@ -289,7 +295,9 @@ export function StoreCategoryPage({
           <h2>Nothing here yet.</h2>
           <p>The shop hasn’t added items to this section.</p>
           <a className="secondary-button" href={storePath(shopSlug, demo)}>
-            Back to {store.name}
+            <span>
+              Back to <span className="notranslate">{store.name}</span>
+            </span>
           </a>
         </div>
       )}

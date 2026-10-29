@@ -52,7 +52,7 @@ export function StoreStorySheet({
       <header className="store-story-sheet-head">
         <StoreAvatar store={store} large />
         <span className="store-story-sheet-id">
-          <strong className="store-story-sheet-name">
+          <strong className="store-story-sheet-name notranslate">
             {store.name}
             <StoreVerifiedBadge store={store} size={15} />
           </strong>

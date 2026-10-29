@@ -559,7 +559,7 @@ function AdminList({
                     </div>
                     <div className="panel-record-info">
                       <h3>
-                        {recordName(item)}{' '}
+                        <span className="notranslate">{recordName(item)}</span>{' '}
                         {isStoreVerified(item) && (
                           <BadgeCheck
                             size={17}
@@ -572,9 +572,13 @@ function AdminList({
                         {item.owner
                           ? `${item.owner.displayName} · ${item.owner.email}`
                           : item.email ||
-                            item.store?.name ||
-                            item.slug ||
-                            'Subscription assignment'}
+                            (item.store?.name ? (
+                              <span className="notranslate">
+                                {item.store.name}
+                              </span>
+                            ) : (
+                              item.slug || 'Subscription assignment'
+                            ))}
                       </p>
                       {resource === 'subscriptions' && (
                         <small>Expires {dateLabel(item.expiresAt)}</small>
@@ -716,7 +720,7 @@ function Detail({
             {data.store && (
               <div>
                 <dt>Store</dt>
-                <dd>{data.store.name}</dd>
+                <dd className="notranslate">{data.store.name}</dd>
               </div>
             )}
             {data.plan && (

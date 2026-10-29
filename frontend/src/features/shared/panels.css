@@ -495,7 +495,9 @@
 .panel-plan-banner strong {
   color: #5b4a2b;
 }
-.panel-plan-banner span {
+/* Direct children only: an owner-written shop name nested inside the message
+   keeps the bold treatment it sits in. */
+.panel-plan-banner > div > span {
   color: var(--panel-muted);
   font-size: 13px;
 }

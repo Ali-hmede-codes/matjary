@@ -570,7 +570,7 @@ function Campaigns({ id }: { id: string }) {
                     <Megaphone size={20} />
                   </div>
                   <div className="panel-record-info">
-                    <h3>{campaign.name}</h3>
+                    <h3 className="notranslate">{campaign.name}</h3>
                     <p>
                       {campaign.owner?.displayName || 'Owner'} ·{' '}
                       {campaign.targetType === 'store' ? 'Shop' : 'Post'} boost

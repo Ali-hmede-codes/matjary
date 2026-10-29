@@ -144,7 +144,8 @@ export function StoreLifecycleControls({
           <p>{actionDescriptions[action]}</p>
           {action === 'delete' && (
             <label>
-              Type “{store.name}” to confirm
+              Type “<span className="notranslate">{store.name}</span>” to
+              confirm
               <input
                 autoComplete="off"
                 value={confirmation}
@@ -283,7 +284,7 @@ export function StoreManager() {
                   <StoreIcon size={24} />
                 </span>
                 <div>
-                  <h2>{store.name}</h2>
+                  <h2 className="notranslate">{store.name}</h2>
                   <p>
                     {store.storeType === 'restaurant_menu'
                       ? 'Restaurant / menu'

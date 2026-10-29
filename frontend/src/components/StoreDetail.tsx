@@ -71,7 +71,7 @@ export function StoreDetailShell({
             <ArrowLeft size={17} />
           </span>
           <StoreAvatar store={store} />
-          <strong>{store.name}</strong>
+          <strong className="notranslate">{store.name}</strong>
           <StoreVerifiedBadge store={store} size={16} />
         </a>
         <div
@@ -102,7 +102,8 @@ export function StoreDetailShell({
       </main>
       <footer className="shop-detail-footer">
         <span>
-          © {new Date().getFullYear()} {store.name}
+          © {new Date().getFullYear()}{' '}
+          <span className="notranslate">{store.name}</span>
         </span>
         <a href={shopHref}>
           Back to shop <ArrowUpRight size={15} aria-hidden="true" />

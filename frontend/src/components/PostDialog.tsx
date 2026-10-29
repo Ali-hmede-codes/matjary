@@ -157,10 +157,20 @@ function PostSlide({
             <StoreAvatar store={post.store} preview={media} expandable />
             <span>
               <strong className="reel-store-name">
-                {storeName}
+                {post.store?.name ? (
+                  <span className="notranslate">{post.store.name}</span>
+                ) : (
+                  storeName
+                )}
                 <StoreVerifiedBadge store={post.store} size={15} />
               </strong>
-              <small>{location}</small>
+              <small>
+                {post.store?.location?.city ? (
+                  <span className="notranslate">{location}</span>
+                ) : (
+                  location
+                )}
+              </small>
             </span>
           </a>
         </header>
@@ -210,7 +220,7 @@ function PostSlide({
                   <LayoutGrid size={15} aria-hidden="true" />
                 )}
                 <span className="reel-product-copy">
-                  <strong>{post.link.name}</strong>
+                  <strong className="notranslate">{post.link.name}</strong>
                   {post.link.type === 'product' &&
                     post.link.priceCents &&
                     post.link.currency && (
@@ -236,14 +246,16 @@ function PostSlide({
                 <ArrowUpRight size={14} aria-hidden="true" />
               </a>
             )}
-            <p className="reel-caption">
+            <p className="reel-caption" dir="auto">
               <a
-                className="reel-caption-author"
+                className="reel-caption-author notranslate"
                 href={post.store ? storePath(post.store.slug, demo) : undefined}
               >
                 {storeName}
               </a>{' '}
-              {post.description || post.title}
+              <span className="notranslate">
+                {post.description || post.title}
+              </span>
             </p>
             {published && <p className="reel-date">Shared {published}</p>}
             {notice && active && (

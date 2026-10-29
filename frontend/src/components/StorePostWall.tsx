@@ -65,7 +65,7 @@ export function StorePostWall({
                 </span>
               </span>
               <span className="shop-post-row-copy">
-                <strong>{post.title}</strong>
+                <strong className="notranslate">{post.title}</strong>
                 <small>
                   {post.media.length}{' '}
                   {post.media.length === 1

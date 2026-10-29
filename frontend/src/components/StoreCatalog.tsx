@@ -68,7 +68,7 @@ export function ShopImage({
                   .slice(0, 2)
                   .join('')}
               </span>
-              <strong>{fallbackName}</strong>
+              <strong className="notranslate">{fallbackName}</strong>
               <small>{fallbackLabel}</small>
             </span>
           ) : (
@@ -297,10 +297,14 @@ function ListItem({
       </a>
       <div className="shop-product-copy">
         <h3>
-          <a href={href}>{product.name}</a>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
         </h3>
         {showDescriptions && product.description && (
-          <p title={product.description}>{product.description}</p>
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
         )}
         <div className="shop-product-bottom">
           <PriceLabels product={product} lbpRate={lbpRate} />
@@ -341,10 +345,14 @@ function PhotoCard({
       </a>
       <div className="shop-product-copy">
         <h3>
-          <a href={href}>{product.name}</a>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
         </h3>
         {showDescriptions && product.description && (
-          <p title={product.description}>{product.description}</p>
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
         )}
         <div className="shop-product-bottom">
           <PriceLabels product={product} lbpRate={lbpRate} />
@@ -376,10 +384,14 @@ function PriceRow({
     >
       <div className="shop-price-row-copy">
         <h3>
-          <a href={href}>{product.name}</a>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
         </h3>
         {showDescriptions && product.description && (
-          <p title={product.description}>{product.description}</p>
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
         )}
         {unavailable && (
           <span className="shop-price-row-stock">Out of stock</span>
@@ -418,10 +430,14 @@ function MenuRow({
     >
       <div className="shop-price-row-copy">
         <h3>
-          <a href={href}>{product.name}</a>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
         </h3>
         {showDescriptions && product.description && (
-          <p title={product.description}>{product.description}</p>
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
         )}
         {unavailable && (
           <span className="shop-price-row-stock">Out of stock</span>
@@ -469,10 +485,14 @@ function GalleryTile({
       </a>
       <div className="shop-gallery-copy">
         <h3>
-          <a href={href}>{product.name}</a>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
         </h3>
         {showDescriptions && product.description && (
-          <p title={product.description}>{product.description}</p>
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
         )}
         <div className="shop-product-bottom">
           <PriceLabels product={product} lbpRate={lbpRate} />
@@ -514,10 +534,14 @@ function FeaturedItem({
       <div className="shop-product-copy">
         <span className="shop-featured-eyebrow">Featured</span>
         <h3>
-          <a href={href}>{product.name}</a>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
         </h3>
         {showDescriptions && product.description && (
-          <p title={product.description}>{product.description}</p>
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
         )}
         <div className="shop-product-bottom">
           <PriceLabels product={product} lbpRate={lbpRate} />

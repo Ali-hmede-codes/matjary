@@ -739,7 +739,13 @@ export function StorePage({ slug }: { slug: string | null }) {
                       shop's identity and whether it is open read at a glance. */}
                   <div className="shop-title-row">
                     <h1 id="shop-title" ref={shopTitle}>
-                      <span ref={shopTitleLabel}>{store.name}</span>
+                      <span
+                        className="notranslate"
+                        ref={shopTitleLabel}
+                        dir="auto"
+                      >
+                        {store.name}
+                      </span>
                       <StoreVerifiedBadge store={store} size={26} />
                     </h1>
                     {store.businessCategoryLabel && (
@@ -765,7 +771,9 @@ export function StorePage({ slug }: { slug: string | null }) {
                     )}
                   </div>
                   {store.description?.trim() && (
-                    <p className="shop-description">{store.description}</p>
+                    <p className="shop-description notranslate" dir="auto">
+                      {store.description}
+                    </p>
                   )}
                   {presentation.restaurant &&
                     productsSectionEnabled &&
@@ -812,7 +820,9 @@ export function StorePage({ slug }: { slug: string | null }) {
                           }
                         >
                           <MapPin size={16} aria-hidden="true" />
-                          <span>{locationLabel}</span>
+                          <span className="notranslate" dir="auto">
+                            {locationLabel}
+                          </span>
                           <span className="shop-map-label">
                             {contactOpen
                               ? 'Hide details'
@@ -1028,11 +1038,19 @@ export function StorePage({ slug }: { slug: string | null }) {
                         {presentation.restaurant ? 'Our menu' : 'Our products'}
                       </h2>
                       <p className="shop-results" role="status">
-                        {searchTerm
-                          ? `${matchingItems.length} ${matchingItems.length === 1 ? 'match' : 'matches'}`
-                          : activeGroup
-                            ? `${activeGroup.count} ${activeGroup.count === 1 ? 'item' : 'items'} in ${activeGroup.name}`
-                            : `${catalogTotal} ${catalogTotal === 1 ? 'item' : 'items'} across ${groups.length} ${groups.length === 1 ? 'section' : 'sections'}`}
+                        {searchTerm ? (
+                          `${matchingItems.length} ${matchingItems.length === 1 ? 'match' : 'matches'}`
+                        ) : activeGroup ? (
+                          <>
+                            {activeGroup.count}{' '}
+                            {activeGroup.count === 1 ? 'item' : 'items'} in{' '}
+                            <span className="notranslate">
+                              {activeGroup.name}
+                            </span>
+                          </>
+                        ) : (
+                          `${catalogTotal} ${catalogTotal === 1 ? 'item' : 'items'} across ${groups.length} ${groups.length === 1 ? 'section' : 'sections'}`
+                        )}
                       </p>
                     </div>
                     <div className="shop-catalog-tools">
@@ -1098,7 +1116,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       >
                         <LayoutGrid size={15} aria-hidden="true" />
                         All items
-                        <span>{catalogTotal}</span>
+                        <span className="shop-chip-count">{catalogTotal}</span>
                       </button>
                       {groups.map((group) => (
                         <button
@@ -1112,8 +1130,8 @@ export function StorePage({ slug }: { slug: string | null }) {
                           aria-pressed={menuFilterKey === group.key}
                           onClick={() => setMenuFilter(group.key)}
                         >
-                          {group.name}
-                          <span>{group.count}</span>
+                          <span className="notranslate">{group.name}</span>
+                          <span className="shop-chip-count">{group.count}</span>
                         </button>
                       ))}
                     </div>
@@ -1145,8 +1163,10 @@ export function StorePage({ slug }: { slug: string | null }) {
                           >
                             <div className="shop-menu-section-head">
                               <h3 id={`menu-${group.key}`}>
-                                {group.name}
-                                <span>
+                                <span className="notranslate">
+                                  {group.name}
+                                </span>
+                                <span className="shop-menu-count">
                                   {count} {count === 1 ? 'item' : 'items'}
                                 </span>
                               </h3>

@@ -36,7 +36,9 @@ export function StoryRail({
               state={storyGroupUnseen(group, seen) ? 'unseen' : 'seen'}
             />
             <span className="story-chip-label">
-              <span className="story-chip-name">{group.store.name}</span>
+              <span className="story-chip-name notranslate">
+                {group.store.name}
+              </span>
               <StoreVerifiedBadge store={group.store} size={13} />
             </span>
           </button>

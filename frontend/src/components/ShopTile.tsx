@@ -39,15 +39,17 @@ export function ShopTile({
         <StoreAvatar store={item} large />
         <span className="shop-tile-body">
           <span className="shop-tile-name">
-            <span title={item.name}>{item.name}</span>
+            <span className="notranslate" title={item.name}>
+              {item.name}
+            </span>
             <StoreVerifiedBadge store={item} size={15} />
           </span>
-          <span className="shop-tile-category">
+          <span className="shop-tile-category notranslate">
             {item.businessCategoryLabel}
           </span>
           <span className="shop-tile-meta">
             {location && (
-              <span>
+              <span className="notranslate">
                 <MapPin size={11} aria-hidden="true" />
                 {location}
               </span>

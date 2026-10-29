@@ -240,11 +240,17 @@ export function OwnerBoost() {
                     <Megaphone size={20} />
                   </div>
                   <div className="panel-record-info">
-                    <h3>{campaign.name}</h3>
+                    <h3 className="notranslate">{campaign.name}</h3>
                     <p>
                       {campaign.targetType === 'store' ? 'Shop' : 'Post'} ·{' '}
-                      {campaign.targetName || 'Your content'} ·{' '}
-                      {campaign.bidStrategy.toUpperCase()}
+                      {campaign.targetName ? (
+                        <span className="notranslate">
+                          {campaign.targetName}
+                        </span>
+                      ) : (
+                        'Your content'
+                      )}{' '}
+                      · {campaign.bidStrategy.toUpperCase()}
                     </p>
                     <small>
                       Budget {coins(campaign.budgetCoins)} · spent{' '}
@@ -546,7 +552,7 @@ function CampaignComposer({
               }}
             >
               {stores.map((item) => (
-                <option key={item.id} value={item.id}>
+                <option className="notranslate" key={item.id} value={item.id}>
                   {item.name}
                 </option>
               ))}
@@ -573,7 +579,11 @@ function CampaignComposer({
                 >
                   <option value="">Choose a post</option>
                   {posts.data.items.map((item) => (
-                    <option key={item.id} value={item.id}>
+                    <option
+                      className="notranslate"
+                      key={item.id}
+                      value={item.id}
+                    >
                       {item.title}
                     </option>
                   ))}

@@ -7,6 +7,12 @@
 // first paint, and re-driving the widget when a route renders new English text.
 // Layout mirroring comes from CSS (logical properties in the component sheets
 // plus styles/translated.css), so the English layout is untouched.
+//
+// Owner-written content — shop names, product names and descriptions, post
+// copy, categories, branches, cart lines — is data, not interface copy. Every
+// node that renders it carries the `notranslate` class, which the widget (and
+// the browser's own translation) skips, so a shop keeps its exact wording in
+// Arabic mode while the surrounding labels still translate.
 export type Language = 'en' | 'ar';
 
 const LANGUAGE_KEY = 'matjary:language';

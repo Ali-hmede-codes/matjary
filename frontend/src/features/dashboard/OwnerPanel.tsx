@@ -257,7 +257,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
                 }}
               >
                 {selectable.map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <option className="notranslate" key={s.id} value={s.id}>
                     {s.name} · {storeStatusLabel[s.status]}
                   </option>
                 ))}
@@ -527,7 +527,10 @@ function InvitationBanner({
           key={item.id}
         >
           <div>
-            <strong>You're invited to help with {item.store.name}.</strong>
+            <strong>
+              You're invited to help with{' '}
+              <span className="notranslate">{item.store.name}</span>.
+            </strong>
             <span>
               {item.invitedByName} invited your Gmail. Accept to add products,
               posts, and stories for this shop.
@@ -612,9 +615,14 @@ function OwnerHome() {
         eyebrow={member ? 'SHOP TEAM' : 'YOUR PERSONAL STUDIO'}
         title={`Welcome back, ${session.user.displayName.split(' ')[0] || 'there'}.`}
         description={
-          member
-            ? `You're helping ${store.name} grow.`
-            : 'A little update can make a big difference.'
+          member ? (
+            <>
+              You're helping <span className="notranslate">{store.name}</span>{' '}
+              grow.
+            </>
+          ) : (
+            'A little update can make a big difference.'
+          )
         }
         action={
           store.status === 'active' ? (
@@ -639,11 +647,15 @@ function OwnerHome() {
             {storeStatusLabel[store.status]}
           </span>
           <h2>
-            {store.name} {isStoreVerified(store) && <BadgeCheck size={25} />}
+            <span className="notranslate">{store.name}</span>{' '}
+            {isStoreVerified(store) && <BadgeCheck size={25} />}
           </h2>
           <p>
-            {store.description ||
-              'Your space to share what makes your business special.'}
+            {store.description ? (
+              <span className="notranslate">{store.description}</span>
+            ) : (
+              'Your space to share what makes your business special.'
+            )}
           </p>
           {member ? (
             <Link className="panel-primary" to="/dashboard/products">

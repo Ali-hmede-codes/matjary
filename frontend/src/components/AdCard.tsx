@@ -66,20 +66,31 @@ export function AdCard({ ad }: { ad: BoostAd }) {
       </span>
       <span className="ad-card-body">
         <span className="ad-card-kicker">
-          <Sparkles size={13} /> Sponsored · {ad.sponsoredBy}
+          <Sparkles size={13} /> Sponsored ·{' '}
+          <span className="notranslate">{ad.sponsoredBy}</span>
         </span>
         <strong className="ad-card-title">
-          {ad.creative?.headline || ad.targetName}
+          <span className="notranslate">
+            {ad.creative?.headline || ad.targetName}
+          </span>
           <StoreVerifiedBadge
             store={{ hasVerificationBadge: ad.targetHasVerificationBadge }}
             size={15}
           />
         </strong>
         <span className="ad-card-copy">
-          {ad.creative?.description ||
-            (ad.targetType === 'store'
-              ? `Discover what is new at ${ad.targetName}.`
-              : `A find from ${ad.targetName}.`)}
+          {ad.creative?.description ? (
+            <span className="notranslate">{ad.creative.description}</span>
+          ) : ad.targetType === 'store' ? (
+            <>
+              Discover what is new at{' '}
+              <span className="notranslate">{ad.targetName}</span>.
+            </>
+          ) : (
+            <>
+              A find from <span className="notranslate">{ad.targetName}</span>.
+            </>
+          )}
         </span>
         <span className="ad-card-cta">
           {cta} <ArrowUpRight size={15} />

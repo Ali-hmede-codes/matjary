@@ -163,7 +163,11 @@ export function PostPage({
           href={shop ? storePath(shop.slug, demo) : home}
         >
           <ArrowLeft size={17} aria-hidden="true" />
-          {shop ? shop.name : settings.siteName}
+          {shop ? (
+            <span className="notranslate">{shop.name}</span>
+          ) : (
+            settings.siteName
+          )}
         </a>
         <a className="shop-platform" href={home}>
           <ShoppingBag size={18} aria-hidden="true" />
@@ -224,21 +228,29 @@ export function PostPage({
                 <StoreAvatar store={shop} preview={media} expandable />
                 <span>
                   <strong className="post-store-name">
-                    {shop.name}
+                    <span className="notranslate">{shop.name}</span>
                     <StoreVerifiedBadge store={shop} size={15} />
                   </strong>
                   <small>
-                    {shop.location?.city ||
-                      shop.businessCategoryLabel ||
-                      'Independent store'}
+                    {shop.location?.city || shop.businessCategoryLabel ? (
+                      <span className="notranslate">
+                        {shop.location?.city || shop.businessCategoryLabel}
+                      </span>
+                    ) : (
+                      'Independent store'
+                    )}
                   </small>
                 </span>
               </a>
             )}
-            <h1 id="post-page-title">{post.title}</h1>
+            <h1 className="notranslate" id="post-page-title" dir="auto">
+              {post.title}
+            </h1>
             {published && <p className="post-page-date">Shared {published}</p>}
             {post.description && (
-              <p className="post-page-description">{post.description}</p>
+              <p className="post-page-description notranslate" dir="auto">
+                {post.description}
+              </p>
             )}
             {link && shop && (
               <a
@@ -259,7 +271,7 @@ export function PostPage({
                   <LayoutGrid size={16} aria-hidden="true" />
                 )}
                 <span>
-                  <strong>{link.name}</strong>
+                  <strong className="notranslate">{link.name}</strong>
                   {link.type === 'product' &&
                     link.priceCents &&
                     link.currency && (
@@ -303,7 +315,9 @@ export function PostPage({
             )}
             {shop && (
               <a className="post-page-shop" href={storePath(shop.slug, demo)}>
-                Visit {shop.name}
+                <span>
+                  Visit <span className="notranslate">{shop.name}</span>
+                </span>
                 <ArrowUpRight size={16} aria-hidden="true" />
               </a>
             )}

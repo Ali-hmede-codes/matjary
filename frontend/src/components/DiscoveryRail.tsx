@@ -35,10 +35,16 @@ export function DiscoveryRail({
           <StoreAvatar store={item} />
           <span>
             <strong className="rail-store-name">
-              {item.name}
+              <span className="notranslate">{item.name}</span>
               <StoreVerifiedBadge store={item} size={14} />
             </strong>
-            <small>{item.location?.city || 'Explore store'}</small>
+            <small>
+              {item.location?.city ? (
+                <span className="notranslate">{item.location.city}</span>
+              ) : (
+                'Explore store'
+              )}
+            </small>
           </span>
           <ArrowUpRight size={17} />
         </a>

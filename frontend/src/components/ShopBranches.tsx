@@ -106,7 +106,7 @@ function BranchCard({
       <header className="shop-branch-head">
         <div>
           <h3>
-            {branch.name}
+            <span className="notranslate">{branch.name}</span>
             {branch.isPrimary && (
               <span className="shop-branch-main">
                 <Check size={11} aria-hidden="true" /> Main
@@ -115,7 +115,13 @@ function BranchCard({
           </h3>
           <p className="shop-branch-address">
             <MapPin size={14} aria-hidden="true" />
-            {address || 'Ask the shop for the exact address.'}
+            {address ? (
+              <span className="notranslate" dir="auto">
+                {address}
+              </span>
+            ) : (
+              'Ask the shop for the exact address.'
+            )}
           </p>
         </div>
         <div className="shop-branch-chips">
@@ -363,7 +369,8 @@ export function ShopBranches({
         <p className="shop-geo-result" role="status">
           <Crosshair size={15} aria-hidden="true" />
           <span>
-            Nearest branch is <strong>{nearestBranch.name}</strong>
+            Nearest branch is{' '}
+            <strong className="notranslate">{nearestBranch.name}</strong>
             {` · ${formatDistance(nearestDistance)}`}
           </span>
         </p>
@@ -384,7 +391,11 @@ export function ShopBranches({
                 }}
               >
                 {ordered.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
+                  <option
+                    className="notranslate"
+                    key={branch.id}
+                    value={branch.id}
+                  >
                     {branch.name}
                     {branch.isPrimary ? ' · Main' : ''}
                     {branch.city ? ` · ${branch.city}` : ''}

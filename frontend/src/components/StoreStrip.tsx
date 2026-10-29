@@ -74,7 +74,7 @@ export function StoreStrip({
               <span className="story-ring">
                 <StoreAvatar store={item} large preview={preview} />
               </span>
-              <span>{item.name}</span>
+              <span className="notranslate">{item.name}</span>
               <StoreVerifiedBadge store={item} size={22} />
             </button>
           );
@@ -87,7 +87,7 @@ export function StoreStrip({
             <span className="story-ring">
               <StoreAvatar store={item} large preview={preview} />
             </span>
-            <span>{item.name}</span>
+            <span className="notranslate">{item.name}</span>
             <StoreVerifiedBadge store={item} size={22} />
           </a>
         );

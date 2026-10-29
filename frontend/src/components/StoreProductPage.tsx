@@ -246,15 +246,21 @@ export function StoreProductPage({
       lbpRate={lbpRate}
     >
       <nav className="shop-crumbs" aria-label="Breadcrumb">
-        <a href={storePath(shopSlug, demo)}>{store.name}</a>
+        <a className="notranslate" href={storePath(shopSlug, demo)}>
+          {store.name}
+        </a>
         {group && categoryHref && (
           <>
             <span aria-hidden="true">/</span>
-            <a href={categoryHref}>{group.name}</a>
+            <a className="notranslate" href={categoryHref}>
+              {group.name}
+            </a>
           </>
         )}
         <span aria-hidden="true">/</span>
-        <span aria-current="page">{product.name}</span>
+        <span className="notranslate" aria-current="page">
+          {product.name}
+        </span>
       </nav>
       <article className="shop-product-detail">
         <div className="shop-product-gallery">
@@ -293,10 +299,17 @@ export function StoreProductPage({
         </div>
         <div className="shop-product-info">
           <p className="shop-detail-eyebrow">
-            {group?.name ??
-              (presentation.restaurant ? 'Menu item' : 'Shop item')}
+            {group?.name ? (
+              <span className="notranslate">{group.name}</span>
+            ) : presentation.restaurant ? (
+              'Menu item'
+            ) : (
+              'Shop item'
+            )}
           </p>
-          <h1>{product.name}</h1>
+          <h1 className="notranslate" dir="auto">
+            {product.name}
+          </h1>
           <p className="shop-product-detail-price">
             {formatProductPrice(displayPriceCents, product.currency)}
             {compareAtPriceCents && (
@@ -312,7 +325,10 @@ export function StoreProductPage({
             )}
           </p>
           {product.description && (
-            <p className="shop-product-detail-description">
+            <p
+              className="shop-product-detail-description notranslate"
+              dir="auto"
+            >
               {product.description}
             </p>
           )}
@@ -324,8 +340,8 @@ export function StoreProductPage({
                   key={group.name}
                 >
                   <legend>
-                    {group.name}
-                    <span>Required</span>
+                    <span className="notranslate">{group.name}</span>
+                    <span className="shop-option-required">Required</span>
                   </legend>
                   <div className="shop-product-option-values">
                     {group.values.map((value) => {
@@ -352,7 +368,7 @@ export function StoreProductPage({
                             }))
                           }
                         >
-                          <span>{value.label}</span>
+                          <span className="notranslate">{value.label}</span>
                           {value.priceCents && value.priceCents !== '0' && (
                             <small>
                               {formatProductPrice(
@@ -418,7 +434,7 @@ export function StoreProductPage({
           {group && categoryHref && (
             <a className="shop-product-category-link" href={categoryHref}>
               {presentation.restaurant ? 'More from' : 'See more in'}{' '}
-              <strong>{group.name}</strong>
+              <strong className="notranslate">{group.name}</strong>
               <ArrowUpRight size={15} aria-hidden="true" />
             </a>
           )}

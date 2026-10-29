@@ -1241,7 +1241,11 @@ export function ContentEditor({
               >
                 <option value="">No category</option>
                 {(categoryList.data?.items ?? []).map((category) => (
-                  <option key={category.id} value={category.id}>
+                  <option
+                    className="notranslate"
+                    key={category.id}
+                    value={category.id}
+                  >
                     {category.name}
                   </option>
                 ))}

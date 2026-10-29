@@ -456,7 +456,7 @@ export function StoryViewer({
           >
             <StoreAvatar store={group.store} />
             <span className="story-viewer-name">
-              <strong>{group.store.name}</strong>
+              <strong className="notranslate">{group.store.name}</strong>
               <StoreVerifiedBadge store={group.store} size={15} />
             </span>
             <small>{storyTimeLabel(story.createdAt)}</small>
@@ -599,7 +599,7 @@ export function StoryViewer({
                 <LayoutGrid size={16} aria-hidden="true" />
               )}
               <span>
-                <strong>{link.name}</strong>
+                <strong className="notranslate">{link.name}</strong>
                 {link.type === 'product' &&
                   link.priceCents &&
                   link.currency && (

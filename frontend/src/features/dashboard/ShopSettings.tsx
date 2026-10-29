@@ -351,8 +351,8 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
           </section>
           <p className="panel-muted shop-settings-tip">
             Cart, checkout, prices and sections belong to{' '}
-            <strong>{store.name}</strong>. Switching shops shows that shop’s
-            settings.
+            <strong className="notranslate">{store.name}</strong>. Switching
+            shops shows that shop’s settings.
           </p>
         </aside>
       </form>

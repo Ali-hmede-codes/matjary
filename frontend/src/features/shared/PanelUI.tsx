@@ -167,9 +167,11 @@ export function PageTitle({
   description,
   action,
 }: {
-  eyebrow?: string;
-  title: string;
-  description?: string;
+  // Owner-written names arrive as already-marked nodes so the translate
+  // widget never rewrites a shop name inside a workspace heading.
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
   action?: ReactNode;
 }) {
   return (

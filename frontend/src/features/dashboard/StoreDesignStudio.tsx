@@ -731,7 +731,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                         return (
                           <li key={category.id}>
                             <div className="design-section-copy">
-                              <strong>{category.name}</strong>
+                              <strong className="notranslate">
+                                {category.name}
+                              </strong>
                               <small>
                                 {category.productCount ?? 0}{' '}
                                 {(category.productCount ?? 0) === 1
@@ -796,7 +798,10 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                 )}
               </span>
               <span className="design-preview-id">
-                <strong style={{ fontFamily: 'var(--shop-font-display)' }}>
+                <strong
+                  className="notranslate"
+                  style={{ fontFamily: 'var(--shop-font-display)' }}
+                >
                   {store.name}
                 </strong>
                 <small>

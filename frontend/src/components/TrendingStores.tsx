@@ -77,8 +77,10 @@ export function TrendingStores() {
             >
               <StoreAvatar store={store} large />
               <span>
-                <strong>{item.name}</strong>
-                <small>{item.headline || item.city || 'Boosted shop'}</small>
+                <strong className="notranslate">{item.name}</strong>
+                <small className="notranslate">
+                  {item.headline || item.city || 'Boosted shop'}
+                </small>
               </span>
               <ArrowUpRight size={16} />
             </a>
