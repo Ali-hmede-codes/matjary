@@ -1737,7 +1737,8 @@
 /* The rail puts its arrows on their own line instead of floating them over the
    first and last cards. */
 .shop-catalog-rail.is-rail .shop-rail-nav,
-.shop-catalog-rail.is-banner .shop-rail-nav {
+.shop-catalog-rail.is-banner .shop-rail-nav,
+.shop-catalog-rail.is-cover .shop-rail-nav {
   position: static;
   justify-content: flex-end;
   gap: 8px;
@@ -1745,7 +1746,8 @@
   transform: none;
 }
 .shop-catalog-rail.is-rail .shop-rail-arrow,
-.shop-catalog-rail.is-banner .shop-rail-arrow {
+.shop-catalog-rail.is-banner .shop-rail-arrow,
+.shop-catalog-rail.is-cover .shop-rail-arrow {
   box-shadow: 0 6px 16px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
@@ -2124,9 +2126,11 @@
   border-bottom: 1px dotted color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
-/* Banner card: a cover card with a floating rounded tile, the shape a store
-   listing uses, laid out as a strip that scrolls sideways. */
-.shop-catalog-items.layout-banner {
+/* Banner and Cover cards: one cover card family. The photo fills the whole art
+   box; the banner variant floats a rounded tile on it, the cover variant leaves
+   the photo alone. Both lay out as a strip that scrolls sideways. */
+.shop-catalog-items.layout-banner,
+.shop-catalog-items.layout-cover {
   display: flex;
   gap: 14px;
   overflow-x: auto;
@@ -2136,19 +2140,23 @@
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
-.shop-catalog-items.layout-banner::-webkit-scrollbar {
+.shop-catalog-items.layout-banner::-webkit-scrollbar,
+.shop-catalog-items.layout-cover::-webkit-scrollbar {
   display: none;
 }
-.shop-catalog-items.layout-banner:focus-visible {
+.shop-catalog-items.layout-banner:focus-visible,
+.shop-catalog-items.layout-cover:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 4px;
   border-radius: var(--shop-tile-radius, 14px);
 }
-.layout-banner > .shop-app-card {
+.layout-banner > .shop-app-card,
+.layout-cover > .shop-app-card {
   flex: 0 0 clamp(240px, 46vw, 300px);
   scroll-snap-align: start;
 }
-.layout-banner > .shop-skeleton {
+.layout-banner > .shop-skeleton,
+.layout-cover > .shop-skeleton {
   flex: 0 0 clamp(240px, 46vw, 300px);
   aspect-ratio: 3 / 4;
 }
@@ -2175,19 +2183,23 @@
 }
 .shop-app-banner {
   position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 54%;
+  inset: 0;
   overflow: hidden;
   background: var(--wash);
 }
-/* A faint shade keeps the cover reading as a backdrop, so the crisp tile above
-   it looks like its logo rather than a second copy of the same photo. */
+/* A faint shade keeps the cover reading as a backdrop and keeps the corner
+   pills legible on pale photos. */
 .shop-app-banner::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #0000, #00000045);
+  background: linear-gradient(
+    180deg,
+    #0000001a,
+    #0000 26%,
+    #0000 58%,
+    #0000004d
+  );
   pointer-events: none;
 }
 /* Both pills sit on the cover's bottom edge, clear of the floating tile. */
@@ -2344,7 +2356,8 @@
 .layout-zigzag > .shop-zigzag-row,
 .layout-index > .shop-numbered-row,
 .layout-rows > .shop-photo-row,
-.layout-banner > .shop-app-card {
+.layout-banner > .shop-app-card,
+.layout-cover > .shop-app-card {
   animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: var(--shop-tile-delay, 0ms);
 }
@@ -2437,7 +2450,9 @@
   /* The banner strip shows one card and a peek of the next, so the swipe is
      obvious on a phone. */
   .layout-banner > .shop-app-card,
-  .layout-banner > .shop-skeleton {
+  .layout-cover > .shop-app-card,
+  .layout-banner > .shop-skeleton,
+  .layout-cover > .shop-skeleton {
     flex-basis: clamp(230px, 64vw, 280px);
   }
   .shop-app-copy {
@@ -2565,6 +2580,7 @@
   .layout-index > .shop-numbered-row,
   .layout-rows > .shop-photo-row,
   .layout-banner > .shop-app-card,
+  .layout-cover > .shop-app-card,
   .shop-catalog-ribbon-track {
     animation: none;
   }

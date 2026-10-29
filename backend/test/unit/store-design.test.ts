@@ -74,6 +74,7 @@ test('store design vocabulary stays aligned across layouts', () => {
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('ribbon'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('rows'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('banner'));
+  assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('cover'));
 });
 
 test('saved design drops stale categories, duplicates, and foreign values', () => {

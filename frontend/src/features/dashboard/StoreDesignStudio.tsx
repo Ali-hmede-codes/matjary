@@ -303,6 +303,14 @@ const catalogWires: Record<CatalogLayout, WireBoxes> = {
     [16, 25, 6, 1],
     [30, 25, 5, 1],
   ],
+  cover: [
+    [1, 2, 12, 20],
+    [15, 2, 12, 20],
+    [29, 2, 10, 20],
+    [2, 24, 9, 1],
+    [16, 24, 9, 1],
+    [30, 24, 8, 1],
+  ],
 };
 
 function LayoutWire({ boxes }: { boxes: WireBoxes }) {

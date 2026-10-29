@@ -582,6 +582,7 @@ const revealLayouts: readonly CatalogLayout[] = [
   'index',
   'rows',
   'banner',
+  'cover',
 ];
 
 // Photo tiles, Bento, Staggered, Sticker, Circles and the Photo rail all share
@@ -781,15 +782,17 @@ function NumberedRow({
   );
 }
 
-// Banner card: a wide cover with a floating rounded tile, then the name, the
-// description and the price underneath. The corner plus is the same AddToCart
-// the other layouts use, shown only while a plain add is possible; once the
-// item sits in the cart (or needs options) the control moves into the caption.
+// Banner card: a cover card whose image fills the whole art box. The banner
+// variant floats a rounded tile over that image; the cover variant leaves the
+// photo alone. The corner plus is the same AddToCart the other layouts use,
+// shown only while a plain add is possible; once the item sits in the cart (or
+// needs options) the control moves into the caption.
 function BannerCard({
   product,
   cart,
   href,
   lbpRate,
+  variant,
   showDescriptions = true,
   delay,
 }: {
@@ -797,6 +800,7 @@ function BannerCard({
   cart: ShopCartController;
   href: string;
   lbpRate?: number | null;
+  variant: 'banner' | 'cover';
   showDescriptions?: boolean;
   delay?: number;
 }) {
@@ -807,7 +811,7 @@ function BannerCard({
   const images = product.imageKeys ?? [];
   return (
     <article
-      className={`shop-product shop-app-card${unavailable ? ' is-unavailable' : ''}`}
+      className={`shop-product shop-app-card is-${variant}${unavailable ? ' is-unavailable' : ''}`}
       style={tileDelay(delay)}
     >
       <div className="shop-app-art">
@@ -822,9 +826,11 @@ function BannerCard({
             <StockBadge product={product} cart={cart} />
           </span>
         </a>
-        <span className="shop-app-tile" aria-hidden="true">
-          <ShopImage value={images[1] ?? images[0]} alt="" />
-        </span>
+        {variant === 'banner' && (
+          <span className="shop-app-tile" aria-hidden="true">
+            <ShopImage value={images[1] ?? images[0]} alt="" />
+          </span>
+        )}
         {quickAdd && (
           <div className="shop-app-quick">
             <AddToCart product={product} cart={cart} chooseHref={href} />
@@ -982,7 +988,7 @@ function ShelfRail({
 }: {
   children: ReactNode;
   count: number;
-  variant?: 'shelves' | 'rail' | 'banner';
+  variant?: 'shelves' | 'rail' | 'banner' | 'cover';
 }) {
   const rail = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState({
@@ -1177,13 +1183,14 @@ export function CatalogItem({
         delay={delay}
       />
     );
-  if (layout === 'banner')
+  if (layout === 'banner' || layout === 'cover')
     return (
       <BannerCard
         product={product}
         cart={cart}
         href={href}
         lbpRate={lbpRate}
+        variant={layout}
         showDescriptions={showDescriptions}
         delay={delay}
       />
@@ -1321,10 +1328,10 @@ export function CatalogItems({
         lbpRate={lbpRate}
       />
     );
-  if (visualLayout === 'banner')
+  if (visualLayout === 'banner' || visualLayout === 'cover')
     return (
-      <ShelfRail count={products.length} variant="banner">
-        {products.map((product, index) => item(product, 'banner', index))}
+      <ShelfRail count={products.length} variant={visualLayout}>
+        {products.map((product, index) => item(product, visualLayout, index))}
       </ShelfRail>
     );
   return (
@@ -1355,7 +1362,11 @@ export function CatalogLoading({ layout }: { layout: CatalogLayout }) {
       </div>
     );
   // Skeletons mirror the shape of the chosen layout without inventing data.
-  const strip = layout === 'rail' || layout === 'ribbon' || layout === 'banner';
+  const strip =
+    layout === 'rail' ||
+    layout === 'ribbon' ||
+    layout === 'banner' ||
+    layout === 'cover';
   const boxed =
     layout === 'tiles' ||
     layout === 'bento' ||

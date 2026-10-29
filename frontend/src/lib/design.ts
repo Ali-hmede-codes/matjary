@@ -97,6 +97,7 @@ export const catalogLayouts = [
   'index',
   'rows',
   'banner',
+  'cover',
 ] as const;
 export type CatalogLayout = (typeof catalogLayouts)[number];
 
@@ -417,6 +418,10 @@ export const catalogLayoutInfo: Record<
   banner: {
     label: 'Banner card',
     hint: 'A wide cover with a floating tile, scrolled sideways.',
+  },
+  cover: {
+    label: 'Cover card',
+    hint: 'The same card without the floating tile.',
   },
 };
 
