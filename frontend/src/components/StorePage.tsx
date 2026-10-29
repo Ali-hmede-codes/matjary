@@ -76,10 +76,7 @@ import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 import { StoryAvatar } from './stories/StoryAvatar';
 import { StoryComposer } from './stories/StoryComposer';
 import { StoryViewer } from './stories/StoryViewer';
-import {
-  QuickComposer,
-  type QuickComposerKind,
-} from '../features/shared/QuickComposer';
+import { ContentEditor } from '../features/shared/ContentEditor';
 import {
   useSeenStories,
   useMyStories,
@@ -199,8 +196,9 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [storyNotice, setStoryNotice] = useState('');
   const [storyOpen, setStoryOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
-  // The shop tabs carry an owner-only "+" that opens this quick composer.
-  const [quickKind, setQuickKind] = useState<QuickComposerKind | null>(null);
+  // The shop tabs carry an owner-only "+" that opens the same editor the
+  // dashboard uses, so adding an item or a post never changes shape.
+  const [quickKind, setQuickKind] = useState<'post' | 'product' | null>(null);
   const [quickNotice, setQuickNotice] = useState('');
   const client = useQueryClient();
   // Stories are public and short-lived; the owner view adds the remaining slots.
@@ -1393,36 +1391,42 @@ export function StorePage({ slug }: { slug: string | null }) {
         />
       )}
       {quickKind && store && viewerIsOwner && (
-        <QuickComposer
-          key={`${quickKind}-${store.id}`}
-          store={store}
-          kind={quickKind}
-          onClose={() => setQuickKind(null)}
-          onPublished={(publishedKind, message) => {
-            setQuickKind(null);
-            setQuickNotice(message);
-            selectTab(publishedKind === 'product' ? 'catalog' : 'posts');
-            // The new item is public immediately, so every surface that may
-            // already have loaded this shop has to drop its cached copy.
-            void client.invalidateQueries({
-              queryKey: ['storefront-posts', store.slug],
-            });
-            void client.invalidateQueries({
-              queryKey: ['storefront-menu', store.slug],
-            });
-            void client.invalidateQueries({
-              queryKey: ['storefront-categories', store.slug],
-            });
-            void client.invalidateQueries({
-              queryKey: ['storefront', store.slug],
-            });
-            void client.invalidateQueries({ queryKey: ['panel'] });
-            void client.invalidateQueries({ queryKey: ['explore'] });
-            // Shop cards and the directory show post/product counts.
-            void client.invalidateQueries({ queryKey: ['stores'] });
-            void client.invalidateQueries({ queryKey: ['store-directory'] });
-          }}
-        />
+        // The panel look is scoped to .panel-app; the dialog renders in the
+        // top layer itself, so this wrapper must not paint or reserve space.
+        <div className="panel-app panel-embed">
+          <ContentEditor
+            key={`${quickKind}-${store.id}`}
+            store={store}
+            kind={quickKind === 'product' ? 'products' : 'posts'}
+            item={null}
+            cacheScope={`shop-${store.id}`}
+            close={() => setQuickKind(null)}
+            done={(message) => {
+              setQuickKind(null);
+              setQuickNotice(message);
+              selectTab(quickKind === 'product' ? 'catalog' : 'posts');
+              // A published row is public immediately, so every surface that
+              // may have loaded this shop has to drop its cached copy.
+              void client.invalidateQueries({
+                queryKey: ['storefront-posts', store.slug],
+              });
+              void client.invalidateQueries({
+                queryKey: ['storefront-menu', store.slug],
+              });
+              void client.invalidateQueries({
+                queryKey: ['storefront-categories', store.slug],
+              });
+              void client.invalidateQueries({
+                queryKey: ['storefront', store.slug],
+              });
+              void client.invalidateQueries({ queryKey: ['panel'] });
+              void client.invalidateQueries({ queryKey: ['explore'] });
+              // Shop cards and the directory show post/product counts.
+              void client.invalidateQueries({ queryKey: ['stores'] });
+              void client.invalidateQueries({ queryKey: ['store-directory'] });
+            }}
+          />
+        </div>
       )}
     </div>
   );
