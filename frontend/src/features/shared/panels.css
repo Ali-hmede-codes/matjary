@@ -52,7 +52,10 @@
 }
 .store-manager-heading {
   display: flex;
-  align-items: center;
+  /* The mark hangs beside the first line of the name, so a shop with a long
+     name keeps its title block together instead of floating the icon to the
+     middle of four wrapped lines. */
+  align-items: flex-start;
   gap: 14px;
   min-width: 0;
 }
@@ -61,8 +64,12 @@
 }
 .store-manager-heading h2 {
   margin: 0;
-  font-size: 21px;
-  overflow-wrap: anywhere;
+  font-size: clamp(18px, 0.55vw + 16px, 21px);
+  line-height: 1.28;
+  letter-spacing: -0.02em;
+  /* Whole words first: a shop name only breaks mid-word when one word alone
+     is wider than the card. */
+  overflow-wrap: break-word;
 }
 .store-manager-heading p {
   margin: 3px 0 0;
@@ -2192,6 +2199,33 @@
 @media (max-width: 620px) {
   .panel-main {
     padding: 27px 16px 40px;
+  }
+  /* A shop card on a phone is mostly its name: give the title its own scale
+     and a smaller mark instead of squeezing the name beside the 48px icon. */
+  .store-manager-card {
+    gap: 16px;
+    padding: 18px;
+    border-radius: 15px;
+  }
+  .store-manager-heading {
+    gap: 12px;
+    width: 100%;
+  }
+  .store-manager-heading h2 {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+  .store-manager-heading p {
+    font-size: 12px;
+  }
+  .store-manager-icon {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+  .store-manager-grid {
+    gap: 14px;
   }
   .panel-page-heading {
     gap: 20px;

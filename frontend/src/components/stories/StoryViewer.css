@@ -11,7 +11,9 @@
   border: 0;
   background: #05090a;
   color: #fff;
-  touch-action: manipulation;
+  /* The reel owns every touch: a downward pull closes it, and the browser
+     must not turn the same gesture into a page scroll or a refresh. */
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
 .story-viewer::backdrop {
@@ -39,6 +41,73 @@
   margin: 0 auto;
   overflow: hidden;
   background: #0b1210;
+  /* The pull gesture only writes these two variables; the transition turns a
+     released card back into place, and is switched off while a finger drags. */
+  transform: translate3d(0, var(--story-pull, 0px), 0)
+    scale(var(--story-pull-scale, 1));
+  border-radius: var(--story-pull-radius, 0);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-radius 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.story-viewer-shell.is-pulling {
+  transition: none;
+}
+/* Letting go past the threshold drops the reel off the screen. The keyframes
+   only describe the destination, so the card leaves from wherever the finger
+   left it instead of jumping back to the top first. */
+.story-viewer[open] .story-viewer-shell.is-closing {
+  animation: story-close 240ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+@keyframes story-close {
+  to {
+    transform: translate3d(0, 62vh, 0) scale(0.72);
+    opacity: 0;
+  }
+}
+/* Instagram-style pull indicator: a ring that fills while the story is dragged
+   down, parked in the viewport so the card travels underneath it. */
+.story-pull {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  /* A circle has no reading direction: keep it physically centred. */
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #00000057;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease-out;
+}
+.story-pull.is-visible {
+  opacity: 1;
+}
+.story-pull-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* Start the stroke at twelve o'clock, like a countdown ring. */
+  transform: rotate(-90deg);
+}
+.story-pull circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+.story-pull-track {
+  stroke: #ffffff3d;
+}
+.story-pull-fill {
+  stroke: #fff;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 80ms linear;
 }
 /* A story card expands into place when it opens. */
 .story-viewer[open] .story-viewer-shell {
@@ -273,5 +342,8 @@
   .story-viewer-media img,
   .story-viewer-media video {
     animation: none;
+  }
+  .story-viewer-shell {
+    transition: none;
   }
 }

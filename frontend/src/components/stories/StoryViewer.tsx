@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
+import {
+  ChevronDown,
   LayoutGrid,
   LoaderCircle,
   Play,
@@ -26,6 +35,13 @@ import { StoreAvatar, StoreVerifiedBadge } from '../StoreAvatar';
 // A hold longer than this is a pause, not a tap on the story.
 const HOLD_MS = 250;
 const PROGRESS_TICK_MS = 50;
+// A downward drag past this distance closes the reel, and the ring that
+// follows the finger is full at exactly this point.
+const SWIPE_CLOSE_PX = 140;
+const SWIPE_RING_RADIUS = 21;
+const SWIPE_RING_LENGTH = 2 * Math.PI * SWIPE_RING_RADIUS;
+// How far the reel travels while closing; the CSS keyframes handle the rest.
+const CLOSE_ANIMATION_MS = 240;
 
 export function StoryViewer({
   groups,
@@ -61,6 +77,24 @@ export function StoryViewer({
   const elapsed = useRef(0);
   const holdStart = useRef(0);
   const suppressTap = useRef(false);
+  // Pulling down closes the reel like Instagram: the card follows the finger,
+  // a ring at the top fills as it travels, and letting go past the threshold
+  // drops it away. The ref mirrors the state so the release reads the latest
+  // distance rather than the value of the last render.
+  const [pull, setPull] = useState(0);
+  const pullRef = useRef(0);
+  const [pulling, setPulling] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const drag = useRef<
+    | {
+        id: number;
+        startX: number;
+        startY: number;
+        active: boolean;
+      }
+    | undefined
+  >(undefined);
+  const closeTimer = useRef(0);
 
   const queue = useMemo(
     () =>
@@ -94,6 +128,8 @@ export function StoryViewer({
   const upcoming = group
     ? (group.stories[storyIndex + 1] ?? queue[groupIndex + 1]?.stories[0])
     : undefined;
+
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
 
   const advance = useCallback(
     (direction: 1 | -1) => {
@@ -226,6 +262,93 @@ export function StoryViewer({
     advance(direction);
   }
 
+  function beginDrag(event: ReactPointerEvent<HTMLDialogElement>) {
+    if (closing) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    // Links and the tool buttons keep their own gestures; the rest of the
+    // stage is one big swipe surface.
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        '.story-viewer-tools, .story-viewer-shop, .story-viewer-foot',
+      )
+    )
+      return;
+    drag.current = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+    };
+  }
+
+  function trackDrag(event: ReactPointerEvent<HTMLDialogElement>) {
+    const current = drag.current;
+    if (!current || current.id !== event.pointerId) return;
+    const distanceY = event.clientY - current.startY;
+    if (!current.active) {
+      // Only a downward pull closes: sideways travel still belongs to the
+      // previous/next taps and upward travel is not a story gesture.
+      if (
+        distanceY <= 8 ||
+        distanceY <= Math.abs(event.clientX - current.startX)
+      )
+        return;
+      current.active = true;
+      setPulling(true);
+      setPaused(true);
+      // Capture only once the gesture is certain, so ordinary taps still
+      // reach the navigation buttons. A browser that already dropped the
+      // pointer rejects the capture; the drag itself must still work.
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // No active pointer to capture: the gesture keeps its own tracking.
+      }
+    }
+    // Past the threshold the card slows down, so it stays under the finger
+    // instead of running away from it.
+    const next =
+      distanceY <= SWIPE_CLOSE_PX
+        ? distanceY
+        : SWIPE_CLOSE_PX + (distanceY - SWIPE_CLOSE_PX) * 0.35;
+    pullRef.current = next;
+    setPull(next);
+  }
+
+  function endDrag(
+    event: ReactPointerEvent<HTMLDialogElement>,
+    cancelled = false,
+  ) {
+    const current = drag.current;
+    if (!current || current.id !== event.pointerId) return;
+    drag.current = undefined;
+    if (!current.active) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    // The release must never fall through as a tap on the story.
+    suppressTap.current = true;
+    setPulling(false);
+    if (!cancelled && pullRef.current >= SWIPE_CLOSE_PX) {
+      closeBySwipe();
+      return;
+    }
+    pullRef.current = 0;
+    setPull(0);
+    setPaused(false);
+  }
+
+  function closeBySwipe() {
+    setClosing(true);
+    const reduced = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    closeTimer.current = window.setTimeout(
+      onClose,
+      reduced ? 0 : CLOSE_ANIMATION_MS,
+    );
+  }
+
   async function removeStory() {
     if (!story || !onDelete || deleting) return;
     const target = story;
@@ -247,6 +370,10 @@ export function StoryViewer({
       onCancel={onClose}
       onContextMenu={(event) => event.preventDefault()}
       onDragStart={(event) => event.preventDefault()}
+      onPointerDown={beginDrag}
+      onPointerMove={trackDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={(event) => endDrag(event, true)}
       onKeyDown={(event) => {
         if (event.key === 'ArrowRight') {
           event.preventDefault();
@@ -257,7 +384,45 @@ export function StoryViewer({
         }
       }}
     >
-      <div className="story-viewer-shell">
+      {/* The ring sits in the viewport, not on the card, so it stays at the
+          top of the screen while the story travels down with the finger. */}
+      <span
+        className={`story-pull${pulling || closing ? ' is-visible' : ''}`}
+        aria-hidden="true"
+      >
+        <svg className="story-pull-ring" viewBox="0 0 48 48">
+          <circle
+            className="story-pull-track"
+            cx="24"
+            cy="24"
+            r={SWIPE_RING_RADIUS}
+          />
+          <circle
+            className="story-pull-fill"
+            cx="24"
+            cy="24"
+            r={SWIPE_RING_RADIUS}
+            strokeDasharray={SWIPE_RING_LENGTH}
+            strokeDashoffset={
+              SWIPE_RING_LENGTH *
+              (1 - (closing ? 1 : Math.min(1, pull / SWIPE_CLOSE_PX)))
+            }
+          />
+        </svg>
+        <ChevronDown size={17} aria-hidden="true" />
+      </span>
+      <div
+        className={`story-viewer-shell${pulling ? ' is-pulling' : ''}${
+          closing ? ' is-closing' : ''
+        }`}
+        style={
+          {
+            '--story-pull': `${pull}px`,
+            '--story-pull-radius': `${Math.min(26, pull / 5)}px`,
+            '--story-pull-scale': String(1 - Math.min(0.14, pull / 1000)),
+          } as CSSProperties
+        }
+      >
         <div className="story-viewer-bars" aria-hidden="true">
           {group.stories.map((item, index) => (
             <span
@@ -402,8 +567,13 @@ export function StoryViewer({
           aria-label="Previous story"
           onPointerDown={beginHold}
           onPointerUp={endHold}
-          onPointerLeave={() => setPaused(false)}
-          onPointerCancel={() => setPaused(false)}
+          onPointerLeave={() => {
+            // Leaving the button must not resume a story that is being pulled.
+            if (!drag.current?.active) setPaused(false);
+          }}
+          onPointerCancel={() => {
+            if (!drag.current?.active) setPaused(false);
+          }}
           onClick={() => tap(-1)}
         />
         <button
@@ -412,8 +582,12 @@ export function StoryViewer({
           aria-label="Next story"
           onPointerDown={beginHold}
           onPointerUp={endHold}
-          onPointerLeave={() => setPaused(false)}
-          onPointerCancel={() => setPaused(false)}
+          onPointerLeave={() => {
+            if (!drag.current?.active) setPaused(false);
+          }}
+          onPointerCancel={() => {
+            if (!drag.current?.active) setPaused(false);
+          }}
           onClick={() => tap(1)}
         />
         {linkHref && link && (
