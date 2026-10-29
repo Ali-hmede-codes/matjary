@@ -315,6 +315,9 @@ export class AdminCatalogService {
         store.hasVerificationBadge = true;
         store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = actor.id;
+        // A manual administrator grant is not a plan bundle: it keeps its own
+        // month and never consumes one of the owner's bundled slots.
+        store.verificationIncludedInPlan = false;
         store.verificationBadgeExpiresAt = nextVerificationExpiry(
           store.verificationBadgeExpiresAt,
           now,
@@ -335,6 +338,7 @@ export class AdminCatalogService {
         store.verificationBadgeGrantedAt = null;
         store.verificationBadgeGrantedBy = null;
         store.verificationBadgeExpiresAt = null;
+        store.verificationIncludedInPlan = false;
         for (const request of pending) {
           request.status = VerificationRequestStatus.REJECTED;
           request.reviewedBy = actor.id;
@@ -350,7 +354,11 @@ export class AdminCatalogService {
         'stores',
         id,
         enabled ? 'badge.grant' : 'badge.revoke',
-        ['hasVerificationBadge', 'verificationBadgeExpiresAt'],
+        [
+          'hasVerificationBadge',
+          'verificationBadgeExpiresAt',
+          'verificationIncludedInPlan',
+        ],
       );
       return { id, enabled };
     });

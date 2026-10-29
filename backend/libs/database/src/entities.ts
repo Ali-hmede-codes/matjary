@@ -620,6 +620,17 @@ export class Store extends BaseEntity {
   })
   verificationBadgeGrantedBy!: string | null; // Admin user ID who granted the badge
 
+  // True while the badge consumes one of the owner's plan-bundled slots. A
+  // bundled badge is paid by the subscription, so it ends when that does;
+  // monthly add-ons keep their own clock and never occupy a bundled slot.
+  @Column({
+    name: 'verification_included_in_plan',
+    type: 'boolean',
+    default: false,
+    comment: 'Whether the current badge uses a plan-bundled slot',
+  })
+  verificationIncludedInPlan!: boolean;
+
   @Column({
     name: 'verification_badge_expires_at',
     type: 'datetime',

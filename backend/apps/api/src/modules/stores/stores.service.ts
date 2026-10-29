@@ -1390,8 +1390,8 @@ export class StoresService {
         ? 0
         : limits.maxVerificationBadges;
     const pricing = verificationPricing(limits, {
-      hasBadge: store.hasVerificationBadge,
-      activeBadges: currentBadges,
+      includedBadge: store.verificationIncludedInPlan,
+      activeIncludedBadges: currentBadges,
     });
     return {
       eligible: pricing.available,
@@ -1409,7 +1409,8 @@ export class StoresService {
     manager: import('typeorm').EntityManager,
     ownerId: string,
   ): Promise<number> {
-    // Badges past their grace window no longer occupy a plan slot.
+    // Only bundled badges occupy a plan slot; paid add-ons never do. Badges
+    // past their grace window no longer occupy anything.
     const graceBorder = new Date(
       Date.now() - VERIFICATION_GRACE_DAYS * 86_400_000,
     );
@@ -1418,6 +1419,7 @@ export class StoresService {
       .createQueryBuilder('store')
       .where('store.ownerId = :ownerId', { ownerId })
       .andWhere('store.hasVerificationBadge = true')
+      .andWhere('store.verificationIncludedInPlan = true')
       .andWhere(
         '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
         { graceBorder },
@@ -1491,6 +1493,9 @@ export class StoresService {
         store.hasVerificationBadge = true;
         store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = grantedBy;
+        // A manual administrator grant is not a plan bundle: it keeps its own
+        // month and never consumes one of the owner's bundled slots.
+        store.verificationIncludedInPlan = false;
         await manager.save(store);
         await this.settleVerificationRequests(
           manager,
@@ -1504,7 +1509,7 @@ export class StoresService {
           'stores',
           storeId,
           'badge.grant',
-          ['hasVerificationBadge'],
+          ['hasVerificationBadge', 'verificationIncludedInPlan'],
         );
         return { success: true };
       });
@@ -1549,6 +1554,7 @@ export class StoresService {
         store.verificationBadgeGrantedAt = null;
         store.verificationBadgeGrantedBy = null;
         store.verificationBadgeExpiresAt = null;
+        store.verificationIncludedInPlan = false;
         await manager.save(store);
         const pending = await manager.find(StoreVerificationRequest, {
           where: {

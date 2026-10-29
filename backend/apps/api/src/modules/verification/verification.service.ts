@@ -17,6 +17,7 @@ import {
   appendAdminAudit,
   effectiveLimits,
   effectiveSubscription,
+  includedBadgeExpiry,
   nextVerificationExpiry,
   ownerWhere,
   requireAdmin,
@@ -37,6 +38,8 @@ import type {
 const DAY_MS = 86_400_000;
 const PHONE_INVALID_CODE = 'VERIFICATION_PHONE_INVALID';
 const NOT_AVAILABLE_CODE = 'VERIFICATION_NOT_AVAILABLE';
+const PLAN_INACTIVE_CODE = 'VERIFICATION_PLAN_INACTIVE';
+const PLAN_SLOT_LOST_CODE = 'VERIFICATION_PLAN_SLOT_LOST';
 
 @Injectable()
 export class VerificationService {
@@ -69,11 +72,11 @@ export class VerificationService {
       });
       if (!store) throw new NotFoundException('Store not found');
       this.assertOwner(store, userId);
-      const [limits, subscription, activeBadges, pending, latest] =
+      const [limits, subscription, includedBadges, pending, latest] =
         await Promise.all([
           effectiveLimits(manager, store.ownerId),
           effectiveSubscription(manager, store.ownerId),
-          this.activeBadgeCount(manager, store.ownerId),
+          this.includedBadgeCount(manager, store.ownerId),
           this.latestRequest(
             manager,
             storeId,
@@ -82,8 +85,8 @@ export class VerificationService {
           this.latestRequest(manager, storeId),
         ]);
       const pricing = verificationPricing(limits, {
-        hasBadge: store.hasVerificationBadge,
-        activeBadges,
+        includedBadge: store.verificationIncludedInPlan,
+        activeIncludedBadges: includedBadges,
       });
       return {
         store: {
@@ -100,7 +103,9 @@ export class VerificationService {
             limits.maxVerificationBadges === undefined
               ? 0
               : limits.maxVerificationBadges,
-          activeBadges,
+          activeBadges: includedBadges,
+          // Bundled badges end here; the tab explains the link to the plan.
+          endsAt: subscription?.expiresAt ?? null,
         },
         eligibility: {
           available: pricing.available,
@@ -109,7 +114,7 @@ export class VerificationService {
           currency: 'USD',
           reason: pricing.available
             ? null
-            : 'Your plan does not include verification and has no monthly price set.',
+            : 'Your plan does not include another verification badge and has no monthly badge price set.',
         },
         pendingRequest: pending ? this.requestView(pending) : null,
         latestRequest: latest ? this.requestView(latest) : null,
@@ -138,13 +143,13 @@ export class VerificationService {
         });
         if (!store) throw new NotFoundException('Store not found');
         this.assertOwner(store, userId);
-        const [limits, activeBadges] = await Promise.all([
+        const [limits, includedBadges] = await Promise.all([
           effectiveLimits(manager, store.ownerId),
-          this.activeBadgeCount(manager, store.ownerId),
+          this.includedBadgeCount(manager, store.ownerId),
         ]);
         const pricing = verificationPricing(limits, {
-          hasBadge: store.hasVerificationBadge,
-          activeBadges,
+          includedBadge: store.verificationIncludedInPlan,
+          activeIncludedBadges: includedBadges,
         });
         if (!pricing.available)
           throw new ForbiddenException({
@@ -325,10 +330,53 @@ export class VerificationService {
         if (request.status !== VerificationRequestStatus.PENDING)
           throw new ConflictException('This request is no longer pending');
         const now = new Date();
-        const expiresAt = nextVerificationExpiry(
-          store.verificationBadgeExpiresAt,
-          now,
-        );
+        // A bundled badge is paid by the subscription, so it ends when the plan
+        // does. A monthly add-on keeps its own rolling period.
+        let expiresAt: Date | null;
+        let periodStartsAt = now;
+        if (request.includedInPlan) {
+          // The plan economics can change between application and approval: a
+          // bundled application must still have a live subscription and a slot.
+          const [limits, includedBadges, subscription] = await Promise.all([
+            effectiveLimits(manager, store.ownerId),
+            this.includedBadgeCount(manager, store.ownerId),
+            effectiveSubscription(manager, store.ownerId, now),
+          ]);
+          if (!subscription)
+            throw new BadRequestException({
+              code: PLAN_INACTIVE_CODE,
+              message:
+                'The owner has no active subscription. Assign a plan or reject this request.',
+            });
+          const pricing = verificationPricing(limits, {
+            includedBadge: store.verificationIncludedInPlan,
+            activeIncludedBadges: includedBadges,
+          });
+          if (!pricing.included)
+            throw new BadRequestException({
+              code: PLAN_SLOT_LOST_CODE,
+              message:
+                'The plan no longer includes a badge slot. Reject this request so the owner can apply at the monthly price.',
+            });
+          expiresAt = includedBadgeExpiry(
+            {
+              subscriptionExpiresAt: subscription.expiresAt ?? null,
+              currentExpiry: store.verificationBadgeExpiresAt,
+              currentIncluded: store.verificationIncludedInPlan,
+            },
+            now,
+          );
+          store.verificationIncludedInPlan = true;
+        } else {
+          expiresAt = nextVerificationExpiry(
+            store.verificationBadgeExpiresAt,
+            now,
+          );
+          store.verificationIncludedInPlan = false;
+          periodStartsAt = new Date(
+            expiresAt.getTime() - VERIFICATION_PERIOD_DAYS * DAY_MS,
+          );
+        }
         store.hasVerificationBadge = true;
         store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = audited.id;
@@ -337,9 +385,7 @@ export class VerificationService {
         request.reviewedBy = audited.id;
         request.reviewedAt = now;
         request.reviewNote = audited.reason ?? null;
-        request.periodStartsAt = new Date(
-          expiresAt.getTime() - VERIFICATION_PERIOD_DAYS * DAY_MS,
-        );
+        request.periodStartsAt = periodStartsAt;
         request.periodEndsAt = expiresAt;
         await manager.save([store, request]);
         await appendAdminAudit(
@@ -348,7 +394,11 @@ export class VerificationService {
           'stores',
           store.id,
           'verification.approve',
-          ['hasVerificationBadge', 'verificationBadgeExpiresAt'],
+          [
+            'hasVerificationBadge',
+            'verificationBadgeExpiresAt',
+            'verificationIncludedInPlan',
+          ],
         );
         return { success: true, expiresAt, requestId };
       });
@@ -410,10 +460,39 @@ export class VerificationService {
             message: 'This store has no verification badge to extend',
           });
         const now = new Date();
-        const expiresAt = nextVerificationExpiry(
-          store.verificationBadgeExpiresAt,
-          now,
-        );
+        // Bundled badges follow the subscription, so "+1 month" re-reads the
+        // plan end instead of stacking free months. Add-ons stack as before.
+        let expiresAt: Date | null;
+        let periodStartsAt = now;
+        if (store.verificationIncludedInPlan) {
+          const subscription = await effectiveSubscription(
+            manager,
+            store.ownerId,
+            now,
+          );
+          if (!subscription)
+            throw new BadRequestException({
+              code: PLAN_INACTIVE_CODE,
+              message:
+                'This badge is bundled with the plan and the subscription is no longer active. Assign a plan first.',
+            });
+          expiresAt = includedBadgeExpiry(
+            {
+              subscriptionExpiresAt: subscription.expiresAt ?? null,
+              currentExpiry: store.verificationBadgeExpiresAt,
+              currentIncluded: true,
+            },
+            now,
+          );
+        } else {
+          expiresAt = nextVerificationExpiry(
+            store.verificationBadgeExpiresAt,
+            now,
+          );
+          periodStartsAt = new Date(
+            expiresAt.getTime() - VERIFICATION_PERIOD_DAYS * DAY_MS,
+          );
+        }
         store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = audited.id;
         store.verificationBadgeExpiresAt = expiresAt;
@@ -424,6 +503,7 @@ export class VerificationService {
           audited,
           now,
           expiresAt,
+          periodStartsAt,
         );
         await appendAdminAudit(
           manager,
@@ -431,7 +511,7 @@ export class VerificationService {
           'stores',
           storeId,
           'verification.extend',
-          ['verificationBadgeExpiresAt'],
+          ['verificationBadgeExpiresAt', 'verificationIncludedInPlan'],
         );
         return { success: true, storeId, expiresAt };
       });
@@ -454,6 +534,7 @@ export class VerificationService {
         store.verificationBadgeGrantedAt = null;
         store.verificationBadgeGrantedBy = null;
         store.verificationBadgeExpiresAt = null;
+        store.verificationIncludedInPlan = false;
         await manager.save(store);
         await this.rejectPendingRequests(manager, storeId, audited);
         await appendAdminAudit(
@@ -462,7 +543,11 @@ export class VerificationService {
           'stores',
           storeId,
           'verification.revoke',
-          ['hasVerificationBadge', 'verificationBadgeExpiresAt'],
+          [
+            'hasVerificationBadge',
+            'verificationBadgeExpiresAt',
+            'verificationIncludedInPlan',
+          ],
         );
         return { success: true, storeId };
       });
@@ -516,10 +601,11 @@ export class VerificationService {
   }
 
   /**
-   * Count the owner's badges that still occupy a plan slot: the paid month and
-   * its grace window. Badges past the grace window no longer count.
+   * Count the owner's bundled badges that still occupy a plan slot: the paid
+   * period and its grace window. Monthly add-ons never occupy a slot, and
+   * badges past the grace window no longer count.
    */
-  private activeBadgeCount(
+  private includedBadgeCount(
     manager: EntityManager,
     ownerId: string,
     now = new Date(),
@@ -532,6 +618,7 @@ export class VerificationService {
       .createQueryBuilder('store')
       .where('store.ownerId = :ownerId', { ownerId })
       .andWhere('store.hasVerificationBadge = true')
+      .andWhere('store.verificationIncludedInPlan = true')
       .andWhere(
         '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
         { graceBorder },
@@ -548,6 +635,8 @@ export class VerificationService {
       expiresAt: badge.expiresAt,
       graceEndsAt: badge.graceEndsAt,
       daysRemaining: badge.daysRemaining,
+      // True while this badge uses one of the plan's bundled slots.
+      included: store.verificationIncludedInPlan,
     };
   }
 
@@ -595,7 +684,8 @@ export class VerificationService {
     storeId: string,
     actor: AdminActor,
     now: Date,
-    expiresAt: Date,
+    expiresAt: Date | null,
+    periodStartsAt: Date,
   ): Promise<void> {
     const pending = await manager.find(StoreVerificationRequest, {
       where: { storeId, status: VerificationRequestStatus.PENDING },
@@ -606,9 +696,7 @@ export class VerificationService {
       request.reviewedBy = actor.id;
       request.reviewedAt = now;
       request.reviewNote = actor.reason ?? null;
-      request.periodStartsAt = new Date(
-        expiresAt.getTime() - VERIFICATION_PERIOD_DAYS * DAY_MS,
-      );
+      request.periodStartsAt = periodStartsAt;
       request.periodEndsAt = expiresAt;
     }
     if (pending.length) await manager.save(pending);

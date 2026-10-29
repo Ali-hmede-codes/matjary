@@ -182,6 +182,14 @@ function fixture() {
             return query;
           },
           andWhere: () => query,
+          setLock: () => query,
+          // Plan-bundled badges are the only stores the subscription syncs.
+          getMany: async () =>
+            (data.get(name(target)) ?? []).filter(
+              (row) =>
+                row.hasVerificationBadge === true &&
+                row.verificationIncludedInPlan === true,
+            ),
           getExists: async () => {
             const row = (data.get(name(target)) ?? []).find(
               (item) => item.id === selectedId,
@@ -469,7 +477,12 @@ test('subscription management preserves free fallback and historical assignments
     BadRequestException,
   );
   const paid = await plans.create(
-    { slug: 'paid', name: 'Paid', limits: {}, priceCents: 100 },
+    {
+      slug: 'paid',
+      name: 'Paid',
+      limits: { maxVerificationBadges: 1 },
+      priceCents: 100,
+    },
     adminId,
   );
   await plans.update(paid.id, { name: 'Premium' }, adminId);
@@ -479,8 +492,33 @@ test('subscription management preserves free fallback and historical assignments
     false,
   );
   await plans.update(paid.id, { isActive: true }, adminId);
-  const first = await plans.assignSubscription(ownerId, paid.id, adminId);
+  f.add(Store, {
+    id: '77777777-7777-4777-8777-777777777777',
+    ownerId,
+    hasVerificationBadge: true,
+    verificationIncludedInPlan: true,
+    verificationBadgeExpiresAt: new Date(Date.now() + 86_400_000),
+  });
+  const paidExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const first = await plans.assignSubscription(
+    ownerId,
+    paid.id,
+    adminId,
+    paidExpiry,
+  );
+  // A bundled badge follows the subscription that pays for it.
+  assert.equal(
+    new Date(f.rows(Store)[0]?.verificationBadgeExpiresAt as Date).getTime(),
+    paidExpiry.getTime(),
+  );
   await plans.assignSubscription(ownerId, free.id, adminId);
+  // A plan without badge slots ends the bundled badge (grace still applies)
+  // instead of letting it run on a subscription that no longer bundles it.
+  assert.equal(f.rows(Store)[0]?.verificationIncludedInPlan, false);
+  assert.ok(
+    (f.rows(Store)[0]?.verificationBadgeExpiresAt as Date).getTime() <=
+      Date.now(),
+  );
   assert.equal(
     f.rows(UserSubscription).find((row) => row.id === first.id)?.status,
     SubscriptionStatus.CANCELLED,

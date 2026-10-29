@@ -672,6 +672,7 @@ interface VerificationQueueRequest {
     expiresAt: string | null;
     graceEndsAt: string | null;
     daysRemaining: number | null;
+    included: boolean;
   } | null;
   owner: { displayName: string; email: string } | null;
 }
@@ -687,6 +688,7 @@ interface VerificationQueueStore {
   expiresAt: string | null;
   graceEndsAt: string | null;
   daysRemaining: number | null;
+  included: boolean;
 }
 
 const badgeStateLabel = (state: string) =>
@@ -804,7 +806,9 @@ function AdminVerification({ id }: { id: string }) {
                     setAction({
                       path: `admin/verification/requests/${request.id}/approve`,
                       title: `Approve verification for ${request.store?.name ?? 'this shop'}`,
-                      description: `One month starts on approval. Call ${request.applicantName} on ${request.phone}. ${priceText(request)}.`,
+                      description: request.includedInPlan
+                        ? `Included in the owner's plan, so the badge ends when the subscription ends. Call ${request.applicantName} on ${request.phone} to confirm.`
+                        : `One month starts on approval. Call ${request.applicantName} on ${request.phone}. ${priceText(request)}.`,
                       reasons: [
                         'Payment received',
                         'Identity and business confirmed',
@@ -878,6 +882,8 @@ function AdminVerification({ id }: { id: string }) {
                       : 'Shop owner'}
                   </p>
                   <small>
+                    {store.included ? 'Included in the plan' : 'Monthly add-on'}
+                    {' · '}
                     {store.expiresAt
                       ? store.state === 'active'
                         ? `Renews ${dateLabel(store.expiresAt)} · ${store.daysRemaining ?? 0} days left`
@@ -890,24 +896,30 @@ function AdminVerification({ id }: { id: string }) {
                 <span className={`panel-pill ${store.visible ? '' : 'muted'}`}>
                   {badgeStateLabel(store.state)}
                 </span>
-                <button
-                  className="panel-primary"
-                  onClick={() =>
-                    setAction({
-                      path: `admin/verification/stores/${store.id}/extend`,
-                      title: `Give ${store.name} another month`,
-                      description:
-                        'The new month starts where the current one ends, or today if it already lapsed. Any pending renewal from this shop is approved too.',
-                      reasons: [
-                        'Monthly renewal paid',
-                        'Payment received by transfer',
-                        'Administrator adjustment',
-                      ],
-                    })
-                  }
-                >
-                  +1 month
-                </button>
+                {store.included ? (
+                  <span className="panel-pill muted">
+                    Follows the subscription end
+                  </span>
+                ) : (
+                  <button
+                    className="panel-primary"
+                    onClick={() =>
+                      setAction({
+                        path: `admin/verification/stores/${store.id}/extend`,
+                        title: `Give ${store.name} another month`,
+                        description:
+                          'The new month starts where the current one ends, or today if it already lapsed. Any pending renewal from this shop is approved too.',
+                        reasons: [
+                          'Monthly renewal paid',
+                          'Payment received by transfer',
+                          'Administrator adjustment',
+                        ],
+                      })
+                    }
+                  >
+                    +1 month
+                  </button>
+                )}
                 <button
                   onClick={() =>
                     setAction({

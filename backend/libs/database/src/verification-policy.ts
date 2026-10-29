@@ -93,6 +93,30 @@ export function nextVerificationExpiry(
   return new Date(base.getTime() + VERIFICATION_PERIOD_DAYS * DAY_MS);
 }
 
+// A badge bought with a plan bundle is paid by the subscription itself, so its
+// end date is the subscription end instead of a rolling month. A still-running
+// paid month is never cut short when a shop moves into a bundled slot; a plan
+// without an end date carries its bundled badge with no end either.
+export function includedBadgeExpiry(
+  input: {
+    subscriptionExpiresAt: Date | null;
+    currentExpiry: Date | null;
+    currentIncluded: boolean;
+  },
+  now = new Date(),
+): Date | null {
+  const { subscriptionExpiresAt, currentExpiry, currentIncluded } = input;
+  if (!subscriptionExpiresAt) return null;
+  // A paid month that already runs past the subscription keeps its end date.
+  if (
+    !currentIncluded &&
+    currentExpiry &&
+    currentExpiry.getTime() > subscriptionExpiresAt.getTime()
+  )
+    return currentExpiry;
+  return subscriptionExpiresAt;
+}
+
 export interface VerificationPricing {
   included: boolean;
   priceCents: number;
@@ -100,14 +124,16 @@ export interface VerificationPricing {
 }
 
 // Plans decide whether a badge is bundled (maxVerificationBadges) or sold as a
-// monthly add-on (verificationBadgePriceCents). Renewing a badge that already
-// belongs to this shop never competes with a sibling shop for the same slot.
+// monthly add-on (verificationBadgePriceCents). A shop already inside a bundled
+// slot renews that same slot; any other shop needs a free slot, otherwise it is
+// an add-on with its own monthly price. Add-on badges never consume a bundled
+// slot, so a paid badge on one shop cannot push another shop onto the add-on.
 export function verificationPricing(
   limits: Pick<
     SubscriptionLimits,
     'maxVerificationBadges' | 'verificationBadgePriceCents'
   >,
-  input: { hasBadge: boolean; activeBadges: number },
+  input: { includedBadge: boolean; activeIncludedBadges: number },
 ): VerificationPricing {
   const maxBadges =
     limits.maxVerificationBadges === undefined
@@ -115,7 +141,8 @@ export function verificationPricing(
       : limits.maxVerificationBadges;
   const included =
     maxBadges === null ||
-    (maxBadges > 0 && (input.hasBadge || input.activeBadges < maxBadges));
+    (maxBadges > 0 &&
+      (input.includedBadge || input.activeIncludedBadges < maxBadges));
   const priceCents = included
     ? 0
     : Math.max(0, limits.verificationBadgePriceCents ?? 0);

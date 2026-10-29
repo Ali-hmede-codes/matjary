@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   VERIFICATION_GRACE_DAYS,
   VERIFICATION_PERIOD_DAYS,
+  includedBadgeExpiry,
   nextVerificationExpiry,
   verificationBadgeInfo,
   verificationBadgeVisible,
@@ -124,7 +125,7 @@ test('pricing bundles a badge slot or sells the monthly add-on', () => {
   assert.deepEqual(
     verificationPricing(
       { maxVerificationBadges: 1, verificationBadgePriceCents: null },
-      { hasBadge: false, activeBadges: 0 },
+      { includedBadge: false, activeIncludedBadges: 0 },
     ),
     { included: true, priceCents: 0, available: true },
   );
@@ -132,23 +133,32 @@ test('pricing bundles a badge slot or sells the monthly add-on', () => {
   assert.deepEqual(
     verificationPricing(
       { maxVerificationBadges: 1, verificationBadgePriceCents: null },
-      { hasBadge: false, activeBadges: 1 },
+      { includedBadge: false, activeIncludedBadges: 1 },
     ),
     { included: false, priceCents: 0, available: false },
   );
-  // The same shop renewing its own badge never competes for the slot.
+  // The same shop renewing its own bundled slot never competes for it.
   assert.deepEqual(
     verificationPricing(
       { maxVerificationBadges: 1, verificationBadgePriceCents: null },
-      { hasBadge: true, activeBadges: 1 },
+      { includedBadge: true, activeIncludedBadges: 1 },
     ),
     { included: true, priceCents: 0, available: true },
+  );
+  // A second shop renews the monthly add-on while the bundled slot is used;
+  // the paid badge itself never frees or takes a bundled slot.
+  assert.deepEqual(
+    verificationPricing(
+      { maxVerificationBadges: 1, verificationBadgePriceCents: 500 },
+      { includedBadge: false, activeIncludedBadges: 1 },
+    ),
+    { included: false, priceCents: 500, available: true },
   );
   // A paid add-on is available even when the plan includes no badge.
   assert.deepEqual(
     verificationPricing(
       { maxVerificationBadges: 0, verificationBadgePriceCents: 500 },
-      { hasBadge: false, activeBadges: 0 },
+      { includedBadge: false, activeIncludedBadges: 0 },
     ),
     { included: false, priceCents: 500, available: true },
   );
@@ -156,13 +166,66 @@ test('pricing bundles a badge slot or sells the monthly add-on', () => {
   assert.deepEqual(
     verificationPricing(
       { maxVerificationBadges: null, verificationBadgePriceCents: 900 },
-      { hasBadge: false, activeBadges: 4 },
+      { includedBadge: false, activeIncludedBadges: 4 },
     ),
     { included: true, priceCents: 0, available: true },
   );
   // Missing limits fail closed, like an expired plan.
   assert.deepEqual(
-    verificationPricing({}, { hasBadge: false, activeBadges: 0 }),
+    verificationPricing({}, { includedBadge: false, activeIncludedBadges: 0 }),
     { included: false, priceCents: 0, available: false },
+  );
+});
+
+test('a bundled badge ends with the subscription that pays for it', () => {
+  const subscriptionEnd = new Date(now.getTime() + 10 * day);
+  // A bundled renewal follows the subscription instead of a rolling month.
+  assert.equal(
+    includedBadgeExpiry(
+      {
+        subscriptionExpiresAt: subscriptionEnd,
+        currentExpiry: new Date(now.getTime() + 3 * day),
+        currentIncluded: true,
+      },
+      now,
+    )?.toISOString(),
+    subscriptionEnd.toISOString(),
+  );
+  // A shorter subscription pulls an older bundled end back with the plan.
+  assert.equal(
+    includedBadgeExpiry(
+      {
+        subscriptionExpiresAt: subscriptionEnd,
+        currentExpiry: new Date(now.getTime() + 40 * day),
+        currentIncluded: true,
+      },
+      now,
+    )?.toISOString(),
+    subscriptionEnd.toISOString(),
+  );
+  // A paid month already running past the subscription is never cut short.
+  const paidEnd = new Date(now.getTime() + 40 * day);
+  assert.equal(
+    includedBadgeExpiry(
+      {
+        subscriptionExpiresAt: subscriptionEnd,
+        currentExpiry: paidEnd,
+        currentIncluded: false,
+      },
+      now,
+    )?.toISOString(),
+    paidEnd.toISOString(),
+  );
+  // A plan without an end date carries the bundled badge with no end either.
+  assert.equal(
+    includedBadgeExpiry(
+      {
+        subscriptionExpiresAt: null,
+        currentExpiry: null,
+        currentIncluded: true,
+      },
+      now,
+    ),
+    null,
   );
 });

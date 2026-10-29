@@ -42,12 +42,16 @@ interface VerificationStatus {
     expiresAt: string | null;
     graceEndsAt: string | null;
     daysRemaining: number | null;
+    // True while the badge uses one of the plan's included slots.
+    included: boolean;
   };
   plan: {
     name: string | null;
     slug: string | null;
     maxBadges: number | null;
     activeBadges: number;
+    // Bundled badges end with the subscription.
+    endsAt: string | null;
   };
   eligibility: {
     available: boolean;
@@ -153,9 +157,20 @@ export function OwnerVerification() {
         title="Verification"
         description="The blue tick tells shoppers this business is real and reachable. Verification is reviewed by the Matjary team and renewed month by month."
         action={
-          <span className={`panel-pill ${badge.visible ? '' : 'muted'}`}>
-            {STATE_LABEL[badge.state]}
-          </span>
+          <>
+            {!data.eligibility.included && price > 0 && (
+              <span className="panel-pill">
+                {formatProductPrice(
+                  data.eligibility.priceCents,
+                  data.eligibility.currency,
+                )}{' '}
+                / month
+              </span>
+            )}
+            <span className={`panel-pill ${badge.visible ? '' : 'muted'}`}>
+              {STATE_LABEL[badge.state]}
+            </span>
+          </>
         }
       />
       {notice && <Notice>{notice}</Notice>}
@@ -169,11 +184,17 @@ export function OwnerVerification() {
               {badge.expiresAt ? ` until ${dateLabel(badge.expiresAt)}` : ''}.
             </strong>
             <span>
-              {badge.daysRemaining != null
-                ? `${dayText(badge.daysRemaining)} left in this month. `
-                : ''}
-              Renew before it ends and the new month starts where the current
-              one finishes.
+              {badge.included
+                ? `Included with your ${data.plan.name ?? 'current'} plan, so it ends when the subscription does${
+                    data.plan.endsAt ? ` on ${dateLabel(data.plan.endsAt)}` : ''
+                  }.${
+                    badge.daysRemaining != null
+                      ? ` ${dayText(badge.daysRemaining)} left.`
+                      : ''
+                  }`
+                : badge.daysRemaining != null
+                  ? `${dayText(badge.daysRemaining)} left in this month. Renew before it ends and the new month starts where the current one finishes.`
+                  : 'This badge has no end date.'}
             </span>
           </div>
         </div>
@@ -212,12 +233,25 @@ export function OwnerVerification() {
           </h2>
           <p>
             {data.eligibility.included
-              ? `Verification is included in your ${data.plan.name ?? 'current'} plan. Each approval covers one month.`
+              ? `Verification is included in your ${data.plan.name ?? 'current'} plan. The badge runs as long as your subscription and ends with it.`
               : price > 0
-                ? `${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month. An administrator will call you to arrange payment before the badge is activated.`
+                ? data.plan.maxBadges != null &&
+                  data.plan.maxBadges > 0 &&
+                  data.plan.activeBadges >= data.plan.maxBadges
+                  ? `Your plan's included badge is already used by another shop, so this shop is ${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month, billed separately. An administrator will call you to arrange payment before the badge is activated.`
+                  : `${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month. An administrator will call you to arrange payment before the badge is activated.`
                 : (data.eligibility.reason ??
                   'Verification is not available on your current plan.')}
           </p>
+          <small className="panel-muted">
+            Included badges in use: {data.plan.activeBadges}
+            {data.plan.maxBadges === null
+              ? ' (unlimited)'
+              : ` of ${data.plan.maxBadges}`}
+            {data.plan.endsAt
+              ? ` · Plan ends ${dateLabel(data.plan.endsAt)}`
+              : ''}
+          </small>
           {pending ? (
             <>
               <span className="panel-pill">{STATUS_LABEL[pending.status]}</span>
@@ -286,6 +320,13 @@ export function OwnerVerification() {
               <span>
                 If a month ends without renewal, the tick stays for 5 days and
                 then disappears.
+              </span>
+            </li>
+            <li>
+              <ShieldCheck size={16} />
+              <span>
+                A badge included with your plan ends when the subscription ends.
+                Extra shops renew monthly at the plan's badge price.
               </span>
             </li>
           </ul>

@@ -26,7 +26,9 @@ import {
   actorContext,
   appendAdminAudit,
   requireAdmin,
+  Store,
   StoreSubscriptionTier,
+  VERIFICATION_GRACE_DAYS,
 } from '@app/database';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
@@ -67,6 +69,54 @@ export class SubscriptionPlansService {
       );
       return result;
     });
+  }
+
+  /**
+   * Plan-bundled verification badges are paid by the subscription, so they
+   * follow the plan: a new subscription moves their end date, and a plan
+   * without badge slots ends them (the usual grace window still applies).
+   * Only badges still inside the renewal window are touched, so a lapsed badge
+   * is never revived without a fresh administrator review.
+   */
+  private async syncIncludedBadges(
+    manager: EntityManager,
+    userId: string,
+    next: { included: boolean; expiresAt: Date | null },
+    now: Date,
+  ): Promise<number> {
+    const graceBorder = new Date(
+      now.getTime() - VERIFICATION_GRACE_DAYS * 86_400_000,
+    );
+    const stores = await manager
+      .getRepository(Store)
+      .createQueryBuilder('store')
+      .where('store.ownerId = :userId', { userId })
+      .andWhere('store.hasVerificationBadge = true')
+      .andWhere('store.verificationIncludedInPlan = true')
+      .andWhere(
+        '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
+        { graceBorder },
+      )
+      .setLock('pessimistic_write')
+      .getMany();
+    for (const store of stores) {
+      if (!next.included) store.verificationIncludedInPlan = false;
+      if (next.included && next.expiresAt === null) {
+        // The plan itself never ends, so the bundled badge does not either.
+        store.verificationBadgeExpiresAt = null;
+      } else if (next.expiresAt && next.expiresAt.getTime() > now.getTime()) {
+        store.verificationBadgeExpiresAt = next.expiresAt;
+      } else if (
+        !store.verificationBadgeExpiresAt ||
+        store.verificationBadgeExpiresAt.getTime() > now.getTime()
+      ) {
+        // Cancelled or slotless plans end the bundled badge now; a badge
+        // already inside its renewal window keeps the original end date.
+        store.verificationBadgeExpiresAt = now;
+      }
+    }
+    if (stores.length) await manager.save(stores);
+    return stores.length;
   }
 
   private sanitize(error: unknown): never {
@@ -328,6 +378,15 @@ export class SubscriptionPlansService {
           { id },
           { status: SubscriptionStatus.CANCELLED },
         );
+        // Cancelling ends the subscription now, so bundled badges enter their
+        // renewal window instead of running past the plan that paid for them.
+        const now = new Date();
+        await this.syncIncludedBadges(
+          manager,
+          subscription.userId,
+          { included: true, expiresAt: now },
+          now,
+        );
       },
     );
   }
@@ -430,13 +489,30 @@ export class SubscriptionPlansService {
               notes: notes ?? null,
             }),
           );
+          // A plan with bundled badge slots lets the owner's bundled badges run
+          // to the subscription end; a plan without slots ends them now.
+          const maxBadges = plan.limits?.maxVerificationBadges;
+          const includesBadges =
+            maxBadges === null ||
+            (typeof maxBadges === 'number' && maxBadges > 0);
+          const synced = await this.syncIncludedBadges(
+            manager,
+            userId,
+            {
+              included: includesBadges,
+              expiresAt: includesBadges ? (saved.expiresAt ?? null) : now,
+            },
+            now,
+          );
           await appendAdminAudit(
             manager,
             actor,
             'subscriptions',
             saved.id,
             'assignment.create',
-            ['planId', 'expiresAt'],
+            synced
+              ? ['planId', 'expiresAt', 'verificationBadgeExpiresAt']
+              : ['planId', 'expiresAt'],
           );
           return saved;
         },
