@@ -105,6 +105,11 @@
 .main-nav :is(button, a).active svg {
   stroke-width: 2.3;
 }
+/* The raised create circle belongs to the mobile dock only; desktop keeps the
+   labelled "Create" button in the topbar instead. */
+.main-nav .nav-create {
+  display: none;
+}
 .search-box {
   display: flex;
   align-items: center;
@@ -194,8 +199,9 @@
     width: min(calc(100% - 24px), 520px);
     margin-inline: auto;
     display: grid;
-    /* Home, Trending, Videos, Saved, Shops, Pricing. */
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    /* Home, Trending, Videos, Create, Saved, Shops, Pricing: seven columns keep
+       the create circle in the exact middle of the dock. */
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 2px;
     padding: 7px;
     border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
@@ -230,6 +236,39 @@
     box-shadow: 0 12px 20px -14px
       color-mix(in srgb, var(--primary) 85%, transparent);
   }
+  /* The create action floats above the glass on purpose: it crosses the dock's
+     top edge so the plus reads as a floating action, not another tab. */
+  .main-nav .nav-create {
+    display: grid;
+    place-items: center;
+    align-self: center;
+    justify-self: center;
+    width: 54px;
+    height: 54px;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--on-primary);
+    transform: translateY(-26px);
+    box-shadow:
+      0 0 0 5px var(--surface),
+      0 16px 28px -14px color-mix(in srgb, var(--primary) 90%, transparent);
+    transition: transform 160ms ease;
+  }
+  .main-nav .nav-create:hover,
+  .main-nav .nav-create:focus-visible {
+    background: var(--primary);
+    color: var(--on-primary);
+    transform: translateY(-29px);
+  }
+  .main-nav .nav-create:active {
+    transform: translateY(-23px) scale(0.95);
+  }
+  /* The dock carries create from here on, so the topbar drops its duplicate. */
+  .header-actions .create-button {
+    display: none;
+  }
 }
 @media (max-width: 600px) {
   .topbar {
@@ -263,19 +302,19 @@
     width: 38px;
     height: 38px;
   }
-  .create-button {
-    width: 38px;
-    padding: 0;
-  }
-  .create-button span {
-    display: none;
-  }
   .profile-button {
     width: 38px;
     min-height: 38px;
   }
   .search-box {
     display: none;
+  }
+  /* Seven dock columns leave about 48px per tab on a phone, so the labels lose
+     a little weight instead of wrapping into a second line. */
+  .main-nav :is(button, a) {
+    padding-inline: 2px;
+    font-size: 9.5px;
+    letter-spacing: 0;
   }
   .search-open .search-box {
     display: flex;
@@ -285,5 +324,16 @@
   }
   .search-box input {
     font-size: 16px;
+  }
+}
+@media (max-width: 380px) {
+  .main-nav :is(button, a) {
+    padding-inline: 1px;
+    font-size: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main-nav .nav-create {
+    transition: none;
   }
 }

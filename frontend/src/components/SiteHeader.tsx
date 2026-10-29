@@ -44,6 +44,25 @@ export function SiteHeader(props: SiteHeaderProps) {
   // Curated labels for the short navigation words the widget translates badly;
   // the elements carrying them are marked notranslate.
   const uiText = useUiLabel();
+  // One renderer for both shapes: the feed switches view in place, while the
+  // standalone pages (shops, pricing, favorites) link back to the feed.
+  const navItem = ({ id, label, icon: Icon }: (typeof navigation)[number]) =>
+    feed ? (
+      <button
+        key={id}
+        onClick={() => feed.onNavigate(id)}
+        className={view === id ? 'active' : ''}
+        aria-current={view === id ? 'page' : undefined}
+      >
+        <Icon size={19} aria-hidden="true" />
+        <span className="notranslate">{uiText(label)}</span>
+      </button>
+    ) : (
+      <a key={id} href={id === 'discover' ? '/' : `/?view=${id}`}>
+        <Icon size={19} aria-hidden="true" />
+        <span className="notranslate">{uiText(label)}</span>
+      </a>
+    );
   return (
     <header className="site-header">
       <div className="topbar">
@@ -63,24 +82,17 @@ export function SiteHeader(props: SiteHeaderProps) {
           <span className="brand-name">{settings.siteName}</span>
         </a>
         <nav className="main-nav" aria-label="Main navigation">
-          {navigation.map(({ id, label, icon: Icon }) =>
-            feed ? (
-              <button
-                key={id}
-                onClick={() => feed.onNavigate(id)}
-                className={view === id ? 'active' : ''}
-                aria-current={view === id ? 'page' : undefined}
-              >
-                <Icon size={19} aria-hidden="true" />
-                <span className="notranslate">{uiText(label)}</span>
-              </button>
-            ) : (
-              <a key={id} href={id === 'discover' ? '/' : `/?view=${id}`}>
-                <Icon size={19} aria-hidden="true" />
-                <span className="notranslate">{uiText(label)}</span>
-              </a>
-            ),
-          )}
+          {navigation.slice(0, 3).map(navItem)}
+          {/* Holds the exact middle column of the mobile dock, where it floats
+              above the glass instead of sitting inside the bar. */}
+          <a
+            className="nav-create"
+            href={loginUrl}
+            aria-label="Create a shop or share a post"
+          >
+            <Plus size={26} strokeWidth={2.4} aria-hidden="true" />
+          </a>
+          {navigation.slice(3).map(navItem)}
           <a
             href="/shops"
             className={view === 'shops' ? 'active' : ''}
