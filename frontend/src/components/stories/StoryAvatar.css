@@ -1,6 +1,5 @@
-/* Story ring: a gradient outline in the site's own brand colors with a small
-   gap between the ring and the round photo. Watched shops drop to a quiet
-   gray. */
+/* Instagram-style story ring: a circular gradient outline with a small gap
+   between the ring and the round photo. Watched shops drop to a quiet gray. */
 .story-avatar {
   position: relative;
   display: inline-grid;

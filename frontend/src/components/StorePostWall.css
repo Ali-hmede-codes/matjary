@@ -314,9 +314,17 @@
   height: 8px;
   margin-right: 6px;
   border-radius: 50%;
-  /* An 8px disc is too small for the conic ring, so the mark keeps the same
-     two brand colors as a plain gradient. */
-  background: linear-gradient(140deg, var(--secondary), var(--primary));
+  /* An 8px disc is too small for the conic ring, so the mark uses the same
+     Instagram sweep as a plain circle. */
+  background: conic-gradient(
+    from 210deg,
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
+  );
 }
 .shop-story-tile-copy small {
   font-size: 11px;

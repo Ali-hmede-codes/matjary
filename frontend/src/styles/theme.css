@@ -25,13 +25,16 @@
   /* Outlines around controls and shop rings keep a trace of the brand; the
      neutral --line reads as a dirty gray frame on a white page. */
   --line-brand: color-mix(in srgb, var(--primary) 20%, var(--line));
-  /* A live story's ring is drawn from the site's own colors: a fixed
-     Instagram-style palette clashes with every brand but its own. */
+  /* The live-story outline keeps Instagram's five-color sweep on purpose: it
+     is the familiar "new story" signal, so it stays the same on every theme. */
   --story-ring: conic-gradient(
     from 210deg,
-    var(--secondary),
-    var(--primary) 55%,
-    var(--secondary)
+    #feda75,
+    #fa7e1e,
+    #d62976,
+    #962fbf,
+    #4f5bd5,
+    #feda75
   );
   min-height: 100vh;
   color: var(--ink);
