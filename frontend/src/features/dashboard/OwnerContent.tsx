@@ -31,6 +31,7 @@ import {
 } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
 import {
+  formatProductPrice,
   normalizeSlug,
   productCategoryLabel,
   productPriceLabel,
@@ -47,6 +48,8 @@ interface Content {
   status: string;
   description: string | null;
   priceCents?: string;
+  // Old price while the item is on sale; null means no sale.
+  compareAtPriceCents?: string | null;
   currency?: string;
   category?: string;
   categoryId?: string | null;
@@ -67,8 +70,10 @@ interface Content {
 }
 interface LinkProduct {
   id: string;
+  slug: string;
   name: string;
   priceCents?: string;
+  compareAtPriceCents?: string | null;
   currency?: string;
 }
 interface Category {
@@ -588,6 +593,14 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
                             currency: item.currency || 'USD',
                             options: item.options ?? null,
                           })}
+                          {item.compareAtPriceCents && (
+                            <s className="price-was">
+                              {formatProductPrice(
+                                item.compareAtPriceCents,
+                                item.currency || 'USD',
+                              )}
+                            </s>
+                          )}
                         </strong>
                       ) : null}
                       {product && item.options?.length ? (
@@ -698,6 +711,13 @@ function ContentEditor({
     item?.priceCents ? decimalPrice(item.priceCents) : '',
   );
   const [currency, setCurrency] = useState(item?.currency || 'USD');
+  // A sale is one optional old price beside the amount the item charges. For a
+  // post the same switch edits the linked item, because that is the row whose
+  // price the post and the shop both print.
+  const [onSale, setOnSale] = useState(Boolean(item?.compareAtPriceCents));
+  const [oldPrice, setOldPrice] = useState(
+    item?.compareAtPriceCents ? decimalPrice(item.compareAtPriceCents) : '',
+  );
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '');
   // Availability is stored as the product's status: publishing an item keeps
   // "out of stock" visible to shoppers instead of hiding it.
@@ -762,6 +782,7 @@ function ContentEditor({
     keys: string[];
     options: OptionGroupDraft[];
     link: string;
+    sale: string;
   }) => JSON.stringify(values);
   const snapshot = snapshotOf({
     name,
@@ -779,6 +800,7 @@ function ContentEditor({
     keys,
     options,
     link: linkValue,
+    sale: `${onSale ? '1' : '0'}:${oldPrice}`,
   });
   const [baseline, setBaseline] = useState(snapshot);
   const seoSnapshot = JSON.stringify(seo);
@@ -823,6 +845,28 @@ function ContentEditor({
   });
   const linkProducts = linkSources.data?.products ?? [];
   const linkCategories = linkSources.data?.categories ?? [];
+  // The item behind the post's shoppable pill. Its price is what the post
+  // prints, so the sale switch below writes that row.
+  const linkedItem =
+    !product && linkValue.startsWith('p:')
+      ? linkProducts.find((entry) => `p:${entry.id}` === linkValue)
+      : undefined;
+  // Picking a different item loads its own sale; the effect is keyed on the
+  // item and its stored old price so an unrelated re-render never resets it.
+  const saleSource = linkedItem
+    ? `${linkedItem.id}:${linkedItem.compareAtPriceCents ?? ''}`
+    : '';
+  const saleHydrated = useRef('');
+  useEffect(() => {
+    if (saleHydrated.current === saleSource) return;
+    saleHydrated.current = saleSource;
+    setOnSale(Boolean(linkedItem?.compareAtPriceCents));
+    setOldPrice(
+      linkedItem?.compareAtPriceCents
+        ? decimalPrice(linkedItem.compareAtPriceCents)
+        : '',
+    );
+  }, [saleSource, linkedItem?.compareAtPriceCents]);
   // Other products owned by this account are the source for copied options.
   // One query covers every store, so a shop can reuse a size chart or color
   // list from a sibling shop without retyping it.
@@ -1101,6 +1145,30 @@ function ContentEditor({
       );
       return;
     }
+    // The sale is one optional old price. For a post it belongs to the linked
+    // item, which is the row whose price the post and the shop both print.
+    const saleTargetPrice = product
+      ? cents
+      : linkedItem && linkedItem.priceCents
+        ? Number(linkedItem.priceCents)
+        : null;
+    const compareAtCents =
+      onSale && saleTargetPrice !== null ? priceInput(oldPrice) : null;
+    if (onSale && saleTargetPrice !== null) {
+      const saleProblem =
+        compareAtCents === null
+          ? 'Use the old price, such as 20.00, to show the discount.'
+          : compareAtCents <= saleTargetPrice
+            ? 'The old price must be higher than the price shoppers pay.'
+            : '';
+      if (saleProblem) {
+        // The price field sits in the item form only, so a post reports the
+        // same refusal in the form's own error area.
+        if (product) setPriceError(saleProblem);
+        else setError(saleProblem);
+        return;
+      }
+    }
     const nextSeo = cleanSeo(seo);
     const nextSeoSnapshot = JSON.stringify(nextSeo);
     const seoChanged = nextSeoSnapshot !== seoBaseline;
@@ -1127,6 +1195,7 @@ function ContentEditor({
           ? {
               name: cleanName,
               priceCents: cents,
+              compareAtPriceCents: compareAtCents,
               currency,
               categoryId: categoryId || null,
               stockQuantity,
@@ -1156,6 +1225,38 @@ function ContentEditor({
         body,
         record ? 'PATCH' : 'POST',
       );
+      // A product owns its sale, so the saved row reports it. A post only links
+      // the item: the sale is written to that row after the post itself saved,
+      // and a refusal there must not look like a successful save.
+      let storedCompareAt: string | null = product
+        ? (saved.compareAtPriceCents ?? null)
+        : (linkedItem?.compareAtPriceCents ?? null);
+      if (!product && linkedItem) {
+        const saleChanged =
+          compareAtCents === null
+            ? Boolean(linkedItem.compareAtPriceCents)
+            : String(compareAtCents) !== linkedItem.compareAtPriceCents;
+        if (saleChanged) {
+          try {
+            await mutate(
+              `stores/${encodeURIComponent(store!.slug)}/products/${encodeURIComponent(linkedItem.slug)}`,
+              { compareAtPriceCents: compareAtCents },
+              'PATCH',
+            );
+            storedCompareAt =
+              compareAtCents === null ? null : String(compareAtCents);
+          } catch (saleError) {
+            setRecord(saved);
+            setError(
+              `The post was saved, but the sale was not. ${panelError(saleError)}`,
+            );
+            return;
+          }
+        }
+      }
+      const nextOldPrice = storedCompareAt ? decimalPrice(storedCompareAt) : '';
+      setOnSale(Boolean(storedCompareAt));
+      setOldPrice(nextOldPrice);
       const nextOptions = saved.options
         ? optionDrafts(saved.options)
         : shouldSaveOptions
@@ -1198,6 +1299,7 @@ function ContentEditor({
           keys,
           options: nextOptions,
           link: savedLink,
+          sale: `${storedCompareAt ? '1' : '0'}:${nextOldPrice}`,
         }),
       );
       // Search settings are a separate row; save them with the same action so
@@ -1229,6 +1331,23 @@ function ContentEditor({
       await client.invalidateQueries({
         queryKey: ['panel', session.user.id, 'product-option-sources'],
       });
+      // The shop, the item page and every post card print this price, so a
+      // saved sale must not wait for a cache entry to expire.
+      if (product || linkedItem) {
+        await client.invalidateQueries({
+          queryKey: ['panel', session.user.id, 'post-link-sources', store!.id],
+        });
+        await Promise.all(
+          [
+            ['storefront'],
+            ['storefront-product'],
+            ['storefront-menu'],
+            ['storefront-category-products'],
+            ['storefront-posts'],
+            ['explore'],
+          ].map((queryKey) => client.invalidateQueries({ queryKey })),
+        );
+      }
       if (seoFailed) return;
       if (stay)
         setNotice(
@@ -1266,6 +1385,51 @@ function ContentEditor({
       action === 'photos',
     );
   }
+  // One switch and one amount: the owner decides a price is a sale price, the
+  // shopfront prints the difference everywhere the price already appears.
+  const saleEditor = (
+    <fieldset className="panel-settings-fieldset">
+      <legend>
+        Sale <span>Optional</span>
+      </legend>
+      <label className="panel-toggle">
+        <input
+          type="checkbox"
+          checked={onSale}
+          onChange={(e) => {
+            setOnSale(e.target.checked);
+            setPriceError('');
+            setError('');
+          }}
+        />
+        On sale
+        <small>
+          {product
+            ? 'Shoppers see the old price crossed out and a discount badge.'
+            : 'Saved on the linked item, so this post and your shop show the same sale.'}
+        </small>
+      </label>
+      {onSale && (
+        <label>
+          Old price
+          <input
+            inputMode="decimal"
+            maxLength={18}
+            value={oldPrice}
+            onChange={(e) => {
+              setOldPrice(e.target.value);
+              setPriceError('');
+              setError('');
+            }}
+            placeholder="20.00"
+          />
+          <small>
+            What it cost before. It must be higher than the price shoppers pay.
+          </small>
+        </label>
+      )}
+    </fieldset>
+  );
   return (
     <Modal
       title={
@@ -1369,6 +1533,7 @@ function ContentEditor({
                 {priceError}
               </p>
             )}
+            {saleEditor}
             <label>
               Category
               <select
@@ -1695,6 +1860,7 @@ function ContentEditor({
             </small>
           </label>
         )}
+        {!product && linkedItem && saleEditor}
         {record ? (
           <details className="panel-optional">
             <summary>

@@ -125,6 +125,7 @@ export class UserProductSummaryDto {
   name!: string;
   description!: string | null;
   priceCents!: string;
+  compareAtPriceCents!: string | null;
   currency!: string;
   category!: string;
   categoryId!: string | null;
@@ -153,6 +154,7 @@ export class UserProductSummaryDto {
     dto.name = product.name;
     dto.description = product.description;
     dto.priceCents = product.priceCents;
+    dto.compareAtPriceCents = product.compareAtPriceCents ?? null;
     dto.currency = product.currency;
     dto.category = product.category;
     dto.categoryId = product.categoryId ?? null;

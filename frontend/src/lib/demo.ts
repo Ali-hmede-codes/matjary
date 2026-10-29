@@ -168,6 +168,10 @@ export const demoProducts: Product[] = examples.flatMap(
         name,
         description,
         priceCents: String(basePrice),
+        // One sample item carries a sale so the preview shows the crossed-out
+        // old price and the discount badge a live shop prints.
+        compareAtPriceCents:
+          storeIndex === 0 && index === 1 ? String(basePrice + 700) : null,
         currency: 'USD',
         // One sample item is sold out and one is low so the preview shows the
         // availability states shoppers see on a live menu.

@@ -10,7 +10,11 @@ import {
   X,
 } from 'lucide-react';
 import { assetUrl, type Story, type StoryGroup } from '../../lib/api';
-import { formatProductPrice, storePath } from '../../lib/storefront';
+import {
+  formatProductPrice,
+  linkCompareAtPriceCents,
+  storePath,
+} from '../../lib/storefront';
 import {
   STORY_MAX_VIDEO_MS,
   storyDisplayMs,
@@ -197,6 +201,10 @@ export function StoryViewer({
   if (!story || !group) return null;
   const link = story.link;
   const linkHref = link ? storyLinkPath(link, group.store.slug) : null;
+  // A story opens the same item page, so it prints the same sale.
+  const linkCompareAt = link
+    ? linkCompareAtPriceCents(link.compareAtPriceCents, link.priceCents)
+    : null;
 
   function beginHold() {
     holdStart.current = Date.now();
@@ -423,6 +431,11 @@ export function StoryViewer({
                   link.currency && (
                     <small>
                       {formatProductPrice(link.priceCents, link.currency)}
+                      {linkCompareAt && (
+                        <s className="price-was">
+                          {formatProductPrice(linkCompareAt, link.currency)}
+                        </s>
+                      )}
                     </small>
                   )}
               </span>

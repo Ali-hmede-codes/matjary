@@ -105,6 +105,8 @@ export function panelError(error: unknown): string {
       return 'That web address is already used by another product. Choose a different one.';
     if (error.code === 'PRODUCT_OPTIONS_INVALID')
       return 'Check the options: every option needs a name and at least one value, and names must be unique.';
+    if (error.code === 'PRODUCT_SALE_PRICE_INVALID')
+      return 'The old price must be higher than the price shoppers pay.';
     if (error.code === 'SECTION_DISABLED')
       return 'This section is turned off for the shop. Turn it back on in the shop settings first.';
     if (error.code === 'SECTION_NO_ROOM')

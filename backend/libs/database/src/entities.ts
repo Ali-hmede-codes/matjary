@@ -908,6 +908,17 @@ export class Product extends BaseEntity {
   @Column({ name: 'price_cents', type: 'bigint', unsigned: true })
   priceCents!: string;
 
+  // Optional old price while the item is on sale. Shoppers always pay
+  // priceCents; this column only feeds the crossed-out label and the badge, so
+  // carts, checkout and plan arithmetic keep reading one amount.
+  @Column({
+    name: 'compare_at_price_cents',
+    type: 'bigint',
+    unsigned: true,
+    nullable: true,
+  })
+  compareAtPriceCents!: string | null;
+
   @Column({ name: 'currency', type: 'varchar', length: 3, default: 'USD' })
   currency!: string;
 

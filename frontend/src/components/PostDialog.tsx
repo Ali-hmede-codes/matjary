@@ -20,6 +20,7 @@ import {
   formatProductPrice,
   lbpPriceLabel,
   lbpRateFor,
+  linkCompareAtPriceCents,
   storeCategoryPath,
   storePath,
   storeProductPath,
@@ -110,6 +111,11 @@ function PostSlide({
           lbpRateFor(lbpExchangeRate, post.store),
         )
       : null;
+  // The pill prints the same sale a shopper meets on the item page.
+  const linkCompareAt = linkCompareAtPriceCents(
+    post.link?.compareAtPriceCents,
+    post.link?.priceCents,
+  );
   const location = demo
     ? 'Sample showcase'
     : post.store?.location?.city || 'Independent store';
@@ -212,6 +218,14 @@ function PostSlide({
                         {formatProductPrice(
                           post.link.priceCents,
                           post.link.currency,
+                        )}
+                        {linkCompareAt && (
+                          <s className="price-was">
+                            {formatProductPrice(
+                              linkCompareAt,
+                              post.link.currency,
+                            )}
+                          </s>
                         )}
                         {linkLbp && (
                           <span className="price-lbp-inline">· {linkLbp}</span>

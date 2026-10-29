@@ -51,6 +51,9 @@ export function QuickComposer({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  // One optional amount turns the price into a sale: the old price is printed
+  // crossed out, so the quick path can advertise a discount without a detour.
+  const [oldPrice, setOldPrice] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [categoryId, setCategoryId] = useState('');
   const [keys, setKeys] = useState<string[]>([]);
@@ -101,6 +104,7 @@ export function QuickComposer({
   });
 
   const cents = product ? priceInput(price) : null;
+  const oldCents = product && oldPrice.trim() ? priceInput(oldPrice) : null;
   const readyForMedia = Boolean(title.trim()) && (!product || cents !== null);
 
   async function createDraft(): Promise<string> {
@@ -111,6 +115,13 @@ export function QuickComposer({
       priceCents = priceInput(price);
       if (priceCents === null) throw new Error('quick-price-required');
     }
+    const saleCents = product && oldPrice.trim() ? priceInput(oldPrice) : null;
+    // The draft is created before the final checks, so an unfinished old price
+    // is left out instead of refusing to save the file the owner picked.
+    const draftSaleCents =
+      saleCents !== null && priceCents !== null && saleCents > priceCents
+        ? saleCents
+        : null;
     const request = (async () => {
       const created = await mutate<DraftRecord>(
         product ? `stores/${encodeURIComponent(store.slug)}/products` : 'posts',
@@ -118,6 +129,7 @@ export function QuickComposer({
           ? {
               name: cleanTitle,
               priceCents,
+              compareAtPriceCents: draftSaleCents,
               currency,
               categoryId: categoryId || null,
               description: description.trim() || null,
@@ -168,6 +180,14 @@ export function QuickComposer({
       setError('Use a price such as 12.50, with at most two decimals.');
       return;
     }
+    if (product && oldPrice.trim() && oldCents === null) {
+      setError('Use the old price such as 20.00, or leave it blank.');
+      return;
+    }
+    if (oldCents !== null && cents !== null && oldCents <= cents) {
+      setError('The old price must be higher than the price shoppers pay.');
+      return;
+    }
     if (!keys.length) {
       setError(product ? 'Add at least one photo.' : 'Add a photo or video.');
       return;
@@ -190,6 +210,7 @@ export function QuickComposer({
           ? {
               name: cleanTitle,
               priceCents: cents,
+              compareAtPriceCents: oldCents,
               currency,
               categoryId: categoryId || null,
               description: description.trim() || null,
@@ -319,6 +340,24 @@ export function QuickComposer({
                 </select>
               </label>
             </div>
+          )}
+          {product && (
+            <label>
+              Old price <span className="panel-muted">Optional</span>
+              <input
+                inputMode="decimal"
+                maxLength={18}
+                value={oldPrice}
+                onChange={(event) => {
+                  setOldPrice(event.target.value);
+                  setError('');
+                }}
+                placeholder="e.g. 20.00"
+              />
+              <span className="panel-muted">
+                Add it to show the price crossed out with a sale badge.
+              </span>
+            </label>
           )}
           {product && Boolean(categories.data?.items.length) && (
             <label>

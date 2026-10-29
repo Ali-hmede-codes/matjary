@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Ban, Check, Minus, Package, Plus } from 'lucide-react';
 import { assetUrl, type Product, type SelectedProductOption } from '../lib/api';
 import {
+  formatProductPrice,
+  productCompareAtPriceCents,
+  productDiscountPercent,
   productHasOptions,
   productLbpPriceLabel,
   productPriceLabel,
@@ -223,7 +226,21 @@ function StockBadge({
   return null;
 }
 
-// One price block: the USD amount with the owner's optional LBP line under it.
+// A sale owns the free corner of the photo: the discount is the first thing a
+// shopper should notice, so it stays above the stock pill.
+function SaleBadge({ product }: { product: Product }) {
+  const percent = productDiscountPercent(product);
+  if (!percent) return null;
+  return (
+    <span className="shop-sale-label">
+      <span className="sr-only">On sale: </span>
+      {percent}% off
+    </span>
+  );
+}
+
+// One price block: the amount the shopper pays, the struck-through old price
+// during a sale, and the owner's optional LBP line under it.
 function PriceLabels({
   product,
   lbpRate,
@@ -234,9 +251,17 @@ function PriceLabels({
   className?: string;
 }) {
   const lbp = productLbpPriceLabel(product, lbpRate ?? null);
+  const compareAt = productCompareAtPriceCents(product);
   return (
     <span className={`price-stack${className ? ` ${className}` : ''}`}>
-      <strong>{productPriceLabel(product)}</strong>
+      <strong>
+        {productPriceLabel(product)}
+        {compareAt && (
+          <s className="price-was">
+            {formatProductPrice(compareAt, product.currency)}
+          </s>
+        )}
+      </strong>
       {lbp && <small className="price-lbp">{lbp}</small>}
     </span>
   );
@@ -267,6 +292,7 @@ function ListItem({
         aria-label={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
+        <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
       </a>
       <div className="shop-product-copy">
@@ -310,6 +336,7 @@ function PhotoCard({
         aria-label={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
+        <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
       </a>
       <div className="shop-product-copy">
@@ -437,6 +464,7 @@ function GalleryTile({
         aria-label={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
+        <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
       </a>
       <div className="shop-gallery-copy">
@@ -480,6 +508,7 @@ function FeaturedItem({
         aria-label={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} eager />
+        <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
       </a>
       <div className="shop-product-copy">

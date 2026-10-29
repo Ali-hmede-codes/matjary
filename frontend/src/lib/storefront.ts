@@ -430,6 +430,55 @@ export function productPriceLabel(
 }
 
 /**
+ * The struck-through "was" price of a product, or null when the item is not on
+ * sale. A compare-at amount that is not above what the shopper pays is ignored,
+ * so a stale or mistyped row can never advertise a fake discount.
+ */
+export function productCompareAtPriceCents(
+  product: Pick<Product, 'options' | 'priceCents'> & {
+    compareAtPriceCents?: string | null;
+  },
+): string | null {
+  return linkCompareAtPriceCents(
+    product.compareAtPriceCents,
+    productFromPriceCents(product),
+  );
+}
+
+/** Whole-percent discount for the sale badge; null when the item is not on sale. */
+export function productDiscountPercent(
+  product: Pick<Product, 'options' | 'priceCents'> & {
+    compareAtPriceCents?: string | null;
+  },
+): number | null {
+  const compare = productCompareAtPriceCents(product);
+  if (!compare) return null;
+  const current = BigInt(productFromPriceCents(product));
+  const old = BigInt(compare);
+  if (old <= current) return null;
+  // A one-cent difference still reads as a real discount, so the floor is 1%.
+  const percent = Number(((old - current) * 100n) / old);
+  return Math.min(99, Math.max(1, percent));
+}
+
+/** A linked post prints its product price, so its old price follows the same rule. */
+export function linkCompareAtPriceCents(
+  compareAtPriceCents: string | null | undefined,
+  priceCents: string | null | undefined,
+): string | null {
+  if (
+    !compareAtPriceCents ||
+    !priceCents ||
+    !/^\d+$/u.test(compareAtPriceCents) ||
+    !/^\d+$/u.test(priceCents)
+  )
+    return null;
+  return BigInt(compareAtPriceCents) > BigInt(priceCents)
+    ? compareAtPriceCents
+    : null;
+}
+
+/**
  * The platform rate to print under USD prices, or null when this shop keeps
  * them in dollars. Both the owner opt-in and the administrator's rate must be
  * present; anything else falls back to today's USD-only shopfront.

@@ -9,6 +9,7 @@ import {
   formatProductPrice,
   lbpPriceLabel,
   lbpRateFor,
+  linkCompareAtPriceCents,
   readOwnerStoreId,
   rememberOwnerStore,
   selectOwnerStore,
@@ -24,6 +25,8 @@ import {
   postPath,
   postSlugFromPath,
   productCategoryKey,
+  productCompareAtPriceCents,
+  productDiscountPercent,
   productLbpPriceLabel,
   productOptionSelection,
   productPriceLabel,
@@ -697,4 +700,63 @@ test('catalog prices say “from” the lowest value price', () => {
     }),
     'from $9.00',
   );
+});
+
+test('a sale prints its old price and a whole-percent badge', () => {
+  const product = { priceCents: '1500', currency: 'USD', options: null };
+  assert.equal(productCompareAtPriceCents(product), null);
+  assert.equal(productDiscountPercent(product), null);
+  assert.equal(
+    productCompareAtPriceCents({
+      ...product,
+      compareAtPriceCents: '2000',
+    }),
+    '2000',
+  );
+  assert.equal(
+    productDiscountPercent({ ...product, compareAtPriceCents: '2000' }),
+    25,
+  );
+  // A rounded discount is never 0%: shoppers must see a real badge.
+  assert.equal(
+    productDiscountPercent({ ...product, compareAtPriceCents: '1505' }),
+    1,
+  );
+  // A stale row cannot advertise a discount that is not one.
+  assert.equal(
+    productCompareAtPriceCents({
+      ...product,
+      compareAtPriceCents: '1500',
+    }),
+    null,
+  );
+  assert.equal(
+    productCompareAtPriceCents({
+      ...product,
+      compareAtPriceCents: 'not-a-price',
+    }),
+    null,
+  );
+  // The badge follows the lowest reachable price, which is what the label shows.
+  assert.equal(
+    productDiscountPercent({
+      priceCents: '0',
+      compareAtPriceCents: '2000',
+      options: [
+        {
+          name: 'Size',
+          values: [{ label: 'Small', priceCents: '1000' }],
+        },
+      ],
+    }),
+    50,
+  );
+});
+
+test('a linked post only prints an old price above the price it shows', () => {
+  assert.equal(linkCompareAtPriceCents('2000', '1500'), '2000');
+  assert.equal(linkCompareAtPriceCents('2000', '2000'), null);
+  assert.equal(linkCompareAtPriceCents(null, '1500'), null);
+  assert.equal(linkCompareAtPriceCents('2000', null), null);
+  assert.equal(linkCompareAtPriceCents('free', '1500'), null);
 });

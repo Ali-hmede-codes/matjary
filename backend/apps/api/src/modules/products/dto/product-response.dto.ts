@@ -13,6 +13,8 @@ export class ProductResponseDto {
   name!: string;
   description!: string | null;
   priceCents!: string; // BIGINT stays as string
+  // Old price while the item is on sale; null when there is no sale.
+  compareAtPriceCents!: string | null;
   currency!: string;
   category!: ProductCategory;
   categoryId!: string | null;
@@ -46,6 +48,7 @@ export function toProductResponseDto(
     name: product.name,
     description: product.description,
     priceCents: product.priceCents,
+    compareAtPriceCents: product.compareAtPriceCents ?? null,
     currency: product.currency,
     category: product.category,
     categoryId: product.categoryId ?? null,

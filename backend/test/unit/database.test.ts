@@ -334,6 +334,11 @@ test('entity metadata has private hashes, unique keys, and restrictive foreign k
     product.findColumnWithPropertyName('priceCents')?.type,
     'bigint',
   );
+  // The optional old price is the same signed-integer width as the price it
+  // replaces, and stays nullable so every existing product needs no backfill.
+  const compareAt = product.findColumnWithPropertyName('compareAtPriceCents');
+  assert.equal(compareAt?.type, 'bigint');
+  assert.equal(compareAt?.isNullable, true);
   // Cart specific checks
   const cart = source.getMetadata(Cart);
   assert.ok(

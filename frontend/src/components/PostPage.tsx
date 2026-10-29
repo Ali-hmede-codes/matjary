@@ -15,6 +15,7 @@ import {
   formatProductPrice,
   lbpPriceLabel,
   lbpRateFor,
+  linkCompareAtPriceCents,
   postPath,
   storeCategoryPath,
   storePath,
@@ -149,6 +150,11 @@ export function PostPage({
           lbpRateFor(settings.lbpExchangeRate, shop),
         )
       : null;
+  // The linked item's sale follows the post onto its own page.
+  const linkCompareAt = linkCompareAtPriceCents(
+    link?.compareAtPriceCents,
+    link?.priceCents,
+  );
   return (
     <div className="app storefront storefront-detail post-page">
       <header className="post-page-bar">
@@ -259,6 +265,11 @@ export function PostPage({
                     link.currency && (
                       <small>
                         {formatProductPrice(link.priceCents, link.currency)}
+                        {linkCompareAt && (
+                          <s className="price-was">
+                            {formatProductPrice(linkCompareAt, link.currency)}
+                          </s>
+                        )}
                         {linkLbp && (
                           <span className="price-lbp-inline">· {linkLbp}</span>
                         )}

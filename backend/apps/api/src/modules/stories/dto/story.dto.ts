@@ -31,6 +31,8 @@ export interface StoryLinkDto {
   slug: string | null;
   priceCents: string | null;
   currency: string | null;
+  // Old price while the linked item is on sale.
+  compareAtPriceCents: string | null;
 }
 
 export interface StoryMediaDto {

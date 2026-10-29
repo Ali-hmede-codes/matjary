@@ -723,6 +723,7 @@ export class UserDashboardService {
           'p.name',
           'p.description',
           'p.priceCents',
+          'p.compareAtPriceCents',
           'p.currency',
           'p.category',
           'p.categoryId',

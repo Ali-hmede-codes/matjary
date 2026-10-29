@@ -33,6 +33,7 @@ import {
   PRODUCT_SLUG_TAKEN_CODE,
   assertStoreAccess,
   storeAccess,
+  normalizeCompareAtPriceCents,
 } from '@app/database';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -241,6 +242,10 @@ export class ProductsService {
             name: dto.name,
             description: dto.description ?? null,
             priceCents: dto.priceCents.toString(),
+            compareAtPriceCents: normalizeCompareAtPriceCents(
+              dto.compareAtPriceCents,
+              dto.priceCents,
+            ),
             currency: dto.currency ?? 'USD',
             category: dto.category ?? ProductCategory.OTHER,
             categoryId: category?.id ?? null,
@@ -342,6 +347,19 @@ export class ProductsService {
       if (dto.description !== undefined) product.description = dto.description;
       if (dto.priceCents !== undefined)
         product.priceCents = dto.priceCents.toString();
+      // The old price is re-checked whenever it or the price moves: lowering the
+      // price under an existing sale would otherwise advertise a fake discount.
+      if (dto.compareAtPriceCents !== undefined) {
+        product.compareAtPriceCents = normalizeCompareAtPriceCents(
+          dto.compareAtPriceCents,
+          dto.priceCents ?? product.priceCents,
+        );
+      } else if (dto.priceCents !== undefined && product.compareAtPriceCents) {
+        product.compareAtPriceCents = normalizeCompareAtPriceCents(
+          product.compareAtPriceCents,
+          dto.priceCents,
+        );
+      }
       if (dto.currency !== undefined) product.currency = dto.currency;
       if (dto.category !== undefined) product.category = dto.category;
       if (dto.status !== undefined) product.status = dto.status;

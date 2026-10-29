@@ -19,6 +19,8 @@ import {
   lbpRateFor,
   menuCategoryGroups,
   productCategoryKey,
+  productCompareAtPriceCents,
+  productDiscountPercent,
   productFromPriceCents,
   productOptionSelection,
   storeCategoryPath,
@@ -226,6 +228,14 @@ export function StoreProductPage({
     product.currency,
     lbpRate,
   );
+  // A value with its own price replaces the base amount, and the old price
+  // belongs to that base item only, so it steps aside for the chosen value.
+  const compareAtPriceCents = chosenPriceCents
+    ? null
+    : productCompareAtPriceCents(product);
+  const discountPercent = compareAtPriceCents
+    ? productDiscountPercent(product)
+    : null;
   return (
     <StoreDetailShell
       store={store}
@@ -289,6 +299,14 @@ export function StoreProductPage({
           <h1>{product.name}</h1>
           <p className="shop-product-detail-price">
             {formatProductPrice(displayPriceCents, product.currency)}
+            {compareAtPriceCents && (
+              <s className="price-was">
+                {formatProductPrice(compareAtPriceCents, product.currency)}
+              </s>
+            )}
+            {discountPercent && (
+              <span className="shop-detail-sale">{discountPercent}% off</span>
+            )}
             {displayPriceLbp && (
               <small className="price-lbp">{displayPriceLbp}</small>
             )}

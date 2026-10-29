@@ -411,6 +411,7 @@ export class StoriesService {
           slug: product.slug,
           priceCents: product.priceCents,
           currency: product.currency,
+          compareAtPriceCents: product.compareAtPriceCents ?? null,
         };
       } else if (category && category.storeId === story.storeId) {
         link = {
@@ -419,6 +420,7 @@ export class StoriesService {
           slug: null,
           priceCents: null,
           currency: null,
+          compareAtPriceCents: null,
         };
       }
       result.set(story.id, {

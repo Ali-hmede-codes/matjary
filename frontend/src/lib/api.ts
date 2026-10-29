@@ -114,6 +114,8 @@ export interface Product {
   name: string;
   description: string | null;
   priceCents: string;
+  // Old price while the item is on sale; null when there is no sale.
+  compareAtPriceCents?: string | null;
   currency: string;
   status?: ProductStatus;
   category: string;
@@ -176,6 +178,8 @@ export interface PostLink {
   slug: string | null;
   priceCents: string | null;
   currency: string | null;
+  // Old price while the linked item is on sale.
+  compareAtPriceCents?: string | null;
 }
 
 export interface Post {
@@ -445,6 +449,8 @@ export interface StoryLink {
   slug: string | null;
   priceCents: string | null;
   currency: string | null;
+  // Old price while the linked item is on sale.
+  compareAtPriceCents?: string | null;
 }
 
 export interface Story {

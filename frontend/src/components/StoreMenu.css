@@ -566,10 +566,28 @@
   overflow-wrap: anywhere;
 }
 .shop-product-detail-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.6px;
   font-variant-numeric: tabular-nums;
+}
+/* The discount rides beside the amount it explains, never instead of it. */
+.shop-detail-sale {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #c2452d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+.shop-product-detail-price .price-lbp {
+  flex-basis: 100%;
 }
 .shop-product-detail-description {
   margin-top: 16px;
@@ -741,6 +759,10 @@
   height: 34px;
   border-radius: 10px;
   box-shadow: 0 0 0 1px #ffffff2e;
+}
+.shop-detail-identity .store-avatar,
+.shop-detail-identity .store-verified-badge {
+  flex: none;
 }
 .shop-detail-identity strong {
   overflow: hidden;
@@ -1018,8 +1040,19 @@
     gap: 10px;
   }
   .shop-detail-identity {
+    flex: 1 1 auto;
     gap: 8px;
     font-size: 13px;
+  }
+  /* The bar names the shop on every page, so a long name wraps instead of
+     ending in an ellipsis on a phone. */
+  .shop-detail-identity strong {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.3;
   }
   .shop-detail-main {
     padding: 16px 16px 52px;
@@ -1180,8 +1213,10 @@
   border-color: #fff;
   color: #17231e;
 }
-/* The stock pill belongs to the photo, so it must stay above the overlay. */
-.shop-gallery-tile .shop-stock-label {
+/* The stock pill and the sale badge belong to the photo, so they must stay
+   above the copy overlay. */
+.shop-gallery-tile .shop-stock-label,
+.shop-gallery-tile .shop-sale-label {
   z-index: 3;
 }
 .shop-gallery-copy .shop-qty-stepper button {

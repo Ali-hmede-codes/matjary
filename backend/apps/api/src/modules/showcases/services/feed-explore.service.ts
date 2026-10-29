@@ -103,6 +103,8 @@ export interface FeedPostLink {
   slug: string | null;
   priceCents: string | null;
   currency: string | null;
+  // Old price while the linked item is on sale; the card prints it crossed out.
+  compareAtPriceCents: string | null;
 }
 
 export interface FeedMediaItem {
@@ -1125,6 +1127,7 @@ export class FeedExploreService {
           slug: linkedProduct.slug,
           priceCents: linkedProduct.priceCents,
           currency: linkedProduct.currency,
+          compareAtPriceCents: linkedProduct.compareAtPriceCents ?? null,
         };
       } else if (
         linkedCategory &&
@@ -1136,6 +1139,7 @@ export class FeedExploreService {
           slug: null,
           priceCents: null,
           currency: null,
+          compareAtPriceCents: null,
         };
       }
 

@@ -40,6 +40,14 @@ export class UpdateProductDto {
   @Max(Number.MAX_SAFE_INTEGER)
   priceCents?: number;
 
+  // Old price shown crossed out while the item is on sale. Null ends the sale;
+  // the API refuses a value that is not above the item's current price.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  compareAtPriceCents?: number | null;
+
   @IsOptional()
   @IsString()
   @Length(3, 3)

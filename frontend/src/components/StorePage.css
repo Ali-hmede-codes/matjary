@@ -324,6 +324,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* A tight line box clips descenders once overflow is hidden, so this one
+     line keeps the font's own height. */
+  line-height: normal;
 }
 .shop-description {
   max-width: 680px;
@@ -619,6 +622,24 @@
 .shop-stock-label {
   bottom: 12px;
   right: 12px;
+}
+/* The sale owns the top-right corner of the photo: the discount is the first
+   thing a shopper should notice, and stock keeps the bottom edge. */
+.shop-sale-label {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #c2452d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px rgb(23 35 30 / 18%);
 }
 .shop-product-image img {
   width: 100%;
@@ -1088,13 +1109,26 @@
   .shop-intro {
     padding-top: 0;
   }
+  /* Phones hand the whole row to the name: a long shop name wraps onto a
+     second line instead of ending in an ellipsis beside the category and the
+     open pill, which move down together. */
   .shop-title-row {
+    flex-wrap: wrap;
     gap: 6px 8px;
   }
   .shop-intro h1 {
+    flex: 1 0 100%;
     gap: 4px;
     font-size: 22px;
     letter-spacing: -0.7px;
+  }
+  .shop-intro h1 > span:first-child {
+    white-space: normal;
+    /* Wrapped text needs no ellipsis, and dropping the clip keeps tall glyphs
+       whole on every phone font. */
+    overflow: visible;
+    /* A single very long word still breaks instead of being clipped. */
+    overflow-wrap: anywhere;
   }
   .shop-category {
     padding: 4px 8px;
@@ -1177,6 +1211,12 @@
   .shop-stock-label {
     max-width: calc(100% - 16px);
     padding: 5px 8px;
+    font-size: 10px;
+  }
+  .shop-sale-label {
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
     font-size: 10px;
   }
   .shop-product-category {

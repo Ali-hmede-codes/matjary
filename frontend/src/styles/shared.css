@@ -111,6 +111,19 @@
   font-weight: 500;
   opacity: 0.8;
 }
+/* Sale: the old price sits beside the amount the shopper pays, struck through
+   and quieter. It inherits the color for the same reason the LBP line does. */
+.price-was {
+  margin-left: 6px;
+  color: inherit;
+  font-size: 0.72em;
+  font-weight: 550;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-decoration-thickness: 1.5px;
+  white-space: nowrap;
+  opacity: 0.65;
+}
 
 /* A shop name that also carries its verification badge keeps one baseline. */
 .post-store-name,
