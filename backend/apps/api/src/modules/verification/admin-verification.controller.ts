@@ -72,6 +72,17 @@ export class AdminVerificationController {
     return this.verification.adminExtend(actor, id, dto.reason);
   }
 
+  // Special shops (partners, long-standing businesses) can be verified with no
+  // end date; only a revoke removes that badge.
+  @Post('stores/:id/unlimited')
+  unlimited(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VerificationReasonDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.verification.adminGrantUnlimited(actor, id, dto.reason);
+  }
+
   @Post('stores/:id/revoke')
   revoke(
     @Param('id', ParseUUIDPipe) id: string,

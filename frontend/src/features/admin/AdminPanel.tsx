@@ -740,7 +740,7 @@ function AdminVerification({ id }: { id: string }) {
       <PageTitle
         eyebrow="ADMINISTRATION"
         title="Verification"
-        description="Review identity details, approve a month, and keep trusted shops ticking. Each approval covers 30 days; a lapsed badge stays visible for 5 grace days."
+        description="Review identity details, approve a month, and keep trusted shops ticking. Each approval covers 30 days; a lapsed badge stays visible for 5 grace days. Special shops can be verified with no end date."
       />
       <div className="panel-stats">
         <div className="panel-stat">
@@ -900,25 +900,46 @@ function AdminVerification({ id }: { id: string }) {
                   <span className="panel-pill muted">
                     Follows the subscription end
                   </span>
+                ) : store.expiresAt ? (
+                  <>
+                    <button
+                      className="panel-primary"
+                      onClick={() =>
+                        setAction({
+                          path: `admin/verification/stores/${store.id}/extend`,
+                          title: `Give ${store.name} another month`,
+                          description:
+                            'The new month starts where the current one ends, or today if it already lapsed. Any pending renewal from this shop is approved too.',
+                          reasons: [
+                            'Monthly renewal paid',
+                            'Payment received by transfer',
+                            'Administrator adjustment',
+                          ],
+                        })
+                      }
+                    >
+                      +1 month
+                    </button>
+                    <button
+                      onClick={() =>
+                        setAction({
+                          path: `admin/verification/stores/${store.id}/unlimited`,
+                          title: `Give ${store.name} unlimited verification`,
+                          description:
+                            'The blue tick stays with no end date until an administrator revokes it. It is not tied to the plan or subscription.',
+                          reasons: [
+                            'Lifetime partner shop',
+                            'Special arrangement',
+                            'Administrator adjustment',
+                          ],
+                        })
+                      }
+                    >
+                      Forever
+                    </button>
+                  </>
                 ) : (
-                  <button
-                    className="panel-primary"
-                    onClick={() =>
-                      setAction({
-                        path: `admin/verification/stores/${store.id}/extend`,
-                        title: `Give ${store.name} another month`,
-                        description:
-                          'The new month starts where the current one ends, or today if it already lapsed. Any pending renewal from this shop is approved too.',
-                        reasons: [
-                          'Monthly renewal paid',
-                          'Payment received by transfer',
-                          'Administrator adjustment',
-                        ],
-                      })
-                    }
-                  >
-                    +1 month
-                  </button>
+                  <span className="panel-pill muted">Unlimited</span>
                 )}
                 <button
                   onClick={() =>
@@ -1142,7 +1163,7 @@ function Detail({
                     Open storefront
                   </Link>
                 )}
-                {isStoreVerified(data) && (
+                {isStoreVerified(data) && data.verificationBadgeExpiresAt && (
                   <button
                     onClick={() =>
                       setAction({
@@ -1159,6 +1180,27 @@ function Detail({
                     }
                   >
                     +1 month
+                  </button>
+                )}
+                {!(
+                  isStoreVerified(data) && !data.verificationBadgeExpiresAt
+                ) && (
+                  <button
+                    onClick={() =>
+                      setAction({
+                        path: `admin/verification/stores/${data.id}/unlimited`,
+                        title: `Give ${recordName(data)} unlimited verification`,
+                        description:
+                          'The blue tick stays with no end date until an administrator revokes it. It is not tied to the plan or subscription.',
+                        reasons: [
+                          'Lifetime partner shop',
+                          'Special arrangement',
+                          'Administrator adjustment',
+                        ],
+                      })
+                    }
+                  >
+                    {isStoreVerified(data) ? 'Make unlimited' : 'Grant forever'}
                   </button>
                 )}
                 <button

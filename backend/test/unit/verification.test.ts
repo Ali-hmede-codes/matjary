@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   VERIFICATION_GRACE_DAYS,
   VERIFICATION_PERIOD_DAYS,
@@ -10,7 +11,9 @@ import {
   verificationGraceEndsAt,
   verificationPricing,
 } from '../../libs/database/src/verification-policy';
+import { Store } from '../../libs/database/src/entities';
 import { normalizeLebanesePhone } from '../../apps/api/src/modules/verification/verification-phone';
+import { VerificationService } from '../../apps/api/src/modules/verification/verification.service';
 
 const now = new Date('2026-10-29T12:00:00Z');
 const day = 86_400_000;
@@ -227,5 +230,69 @@ test('a bundled badge ends with the subscription that pays for it', () => {
       now,
     ),
     null,
+  );
+});
+
+test('an administrator can give a special shop unlimited verification', async () => {
+  const store = Object.assign(new Store(), {
+    id: 'shop',
+    ownerId: 'owner',
+    hasVerificationBadge: false,
+    verificationBadgeExpiresAt: new Date('2026-11-20T00:00:00Z'),
+    verificationIncludedInPlan: true,
+  });
+  const audits: { action?: string }[] = [];
+  const manager = {
+    findOneBy: async () => ({
+      id: 'admin',
+      email: 'admin@example.test',
+      suspendedAt: null,
+    }),
+    findOne: async () => store,
+    find: async () => [],
+    save: async () => undefined,
+    insert: async (_target: unknown, row: { action?: string }) => {
+      audits.push(row);
+    },
+  };
+  const service = new VerificationService(
+    {
+      manager,
+      transaction: async (work: (value: unknown) => Promise<unknown>) =>
+        work(manager),
+    } as never,
+    { get: () => 'admin@example.test' } as never,
+  );
+  await service.adminGrantUnlimited(
+    { id: 'admin', requestId: 'request' },
+    'shop',
+    'Lifetime partner shop',
+  );
+  assert.equal(store.hasVerificationBadge, true);
+  assert.equal(store.verificationBadgeExpiresAt, null);
+  assert.equal(store.verificationIncludedInPlan, false);
+  assert.equal(store.verificationBadgeGrantedBy, 'admin');
+  assert.equal(audits.at(-1)?.action, 'verification.unlimited');
+  // A lifetime badge has no month to extend and nothing for the owner to renew.
+  await assert.rejects(
+    service.adminExtend(
+      { id: 'admin', requestId: 'request' },
+      'shop',
+      'Administrator adjustment',
+    ),
+    (error: any) =>
+      error instanceof BadRequestException &&
+      (error.getResponse() as { code?: string }).code ===
+        'VERIFICATION_UNLIMITED',
+  );
+  await assert.rejects(
+    service.submit('shop', 'owner', {
+      applicantName: 'Owner',
+      phone: '03 123 456',
+    }),
+    (error: any) =>
+      error instanceof ConflictException &&
+      (error.getResponse() as { code?: string }).code ===
+        'VERIFICATION_UNLIMITED',
   );
 });

@@ -40,6 +40,7 @@ const PHONE_INVALID_CODE = 'VERIFICATION_PHONE_INVALID';
 const NOT_AVAILABLE_CODE = 'VERIFICATION_NOT_AVAILABLE';
 const PLAN_INACTIVE_CODE = 'VERIFICATION_PLAN_INACTIVE';
 const PLAN_SLOT_LOST_CODE = 'VERIFICATION_PLAN_SLOT_LOST';
+const UNLIMITED_CODE = 'VERIFICATION_UNLIMITED';
 
 @Injectable()
 export class VerificationService {
@@ -143,6 +144,17 @@ export class VerificationService {
         });
         if (!store) throw new NotFoundException('Store not found');
         this.assertOwner(store, userId);
+        // A lifetime grant is not a monthly badge, so there is nothing to
+        // renew; only an administrator can change it.
+        if (
+          store.hasVerificationBadge &&
+          store.verificationBadgeExpiresAt === null &&
+          !store.verificationIncludedInPlan
+        )
+          throw new ConflictException({
+            code: UNLIMITED_CODE,
+            message: 'This shop already has unlimited verification.',
+          });
         const [limits, includedBadges] = await Promise.all([
           effectiveLimits(manager, store.ownerId),
           this.includedBadgeCount(manager, store.ownerId),
@@ -460,6 +472,17 @@ export class VerificationService {
             message: 'This store has no verification badge to extend',
           });
         const now = new Date();
+        // A lifetime grant has no month to extend; the admin revokes it first
+        // if the shop should go back to a monthly badge.
+        if (
+          !store.verificationIncludedInPlan &&
+          store.verificationBadgeExpiresAt === null
+        )
+          throw new BadRequestException({
+            code: UNLIMITED_CODE,
+            message:
+              'This badge has no end date. Revoke it first to make it a monthly badge.',
+          });
         // Bundled badges follow the subscription, so "+1 month" re-reads the
         // plan end instead of stacking free months. Add-ons stack as before.
         let expiresAt: Date | null;
@@ -543,6 +566,61 @@ export class VerificationService {
           'stores',
           storeId,
           'verification.revoke',
+          [
+            'hasVerificationBadge',
+            'verificationBadgeExpiresAt',
+            'verificationIncludedInPlan',
+          ],
+        );
+        return { success: true, storeId };
+      });
+    } catch (error) {
+      this.sanitize(error);
+    }
+  }
+
+  /**
+   * The administrator's "special shop" action: verification with no end date.
+   * It is deliberately not a plan-bundled slot and carries no monthly price, so
+   * subscription changes never shorten it; only an explicit revoke removes it.
+   */
+  async adminGrantUnlimited(
+    actor: AdminActor,
+    storeId: string,
+    reason: string,
+  ) {
+    const audited = this.actorWithReason(actor, reason);
+    try {
+      return await this.database.transaction(async (manager) => {
+        await this.requireAdmin(manager, audited);
+        const store = await manager.findOne(Store, {
+          where: { id: storeId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!store) throw new NotFoundException('Store not found');
+        const now = new Date();
+        store.hasVerificationBadge = true;
+        store.verificationBadgeGrantedAt = now;
+        store.verificationBadgeGrantedBy = audited.id;
+        store.verificationBadgeExpiresAt = null;
+        store.verificationIncludedInPlan = false;
+        await manager.save(store);
+        // The shop is verified for good, so any waiting application is settled
+        // with an open-ended period instead of a paid month.
+        await this.settlePendingRequests(
+          manager,
+          storeId,
+          audited,
+          now,
+          null,
+          now,
+        );
+        await appendAdminAudit(
+          manager,
+          audited,
+          'stores',
+          storeId,
+          'verification.unlimited',
           [
             'hasVerificationBadge',
             'verificationBadgeExpiresAt',

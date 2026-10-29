@@ -150,6 +150,10 @@ export function OwnerVerification() {
   const pending = data.pendingRequest;
   const latest = data.latestRequest;
   const price = Number(data.eligibility.priceCents);
+  // An administrator can grant a badge with no end date to special shops; it
+  // is not a plan slot and needs no monthly renewal.
+  const lifetime =
+    badge.state === 'active' && !badge.expiresAt && !badge.included;
   return (
     <>
       <PageTitle
@@ -158,7 +162,7 @@ export function OwnerVerification() {
         description="The blue tick tells shoppers this business is real and reachable. Verification is reviewed by the Matjary team and renewed month by month."
         action={
           <>
-            {!data.eligibility.included && price > 0 && (
+            {!lifetime && !data.eligibility.included && price > 0 && (
               <span className="panel-pill">
                 {formatProductPrice(
                   data.eligibility.priceCents,
@@ -227,21 +231,25 @@ export function OwnerVerification() {
           <h2>
             {pending
               ? 'Your application is with the team.'
-              : badge.visible
-                ? 'Keep your tick for another month.'
-                : 'Get your shop verified.'}
+              : lifetime
+                ? 'Your shop is verified without an end date.'
+                : badge.visible
+                  ? 'Keep your tick for another month.'
+                  : 'Get your shop verified.'}
           </h2>
           <p>
-            {data.eligibility.included
-              ? `Verification is included in your ${data.plan.name ?? 'current'} plan. The badge runs as long as your subscription and ends with it.`
-              : price > 0
-                ? data.plan.maxBadges != null &&
-                  data.plan.maxBadges > 0 &&
-                  data.plan.activeBadges >= data.plan.maxBadges
-                  ? `Your plan's included badge is already used by another shop, so this shop is ${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month, billed separately. An administrator will call you to arrange payment before the badge is activated.`
-                  : `${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month. An administrator will call you to arrange payment before the badge is activated.`
-                : (data.eligibility.reason ??
-                  'Verification is not available on your current plan.')}
+            {lifetime
+              ? 'The Matjary team granted this badge with no end date. It stays on until an administrator removes it.'
+              : data.eligibility.included
+                ? `Verification is included in your ${data.plan.name ?? 'current'} plan. The badge runs as long as your subscription and ends with it.`
+                : price > 0
+                  ? data.plan.maxBadges != null &&
+                    data.plan.maxBadges > 0 &&
+                    data.plan.activeBadges >= data.plan.maxBadges
+                    ? `Your plan's included badge is already used by another shop, so this shop is ${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month, billed separately. An administrator will call you to arrange payment before the badge is activated.`
+                    : `${formatProductPrice(data.eligibility.priceCents, data.eligibility.currency)} per month. An administrator will call you to arrange payment before the badge is activated.`
+                  : (data.eligibility.reason ??
+                    'Verification is not available on your current plan.')}
           </p>
           <small className="panel-muted">
             Included badges in use: {data.plan.activeBadges}
@@ -290,6 +298,10 @@ export function OwnerVerification() {
                 {busy ? 'Withdrawing…' : 'Withdraw request'}
               </button>
             </>
+          ) : lifetime ? (
+            <span className="panel-muted">
+              No renewal is needed while this badge is active.
+            </span>
           ) : data.eligibility.available ? (
             <a className="panel-secondary" href="#verification-form">
               Send your details <ArrowUpRight size={16} />
@@ -344,7 +356,7 @@ export function OwnerVerification() {
           )}
         </section>
       </div>
-      {!pending && data.eligibility.available && (
+      {!pending && !lifetime && data.eligibility.available && (
         <section className="panel-card" id="verification-form">
           <h2>
             {badge.state === 'active' || badge.state === 'grace'
