@@ -85,6 +85,17 @@ export const catalogLayouts = [
   'gallery',
   'featured',
   'shelves',
+  'overlay',
+  'tiles',
+  'bento',
+  'stagger',
+  'sticker',
+  'circles',
+  'rail',
+  'ribbon',
+  'zigzag',
+  'index',
+  'rows',
 ] as const;
 export type CatalogLayout = (typeof catalogLayouts)[number];
 
@@ -357,6 +368,50 @@ export const catalogLayoutInfo: Record<
   shelves: {
     label: 'Sideways rail',
     hint: '1:1 card boxes that scroll left to right.',
+  },
+  overlay: {
+    label: 'Photo overlay',
+    hint: 'Full 4:3 photos with a glass name and price.',
+  },
+  tiles: {
+    label: 'Photo tiles',
+    hint: '4:3 photos with a quiet caption below.',
+  },
+  bento: {
+    label: 'Bento',
+    hint: '4:3 photos in a mixed grid with one wide tile.',
+  },
+  stagger: {
+    label: 'Staggered',
+    hint: '4:3 photos on an offset, editorial rhythm.',
+  },
+  sticker: {
+    label: 'Sticker',
+    hint: 'A caption card overlapping each 4:3 photo.',
+  },
+  circles: {
+    label: 'Circles',
+    hint: 'Round photos with the name underneath.',
+  },
+  rail: {
+    label: 'Photo rail',
+    hint: 'A 4:3 strip that snaps sideways.',
+  },
+  ribbon: {
+    label: 'Ribbon',
+    hint: 'A 4:3 strip that drifts on its own.',
+  },
+  zigzag: {
+    label: 'Zigzag',
+    hint: 'Photo and text rows that alternate sides.',
+  },
+  index: {
+    label: 'Numbered',
+    hint: 'An editorial list with big index numbers.',
+  },
+  rows: {
+    label: 'Photo menu',
+    hint: 'Thin rows with a small 4:3 photo and dotted prices.',
   },
 };
 

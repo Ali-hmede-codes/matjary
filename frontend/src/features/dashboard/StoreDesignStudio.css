@@ -885,7 +885,29 @@
 .design-preview-items.is-gallery b,
 .design-preview-items.is-gallery span,
 .design-preview-items.is-featured b,
-.design-preview-items.is-featured span {
+.design-preview-items.is-featured span,
+.design-preview-items.is-overlay b,
+.design-preview-items.is-overlay span,
+.design-preview-items.is-tiles b,
+.design-preview-items.is-tiles span,
+.design-preview-items.is-bento b,
+.design-preview-items.is-bento span,
+.design-preview-items.is-stagger b,
+.design-preview-items.is-stagger span,
+.design-preview-items.is-sticker b,
+.design-preview-items.is-sticker span,
+.design-preview-items.is-circles b,
+.design-preview-items.is-circles span,
+.design-preview-items.is-rail b,
+.design-preview-items.is-rail span,
+.design-preview-items.is-ribbon b,
+.design-preview-items.is-ribbon span,
+.design-preview-items.is-zigzag b,
+.design-preview-items.is-zigzag span,
+.design-preview-items.is-index b,
+.design-preview-items.is-index span,
+.design-preview-items.is-rows b,
+.design-preview-items.is-rows span {
   display: none;
 }
 .design-preview-items.is-shelves {
@@ -903,6 +925,109 @@
 .design-preview-items.is-shelves b,
 .design-preview-items.is-shelves span {
   display: none;
+}
+/* Photo overlay: 4:3 photos with a slim glass caption drawn on the photo. */
+.design-preview-items.is-overlay {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.design-preview-items.is-overlay i {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 4px);
+  background: color-mix(in srgb, var(--brand-ink) 22%, var(--brand-surface));
+}
+.design-preview-items.is-overlay i::after {
+  content: '';
+  position: absolute;
+  inset-inline: 4px;
+  bottom: 4px;
+  height: 7px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--brand-surface) 82%, transparent);
+}
+/* Photo tiles, Bento, Staggered, Sticker and Circles: 4:3 photo boxes. */
+.design-preview-items.is-tiles,
+.design-preview-items.is-bento,
+.design-preview-items.is-stagger,
+.design-preview-items.is-sticker,
+.design-preview-items.is-circles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.design-preview-items.is-tiles i,
+.design-preview-items.is-bento i,
+.design-preview-items.is-stagger i,
+.design-preview-items.is-sticker i,
+.design-preview-items.is-circles i {
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 4px);
+  background: color-mix(in srgb, var(--brand-ink) 20%, var(--brand-surface));
+}
+.design-preview-items.is-bento i:first-child {
+  grid-column: span 2;
+  aspect-ratio: 8 / 3;
+}
+.design-preview-items.is-stagger i:nth-child(3n + 2) {
+  margin-top: 5px;
+}
+.design-preview-items.is-sticker i {
+  position: relative;
+}
+.design-preview-items.is-sticker i::after {
+  content: '';
+  position: absolute;
+  inset-inline: 4px;
+  bottom: 3px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--brand-surface);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--brand-ink) 22%, transparent);
+}
+.design-preview-items.is-circles i {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+/* Photo rail and Ribbon: a sideways 4:3 strip. */
+.design-preview-items.is-rail,
+.design-preview-items.is-ribbon {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+.design-preview-items.is-rail i,
+.design-preview-items.is-ribbon i {
+  flex: 0 0 34%;
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 4px);
+  background: color-mix(in srgb, var(--brand-ink) 20%, var(--brand-surface));
+}
+/* Zigzag, Numbered and Photo menu: line rows. */
+.design-preview-items.is-zigzag,
+.design-preview-items.is-index,
+.design-preview-items.is-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+.design-preview-items.is-zigzag i,
+.design-preview-items.is-index i,
+.design-preview-items.is-rows i {
+  display: block;
+  height: 15px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--brand-ink) 14%, var(--brand-surface));
+}
+.design-preview-items.is-zigzag i:nth-child(even) {
+  margin-inline-start: 30%;
+}
+.design-preview-items.is-index i:nth-child(odd) {
+  width: 74%;
 }
 .design-preview-caption {
   display: flex;

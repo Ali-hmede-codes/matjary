@@ -1362,11 +1362,494 @@
   pointer-events: none;
 }
 
+/* Photo overlay: the 4:3 photo is the whole tile, and a frosted glass bar
+   carries the name, price and action. Two or three fit a row, so a section
+   stays quick to browse instead of turning every item into a big post. */
+.shop-catalog-items.layout-overlay {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  gap: 12px;
+}
+.storefront .shop-overlay-card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-radius, 20px);
+  background: var(--surface);
+}
+.shop-overlay-card .shop-product-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+/* A short scrim keeps the sale and stock pills legible on pale photos without
+   dimming the dish itself. */
+.shop-overlay-card .shop-product-image::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #00000038, #0000 38%);
+  pointer-events: none;
+}
+.shop-overlay-card .shop-product-image img {
+  transition:
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.35s ease;
+}
+/* Stock moves to the free top corner: the bottom edge now belongs to the bar.
+   Without its icon the pill stays short enough to sit beside a sale badge on a
+   two-column phone tile. */
+.shop-overlay-card .shop-stock-label {
+  top: 10px;
+  bottom: auto;
+  inset-inline-start: 10px;
+  inset-inline-end: auto;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.shop-overlay-card .shop-stock-label svg {
+  display: none;
+}
+.shop-overlay-card .shop-sale-label {
+  top: 10px;
+  inset-inline-end: 10px;
+}
+/* The tile draws no border, so the keyboard ring has to be its own. */
+.storefront .shop-overlay-card:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+/* The glass bar wraps instead of squeezing: a long name keeps its own line and
+   the price and action drop to the row below on a narrow tile. */
+.shop-overlay-bar {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--surface) 58%, transparent);
+  border-radius: calc(var(--shop-radius, 20px) - 6px);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 18%, transparent);
+  transition:
+    background 240ms ease,
+    border-color 240ms ease;
+}
+.shop-overlay-copy {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.shop-overlay-copy h3 {
+  overflow: hidden;
+  margin: 0;
+  font-family: var(--shop-font-display, inherit);
+  font-size: 14px;
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: var(--shop-display-spacing, -0.2px);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-overlay-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.shop-overlay-bottom .price-stack {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-overlay-bottom .price-lbp {
+  font-size: 10px;
+}
+/* The bar owns the trailing edge, so the action drops its own auto margin and
+   shrinks to one compact pill. The quantity stepper keeps its tap-sized dots. */
+.shop-overlay-card .shop-add-to-cart,
+.shop-overlay-card .shop-qty-stepper {
+  flex-shrink: 0;
+  min-width: 0;
+  margin-inline-start: 0;
+  box-shadow: none;
+}
+.shop-overlay-card .shop-add-to-cart {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+/* Motion: a capped rise-and-fade on first paint, then a slow photo push-in and
+   a brighter glass bar on hover. The animation fills backwards so it releases
+   the transform when it ends and hover keeps working. */
+@keyframes shop-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.shop-catalog-items.layout-overlay > .shop-overlay-card {
+  animation: shop-overlay-in 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+  transition:
+    transform 260ms ease,
+    box-shadow 260ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .storefront .shop-overlay-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 20px 42px color-mix(in srgb, var(--ink) 18%, transparent);
+  }
+  .shop-overlay-card:hover .shop-product-image img,
+  .shop-overlay-card:focus-within .shop-product-image img {
+    transform: scale(1.07);
+  }
+  .shop-overlay-card:hover .shop-overlay-bar,
+  .shop-overlay-card:focus-within .shop-overlay-bar {
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--surface));
+    background: color-mix(in srgb, var(--surface) 93%, transparent);
+  }
+}
+
+/* ---------- Photo-first layouts ---------- */
+/* Tiles, Bento, Staggered, Sticker, Circles and the Photo rail share one card:
+   a 4:3 photo and a quiet caption. Only the grid and the caption treatment
+   change, so switching between them never re-enters anything. */
+.storefront .shop-tile-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.shop-tile-card .shop-product-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-radius, 20px);
+}
+.shop-tile-card .shop-item-caption {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px 2px 0;
+}
+.shop-tile-card h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0 0 2px;
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-item-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-item-bottom .price-stack {
+  min-width: 0;
+}
+.shop-item-bottom .price-lbp {
+  font-size: 10.5px;
+}
+.shop-tile-card .shop-add-to-cart {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+/* The product card lifts and frames itself; a photo-first tile only wants the
+   photo to answer the pointer. */
+@media (hover: hover) and (pointer: fine) {
+  .storefront .shop-tile-card:hover {
+    border-color: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+}
+
+/* Tiles: the plain 4:3 photo grid with a caption under each photo. */
+.shop-catalog-items.layout-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 22px 14px;
+}
+/* Bento: the first tile is a wide band at the same height as one row of 4:3
+   tiles, so it reads as a rhythm and never as one oversized post. */
+.shop-catalog-items.layout-bento {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 18px 12px;
+}
+.layout-bento > .shop-tile-card:first-child {
+  grid-column: span 2;
+}
+.layout-bento > .shop-tile-card:first-child .shop-product-image {
+  aspect-ratio: 8 / 3;
+}
+/* Staggered: three columns, the middle one dropped a step. */
+.shop-catalog-items.layout-stagger {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 12px;
+  padding-bottom: 26px;
+}
+.layout-stagger > .shop-tile-card:nth-child(3n + 2) {
+  margin-top: 26px;
+}
+/* Sticker: the caption is its own small card overlapping the photo's bottom
+   edge, like a printed label taped onto the picture. */
+.shop-catalog-items.layout-sticker {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 28px 14px;
+}
+.shop-tile-card.is-sticker .shop-item-caption {
+  position: relative;
+  z-index: 2;
+  margin: -32px 10px 0;
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, var(--surface));
+  border-radius: var(--shop-control-radius, 14px);
+  background: var(--surface);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+/* Circles: round photos with the name and price centred beneath, the shape a
+   café menu and a highlights row already use. */
+.shop-catalog-items.layout-circles {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr));
+  gap: 22px 12px;
+}
+.layout-circles .shop-tile-card {
+  align-items: center;
+  text-align: center;
+}
+.layout-circles .shop-product-image {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.layout-circles .shop-item-caption {
+  align-items: center;
+  padding-top: 9px;
+}
+.layout-circles .shop-tile-card h3 {
+  font-size: 13px;
+}
+.layout-circles .shop-item-bottom {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.layout-circles .shop-add-to-cart {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+/* Corner pills would hang outside a round crop, so they centre instead. */
+.layout-circles .shop-sale-label {
+  top: 12px;
+  inset-inline: 0;
+  width: fit-content;
+  margin-inline: auto;
+}
+.layout-circles .shop-stock-label {
+  bottom: 12px;
+  inset-inline: 0;
+  width: fit-content;
+  margin-inline: auto;
+}
+/* Photo rail: the same 4:3 cards in the sideways, snapping strip. */
+.shop-catalog-items.layout-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.shop-catalog-items.layout-rail::-webkit-scrollbar {
+  display: none;
+}
+.shop-catalog-items.layout-rail:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.layout-rail > .shop-tile-card {
+  flex: 0 0 clamp(210px, 42vw, 270px);
+  scroll-snap-align: start;
+}
+.layout-rail > .shop-skeleton {
+  flex: 0 0 clamp(210px, 42vw, 270px);
+  aspect-ratio: 4 / 3;
+}
+
+/* Ribbon: a strip that keeps moving. Each set carries its own trailing gap so
+   shifting by exactly one set lands on the seam, and the duplicate sets stay
+   out of the tab order (see RibbonTile). */
+.shop-catalog-ribbon {
+  position: relative;
+  overflow: hidden;
+  padding-block: 4px;
+}
+.shop-catalog-ribbon-track {
+  display: flex;
+  width: max-content;
+  animation: shop-ribbon-move var(--ribbon-duration, 40s) linear infinite;
+}
+.shop-catalog-ribbon:hover .shop-catalog-ribbon-track,
+.shop-catalog-ribbon:focus-within .shop-catalog-ribbon-track,
+.shop-catalog-ribbon.is-stopped .shop-catalog-ribbon-track {
+  animation-play-state: paused;
+}
+/* Paused by the visitor's own button, the strip becomes a normal swipe row so
+   every dish stays reachable without resuming the motion. */
+.shop-catalog-ribbon.is-stopped {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.shop-catalog-ribbon.is-stopped::-webkit-scrollbar {
+  display: none;
+}
+.shop-catalog-ribbon-set {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  padding-inline-end: 12px;
+}
+@keyframes shop-ribbon-move {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(calc(0% - var(--ribbon-shift, 50%)), 0, 0);
+  }
+}
+/* RTL lays the strip out from the right, so the next set enters from the left
+   and the ribbon has to travel the other way. */
+@keyframes shop-ribbon-move-rtl {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--ribbon-shift, 50%), 0, 0);
+  }
+}
+[dir='rtl'] .shop-catalog-ribbon-track {
+  animation-name: shop-ribbon-move-rtl;
+}
+.shop-ribbon-tile {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: clamp(200px, 40vw, 260px);
+  color: inherit;
+  text-decoration: none;
+}
+.shop-ribbon-tile .shop-product-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-radius, 20px);
+}
+.shop-ribbon-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 2px 0;
+}
+.shop-ribbon-caption h3 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-ribbon-caption .price-stack {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+/* Moving content must be stoppable, so the control stays visible. */
+.shop-ribbon-toggle {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  inset-inline-end: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-ribbon-tile:hover .shop-product-image img {
+    transform: scale(1.05);
+  }
+}
+
 @media (max-width: 720px) {
   .shop-catalog-items.layout-cards,
   .shop-catalog-items.layout-gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+  /* Photo overlay keeps two small 4:3 tiles per row; on a phone one full-width
+     tile would read as the big post this layout is meant to avoid. */
+  .shop-catalog-items.layout-overlay {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .shop-overlay-bar {
+    inset-inline: 6px;
+    bottom: 6px;
+    gap: 5px 8px;
+    padding: 6px 6px 6px 9px;
+  }
+  .shop-overlay-copy h3 {
+    font-size: 12px;
+  }
+  .shop-overlay-bottom .price-stack {
+    font-size: 12px;
+  }
+  .shop-overlay-card .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 11px;
   }
   /* A 4:3 box stays readable side by side, even on a phone. */
   .shop-catalog-items.layout-featured {
@@ -1411,6 +1894,346 @@
     gap: 8px 10px;
   }
   .shop-menu-row .shop-price-leader {
+    display: none;
+  }
+  /* Two small photos share a phone row, so a glass bar over each dish would
+     cover half the photo; the caption moves under it and the tile stays a
+     4:3 photo with one quiet line of text. */
+  .storefront .shop-overlay-card {
+    aspect-ratio: auto;
+  }
+  /* A skeleton has no caption to give it height once the ratio is released. */
+  .shop-overlay-card.shop-skeleton {
+    aspect-ratio: 4 / 3;
+  }
+  .shop-overlay-card .shop-product-image {
+    position: relative;
+    inset: auto;
+    aspect-ratio: 4 / 3;
+  }
+  .shop-overlay-bar {
+    position: static;
+    padding: 7px 9px 8px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .shop-overlay-bottom {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    margin-inline-start: 0;
+  }
+}
+/* Zigzag: a magazine row. The photo and the copy swap sides on every other
+   item, so a short menu reads like a spread instead of a stack of cards. */
+.shop-catalog-items.layout-zigzag {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.storefront .shop-zigzag-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 10px;
+  border-radius: var(--shop-radius, 20px);
+}
+.shop-zigzag-row .shop-product-image {
+  flex: 0 0 42%;
+  width: 42%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.shop-zigzag-row:nth-child(even) {
+  flex-direction: row-reverse;
+}
+.shop-zigzag-row .shop-item-caption {
+  flex: 1;
+  padding: 0 6px;
+}
+.shop-zigzag-row h3 {
+  font-size: 16px;
+}
+.shop-zigzag-row .shop-item-caption p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-zigzag-row .shop-item-bottom {
+  padding-top: 8px;
+  font-size: 16px;
+}
+
+/* Numbered: an editorial list where the index is the graphic element. */
+.shop-catalog-items.layout-index {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.shop-numbered-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.shop-numbered-index {
+  flex: 0 0 auto;
+  min-width: 26px;
+  color: color-mix(in srgb, var(--ink) 38%, var(--surface));
+  font-family: var(--shop-font-display, inherit);
+  font-size: 19px;
+  font-weight: var(--shop-display-weight, 600);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.shop-numbered-thumb {
+  display: block;
+  flex: 0 0 84px;
+  width: 84px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: calc(var(--shop-tile-radius, 14px) * 0.7);
+  background: var(--wash);
+}
+.shop-numbered-copy {
+  flex: 1;
+  min-width: 0;
+}
+.shop-numbered-copy h3 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  line-height: 1.4;
+}
+.shop-numbered-copy p {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-numbered-price {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.shop-numbered-copy h3 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shop-numbered-row .shop-add-to-cart {
+  margin-inline-start: 0;
+}
+.shop-numbered-row.is-unavailable .shop-numbered-thumb img,
+.shop-photo-row.is-unavailable .shop-photo-row-thumb img {
+  filter: saturate(0.45);
+}
+
+/* Photo menu: thin rows with a small 4:3 photo, dotted leader and price. */
+.shop-catalog-items.layout-rows {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shop-photo-row {
+  gap: 12px;
+  padding: 10px 4px;
+  /* The row is taller than a text line, so the intrinsic placeholder has to
+     match it or a long menu jumps while scrolling. */
+  contain-intrinsic-size: auto 104px;
+}
+.shop-photo-row-thumb {
+  position: relative;
+  display: block;
+  flex: 0 0 80px;
+  width: 80px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: calc(var(--shop-tile-radius, 14px) * 0.7);
+  background: var(--wash);
+}
+.shop-photo-row .shop-price-leader {
+  display: block;
+  flex: 1 1 24px;
+  min-width: 18px;
+  align-self: center;
+  border-bottom: 1px dotted color-mix(in srgb, var(--ink) 28%, transparent);
+}
+
+/* Motion: one capped rise-and-fade for every photo-first layout. The skeleton
+   boxes stay still so loading never looks like content arriving. */
+@keyframes shop-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.layout-tiles > .shop-tile-card,
+.layout-bento > .shop-tile-card,
+.layout-stagger > .shop-tile-card,
+.layout-sticker > .shop-tile-card,
+.layout-circles > .shop-tile-card,
+.layout-rail > .shop-tile-card,
+.layout-zigzag > .shop-zigzag-row,
+.layout-index > .shop-numbered-row,
+.layout-rows > .shop-photo-row {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+/* Skeletons reuse the 4:3 frame of the layout they stand in for. */
+.shop-catalog-items.layout-tiles > .shop-skeleton,
+.shop-catalog-items.layout-stagger > .shop-skeleton,
+.shop-catalog-items.layout-sticker > .shop-skeleton,
+.shop-catalog-items.layout-bento > .shop-skeleton {
+  aspect-ratio: 4 / 3;
+}
+.shop-catalog-items.layout-circles > .shop-skeleton {
+  aspect-ratio: 1 / 1;
+}
+.layout-bento > .shop-skeleton:first-child {
+  grid-column: span 2;
+}
+
+@media (max-width: 720px) {
+  .shop-catalog-items.layout-tiles,
+  .shop-catalog-items.layout-sticker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 10px;
+  }
+  .shop-catalog-items.layout-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 10px;
+  }
+  .shop-catalog-items.layout-stagger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 10px;
+    padding-bottom: 22px;
+  }
+  /* A two-column phone cannot carry the middle-column offset, so the even
+     tiles take the step instead. */
+  .layout-stagger > .shop-tile-card:nth-child(3n + 2) {
+    margin-top: 0;
+  }
+  .layout-stagger > .shop-tile-card:nth-child(even) {
+    margin-top: 22px;
+  }
+  .shop-tile-card h3 {
+    font-size: 13px;
+  }
+  .shop-item-bottom {
+    font-size: 13.5px;
+  }
+  .shop-tile-card .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+  .shop-tile-card.is-sticker .shop-item-caption {
+    margin-inline: 6px;
+    padding: 8px 9px 10px;
+  }
+  .shop-zigzag-row {
+    gap: 12px;
+    padding: 8px;
+  }
+  .shop-zigzag-row h3 {
+    font-size: 14.5px;
+  }
+  .shop-numbered-row {
+    gap: 10px;
+    padding: 12px 2px;
+  }
+  .shop-numbered-thumb {
+    flex-basis: 64px;
+    width: 64px;
+  }
+  .shop-numbered-index {
+    min-width: 22px;
+    font-size: 16px;
+  }
+  .shop-numbered-price {
+    font-size: 14px;
+  }
+  .shop-ribbon-tile {
+    width: clamp(170px, 56vw, 220px);
+  }
+}
+@media (max-width: 560px) {
+  .shop-catalog-items.layout-circles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px 8px;
+  }
+  .layout-circles .shop-tile-card h3 {
+    font-size: 11.5px;
+  }
+  /* The dotted leader needs room the phone row does not have. */
+  .shop-photo-row .shop-price-leader {
+    display: none;
+  }
+  .shop-zigzag-row .shop-product-image {
+    flex-basis: 38%;
+    width: 38%;
+  }
+  .shop-numbered-copy p {
+    display: none;
+  }
+  .shop-numbered-copy h3 {
+    font-size: 13.5px;
+  }
+  .shop-numbered-thumb {
+    flex-basis: 56px;
+    width: 56px;
+  }
+  .shop-numbered-row .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-catalog-items.layout-overlay > .shop-overlay-card,
+  .shop-overlay-bar,
+  .shop-overlay-card .shop-product-image img {
+    animation: none;
+    transition: none;
+  }
+  .storefront .shop-overlay-card:hover,
+  .shop-overlay-card:hover .shop-product-image img {
+    transform: none;
+  }
+  .layout-tiles > .shop-tile-card,
+  .layout-bento > .shop-tile-card,
+  .layout-stagger > .shop-tile-card,
+  .layout-sticker > .shop-tile-card,
+  .layout-circles > .shop-tile-card,
+  .layout-rail > .shop-tile-card,
+  .layout-zigzag > .shop-zigzag-row,
+  .layout-index > .shop-numbered-row,
+  .layout-rows > .shop-photo-row,
+  .shop-catalog-ribbon-track {
+    animation: none;
+  }
+  /* With the motion off the ribbon has to be swiped, and a pause control would
+     only say nothing. */
+  .shop-catalog-ribbon {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .shop-ribbon-toggle {
     display: none;
   }
 }
