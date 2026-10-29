@@ -1,5 +1,5 @@
 .page-shell {
-  margin-left: var(--sidebar-width);
+  margin-inline-start: var(--sidebar-width);
 }
 .main-content {
   max-width: var(--content-max-width);
@@ -27,7 +27,7 @@
 @media (max-width: 900px) {
   /* Clears the floating navigation dock, which sits above the safe area. */
   .page-shell {
-    margin-left: 0;
+    margin-inline-start: 0;
     padding-bottom: calc(104px + env(safe-area-inset-bottom));
   }
 }

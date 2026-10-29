@@ -12,7 +12,7 @@
 .ad-card-label {
   position: absolute;
   top: 12px;
-  right: 12px;
+  inset-inline-end: 12px;
   z-index: 1;
   padding: 4px 7px;
   border-radius: 6px;
@@ -122,6 +122,6 @@
   }
   .ad-card-label {
     top: 18px;
-    right: 16px;
+    inset-inline-end: 16px;
   }
 }

@@ -62,7 +62,7 @@
 }
 .post-page-pager {
   position: absolute;
-  left: 12px;
+  inset-inline-start: 12px;
   bottom: 12px;
   display: flex;
   align-items: center;

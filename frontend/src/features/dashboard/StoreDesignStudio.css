@@ -87,7 +87,7 @@
   border-radius: 12px;
   background: #fff;
   color: var(--panel-ink);
-  text-align: left;
+  text-align: start;
 }
 .design-pattern.is-selected {
   border-color: var(--panel-green);
@@ -289,7 +289,7 @@
   border-radius: 11px;
   background: #fff;
   color: var(--panel-ink);
-  text-align: left;
+  text-align: start;
 }
 .design-hero.is-selected {
   border-color: var(--panel-green);
@@ -391,7 +391,7 @@
   border-radius: 11px;
   background: #fff;
   color: var(--panel-ink);
-  text-align: left;
+  text-align: start;
 }
 .design-layout:hover {
   border-color: #b9c8be;

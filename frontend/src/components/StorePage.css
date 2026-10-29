@@ -266,7 +266,7 @@
 }
 .shop-story-add {
   position: absolute;
-  right: 4px;
+  inset-inline-end: 4px;
   bottom: 8px;
   z-index: 2;
   display: grid;
@@ -367,7 +367,7 @@
   max-width: 100%;
   min-width: 0;
   line-height: 1.5;
-  text-align: left;
+  text-align: start;
 }
 .shop-location-toggle {
   min-height: 44px;
@@ -617,18 +617,18 @@
 }
 .shop-product-category {
   top: 12px;
-  left: 12px;
+  inset-inline-start: 12px;
 }
 .shop-stock-label {
   bottom: 12px;
-  right: 12px;
+  inset-inline-end: 12px;
 }
 /* The sale owns the top-right corner of the photo: the discount is the first
    thing a shopper should notice, and stock keeps the bottom edge. */
 .shop-sale-label {
   position: absolute;
   top: 12px;
-  right: 12px;
+  inset-inline-end: 12px;
   z-index: 2;
   padding: 5px 9px;
   border-radius: 999px;
@@ -870,7 +870,7 @@
 .shop-post-indicators {
   position: absolute;
   top: 10px;
-  right: 10px;
+  inset-inline-end: 10px;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -1215,17 +1215,17 @@
   }
   .shop-sale-label {
     top: 8px;
-    right: 8px;
+    inset-inline-end: 8px;
     padding: 4px 8px;
     font-size: 10px;
   }
   .shop-product-category {
     top: 8px;
-    left: 8px;
+    inset-inline-start: 8px;
   }
   .shop-stock-label {
     bottom: 8px;
-    right: 8px;
+    inset-inline-end: 8px;
   }
   .shop-product-bottom {
     gap: 8px;
@@ -1237,7 +1237,7 @@
   }
   .shop-post-indicators {
     top: 6px;
-    right: 6px;
+    inset-inline-end: 6px;
     gap: 5px;
   }
   .shop-post-indicators svg {
@@ -1264,7 +1264,7 @@
     backdrop-filter: none;
   }
   .shop-footer-platform > svg:last-child {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .shop-footer-platform > span {
     flex: 0 1 auto;

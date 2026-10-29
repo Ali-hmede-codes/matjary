@@ -20,7 +20,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  text-align: left;
+  text-align: start;
   padding: 0;
   min-width: 0;
 }
@@ -42,7 +42,7 @@
   margin-top: 4px;
 }
 .sample-label {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 9px;
   font-weight: 600;
   color: var(--muted);
@@ -96,10 +96,10 @@
   box-shadow: 0 2px 10px #0002;
 }
 .media-previous {
-  left: 12px;
+  inset-inline-start: 12px;
 }
 .media-next {
-  right: 12px;
+  inset-inline-end: 12px;
 }
 .media-previous:disabled,
 .media-next:disabled {
@@ -122,7 +122,7 @@
 .post-caption-author {
   font-weight: 650;
   color: var(--ink);
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 .post-caption-author:hover {
   color: var(--primary);
@@ -130,7 +130,7 @@
 .media-count {
   position: absolute;
   top: 12px;
-  right: 12px;
+  inset-inline-end: 12px;
   padding: 6px 9px;
   border-radius: 15px;
   background: #17231eaa;
@@ -145,7 +145,7 @@
 .post-link-badge {
   position: absolute;
   bottom: 12px;
-  left: 12px;
+  inset-inline-start: 12px;
   z-index: 1;
   display: inline-flex;
   align-items: center;
@@ -166,7 +166,7 @@
 }
 .compact-grid .post-link-badge {
   bottom: 8px;
-  left: 8px;
+  inset-inline-start: 8px;
   padding: 4px 7px;
 }
 /* The compact grid has no room for a label; the icon alone marks the tile. */
@@ -228,12 +228,12 @@
     padding-inline: 8px;
   }
   .compact-grid .media-previous {
-    left: 4px;
+    inset-inline-start: 4px;
     width: 30px;
     height: 30px;
   }
   .compact-grid .media-next {
-    right: 4px;
+    inset-inline-end: 4px;
     width: 30px;
     height: 30px;
   }

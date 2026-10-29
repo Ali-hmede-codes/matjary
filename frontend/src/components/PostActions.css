@@ -11,7 +11,7 @@
   animation: save-pop 250ms ease-out;
 }
 .save-button {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .is-saved {
   color: var(--primary);

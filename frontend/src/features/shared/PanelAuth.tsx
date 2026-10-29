@@ -192,7 +192,7 @@ export function LoginPage() {
   return (
     <div className="panel-app panel-login">
       <section className="panel-login-story">
-        <Link to="/" className="panel-brand">
+        <Link to="/" className="panel-brand notranslate">
           <img src={brandingUrl('/logo.png')} alt="" /> Matjary
         </Link>
         <div>

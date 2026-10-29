@@ -1,0 +1,65 @@
+/* Arabic mode: the Google Translate widget plus the right-to-left adjustments
+   that a logical property cannot express.
+   Everything positional in the component sheets uses logical properties, so the
+   mirrored layout needs no duplicate rules here. Transforms and icon glyphs are
+   physical by nature, and the widget's own chrome is injected into <body> at
+   runtime; both are handled below. */
+
+/* The widget appends a banner iframe, a hover bubble and a highlight on every
+   translated phrase. The banner frame offsets the whole page by its height, and
+   the highlight paints over the design, so both are suppressed. Current builds
+   label the banner with obfuscated classes but always keep `skiptranslate`. */
+.goog-te-banner-frame,
+#goog-gt-tt,
+.goog-te-balloon-frame,
+iframe.skiptranslate {
+  display: none !important;
+}
+body {
+  top: 0 !important;
+}
+.goog-text-highlight {
+  background: none !important;
+  box-shadow: none !important;
+}
+
+/* The language select is driven programmatically (see lib/language.ts); its host
+   only has to exist and be laid out, never to be visible. */
+.translate-widget {
+  position: fixed;
+  top: 0;
+  inset-inline-start: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Arrows and chevrons point along the reading direction, so RTL mirrors the
+   glyph. The diagonal "open in new" arrow keeps its direction on purpose: it
+   describes an external destination, not a reading direction. */
+[dir='rtl']
+  :is(
+    .lucide-arrow-right,
+    .lucide-arrow-left,
+    .lucide-chevron-right,
+    .lucide-chevron-left
+  ) {
+  transform: scaleX(-1);
+}
+
+/* Arabic letters join, so the tight negative tracking used for the Latin
+   wordmark and headings only makes the script cramped. */
+[lang='ar'] :is(h1, h2, h3, h4, .brand, .brand-name, .panel-brand) {
+  letter-spacing: 0;
+}
+
+/* The panel drawer is off-canvas while closed. Its offset is a transform, which
+   has no logical form, so the mirrored value is spelled out. */
+@media (max-width: 900px) {
+  [dir='rtl'] .panel-sidebar {
+    transform: translateX(100%);
+  }
+  [dir='rtl'] .panel-sidebar.is-open {
+    transform: translateX(0);
+  }
+}

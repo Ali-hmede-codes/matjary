@@ -102,7 +102,7 @@
 }
 .shop-post-wall.layout-frames .shop-post-indicators {
   top: 16px;
-  right: 16px;
+  inset-inline-end: 16px;
 }
 
 /* Wall: dense square tiles for shops with a big visual archive. */
@@ -135,7 +135,7 @@
   border: 1px solid var(--line);
   border-radius: var(--shop-tile-radius, 12px);
   background: var(--surface);
-  text-align: left;
+  text-align: start;
 }
 .shop-post-row-thumb {
   position: relative;
@@ -170,7 +170,7 @@
 }
 .shop-post-row .shop-post-indicators {
   top: 6px;
-  right: 6px;
+  inset-inline-end: 6px;
 }
 
 /* Stack: one cinematic post after another. */
@@ -229,7 +229,7 @@
   }
   .shop-post-wall.layout-frames .shop-post-indicators {
     top: 12px;
-    right: 12px;
+    inset-inline-end: 12px;
   }
 }
 
@@ -312,7 +312,7 @@
   display: inline-block;
   width: 8px;
   height: 8px;
-  margin-right: 6px;
+  margin-inline-end: 6px;
   border-radius: 50%;
   /* An 8px disc is too small for the conic ring, so the mark uses the same
      Instagram sweep as a plain circle. */

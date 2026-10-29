@@ -87,7 +87,7 @@
 .logo-preview-close {
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   display: grid;
   place-items: center;
   width: 38px;

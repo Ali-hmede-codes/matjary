@@ -13,7 +13,8 @@ import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 import { useSeenStories, useStoryGroups } from './hooks/useStories';
 import { StoryViewer } from './components/stories/StoryViewer';
 
-import { lazy, Suspense, useState } from 'react';
+import { documentLanguage, requestTranslation } from './lib/language';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { LoginPage, ProtectedPanel } from './features/shared/PanelAuth';
 import { Loading } from './features/shared/PanelUI';
@@ -76,9 +77,23 @@ const FavoritesPage = lazy(() =>
   })),
 );
 
+// Arabic mode: every route renders English text, so the widget is asked again
+// once the new screen has committed. Routes are lazy and their data queries
+// resolve in several passes; the module coalesces the calls.
+function TranslateSync() {
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    if (documentLanguage() !== 'ar') return;
+    const timer = window.setTimeout(() => void requestTranslation(), 350);
+    return () => window.clearTimeout(timer);
+  }, [pathname, search]);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <TranslateSync />
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<DiscoveryPage />} />

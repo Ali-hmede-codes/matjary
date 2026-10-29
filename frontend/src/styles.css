@@ -5,6 +5,7 @@
 @import './styles/shared.css';
 @import './styles/layout.css';
 @import './components/SiteHeader.css';
+@import './components/LanguageToggle.css';
 @import './components/DiscoveryRail.css';
 @import './components/StoreStrip.css';
 @import './components/StoreAvatar.css';
@@ -34,6 +35,8 @@
 @import './components/stories/StoreStorySheet.css';
 @import './components/stories/StoryComposer.css';
 @import './styles/animations.css';
+/* Last: right-to-left fixes and the Google Translate chrome reset. */
+@import './styles/translated.css';
 
 /* Keep this after component rules so touch layouts hide horizontal scrollbars too. */
 @media (max-width: 900px), (hover: none) and (pointer: coarse) {

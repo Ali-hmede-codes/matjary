@@ -155,7 +155,7 @@
    action rail and the shop identity. */
 .reel-stage .auto-video-sound {
   top: calc(62px + env(safe-area-inset-top));
-  right: calc(10px + env(safe-area-inset-right));
+  inset-inline-end: calc(10px + env(safe-area-inset-right));
   bottom: auto;
 }
 .reel-bottom {
@@ -324,7 +324,7 @@
   background: #0b1a15e6;
 }
 .reel-rail .save-button {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 .reel-visit {
   display: flex;
@@ -392,10 +392,10 @@
   pointer-events: none;
 }
 .reel-prev {
-  left: 18px;
+  inset-inline-start: 18px;
 }
 .reel-next {
-  right: 18px;
+  inset-inline-end: 18px;
 }
 .reel-chrome-button:focus-visible,
 .reel-nav:focus-visible,
@@ -420,10 +420,10 @@
     scroll-snap-align: center;
   }
   .reel-prev {
-    left: 26px;
+    inset-inline-start: 26px;
   }
   .reel-next {
-    right: 26px;
+    inset-inline-end: 26px;
   }
 }
 /* Phones swipe between posts; the chevrons would only crowd the media. */

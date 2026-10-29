@@ -39,7 +39,7 @@
 .explore-tile-badge {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   display: inline-flex;
   color: #fff;
   filter: drop-shadow(0 1px 3px #0009);

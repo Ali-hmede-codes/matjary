@@ -104,7 +104,7 @@
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 .store-story-choice:hover {
   border-color: var(--primary);

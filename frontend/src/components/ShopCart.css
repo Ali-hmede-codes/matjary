@@ -1,7 +1,7 @@
 .shop-cart-count {
   position: absolute;
   top: 0;
-  right: -1px;
+  inset-inline-end: -1px;
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
@@ -22,7 +22,7 @@
   flex: 0 0 auto;
   min-width: 82px;
   min-height: 42px;
-  margin-left: auto;
+  margin-inline-start: auto;
   padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--primary) 85%, var(--ink));
   border-radius: 999px;
@@ -51,7 +51,7 @@
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
-  margin-left: auto;
+  margin-inline-start: auto;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--line));
   border-radius: 999px;
@@ -166,7 +166,7 @@
 }
 .shop-cart-error .text-button,
 .shop-cart-confirm .text-button {
-  margin-right: 18px;
+  margin-inline-end: 18px;
   color: inherit;
 }
 .shop-cart-progress {
@@ -239,7 +239,7 @@
   font-weight: 650;
 }
 .shop-cart-item-options em {
-  margin-left: 3px;
+  margin-inline-start: 3px;
   color: var(--muted);
   font-size: 10px;
   font-style: normal;
@@ -282,11 +282,11 @@
   max-width: 150px;
   font-size: 13px;
   line-height: 1.5;
-  text-align: right;
+  text-align: end;
 }
 .shop-cart-total-price {
   align-items: flex-end;
-  text-align: right;
+  text-align: end;
 }
 .shop-cart-form {
   display: grid;
@@ -379,7 +379,7 @@
 }
 .shop-cart-complete .shop-cart-field {
   width: 100%;
-  text-align: left;
+  text-align: start;
 }
 @media (max-width: 500px) {
   .shop-cart-header,
@@ -399,7 +399,7 @@
     grid-column: 2;
     align-items: flex-start;
     max-width: none;
-    text-align: left;
+    text-align: start;
   }
 }
 .shop-cart-branches {

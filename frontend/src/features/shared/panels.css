@@ -221,7 +221,7 @@
   gap: 28px;
   padding: 30px 22px 22px;
   background: #fff;
-  border-right: 1px solid var(--panel-line);
+  border-inline-end: 1px solid var(--panel-line);
   overflow-y: auto;
 }
 .panel-brand {
@@ -244,7 +244,7 @@
   background: #eaf0e6;
   border-radius: 5px;
   padding: 3px 5px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .panel-nav-label {
   font-size: 9px;
@@ -327,7 +327,7 @@
   flex-shrink: 0;
 }
 .panel-main {
-  margin-left: 248px;
+  margin-inline-start: 248px;
   max-width: 1610px;
   padding: 48px clamp(24px, 4vw, 64px) 70px;
   min-width: 0;
@@ -394,7 +394,7 @@
   color: var(--panel-muted);
 }
 .panel-stat > span svg:last-child:not(:first-child) {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .panel-stat > strong {
   font-weight: 550;
@@ -463,7 +463,7 @@
   color: #4b6050;
 }
 .panel-note button {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .panel-note > div {
   min-width: 0;
@@ -541,12 +541,12 @@
   gap: 10px;
 }
 .panel-toolbar > a {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 12px;
   text-decoration: underline;
 }
 .panel-toolbar > .panel-primary {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .panel-toolbar > input,
 .panel-toolbar > select {
@@ -565,11 +565,11 @@
 }
 .panel-search svg {
   position: absolute;
-  left: 14px;
+  inset-inline-start: 14px;
   color: var(--panel-muted);
 }
 .panel-search input {
-  padding-left: 42px;
+  padding-inline-start: 42px;
 }
 .panel-list-card {
   padding-bottom: 8px;
@@ -650,7 +650,7 @@
   font-size: 12px;
 }
 .panel-pagination > span {
-  margin-right: auto;
+  margin-inline-end: auto;
 }
 .panel-pagination button {
   min-height: 38px;
@@ -1064,7 +1064,7 @@
   color: #934537;
 }
 .panel-notice button {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .panel-field-error {
   color: #a53933;
@@ -1077,7 +1077,7 @@
   justify-content: stretch;
   gap: 3px;
   margin-bottom: 9px;
-  text-align: left;
+  text-align: start;
 }
 .panel-plan-options,
 .panel-type-options {
@@ -1111,11 +1111,11 @@
 }
 .panel-choice input {
   position: absolute;
-  right: 14px;
+  inset-inline-end: 14px;
   top: 14px;
 }
 .panel-choice > strong {
-  padding-right: 10px;
+  padding-inline-end: 10px;
 }
 .panel-store-switch {
   max-width: 300px;
@@ -1279,7 +1279,7 @@
   display: grid;
   gap: 9px;
   margin: 0 0 16px;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   font-size: 14px;
 }
 .panel-team-access {
@@ -1441,7 +1441,7 @@
   color: var(--panel-muted);
   font-size: 11px;
   font-weight: 400;
-  margin-left: 9px;
+  margin-inline-start: 9px;
 }
 .panel-optional:not(.panel-card) {
   border-top: 1px solid var(--panel-line);
@@ -1580,7 +1580,7 @@
 }
 .panel-photo-grid button {
   position: absolute;
-  right: 2px;
+  inset-inline-end: 2px;
   top: 2px;
   width: 44px;
   height: 44px;
@@ -1629,7 +1629,7 @@
 .panel-content-image .panel-pill {
   position: absolute;
   top: 10px;
-  left: 10px;
+  inset-inline-start: 10px;
   background: #fffffff0;
   color: #40513d;
 }
@@ -1786,7 +1786,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   justify-items: start;
-  text-align: left;
+  text-align: start;
   padding: 22px;
   gap: 16px;
 }
@@ -2077,7 +2077,7 @@
 
 @media (min-width: 1610px) {
   .panel-main {
-    margin-right: auto;
+    margin-inline-end: auto;
   }
 }
 @media (max-width: 1200px) {
@@ -2094,7 +2094,7 @@
     min-width: 180px;
   }
   .panel-record > button {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .panel-editor-layout {
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
@@ -2112,7 +2112,7 @@
 }
 @media (max-width: 900px) {
   .panel-main {
-    margin-left: 0;
+    margin-inline-start: 0;
     padding-top: 30px;
   }
   .panel-mobile-bar {
@@ -2154,7 +2154,7 @@
   }
   .panel-store-switch {
     max-width: 100%;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
   /* Phones and small tablets give dialogs the whole screen: product editors
      carry options, photos and actions that a floating card squeezes out. */
@@ -2252,7 +2252,7 @@
     flex-basis: 100%;
   }
   .panel-toolbar > a {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
   .panel-record {
     gap: 12px;
@@ -2265,7 +2265,7 @@
     flex: 1;
   }
   .panel-record .panel-pill {
-    margin-right: auto;
+    margin-inline-end: auto;
   }
   .panel-pagination {
     flex-wrap: wrap;
@@ -2454,7 +2454,7 @@
   }
 }
 .boost-amount {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 12px;
   font-weight: 700;
   color: #36523c;
@@ -2554,7 +2554,7 @@
 .panel-story-grid button {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   display: grid;
   place-items: center;
   width: 30px;

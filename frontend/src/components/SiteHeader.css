@@ -40,6 +40,9 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  /* The wordmark never truncates: the search box is the item that gives way
+     when the topbar runs out of room. */
+  flex-shrink: 0;
   max-width: 210px;
   font-size: 25px;
   font-weight: 800;
@@ -73,7 +76,7 @@
 .main-nav {
   position: fixed;
   top: 100px;
-  left: 24px;
+  inset-inline-start: 24px;
   width: calc(var(--sidebar-width) - 44px);
   display: flex;
   flex-direction: column;
@@ -105,7 +108,7 @@
 .search-box {
   display: flex;
   align-items: center;
-  margin-left: auto;
+  margin-inline-start: auto;
   width: min(420px, 40vw);
   min-width: 140px;
   background: var(--wash);
@@ -145,7 +148,7 @@
    of the flex flow, so nothing else claims the leftover space. Feed pages keep
    the search box as the push, since a second auto margin would center it. */
 .topbar:not(:has(.search-box)) .header-actions {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .create-button,
 .profile-button {
@@ -250,7 +253,7 @@
     border-radius: 10px;
   }
   .header-actions {
-    margin-left: auto;
+    margin-inline-start: auto;
     gap: 6px;
   }
   .header-actions .search-toggle {

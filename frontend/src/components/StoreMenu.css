@@ -368,7 +368,7 @@
    the label never wraps inside it. */
 .shop-menu-item .shop-stock-label.shop-out-of-stock {
   bottom: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   padding: 5px 8px;
   font-size: 10px;
 }
@@ -488,11 +488,11 @@
 /* A USD price with its LBP hint reads as one right-aligned price block. */
 .shop-price-row-price.price-stack {
   align-items: flex-end;
-  text-align: right;
+  text-align: end;
 }
 .shop-price-row .shop-add-to-cart,
 .shop-price-row .shop-qty-stepper {
-  margin-left: 0;
+  margin-inline-start: 0;
   flex-shrink: 0;
 }
 .shop-catalog-items.layout-compact > .shop-skeleton {
@@ -690,7 +690,7 @@
 }
 .shop-product-actions .shop-add-to-cart,
 .shop-product-actions .shop-qty-stepper {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 .shop-product-actions .shop-add-to-cart {
   min-height: 50px;
@@ -832,8 +832,8 @@
 }
 .shop-cart-dock {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  inset-inline-start: 16px;
+  inset-inline-end: 16px;
   bottom: calc(18px + env(safe-area-inset-bottom));
   z-index: 45;
   width: auto;
@@ -852,7 +852,7 @@
   background: var(--ink);
   color: var(--surface);
   box-shadow: 0 18px 40px #0000003d;
-  text-align: left;
+  text-align: start;
 }
 .shop-cart-dock-button:focus-visible {
   outline: 3px solid var(--primary);
@@ -871,7 +871,7 @@
 .shop-cart-dock-count strong {
   position: absolute;
   top: -6px;
-  right: -6px;
+  inset-inline-end: -6px;
   display: grid;
   place-items: center;
   min-width: 20px;
@@ -913,7 +913,7 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  margin-left: auto;
+  margin-inline-start: auto;
   padding: 10px 14px;
   border-radius: 999px;
   background: var(--surface);
@@ -1006,7 +1006,7 @@
     flex-basis: 100%;
   }
   .shop-price-row-price {
-    margin-right: auto;
+    margin-inline-end: auto;
   }
   .shop-detail-hero {
     gap: 12px;
@@ -1062,8 +1062,8 @@
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
   .shop-cart-dock {
-    left: 10px;
-    right: 10px;
+    inset-inline-start: 10px;
+    inset-inline-end: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
   }
   .shop-cart-dock-button {

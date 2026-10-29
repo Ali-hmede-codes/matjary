@@ -231,7 +231,7 @@
   text-underline-offset: 3px;
 }
 .shops-result {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
@@ -479,7 +479,7 @@
   color: #fff;
   font-size: 10px;
   font-weight: 650;
-  text-align: left;
+  text-align: start;
   white-space: nowrap;
   text-overflow: ellipsis;
   pointer-events: none;

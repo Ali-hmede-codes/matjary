@@ -12,6 +12,8 @@ import {
   X,
 } from 'lucide-react';
 import { assetUrl, loginUrl } from '../lib/api';
+import { LanguageToggle } from './LanguageToggle';
+import { useUiLabel } from '../hooks/useUiLabel';
 import type { View } from '../lib/feed';
 import { brandingUrl, type WebsiteSettings } from '../lib/website';
 
@@ -39,10 +41,17 @@ export function SiteHeader(props: SiteHeaderProps) {
   // Property presence narrows the union reliably; comparing view values does
   // not, because one branch's view is itself a union.
   const feed = 'search' in props ? props : null;
+  // Curated labels for the short navigation words the widget translates badly;
+  // the elements carrying them are marked notranslate.
+  const uiText = useUiLabel();
   return (
     <header className="site-header">
       <div className="topbar">
-        <a className="brand" href="/" aria-label={`${settings.siteName} home`}>
+        <a
+          className="brand notranslate"
+          href="/"
+          aria-label={`${settings.siteName} home`}
+        >
           <img
             className="brand-logo"
             src={
@@ -63,12 +72,12 @@ export function SiteHeader(props: SiteHeaderProps) {
                 aria-current={view === id ? 'page' : undefined}
               >
                 <Icon size={19} aria-hidden="true" />
-                <span>{label}</span>
+                <span className="notranslate">{uiText(label)}</span>
               </button>
             ) : (
               <a key={id} href={id === 'discover' ? '/' : `/?view=${id}`}>
                 <Icon size={19} aria-hidden="true" />
-                <span>{label}</span>
+                <span className="notranslate">{uiText(label)}</span>
               </a>
             ),
           )}
@@ -78,7 +87,7 @@ export function SiteHeader(props: SiteHeaderProps) {
             aria-current={view === 'shops' ? 'page' : undefined}
           >
             <Store size={19} aria-hidden="true" />
-            <span>Shops</span>
+            <span className="notranslate">{uiText('Shops')}</span>
           </a>
           <a
             href="/pricing"
@@ -86,16 +95,17 @@ export function SiteHeader(props: SiteHeaderProps) {
             aria-current={view === 'pricing' ? 'page' : undefined}
           >
             <Tag size={19} aria-hidden="true" />
-            <span>Pricing</span>
+            <span className="notranslate">{uiText('Pricing')}</span>
           </a>
         </nav>
         {feed && (
           <label className="search-box" id="feed-search">
             <Search size={18} />
             <input
+              className="notranslate"
               value={feed.search}
               onChange={(event) => feed.onSearchChange(event.target.value)}
-              placeholder="Search posts and stores"
+              placeholder={uiText('Search posts and stores')}
               aria-label="Search loaded posts and stores"
             />
             {feed.search && (
@@ -110,6 +120,7 @@ export function SiteHeader(props: SiteHeaderProps) {
           </label>
         )}
         <div className="header-actions">
+          <LanguageToggle />
           {feed && (
             <button
               className="icon-button search-toggle"
@@ -135,7 +146,7 @@ export function SiteHeader(props: SiteHeaderProps) {
             aria-label="Sign in to share a post"
           >
             <Plus size={20} />
-            <span>Create</span>
+            <span className="notranslate">{uiText('Create')}</span>
           </a>
           <a
             className="profile-button"

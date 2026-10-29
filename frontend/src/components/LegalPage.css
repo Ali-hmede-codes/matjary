@@ -195,7 +195,7 @@
 .legal-section-number {
   position: absolute;
   top: 28px;
-  right: 28px;
+  inset-inline-end: 28px;
   color: color-mix(in srgb, var(--primary) 50%, var(--muted));
   font-size: 11px;
   font-weight: 750;
@@ -203,7 +203,7 @@
   font-variant-numeric: tabular-nums;
 }
 .legal-section h2 {
-  padding-right: 44px;
+  padding-inline-end: 44px;
   font-size: 18px;
   font-weight: 780;
   letter-spacing: -0.4px;
@@ -231,13 +231,13 @@
 }
 .legal-section li {
   position: relative;
-  padding-left: 20px;
+  padding-inline-start: 20px;
 }
 .legal-section li::before {
   content: '';
   position: absolute;
   top: 0.72em;
-  left: 3px;
+  inset-inline-start: 3px;
   width: 5px;
   height: 5px;
   border-radius: 50%;
@@ -410,11 +410,11 @@
   }
   .legal-section-number {
     top: 22px;
-    right: 18px;
+    inset-inline-end: 18px;
   }
   .legal-section h2 {
     font-size: 16.5px;
-    padding-right: 36px;
+    padding-inline-end: 36px;
   }
   .legal-contact {
     padding: 20px 18px;

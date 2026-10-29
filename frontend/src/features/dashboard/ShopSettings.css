@@ -76,7 +76,7 @@
   color: var(--panel-green);
 }
 .shop-settings-links a > svg:last-child {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--panel-muted);
 }
 .shop-settings-links a div {

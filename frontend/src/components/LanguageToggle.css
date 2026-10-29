@@ -1,0 +1,55 @@
+/* Sits in the header action row and in the panel sidebar, so it borrows the
+   surface/border tokens instead of inventing its own colours. */
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s;
+}
+.lang-toggle:hover {
+  background: var(--accent-wash);
+  border-color: var(--line-brand);
+  color: var(--primary);
+}
+.lang-toggle svg {
+  flex: none;
+}
+.lang-toggle-short {
+  display: none;
+}
+/* The panel sidebar is a column of rows with its own spacing. */
+.panel-sidebar-bottom .lang-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 42px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+@media (max-width: 600px) {
+  .lang-toggle {
+    min-height: 38px;
+    padding: 0 10px;
+  }
+  .lang-toggle-long {
+    display: none;
+  }
+  .lang-toggle-short {
+    display: inline;
+  }
+}

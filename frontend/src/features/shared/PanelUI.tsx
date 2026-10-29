@@ -11,6 +11,8 @@ import { ArrowUpRight, Check, LogOut, Menu, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { mutate, panelError, type Session } from './panel-api';
 import { brandingUrl } from '../../lib/website';
+import { LanguageToggle } from '../../components/LanguageToggle';
+import { useUiLabel } from '../../hooks/useUiLabel';
 
 export function PanelShell({
   session,
@@ -27,6 +29,8 @@ export function PanelShell({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const client = useQueryClient();
+  // Section labels are curated so the widget does not turn "Home" into "بيت".
+  const uiText = useUiLabel();
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
@@ -83,7 +87,7 @@ export function PanelShell({
         Skip to content
       </a>
       <header className="panel-mobile-bar">
-        <Link to="/" className="panel-brand">
+        <Link to="/" className="panel-brand notranslate">
           <img src={brandingUrl('/logo.png')} alt="" /> Matjary
         </Link>
         <button
@@ -102,7 +106,7 @@ export function PanelShell({
         />
       )}
       <aside className={`panel-sidebar ${open ? 'is-open' : ''}`}>
-        <Link to="/" className="panel-brand">
+        <Link to="/" className="panel-brand notranslate">
           <img src={brandingUrl('/logo.png')} alt="" /> Matjary
           <span>{admin ? 'ADMIN' : 'STUDIO'}</span>
         </Link>
@@ -120,7 +124,7 @@ export function PanelShell({
               }
               onClick={() => setOpen(false)}
             >
-              <span>{label}</span>
+              <span className="notranslate">{uiText(label)}</span>
               <ArrowUpRight size={16} />
             </NavLink>
           ))}
@@ -143,6 +147,7 @@ export function PanelShell({
               <small>{session.user.email}</small>
             </div>
           </div>
+          <LanguageToggle />
           <button disabled={busy} onClick={() => void logout()}>
             <LogOut size={16} />
             {busy ? 'Signing out…' : 'Sign out'}

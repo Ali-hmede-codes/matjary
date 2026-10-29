@@ -12,7 +12,7 @@
   line-height: 1.5;
 }
 .status-banner button {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: 6px;

@@ -7,7 +7,13 @@ import '@fontsource-variable/dm-sans';
 // Cairo files are only downloaded when Arabic text actually appears.
 import '@fontsource-variable/cairo';
 import App from './App';
+import { applyLanguage, storedLanguage } from './lib/language';
 import './styles.css';
+
+// Resolve the saved language before the first render: <html dir> has to be set
+// before the browser lays out the page, and the translate widget reads its
+// googtrans cookie when it initializes later in the session.
+applyLanguage(storedLanguage());
 
 const client = new QueryClient({
   defaultOptions: {

@@ -1,5 +1,5 @@
 .pricing-page .header-actions {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 .pricing-main {
   max-width: var(--content-max-width);
@@ -424,10 +424,10 @@
 }
 .plan-inclusions strong {
   max-width: 48%;
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 12px;
   font-weight: 700;
-  text-align: right;
+  text-align: end;
 }
 .pricing-note,
 .pricing-status {

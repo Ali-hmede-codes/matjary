@@ -43,7 +43,7 @@
 .shop-branches-close-icon {
   position: absolute;
   top: 14px;
-  right: 14px;
+  inset-inline-end: 14px;
   z-index: 2;
   display: grid;
   place-items: center;
@@ -172,7 +172,7 @@
 }
 .shop-branch-select svg {
   position: absolute;
-  right: 13px;
+  inset-inline-end: 13px;
   color: var(--muted);
   pointer-events: none;
 }
@@ -291,7 +291,7 @@
   font-size: 10px;
   font-weight: 650;
   line-height: 1.4;
-  text-align: left;
+  text-align: start;
   white-space: normal;
 }
 .shop-state-dot {
@@ -387,7 +387,7 @@
   display: none;
 }
 .shop-branch-hours .shop-branch-chevron {
-  margin-left: auto;
+  margin-inline-start: auto;
   transition: transform 0.2s ease;
 }
 .shop-branch-hours[open] .shop-branch-chevron {
@@ -431,7 +431,7 @@
 }
 .shop-branch-hours dd {
   margin: 0;
-  text-align: right;
+  text-align: end;
   white-space: normal;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
@@ -450,10 +450,10 @@
   color: var(--ink);
   font-size: 11px;
   font-weight: 650;
-  text-align: left;
+  text-align: start;
 }
 .shop-branch-map-toggle svg:last-child {
-  margin-left: auto;
+  margin-inline-start: auto;
   transition: transform 0.2s ease;
 }
 .shop-branch-map-toggle svg:last-child.is-open {
@@ -592,11 +592,11 @@
   }
   /* The close button floats in the corner, so only the copy steps aside. */
   .shop-branches-head > div:first-child {
-    padding-right: 46px;
+    padding-inline-end: 46px;
   }
   .shop-branches-close-icon {
     top: 10px;
-    right: 10px;
+    inset-inline-end: 10px;
   }
   .shop-branches-tools {
     justify-content: flex-start;
@@ -670,8 +670,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .shop-branch-hours dd {
-    padding-left: 0;
-    text-align: left;
+    padding-inline-start: 0;
+    text-align: start;
   }
 }
 @media (prefers-reduced-motion: reduce) {

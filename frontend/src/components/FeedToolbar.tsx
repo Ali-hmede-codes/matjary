@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, Rows3, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { DiscoveryFeedController } from '../hooks/useDiscoveryFeed';
+import { useUiLabel } from '../hooks/useUiLabel';
 import type { Algorithm } from '../lib/feed';
 
 type FeedToolbarProps = Pick<
@@ -52,6 +53,9 @@ export function FeedToolbar({
   const [group, setGroup] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
   const filtersRef = useRef<HTMLDivElement>(null);
+  // Feed titles (Home, Saved, Videos) are curated; shop names fall through as
+  // written and stay in their own script.
+  const uiText = useUiLabel();
 
   // Make the whole panel visible when it opens; without this the fixed mobile
   // dock can cover the last row of shop-type chips.
@@ -94,7 +98,7 @@ export function FeedToolbar({
           id="feed-title"
           className={view === 'discover' && !store ? 'sr-only' : 'feed-title'}
         >
-          {feedTitle}
+          <span className="notranslate">{uiText(feedTitle)}</span>
         </h2>
         {view === 'discover' && !store && (
           <div className="feed-tabs" aria-label="Feed views">
@@ -103,14 +107,14 @@ export function FeedToolbar({
               aria-pressed={!explore}
               onClick={() => selectExplore(false)}
             >
-              For you
+              <span className="notranslate">{uiText('For you')}</span>
             </button>
             <button
               className={explore ? 'selected' : ''}
               aria-pressed={explore}
               onClick={() => selectExplore(true)}
             >
-              Explore
+              <span className="notranslate">{uiText('Explore')}</span>
             </button>
           </div>
         )}
@@ -162,8 +166,9 @@ export function FeedToolbar({
       {!store && filtersOpen && (
         <div className="feed-filters" id="feed-filters" ref={filtersRef}>
           <label className="sort-select">
-            Sort by
+            <span className="notranslate">{uiText('Sort by')}</span>
             <select
+              className="notranslate"
               value={algorithm}
               disabled={demo}
               onChange={(event) => {
@@ -171,9 +176,9 @@ export function FeedToolbar({
                 if (view === 'trending') setView('discover');
               }}
             >
-              <option value="mixed">For you</option>
-              <option value="recent">Newest first</option>
-              <option value="trending">Trending</option>
+              <option value="mixed">{uiText('For you')}</option>
+              <option value="recent">{uiText('Newest first')}</option>
+              <option value="trending">{uiText('Trending')}</option>
             </select>
           </label>
 
@@ -181,9 +186,10 @@ export function FeedToolbar({
             <Search size={16} aria-hidden="true" />
             <span className="sr-only">Find a shop type</span>
             <input
+              className="notranslate"
               type="search"
               value={categoryQuery}
-              placeholder="Find a shop type…"
+              placeholder={uiText('Find a shop type…')}
               autoComplete="off"
               onChange={(event) => setCategoryQuery(event.target.value)}
             />
@@ -230,7 +236,7 @@ export function FeedToolbar({
               aria-pressed={!categories.length}
               onClick={clearCategories}
             >
-              All types
+              <span className="notranslate">{uiText('All types')}</span>
             </button>
             {visibleCategories.map((item) => {
               const selected = categories.includes(item.slug);
@@ -275,7 +281,7 @@ export function FeedToolbar({
             );
           })}
           <button className="clear-filters" onClick={clearCategories}>
-            Clear all
+            <span className="notranslate">{uiText('Clear all')}</span>
           </button>
         </div>
       )}
