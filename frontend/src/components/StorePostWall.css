@@ -1,5 +1,9 @@
 /* Owner-chosen post wall layouts. Loaded after StorePage.css so the shared
-   tile frame (portrait, no chrome) stays the base for every variant. */
+   tile frame (portrait, no chrome) stays the base for every variant.
+
+   Ratios are viewport-independent on purpose: a square lead stays square on a
+   phone, and a 4:5 mosaic tile stays 4:5. Breakpoints may change columns,
+   spans and gaps, never the frame ratio a layout promises. */
 
 /* Rail: a swipeable strip. Tiles keep the portrait frame and snap into place. */
 .shop-post-wall.layout-rail {
@@ -38,8 +42,14 @@
   aspect-ratio: 4 / 5;
 }
 
-/* Spotlight: the newest post takes a double frame, the rest follow. The
-   live-story tile is an extra lead item, so it never takes that frame. */
+/* Spotlight: the lead post keeps its square frame on phones too. Only the
+   double frame that sets it apart is a desktop grid feature. */
+.shop-post-wall.layout-spotlight
+  .shop-post-tile:first-child:not(.shop-story-tile),
+.shop-post-wall.layout-spotlight .shop-story-tile + .shop-post-tile {
+  aspect-ratio: 1 / 1;
+  border-radius: var(--shop-tile-radius, 14px);
+}
 @media (min-width: 900px) {
   .shop-post-wall.layout-spotlight {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -50,12 +60,16 @@
   .shop-post-wall.layout-spotlight .shop-story-tile + .shop-post-tile {
     grid-column: span 2;
     grid-row: span 2;
-    aspect-ratio: 1 / 1;
-    border-radius: var(--shop-tile-radius, 14px);
   }
 }
 
-/* Mosaic: alternating wide and tall tiles with a dense, collage feel. */
+/* Mosaic: alternating wide and tall tiles with a dense, collage feel. The
+   tall tile keeps its 4:5 frame on phones; only the wide spans need a desktop
+   grid. */
+.shop-post-wall.layout-mosaic
+  .shop-post-tile:nth-child(5n + 1):not(.shop-story-tile) {
+  aspect-ratio: 4 / 5;
+}
 @media (min-width: 900px) {
   .shop-post-wall.layout-mosaic {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -68,10 +82,6 @@
     .shop-post-tile:nth-child(5n + 4):not(.shop-story-tile) {
     grid-column: span 2;
     border-radius: var(--shop-tile-radius, 14px);
-  }
-  .shop-post-wall.layout-mosaic
-    .shop-post-tile:nth-child(5n + 1):not(.shop-story-tile) {
-    aspect-ratio: 4 / 5;
   }
 }
 
@@ -173,7 +183,8 @@
   inset-inline-end: 6px;
 }
 
-/* Stack: one cinematic post after another. */
+/* Stack: one cinematic post after another, at the same 16:9 frame on every
+   screen. */
 .shop-post-wall.layout-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -182,11 +193,6 @@
 .shop-post-wall.layout-stack .shop-post-tile {
   aspect-ratio: 16 / 9;
   border-radius: var(--shop-tile-radius, 14px);
-}
-@media (min-width: 900px) {
-  .shop-post-wall.layout-stack .shop-post-tile {
-    aspect-ratio: 21 / 9;
-  }
 }
 
 /* Cover: the newest post is a full-width banner, the rest follow in a grid. */
