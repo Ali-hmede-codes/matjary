@@ -8,3 +8,6 @@ node_modules/
 dist/
 coverage/
 *.log
+# Pre-filled deployment launchers contain the site-user password and must
+# never be pushed to the public repository.
+deploy-*.sh
