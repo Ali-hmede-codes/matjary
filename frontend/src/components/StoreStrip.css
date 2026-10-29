@@ -28,7 +28,7 @@
   width: 68px;
   height: 68px;
   padding: 3px;
-  border: 2px solid var(--line);
+  border: 2px solid var(--line-brand);
   border-radius: 23px;
   display: grid;
   place-items: center;
@@ -56,18 +56,8 @@
   color: var(--primary);
 }
 /* A shop with a live story keeps the strip's square tile and frame size, so
-   the row stays uniform; the conic outline is the only story affordance. */
-.story.has-story {
-  --story-ring: conic-gradient(
-    from 210deg,
-    #feda75,
-    #fa7e1e,
-    #d62976,
-    #962fbf,
-    #4f5bd5,
-    #feda75
-  );
-}
+   the row stays uniform; the brand-colored conic outline is the only story
+   affordance. */
 .story.has-story .story-ring {
   border-color: transparent;
   padding: 4px;

@@ -246,15 +246,8 @@
   inset: 0;
   z-index: 3;
   padding: 3px;
-  background: conic-gradient(
-    from 210deg,
-    #feda75,
-    #fa7e1e,
-    #d62976,
-    #962fbf,
-    #4f5bd5,
-    #feda75
-  );
+  /* Same brand ring as the story avatars at the top of the feed. */
+  background: var(--story-ring);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -321,15 +314,9 @@
   height: 8px;
   margin-right: 6px;
   border-radius: 50%;
-  background: conic-gradient(
-    from 210deg,
-    #feda75,
-    #fa7e1e,
-    #d62976,
-    #962fbf,
-    #4f5bd5,
-    #feda75
-  );
+  /* An 8px disc is too small for the conic ring, so the mark keeps the same
+     two brand colors as a plain gradient. */
+  background: linear-gradient(140deg, var(--secondary), var(--primary));
 }
 .shop-story-tile-copy small {
   font-size: 11px;

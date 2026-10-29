@@ -22,6 +22,17 @@
   --line: color-mix(in srgb, var(--ink) 10%, var(--surface));
   --wash: color-mix(in srgb, var(--ink) 4%, var(--surface));
   --accent-wash: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  /* Outlines around controls and shop rings keep a trace of the brand; the
+     neutral --line reads as a dirty gray frame on a white page. */
+  --line-brand: color-mix(in srgb, var(--primary) 20%, var(--line));
+  /* A live story's ring is drawn from the site's own colors: a fixed
+     Instagram-style palette clashes with every brand but its own. */
+  --story-ring: conic-gradient(
+    from 210deg,
+    var(--secondary),
+    var(--primary) 55%,
+    var(--secondary)
+  );
   min-height: 100vh;
   color: var(--ink);
   background: var(--surface);
