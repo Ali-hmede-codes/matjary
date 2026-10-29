@@ -581,6 +581,7 @@ const revealLayouts: readonly CatalogLayout[] = [
   'zigzag',
   'index',
   'rows',
+  'banner',
 ];
 
 // Photo tiles, Bento, Staggered, Sticker, Circles and the Photo rail all share
@@ -780,6 +781,78 @@ function NumberedRow({
   );
 }
 
+// Banner card: a wide cover with a floating rounded tile, then the name, the
+// description and the price underneath. The corner plus is the same AddToCart
+// the other layouts use, shown only while a plain add is possible; once the
+// item sits in the cart (or needs options) the control moves into the caption.
+function BannerCard({
+  product,
+  cart,
+  href,
+  lbpRate,
+  showDescriptions = true,
+  delay,
+}: {
+  product: Product;
+  cart: ShopCartController;
+  href: string;
+  lbpRate?: number | null;
+  showDescriptions?: boolean;
+  delay?: number;
+}) {
+  const unavailable = productCartLimit(product) === 0;
+  const inCart =
+    cart.cart?.items.some((entry) => entry.productId === product.id) ?? false;
+  const quickAdd = !productHasOptions(product) && !unavailable && !inCart;
+  const images = product.imageKeys ?? [];
+  return (
+    <article
+      className={`shop-product shop-app-card${unavailable ? ' is-unavailable' : ''}`}
+      style={tileDelay(delay)}
+    >
+      <div className="shop-app-art">
+        <a
+          className="shop-app-art-link"
+          href={href}
+          aria-label={`Open ${product.name}`}
+        >
+          <span className="shop-app-banner">
+            <ShopImage value={images[0]} alt={product.name} />
+            <SaleBadge product={product} />
+            <StockBadge product={product} cart={cart} />
+          </span>
+        </a>
+        <span className="shop-app-tile" aria-hidden="true">
+          <ShopImage value={images[1] ?? images[0]} alt="" />
+        </span>
+        {quickAdd && (
+          <div className="shop-app-quick">
+            <AddToCart product={product} cart={cart} chooseHref={href} />
+          </div>
+        )}
+      </div>
+      <div className="shop-app-copy">
+        <h3>
+          <a className="notranslate" href={href}>
+            {product.name}
+          </a>
+        </h3>
+        {showDescriptions && product.description && (
+          <p className="notranslate" title={product.description}>
+            {product.description}
+          </p>
+        )}
+        <div className="shop-app-bottom">
+          <PriceLabels product={product} lbpRate={lbpRate} />
+          {!quickAdd && (
+            <AddToCart product={product} cart={cart} chooseHref={href} />
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 // One tile of the Ribbon. The repeated set exists only for the seamless loop,
 // so it is plain markup that can never take focus or announce itself twice.
 function RibbonTile({
@@ -909,7 +982,7 @@ function ShelfRail({
 }: {
   children: ReactNode;
   count: number;
-  variant?: 'shelves' | 'rail';
+  variant?: 'shelves' | 'rail' | 'banner';
 }) {
   const rail = useRef<HTMLDivElement>(null);
   const [nav, setNav] = useState({
@@ -1104,6 +1177,17 @@ export function CatalogItem({
         delay={delay}
       />
     );
+  if (layout === 'banner')
+    return (
+      <BannerCard
+        product={product}
+        cart={cart}
+        href={href}
+        lbpRate={lbpRate}
+        showDescriptions={showDescriptions}
+        delay={delay}
+      />
+    );
   if (
     layout === 'tiles' ||
     layout === 'bento' ||
@@ -1237,6 +1321,12 @@ export function CatalogItems({
         lbpRate={lbpRate}
       />
     );
+  if (visualLayout === 'banner')
+    return (
+      <ShelfRail count={products.length} variant="banner">
+        {products.map((product, index) => item(product, 'banner', index))}
+      </ShelfRail>
+    );
   return (
     <div className={`shop-catalog-items layout-${visualLayout}`}>
       {products.map((product, index) => item(product, visualLayout, index))}
@@ -1265,7 +1355,7 @@ export function CatalogLoading({ layout }: { layout: CatalogLayout }) {
       </div>
     );
   // Skeletons mirror the shape of the chosen layout without inventing data.
-  const strip = layout === 'rail' || layout === 'ribbon';
+  const strip = layout === 'rail' || layout === 'ribbon' || layout === 'banner';
   const boxed =
     layout === 'tiles' ||
     layout === 'bento' ||
@@ -1290,7 +1380,9 @@ export function CatalogLoading({ layout }: { layout: CatalogLayout }) {
   const wide = layout === 'featured';
   const rows = strip ? 5 : skeleton === 'cards' ? (wide ? 4 : 6) : 4;
   const frame = strip
-    ? 'layout-rail'
+    ? layout === 'ribbon'
+      ? 'layout-rail'
+      : `layout-${layout}`
     : boxed
       ? `layout-${layout}`
       : rail

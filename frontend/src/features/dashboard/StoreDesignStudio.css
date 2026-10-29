@@ -907,7 +907,9 @@
 .design-preview-items.is-index b,
 .design-preview-items.is-index span,
 .design-preview-items.is-rows b,
-.design-preview-items.is-rows span {
+.design-preview-items.is-rows span,
+.design-preview-items.is-banner b,
+.design-preview-items.is-banner span {
   display: none;
 }
 .design-preview-items.is-shelves {
@@ -1028,6 +1030,40 @@
 }
 .design-preview-items.is-index i:nth-child(odd) {
   width: 74%;
+}
+/* Banner card: listing cards with a tile on a cover, in a sideways strip. */
+.design-preview-items.is-banner {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+.design-preview-items.is-banner i {
+  position: relative;
+  display: block;
+  flex: 0 0 34%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--brand-ink) 14%, transparent);
+  border-radius: 4px;
+  background: var(--brand-surface);
+}
+.design-preview-items.is-banner i::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 46%;
+  background: color-mix(in srgb, var(--brand-ink) 22%, var(--brand-surface));
+}
+.design-preview-items.is-banner i::after {
+  content: '';
+  position: absolute;
+  inset-inline: 24%;
+  top: 16%;
+  aspect-ratio: 1;
+  border: 2px solid var(--brand-surface);
+  border-radius: 30%;
+  background: color-mix(in srgb, var(--brand-ink) 34%, var(--brand-surface));
 }
 .design-preview-caption {
   display: flex;

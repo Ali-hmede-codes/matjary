@@ -95,6 +95,7 @@ export const DESIGN_CATALOG_LAYOUT_KEYS = [
   'zigzag',
   'index',
   'rows',
+  'banner',
 ] as const;
 
 // Menu sections repeat one layout, a pair, or a triple. The studio keeps the

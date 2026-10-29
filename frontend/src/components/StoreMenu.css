@@ -1736,14 +1736,16 @@
 }
 /* The rail puts its arrows on their own line instead of floating them over the
    first and last cards. */
-.shop-catalog-rail.is-rail .shop-rail-nav {
+.shop-catalog-rail.is-rail .shop-rail-nav,
+.shop-catalog-rail.is-banner .shop-rail-nav {
   position: static;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 6px;
   transform: none;
 }
-.shop-catalog-rail.is-rail .shop-rail-arrow {
+.shop-catalog-rail.is-rail .shop-rail-arrow,
+.shop-catalog-rail.is-banner .shop-rail-arrow {
   box-shadow: 0 6px 16px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
@@ -2122,6 +2124,205 @@
   border-bottom: 1px dotted color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
+/* Banner card: a cover card with a floating rounded tile, the shape a store
+   listing uses, laid out as a strip that scrolls sideways. */
+.shop-catalog-items.layout-banner {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.shop-catalog-items.layout-banner::-webkit-scrollbar {
+  display: none;
+}
+.shop-catalog-items.layout-banner:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.layout-banner > .shop-app-card {
+  flex: 0 0 clamp(240px, 46vw, 300px);
+  scroll-snap-align: start;
+}
+.layout-banner > .shop-skeleton {
+  flex: 0 0 clamp(240px, 46vw, 300px);
+  aspect-ratio: 3 / 4;
+}
+.storefront .shop-app-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--surface));
+  border-radius: calc(var(--shop-radius, 20px) * 0.75);
+  background: var(--surface);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+/* The white head, the cover and the tile share one square-ish art block. */
+.shop-app-art {
+  position: relative;
+  aspect-ratio: 1 / 0.94;
+}
+.shop-app-art-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.shop-app-banner {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 54%;
+  overflow: hidden;
+  background: var(--wash);
+}
+/* A faint shade keeps the cover reading as a backdrop, so the crisp tile above
+   it looks like its logo rather than a second copy of the same photo. */
+.shop-app-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #0000, #00000045);
+  pointer-events: none;
+}
+/* Both pills sit on the cover's bottom edge, clear of the floating tile. */
+.shop-app-banner .shop-sale-label {
+  top: auto;
+  bottom: 8px;
+  inset-inline-start: 8px;
+  inset-inline-end: auto;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+.shop-app-banner .shop-stock-label {
+  bottom: 8px;
+  inset-inline-end: 8px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.shop-app-tile {
+  position: absolute;
+  z-index: 2;
+  top: 13%;
+  inset-inline: 0;
+  width: 52%;
+  margin-inline: auto;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 5px solid var(--surface);
+  border-radius: 30%;
+  background: var(--surface);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--ink) 26%, transparent);
+  pointer-events: none;
+}
+.shop-app-tile .shop-image {
+  width: 100%;
+  height: 100%;
+}
+/* The corner plus is the plain AddToCart: the word is hidden, the icon stays,
+   and the button keeps its accessible label. */
+.shop-app-quick {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  inset-inline-start: 10px;
+}
+.shop-app-quick .shop-add-to-cart {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 0;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 34%, transparent);
+}
+.shop-app-quick .shop-add-to-cart svg {
+  width: 18px;
+  height: 18px;
+}
+.shop-app-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px 14px 14px;
+}
+.shop-app-copy h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-app-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-app-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.shop-app-bottom .price-stack {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-app-bottom .price-lbp {
+  font-size: 11px;
+}
+.shop-app-bottom .shop-add-to-cart {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+/* Motion: the cover pushes in on hover; the tile follows by a hair. */
+.shop-app-banner .shop-image > img,
+.shop-app-tile .shop-image > img {
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* A sold-out dish stays browsable but its art loses colour, like the other
+   photo layouts. */
+.shop-app-card.is-unavailable .shop-app-banner .shop-image > img,
+.shop-app-card.is-unavailable .shop-app-tile .shop-image > img {
+  filter: saturate(0.45);
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-app-card:hover .shop-app-banner .shop-image > img {
+    transform: scale(1.06);
+  }
+  .shop-app-card:hover .shop-app-tile .shop-image > img {
+    transform: scale(1.04);
+  }
+}
+
 /* Motion: one capped rise-and-fade for every photo-first layout. The skeleton
    boxes stay still so loading never looks like content arriving. */
 @keyframes shop-tile-in {
@@ -2142,7 +2343,8 @@
 .layout-rail > .shop-tile-card,
 .layout-zigzag > .shop-zigzag-row,
 .layout-index > .shop-numbered-row,
-.layout-rows > .shop-photo-row {
+.layout-rows > .shop-photo-row,
+.layout-banner > .shop-app-card {
   animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: var(--shop-tile-delay, 0ms);
 }
@@ -2231,6 +2433,27 @@
   }
   .shop-ribbon-tile {
     width: clamp(190px, 58vw, 240px);
+  }
+  /* The banner strip shows one card and a peek of the next, so the swipe is
+     obvious on a phone. */
+  .layout-banner > .shop-app-card,
+  .layout-banner > .shop-skeleton {
+    flex-basis: clamp(230px, 64vw, 280px);
+  }
+  .shop-app-copy {
+    padding: 10px 12px 12px;
+  }
+  .shop-app-copy h3 {
+    font-size: 15px;
+  }
+  .shop-app-copy p {
+    font-size: 12px;
+  }
+  .shop-app-bottom {
+    padding-top: 10px;
+  }
+  .shop-app-bottom .price-stack {
+    font-size: 15px;
   }
 }
 @media (max-width: 560px) {
@@ -2341,6 +2564,7 @@
   .layout-zigzag > .shop-zigzag-row,
   .layout-index > .shop-numbered-row,
   .layout-rows > .shop-photo-row,
+  .layout-banner > .shop-app-card,
   .shop-catalog-ribbon-track {
     animation: none;
   }
