@@ -69,6 +69,9 @@ export const DESIGN_POST_LAYOUT_KEYS = [
   'list',
   'stack',
   'cover',
+  'tiles',
+  'reel',
+  'stagger',
 ] as const;
 
 export const DESIGN_CATALOG_LAYOUT_KEYS = [

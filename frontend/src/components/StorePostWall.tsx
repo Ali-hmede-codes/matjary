@@ -1,8 +1,14 @@
 import { Layers, Play } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { assetUrl, type Post, type Story } from '../lib/api';
 import type { PostLayout } from '../lib/design.ts';
 import { storyTimeLabel } from '../lib/stories';
+import { enableMouseScrolling } from '../lib/website';
 import { MediaView } from './MediaView';
+
+// The 4:3 walls reveal their tiles in a short cascade. The other layouts keep
+// their instant paint so an archive never feels like it is still loading.
+const motionLayouts: readonly PostLayout[] = ['tiles', 'reel', 'stagger'];
 
 /**
  * The shop's post wall. The owner picks the presentation in the design studio;
@@ -25,8 +31,20 @@ export function StorePostWall({
   onOpen: (post: Post) => void;
   onOpenStory?: () => void;
 }) {
+  const motion = motionLayouts.includes(layout);
+  const reel = layout === 'reel';
+  // A capped stagger keeps a long archive from rippling for seconds, and CSS
+  // drops the animation entirely under prefers-reduced-motion.
+  const revealDelay = (index: number): CSSProperties | undefined =>
+    motion
+      ? ({ '--post-delay': `${Math.min(index, 11) * 35}ms` } as CSSProperties)
+      : undefined;
   return (
-    <div className={`shop-post-grid shop-post-wall layout-${layout}`}>
+    <div
+      className={`shop-post-grid shop-post-wall layout-${layout}`}
+      ref={reel ? enableMouseScrolling : undefined}
+      tabIndex={reel ? 0 : undefined}
+    >
       {story && onOpenStory && (
         <StoryTile
           story={story}
@@ -35,7 +53,7 @@ export function StorePostWall({
           onOpen={onOpenStory}
         />
       )}
-      {posts.map((post) => {
+      {posts.map((post, index) => {
         const indicators = (
           <>
             {post.media.some((media) => media.kind === 'video') && (
@@ -80,6 +98,7 @@ export function StorePostWall({
             className="shop-post-tile"
             key={post.id}
             type="button"
+            style={revealDelay(index)}
             aria-label={`Open post: ${post.title}`}
             aria-haspopup="dialog"
             onClick={() => onOpen(post)}

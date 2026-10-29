@@ -214,6 +214,124 @@
   }
 }
 
+/* ---------- Full-bleed 4:3 walls ---------- */
+/* Photo tiles: compact, edge-to-edge 4:3 photos and nothing else. */
+.shop-post-wall.layout-tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+.shop-post-wall.layout-tiles .shop-post-tile,
+.shop-post-wall.layout-stagger .shop-post-tile {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 10px);
+}
+@media (min-width: 640px) {
+  .shop-post-wall.layout-tiles,
+  .shop-post-wall.layout-stagger {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1000px) {
+  .shop-post-wall.layout-tiles,
+  .shop-post-wall.layout-stagger {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+/* Staggered: the same 4:3 tiles, every other one dropped a step. */
+.shop-post-wall.layout-stagger {
+  align-items: start;
+  gap: 8px;
+}
+.shop-post-wall.layout-stagger .shop-post-tile:nth-child(even) {
+  margin-top: 18px;
+}
+
+/* Reel: a sideways 4:3 strip. The wall takes the same wheel/drag scrolling as
+   the other horizontal rails, and snaps one card at a time. */
+.shop-post-wall.layout-reel {
+  display: flex;
+  overflow-x: auto;
+  gap: 8px;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.shop-post-wall.layout-reel::-webkit-scrollbar {
+  display: none;
+}
+.shop-post-wall.layout-reel:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+  border-radius: var(--shop-tile-radius, 12px);
+}
+.shop-post-wall.layout-reel .shop-post-tile {
+  flex: 0 0 clamp(190px, 46vw, 290px);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 12px);
+  scroll-snap-align: start;
+}
+
+/* Motion: a short rise-and-fade on first paint, then a quiet lift and photo
+   zoom on hover. The animation uses backwards fill so it releases the
+   transform as soon as it ends and hover keeps working. */
+@keyframes shop-post-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(9px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.shop-post-wall.layout-tiles .shop-post-tile,
+.shop-post-wall.layout-reel .shop-post-tile,
+.shop-post-wall.layout-stagger .shop-post-tile {
+  animation: shop-post-reveal 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--post-delay, 0ms);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease;
+}
+.shop-post-wall.layout-tiles .shop-post-thumbnail img,
+.shop-post-wall.layout-reel .shop-post-thumbnail img,
+.shop-post-wall.layout-stagger .shop-post-thumbnail img {
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-post-wall.layout-tiles .shop-post-tile:hover,
+  .shop-post-wall.layout-reel .shop-post-tile:hover,
+  .shop-post-wall.layout-stagger .shop-post-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px color-mix(in srgb, var(--ink) 16%, transparent);
+  }
+  .shop-post-wall.layout-tiles .shop-post-tile:hover .shop-post-thumbnail img,
+  .shop-post-wall.layout-reel .shop-post-tile:hover .shop-post-thumbnail img,
+  .shop-post-wall.layout-stagger
+    .shop-post-tile:hover
+    .shop-post-thumbnail
+    img {
+    transform: scale(1.055);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-post-wall.layout-tiles .shop-post-tile,
+  .shop-post-wall.layout-reel .shop-post-tile,
+  .shop-post-wall.layout-stagger .shop-post-tile {
+    animation: none;
+    transition: none;
+  }
+  .shop-post-wall.layout-tiles .shop-post-tile .shop-post-thumbnail img,
+  .shop-post-wall.layout-reel .shop-post-tile .shop-post-thumbnail img,
+  .shop-post-wall.layout-stagger .shop-post-tile .shop-post-thumbnail img {
+    transition: none;
+    transform: none;
+  }
+}
+
 @media (max-width: 640px) {
   .shop-post-wall.layout-masonry {
     column-count: 2;

@@ -115,6 +115,27 @@ const postWires: Record<PostLayout, WireBoxes> = {
     [22, 16, 7, 10],
     [31, 16, 7, 10],
   ],
+  tiles: [
+    [2, 2, 11, 8],
+    [15, 2, 11, 8],
+    [28, 2, 10, 8],
+    [2, 14, 11, 8],
+    [15, 14, 11, 8],
+    [28, 14, 10, 8],
+  ],
+  reel: [
+    [1, 6, 13, 10],
+    [16, 6, 13, 10],
+    [31, 6, 7, 10],
+  ],
+  stagger: [
+    [2, 2, 11, 8],
+    [15, 6, 11, 8],
+    [28, 2, 10, 8],
+    [2, 15, 11, 8],
+    [15, 19, 11, 8],
+    [28, 15, 10, 8],
+  ],
 };
 
 const catalogWires: Record<CatalogLayout, WireBoxes> = {
@@ -445,7 +466,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           <StudioSection
             step="01"
             title="Post layout"
-            hint="Ten arrangements. Pick the one that fits your shop."
+            hint={`${postLayouts.length} arrangements. Pick the one that fits your shop.`}
           >
             <LayoutPicker
               label="Posts"

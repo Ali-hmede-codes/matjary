@@ -767,6 +767,36 @@
   aspect-ratio: 16 / 6;
   border-radius: 5px;
 }
+/* Full-bleed 4:3 photo walls. */
+.design-preview-wall.is-tiles {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+}
+.design-preview-wall.is-tiles i {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 4px);
+}
+.design-preview-wall.is-stagger {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.design-preview-wall.is-stagger i {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 4px);
+}
+.design-preview-wall.is-stagger i:nth-child(even) {
+  margin-top: 7px;
+}
+.design-preview-wall.is-reel {
+  display: flex;
+  overflow: hidden;
+  gap: 4px;
+}
+.design-preview-wall.is-reel i {
+  flex: 0 0 34%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 4px);
+}
 .design-preview-items {
   display: grid;
   gap: 5px;

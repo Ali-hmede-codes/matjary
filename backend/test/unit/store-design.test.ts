@@ -57,10 +57,13 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
 });
 
 test('store design vocabulary stays aligned across layouts', () => {
-  assert.equal(DESIGN_POST_LAYOUT_KEYS.length, 10);
+  assert.equal(DESIGN_POST_LAYOUT_KEYS.length, 13);
   assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('spotlight'));
   assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('list'));
   assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('cover'));
+  assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('tiles'));
+  assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('reel'));
+  assert.ok(DESIGN_POST_LAYOUT_KEYS.includes('stagger'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('menu'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('shelves'));
 });

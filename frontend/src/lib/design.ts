@@ -69,6 +69,9 @@ export const postLayouts = [
   'list',
   'stack',
   'cover',
+  'tiles',
+  'reel',
+  'stagger',
 ] as const;
 export type PostLayout = (typeof postLayouts)[number];
 
@@ -312,6 +315,18 @@ export const postLayoutInfo: Record<
   list: { label: 'List', hint: 'Rows with a thumbnail and the post title.' },
   stack: { label: 'Stack', hint: 'One full-width post after another.' },
   cover: { label: 'Cover', hint: 'A full-width cover post, then a grid.' },
+  tiles: {
+    label: 'Photo tiles',
+    hint: 'Full 4:3 photos in a tidy, compact grid.',
+  },
+  reel: {
+    label: 'Reel',
+    hint: 'A 4:3 strip that scrolls sideways.',
+  },
+  stagger: {
+    label: 'Staggered',
+    hint: '4:3 tiles with an offset, editorial rhythm.',
+  },
 };
 
 export const catalogLayoutInfo: Record<
@@ -528,7 +543,7 @@ export const designPresets: readonly DesignPreset[] = [
     shape: 'round',
     density: 'compact',
     hero: 'split',
-    postsLayout: 'grid',
+    postsLayout: 'tiles',
     catalogLayout: 'shelves',
     accentLayout: 'compact',
     thirdLayout: 'cards',
@@ -544,7 +559,7 @@ export const designPresets: readonly DesignPreset[] = [
     shape: 'sharp',
     density: 'balanced',
     hero: 'poster',
-    postsLayout: 'rail',
+    postsLayout: 'reel',
     catalogLayout: 'cards',
     accentLayout: 'menu',
     thirdLayout: 'gallery',
