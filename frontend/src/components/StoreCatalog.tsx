@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { Ban, Check, Minus, Package, Plus } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  Ban,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  Package,
+  Plus,
+} from 'lucide-react';
 import { assetUrl, type Product, type SelectedProductOption } from '../lib/api';
 import {
   formatProductPrice,
@@ -14,6 +22,7 @@ import {
   type CatalogLayout,
 } from '../lib/storefront';
 import { productCartLimit } from '../lib/cart';
+import { enableMouseScrolling } from '../lib/website';
 import type { ShopCartController } from '../hooks/useShopCart';
 
 export function ShopImage({
@@ -315,24 +324,28 @@ function ListItem({
   );
 }
 
-// Layout 2: photo cards. Best for visual merchandise and signature dishes.
+// Layout 2: photo cards. The card is the box: "square" is a 1:1 tile,
+// "portrait" a 3:4 tile and "wide" a 4:3 landscape card. The photo fills
+// whatever room the caption leaves, so the box ratio never drifts.
 function PhotoCard({
   product,
   cart,
   href,
   lbpRate,
   showDescriptions = true,
+  variant = 'square',
 }: {
   product: Product;
   cart: ShopCartController;
   href: string;
   lbpRate?: number | null;
   showDescriptions?: boolean;
+  variant?: 'square' | 'portrait' | 'wide';
 }) {
   const unavailable = productCartLimit(product) === 0;
   return (
     <article
-      className={`shop-product shop-menu-item shop-photo-card${unavailable ? ' is-unavailable' : ''}`}
+      className={`shop-product shop-photo-card is-${variant}${unavailable ? ' is-unavailable' : ''}`}
     >
       <a
         className="shop-product-image shop-product-image-link"
@@ -454,103 +467,112 @@ function MenuRow({
   );
 }
 
-// Layout 5: image-first tiles. The name and price sit on the photo, so a
-// gallery reads as one continuous wall.
-function GalleryTile({
-  product,
-  cart,
-  href,
-  lbpRate,
-  showDescriptions = true,
+// The sideways rail scrolls on its own; the arrows give mouse and keyboard
+// shoppers the same "next card" a swipe gives touch screens.
+function ShelfRail({
+  children,
+  count,
 }: {
-  product: Product;
-  cart: ShopCartController;
-  href: string;
-  lbpRate?: number | null;
-  showDescriptions?: boolean;
+  children: ReactNode;
+  count: number;
 }) {
-  const unavailable = productCartLimit(product) === 0;
+  const rail = useRef<HTMLDivElement>(null);
+  const [nav, setNav] = useState({
+    scrollable: false,
+    atStart: true,
+    atEnd: true,
+  });
+
+  const measure = () => {
+    const node = rail.current;
+    if (!node) return;
+    const max = node.scrollWidth - node.clientWidth;
+    // RTL runs scrollLeft from 0 down to -max, so compare the magnitude.
+    const offset = Math.abs(node.scrollLeft);
+    const next = {
+      scrollable: max > 2,
+      atStart: offset <= 2,
+      atEnd: offset >= max - 2,
+    };
+    setNav((current) =>
+      current.scrollable === next.scrollable &&
+      current.atStart === next.atStart &&
+      current.atEnd === next.atEnd
+        ? current
+        : next,
+    );
+  };
+
+  useEffect(() => {
+    const node = rail.current;
+    if (!node) return;
+    measure();
+    // The rail keeps its own box width, so only a card count change (or a
+    // breakpoint resize) can make the row overflow or stop overflowing.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [count]);
+
+  const scroll = (direction: 1 | -1) => {
+    const node = rail.current;
+    if (!node) return;
+    const rtl = getComputedStyle(node).direction === 'rtl';
+    const step = Math.max(node.clientWidth * 0.8, 180);
+    node.scrollBy({
+      left: (rtl ? -direction : direction) * step,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+    });
+  };
+
+  // One ref both measures the rail and gives it the site-wide wheel and drag
+  // scrolling, so the rail behaves like every other horizontal strip.
+  const attachRail = (node: HTMLDivElement | null) => {
+    rail.current = node;
+    return enableMouseScrolling(node);
+  };
+
   return (
-    <article
-      className={`shop-product shop-gallery-tile${unavailable ? ' is-unavailable' : ''}`}
-    >
-      <a
-        className="shop-gallery-media"
-        href={href}
-        aria-label={`Open ${product.name}`}
+    <div className="shop-catalog-rail">
+      <div
+        className="shop-catalog-items layout-shelves"
+        ref={attachRail}
+        onScroll={measure}
+        role="group"
+        aria-label="Products"
+        tabIndex={0}
       >
-        <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-        <SaleBadge product={product} />
-        <StockBadge product={product} cart={cart} />
-      </a>
-      <div className="shop-gallery-copy">
-        <h3>
-          <a className="notranslate" href={href}>
-            {product.name}
-          </a>
-        </h3>
-        {showDescriptions && product.description && (
-          <p className="notranslate" title={product.description}>
-            {product.description}
-          </p>
-        )}
-        <div className="shop-product-bottom">
-          <PriceLabels product={product} lbpRate={lbpRate} />
-          <AddToCart product={product} cart={cart} chooseHref={href} />
-        </div>
+        {children}
       </div>
-    </article>
+      {nav.scrollable && (
+        <div className="shop-rail-nav">
+          <button
+            type="button"
+            className="shop-rail-arrow"
+            aria-label="Scroll products backward"
+            disabled={nav.atStart}
+            onClick={() => scroll(-1)}
+          >
+            <ChevronLeft size={18} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="shop-rail-arrow"
+            aria-label="Scroll products forward"
+            disabled={nav.atEnd}
+            onClick={() => scroll(1)}
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
-// Layout 6: one hero item followed by regular cards.
-function FeaturedItem({
-  product,
-  cart,
-  href,
-  lbpRate,
-  showDescriptions = true,
-}: {
-  product: Product;
-  cart: ShopCartController;
-  href: string;
-  lbpRate?: number | null;
-  showDescriptions?: boolean;
-}) {
-  const unavailable = productCartLimit(product) === 0;
-  return (
-    <article
-      className={`shop-product shop-featured-item${unavailable ? ' is-unavailable' : ''}`}
-    >
-      <a
-        className="shop-product-image shop-product-image-link"
-        href={href}
-        aria-label={`Open ${product.name}`}
-      >
-        <ShopImage value={product.imageKeys?.[0]} alt={product.name} eager />
-        <SaleBadge product={product} />
-        <StockBadge product={product} cart={cart} />
-      </a>
-      <div className="shop-product-copy">
-        <span className="shop-featured-eyebrow">Featured</span>
-        <h3>
-          <a className="notranslate" href={href}>
-            {product.name}
-          </a>
-        </h3>
-        {showDescriptions && product.description && (
-          <p className="notranslate" title={product.description}>
-            {product.description}
-          </p>
-        )}
-        <div className="shop-product-bottom">
-          <PriceLabels product={product} lbpRate={lbpRate} />
-          <AddToCart product={product} cart={cart} chooseHref={href} />
-        </div>
-      </div>
-    </article>
-  );
-}
+// Layout 6: the wide 4:3 card, rendered by PhotoCard.
 
 export function CatalogItem({
   product,
@@ -602,17 +624,28 @@ export function CatalogItem({
     );
   if (layout === 'gallery')
     return (
-      <GalleryTile
+      <PhotoCard
         product={product}
         cart={cart}
         href={href}
         lbpRate={lbpRate}
         showDescriptions={showDescriptions}
+        variant="portrait"
       />
     );
-  // "featured" and "shelves" are arranged by CatalogItems; a stray item in
-  // one of those modes still renders as a normal card.
-  if (layout === 'featured' || layout === 'shelves')
+  // "shelves" is arranged by CatalogItems as a rail of square cards.
+  if (layout === 'featured')
+    return (
+      <PhotoCard
+        product={product}
+        cart={cart}
+        href={href}
+        lbpRate={lbpRate}
+        showDescriptions={showDescriptions}
+        variant="wide"
+      />
+    );
+  if (layout === 'shelves')
     return (
       <PhotoCard
         product={product}
@@ -671,28 +704,17 @@ export function CatalogItems({
       showDescriptions={showDescriptions}
     />
   );
-  if (visualLayout === 'featured' && products.length > 0) {
-    const [first, ...rest] = products;
+  if (visualLayout === 'featured')
     return (
       <div className="shop-catalog-items layout-featured">
-        <FeaturedItem
-          product={first!}
-          cart={cart}
-          href={storeProductPath(shopSlug, first!.slug, demo)}
-          lbpRate={lbpRate}
-          showDescriptions={showDescriptions}
-        />
-        <div className="shop-featured-grid">
-          {rest.map((product) => item(product, 'cards'))}
-        </div>
+        {products.map((product) => item(product, 'featured'))}
       </div>
     );
-  }
   if (visualLayout === 'shelves')
     return (
-      <div className="shop-catalog-items layout-shelves">
+      <ShelfRail count={products.length}>
         {products.map((product) => item(product, 'cards'))}
-      </div>
+      </ShelfRail>
     );
   return (
     <div className={`shop-catalog-items layout-${visualLayout}`}>
@@ -709,10 +731,22 @@ export function CatalogLoading({ layout }: { layout: CatalogLayout }) {
       : layout === 'list'
         ? 'list'
         : 'cards';
-  const rows = skeleton === 'cards' ? 6 : 4;
+  // Portrait and wide tiles keep their box ratio while the data loads, and a
+  // rail skeleton stays a row so the page does not jump when the cards arrive.
+  const portrait = layout === 'gallery';
+  const rail = layout === 'shelves';
+  const wide = layout === 'featured';
+  const rows = skeleton === 'cards' ? (wide ? 4 : 6) : 4;
+  const frame = rail
+    ? 'layout-shelves'
+    : wide
+      ? 'layout-featured'
+      : portrait
+        ? 'layout-cards is-portrait'
+        : `layout-${skeleton}`;
   return (
     <div
-      className={`shop-catalog-items layout-${skeleton}`}
+      className={`shop-catalog-items ${frame}`}
       role="status"
       aria-busy="true"
     >

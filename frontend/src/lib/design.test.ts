@@ -123,7 +123,7 @@ test('repeat 3 rotates through the three chosen layouts', () => {
   );
   assert.equal(
     rhythmSummary(design),
-    'Menu → Photo cards → Gallery, repeating',
+    'Menu → Square grid → Portrait grid, repeating',
   );
 });
 
@@ -138,7 +138,10 @@ test('repeat 2 alternates the two chosen layouts', () => {
     ['list', 'gallery', 'list', 'gallery'],
   );
   assert.equal(resolveCategoryLayout(design, Number.NaN), 'list');
-  assert.equal(rhythmSummary(design), 'Classic rows → Gallery, repeating');
+  assert.equal(
+    rhythmSummary(design),
+    'Classic rows → Portrait grid, repeating',
+  );
 });
 
 test('old rhythm values keep their meaning after the redesign', () => {

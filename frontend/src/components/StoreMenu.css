@@ -109,7 +109,13 @@
 /* Sections keep the alternated item layouts in one continuous menu. */
 .shop-menu-sections {
   display: grid;
+  /* The rail is a scroll container; without an explicit minmax(0) track the
+     grid item's automatic minimum grows to the whole row and clips on phones. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 38px;
+}
+.shop-menu-section {
+  min-width: 0;
 }
 .shop-menu-section-head {
   display: flex;
@@ -327,18 +333,16 @@
   color: var(--on-primary);
 }
 
-/* ---------- Three item layouts, alternating per category ---------- */
+/* ---------- Item layouts ---------- */
+/* The container decides its columns; each layout's card shape lives in the
+   "design studio" block further down. */
 .shop-catalog-items {
   display: grid;
   min-width: 0;
 }
 .shop-catalog-items.layout-list {
-  grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr));
   gap: 16px;
-}
-.shop-catalog-items.layout-cards {
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 18px;
 }
 .shop-catalog-items.layout-compact {
   grid-template-columns: minmax(0, 1fr);
@@ -390,7 +394,7 @@
   align-items: center;
   gap: 16px;
   padding: 12px;
-  border-radius: 22px;
+  border-radius: var(--shop-tile-radius, 22px);
 }
 .shop-menu-item .shop-product-image {
   flex: 0 0 118px;
@@ -420,30 +424,110 @@
   font-size: 18px;
   letter-spacing: -0.3px;
 }
-/* Layout 2: photo cards. */
+/* Layout 2: photo cards. The card is the box the owner picked: a 1:1 tile, a
+   3:4 tile or a 4:3 landscape card. The photo takes whatever height the
+   caption leaves, so the box stays on its ratio whatever the text length. */
 .storefront .shop-photo-card {
   flex-direction: column;
   align-items: stretch;
+  overflow: hidden;
   padding: 8px;
-  border-radius: 24px;
+  border-radius: var(--shop-radius, 20px);
 }
-.shop-photo-card .shop-product-image,
-.storefront .shop-photo-card .shop-product-image {
-  flex: none;
+.shop-photo-card.is-square {
+  aspect-ratio: 1 / 1;
+}
+.shop-photo-card.is-portrait {
+  aspect-ratio: 3 / 4;
+}
+.shop-photo-card.is-wide {
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 4 / 3;
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.shop-photo-card .shop-product-image {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   height: auto;
-  aspect-ratio: 4 / 5;
-  border-radius: 18px;
+  aspect-ratio: auto;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.shop-photo-card.is-wide .shop-product-image {
+  flex: 0 0 48%;
+  width: 48%;
+  height: 100%;
+  border-radius: 0;
 }
 .shop-photo-card .shop-product-copy {
-  padding: 16px 10px 8px;
+  flex: 0 0 auto;
+  padding: 8px 6px 2px;
+}
+.shop-photo-card.is-wide .shop-product-copy {
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: clamp(16px, 2.6vw, 30px);
 }
 .shop-photo-card h3 {
-  font-size: 16px;
+  display: -webkit-box;
+  overflow: hidden;
+  margin-bottom: 2px;
+  font-size: 14px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-photo-card.is-wide h3 {
+  font-size: clamp(18px, 2vw, 22px);
+}
+/* A 1:1 tile has no room for prose; the taller boxes keep two lines of it. */
+.shop-photo-card .shop-product-copy p {
+  display: none;
+}
+.shop-photo-card.is-portrait .shop-product-copy p,
+.shop-photo-card.is-wide .shop-product-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 12.5px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+/* A compact tile needs a compact status pill: at 150px the full label wraps
+   over a third of the photo and hides the product. */
+.shop-photo-card .shop-stock-label {
+  bottom: 8px;
+  inset-inline-end: 8px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.shop-photo-card .shop-out-of-stock svg {
+  display: none;
 }
 .shop-photo-card .shop-product-bottom {
-  padding-top: 12px;
-  font-size: 17px;
+  padding-top: 6px;
+  gap: 6px;
+  font-size: 15px;
+}
+.shop-photo-card.is-wide .shop-product-bottom {
+  margin-top: 16px;
+  padding-top: 0;
+  font-size: 19px;
+}
+/* The action sits inside the caption, so it must not outgrow the tile. */
+.shop-photo-card .shop-add-to-cart {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.shop-photo-card .shop-qty-stepper {
+  min-height: 32px;
 }
 /* Layout 3: compact price list without images. */
 .shop-price-row {
@@ -954,7 +1038,8 @@
   .shop-catalog-items.layout-list {
     grid-template-columns: minmax(0, 1fr);
   }
-  .shop-catalog-items.layout-cards {
+  .shop-catalog-items.layout-cards,
+  .shop-catalog-items.layout-gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
@@ -1134,93 +1219,35 @@
   border-radius: var(--shop-tile-radius, 22px);
 }
 
-/* Gallery: one continuous wall of image-first tiles. */
+/* Square grid: the everyday e-commerce wall of 1:1 cards. */
+.shop-catalog-items.layout-cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: 14px;
+}
+/* Portrait grid: the same card with a taller 3:4 photo, so fewer fit a row. */
 .shop-catalog-items.layout-gallery {
-  grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 14px;
 }
-.storefront .shop-gallery-tile {
-  position: relative;
-  display: block;
+/* Loading skeletons reuse the grid, so their boxes keep the layout ratio. */
+.shop-catalog-items .shop-skeleton.shop-product {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  padding: 0;
-  border: 0;
-  border-radius: var(--shop-tile-radius, 8px);
-  background: var(--wash);
-  box-shadow: none;
 }
-.storefront .shop-gallery-tile:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 38px color-mix(in srgb, var(--ink) 16%, transparent);
+.shop-catalog-items .shop-skeleton.shop-product > .shop-product-image {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
 }
-.shop-gallery-media {
-  position: relative;
-  display: block;
+.shop-catalog-items.layout-cards > .shop-skeleton {
+  aspect-ratio: 1 / 1;
+}
+.shop-catalog-items.is-portrait > .shop-skeleton {
   aspect-ratio: 3 / 4;
-  overflow: hidden;
-  border-radius: inherit;
 }
-.shop-gallery-media > .shop-image {
-  position: absolute;
-  inset: 0;
-}
-.shop-gallery-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.45s ease;
-}
-@media (hover: hover) and (pointer: fine) {
-  .shop-gallery-tile:hover .shop-gallery-media img {
-    transform: scale(1.05);
-  }
-}
-.shop-gallery-copy {
-  position: absolute;
-  inset: auto 0 0;
-  z-index: 2;
-  padding: 34px 12px 12px;
-  background: linear-gradient(transparent, #000000b8);
-  color: #fff;
-}
-.shop-gallery-copy h3 {
-  margin: 0 0 3px;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.3px;
-  line-height: 1.35;
-}
-.shop-gallery-copy p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 0;
-  color: #ffffffd9;
-  font-size: 11px;
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-.shop-gallery-copy .shop-product-bottom {
-  padding-top: 8px;
-  color: #fff;
-  font-size: 15px;
-}
-.shop-gallery-copy .shop-add-to-cart,
-.shop-gallery-copy .shop-qty-stepper {
-  background-color: #fff;
-  border-color: #fff;
-  color: #17231e;
-}
-/* The stock pill and the sale badge belong to the photo, so they must stay
-   above the copy overlay. */
-.shop-gallery-tile .shop-stock-label,
-.shop-gallery-tile .shop-sale-label {
-  z-index: 3;
-}
-.shop-gallery-copy .shop-qty-stepper button {
-  color: #17231e;
+.shop-catalog-items.layout-featured > .shop-skeleton {
+  aspect-ratio: 4 / 3;
 }
 
 /* Menu: dotted leaders and a serif line, like a printed card. */
@@ -1258,82 +1285,117 @@
   font-size: 17px;
 }
 
-/* Featured: a hero item, then a regular card grid. */
+/* Wide feature: 4:3 landscape boxes, two per row on desktop. */
 .shop-catalog-items.layout-featured {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
 }
-.storefront .shop-featured-item {
-  flex-direction: row;
-  align-items: stretch;
-  gap: 6px;
-  padding: 10px;
-  border-radius: var(--shop-radius, 24px);
-}
-.shop-featured-item .shop-product-image {
-  flex: 0 0 46%;
-  width: 46%;
-  aspect-ratio: 4 / 3;
-  border-radius: var(--shop-tile-radius, 18px);
-}
-.shop-featured-item .shop-product-copy {
-  justify-content: center;
-  padding: 18px 22px;
-}
-.shop-featured-eyebrow {
-  margin-bottom: 10px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-.shop-featured-item h3 {
+.shop-photo-card.is-wide h3 {
   font-family: var(--shop-font-display, inherit);
-  font-size: clamp(20px, 2.4vw, 26px);
   font-weight: var(--shop-display-weight, 700);
   letter-spacing: var(--shop-display-spacing, -0.6px);
   line-height: 1.2;
 }
-.shop-featured-item p {
+.shop-photo-card.is-wide p {
   max-width: 54ch;
   font-size: 13px;
 }
-.shop-featured-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
-}
 
-/* Shelves: a swipeable row of product cards. */
+/* Sideways rail: square cards that scroll on the x axis, snapped one by one. */
+.shop-catalog-rail {
+  position: relative;
+  min-width: 0;
+}
 .shop-catalog-items.layout-shelves {
   display: flex;
   overflow-x: auto;
-  gap: 14px;
-  padding-bottom: 8px;
-  scroll-snap-type: x proximity;
+  gap: 12px;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
   overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.shop-catalog-items.layout-shelves::-webkit-scrollbar {
+  display: none;
+}
+.shop-catalog-items.layout-shelves:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: var(--shop-tile-radius, 14px);
 }
 .layout-shelves > .shop-photo-card {
-  flex: 0 0 clamp(168px, 36vw, 220px);
+  flex: 0 0 clamp(160px, 42vw, 210px);
   scroll-snap-align: start;
+}
+/* Loading skeletons keep the same card width so the rail does not resize. */
+.layout-shelves > .shop-skeleton {
+  flex: 0 0 clamp(160px, 42vw, 210px);
+  aspect-ratio: 1 / 1;
+}
+.shop-rail-nav {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline: -8px;
+  display: flex;
+  justify-content: space-between;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.shop-rail-arrow {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 18%, transparent);
+  pointer-events: auto;
+}
+.shop-rail-arrow:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.shop-rail-arrow:disabled {
+  opacity: 0;
+  pointer-events: none;
 }
 
 @media (max-width: 720px) {
-  .storefront .shop-featured-item {
-    flex-direction: column;
-  }
-  .shop-featured-item .shop-product-image {
-    flex: none;
-    width: 100%;
-    aspect-ratio: 4 / 3;
-  }
-  .shop-featured-item .shop-product-copy {
-    padding: 14px 6px 6px;
-  }
+  .shop-catalog-items.layout-cards,
   .shop-catalog-items.layout-gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
+  }
+  /* A 4:3 box stays readable side by side, even on a phone. */
+  .shop-catalog-items.layout-featured {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .shop-photo-card .shop-product-copy {
+    padding: 6px 4px 2px;
+  }
+  /* The wide card keeps its own breathing room; this must follow the generic
+     caption padding above to win the cascade. */
+  .shop-photo-card.is-wide .shop-product-copy {
+    padding: 14px 12px;
+  }
+  .shop-photo-card h3 {
+    font-size: 13px;
+  }
+  .shop-photo-card .shop-product-bottom {
+    font-size: 13.5px;
+  }
+  .shop-photo-card .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+  /* Touch screens swipe the rail; floating arrows would only cover cards. */
+  .shop-rail-nav {
+    display: none;
   }
   .shop-menu-row .shop-price-row-copy h3 {
     font-size: 16px;

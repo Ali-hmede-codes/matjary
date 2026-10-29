@@ -807,41 +807,49 @@
 .design-preview-items.is-cards,
 .design-preview-items.is-gallery {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
 }
 .design-preview-items.is-cards i,
 .design-preview-items.is-gallery i {
   display: block;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--shop-tile-radius, 4px);
+  background: color-mix(in srgb, var(--brand-ink) 14%, var(--brand-surface));
+}
+/* Portrait grid: the same boxes, taller. */
+.design-preview-items.is-gallery i {
+  aspect-ratio: 3 / 4;
+}
+/* Wide feature: 4:3 landscape boxes, two per row. */
+.design-preview-items.is-featured {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.design-preview-items.is-featured i {
+  display: block;
+  aspect-ratio: 4 / 3;
   border-radius: var(--shop-tile-radius, 4px);
   background: color-mix(in srgb, var(--brand-ink) 14%, var(--brand-surface));
 }
 .design-preview-items.is-cards b,
 .design-preview-items.is-cards span,
 .design-preview-items.is-gallery b,
-.design-preview-items.is-gallery span {
+.design-preview-items.is-gallery span,
+.design-preview-items.is-featured b,
+.design-preview-items.is-featured span {
   display: none;
-}
-.design-preview-items.is-featured {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.design-preview-items.is-featured i:first-child {
-  grid-column: span 2;
-}
-.design-preview-items.is-featured i:first-child b {
-  flex: 0 0 42px;
-  width: 42px;
-  height: 34px;
 }
 .design-preview-items.is-shelves {
   display: flex;
   gap: 4px;
+  overflow: hidden;
 }
 .design-preview-items.is-shelves i {
-  flex: 0 0 24%;
+  flex: 0 0 26%;
   display: block;
-  height: 54px;
+  aspect-ratio: 1 / 1;
   border-radius: var(--shop-tile-radius, 4px);
   background: color-mix(in srgb, var(--brand-ink) 14%, var(--brand-surface));
 }

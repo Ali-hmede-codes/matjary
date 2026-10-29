@@ -319,12 +319,24 @@ export const catalogLayoutInfo: Record<
   { label: string; hint: string }
 > = {
   list: { label: 'Classic rows', hint: 'Photo, name, description, price.' },
-  cards: { label: 'Photo cards', hint: 'A visual grid of products.' },
+  cards: {
+    label: 'Square grid',
+    hint: '1:1 card boxes, name and price inside the box.',
+  },
   compact: { label: 'Price list', hint: 'Fast to scan, no photos.' },
   menu: { label: 'Menu', hint: 'Dotted prices, editorial feel.' },
-  gallery: { label: 'Gallery', hint: 'Image-first tiles with overlay.' },
-  featured: { label: 'Featured', hint: 'One hero item, then a grid.' },
-  shelves: { label: 'Shelves', hint: 'A swipeable row of products.' },
+  gallery: {
+    label: 'Portrait grid',
+    hint: '3:4 card boxes, copy inside the box.',
+  },
+  featured: {
+    label: 'Wide feature',
+    hint: '4:3 landscape card boxes, two per row.',
+  },
+  shelves: {
+    label: 'Sideways rail',
+    hint: '1:1 card boxes that scroll left to right.',
+  },
 };
 
 export const rhythmInfo: Record<DesignRhythm, { label: string; hint: string }> =
