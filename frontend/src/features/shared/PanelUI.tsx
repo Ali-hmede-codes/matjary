@@ -64,6 +64,7 @@ export function PanelShell({
           ['/design', 'Shop design'],
           ['/settings', 'Shop settings'],
           ['/verification', 'Verification'],
+          ['/qr', 'QR code'],
           ['/products', 'Products / menu'],
           ['/posts', 'Posts'],
           ['/boost', 'Boost'],

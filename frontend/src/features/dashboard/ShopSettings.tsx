@@ -8,6 +8,7 @@ import {
   Layers,
   Megaphone,
   Palette,
+  QrCode,
   ReceiptText,
   ShoppingBag,
   Wallet,
@@ -66,6 +67,18 @@ const relatedSettings = [
     title: 'My plan',
     text: 'Allowances, trial and verification.',
     Icon: BadgeCheck,
+  },
+  {
+    to: '/dashboard/verification',
+    title: 'Verification',
+    text: 'The blue tick and its monthly renewal.',
+    Icon: BadgeCheck,
+  },
+  {
+    to: '/dashboard/qr',
+    title: 'Shop QR code',
+    text: 'Download a printable code with your logo.',
+    Icon: QrCode,
   },
 ];
 

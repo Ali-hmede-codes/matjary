@@ -16,6 +16,7 @@ import {
   Package,
   Palette,
   Plus,
+  QrCode,
   Settings2,
   Store as StoreIcon,
   Users,
@@ -53,6 +54,7 @@ import { ShopSettings } from './ShopSettings';
 import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
 import { OwnerVerification } from './OwnerVerification';
+import { StoreQr } from './StoreQr';
 import { StoreManager } from './StoreManager';
 import { TeamPanel } from './TeamPanel';
 
@@ -359,6 +361,20 @@ export default function OwnerPanel({ session }: { session: Session }) {
                     <OwnerOnly />
                   ) : (
                     <OwnerVerification key={store.id} />
+                  )
+                ) : (
+                  <NoStore />
+                )
+              }
+            />
+            <Route
+              path="qr"
+              element={
+                store ? (
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <StoreQr key={store.id} />
                   )
                 ) : (
                   <NoStore />
@@ -760,6 +776,14 @@ function OwnerHome() {
               {isStoreVerified(store) ? 'Renew verification' : 'Get verified'}
             </strong>
             <span>Send your details for the blue tick.</span>
+            <ArrowUpRight />
+          </Link>
+        )}
+        {!member && (
+          <Link to="/dashboard/qr">
+            <QrCode />
+            <strong>Shop QR code</strong>
+            <span>Download a printable code with your logo.</span>
             <ArrowUpRight />
           </Link>
         )}
