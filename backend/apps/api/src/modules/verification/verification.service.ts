@@ -260,6 +260,10 @@ export class VerificationService {
         qb.andWhere('store.verificationBadgeExpiresAt <= :graceBorder', {
           graceBorder,
         });
+      // The first ordering is a raw SQL expression, so paginate with limit():
+      // take() runs TypeORM's distinct-id query, which parses every ordering as
+      // alias.property and throws on expressions containing a dot. The owner
+      // join is many-to-one, so limit() returns the same rows.
       const [rows, total] = await qb
         .addOrderBy(
           'CASE WHEN store.verificationBadgeExpiresAt IS NULL THEN 1 ELSE 0 END',
@@ -267,8 +271,8 @@ export class VerificationService {
         )
         .addOrderBy('store.verificationBadgeExpiresAt', 'ASC')
         .addOrderBy('store.name', 'ASC')
-        .take(query.limit)
-        .skip(query.offset)
+        .limit(query.limit)
+        .offset(query.offset)
         .getManyAndCount();
       return {
         items: rows.map((store) => ({
