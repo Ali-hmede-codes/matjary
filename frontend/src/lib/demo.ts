@@ -47,6 +47,13 @@ const examples = [
     'photo-1548036328-c9fa89d128fa',
     'merchandise',
   ],
+  [
+    'Night Shift',
+    'Small drops, after dark.',
+    'Limited pieces released in short runs — when they are gone, they are gone.',
+    'photo-1523381210434-271e8be1f52b',
+    'merchandise',
+  ],
 ] as const;
 
 const demoBusinessCategories = [
@@ -55,6 +62,7 @@ const demoBusinessCategories = [
   ['home_furniture', 'Furniture', 'ecommerce'],
   ['restaurants', 'Restaurant', 'restaurant_menu'],
   ['flower_shop', 'Flowers', 'ecommerce'],
+  ['clothing_store', 'Clothing store', 'ecommerce'],
   ['clothing_store', 'Clothing store', 'ecommerce'],
 ] as const;
 
@@ -67,6 +75,7 @@ const demoDesignTemplates: DesignTemplate[] = [
   'table',
   'bloom',
   'editorial',
+  'pulse',
 ];
 
 export const demoStores: Store[] = examples.map(
@@ -84,9 +93,15 @@ export const demoStores: Store[] = examples.map(
       verificationBadgeExpiresAt: index === 3 ? '2020-01-01T00:00:00Z' : null,
       designSettings: designWithPreset(demoDesignTemplates[index] ?? 'studio'),
       brandColor:
-        ['#75604b', '#88452c', '#384e60', '#637348', '#426751', '#91614c'][
-          index
-        ] ?? null,
+        [
+          '#75604b',
+          '#88452c',
+          '#384e60',
+          '#637348',
+          '#426751',
+          '#91614c',
+          '#3f6070',
+        ][index] ?? null,
       storeType:
         business[2] === 'restaurant_menu' ? 'restaurant_menu' : 'ecommerce',
       businessCategory: business[0],
@@ -155,6 +170,7 @@ const productNames = [
   ['Garden harvest bowl', 'Seasonal lunch plate', 'Fresh lemonade'],
   ['Fresh green arrangement', 'Terracotta planter', 'Everyday herb set'],
   ['Everyday tote', 'Weekend bag', 'The little carryall'],
+  ['Cropped hoodie', 'Utility cap', 'Night tote'],
 ];
 
 export const demoProducts: Product[] = examples.flatMap(
@@ -218,8 +234,8 @@ export const demoProducts: Product[] = examples.flatMap(
     }),
 );
 
-export const demoPosts: (Post & { category: string })[] = examples.map(
-  ([, title, description, photo, category], index) => ({
+export const demoPosts: (Post & { category: string })[] = [
+  ...examples.map(([, title, description, photo, category], index) => ({
     id: `demo-${index}`,
     slug: `demo-${index}`,
     title,
@@ -230,7 +246,7 @@ export const demoPosts: (Post & { category: string })[] = examples.map(
     media: [
       {
         id: `demo-media-${index}`,
-        kind: 'image',
+        kind: 'image' as const,
         primaryUrl: `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=900&q=85`,
         posterUrl: null,
         variants: [],
@@ -264,5 +280,38 @@ export const demoPosts: (Post & { category: string })[] = examples.map(
             },
           }
         : {}),
-  }),
-);
+  })),
+  // The Pulse shop needs a short sequence: one frame repeating would not show
+  // what its drifting 4:3 ribbon looks like with real content.
+  ...(demoStores[6]
+    ? (
+        [
+          ['Drop 01 — Cropped hoodie', 'photo-1556905055-8f358a7a47b2'],
+          ['Drop 02 — Utility cap', 'photo-1578681994506-b8f463449011'],
+          ['Drop 03 — Night tote', 'photo-1620799140408-edc6dcb6d633'],
+        ] as const
+      ).map(([title, photo], index) => ({
+        id: `demo-night-${index}`,
+        slug: `demo-night-${index}`,
+        title,
+        description: 'Small-run piece from this week\u2019s drop.',
+        publishedAt: null,
+        store: demoStores[6],
+        category: 'merchandise',
+        media: [
+          {
+            id: `demo-night-media-${index}`,
+            kind: 'image' as const,
+            primaryUrl: `https://images.unsplash.com/${photo}?auto=format&fit=crop&w=900&q=85`,
+            posterUrl: null,
+            variants: [],
+          },
+        ],
+        engagement: {
+          likes: [46, 38, 71][index] ?? 0,
+          views: [820, 640, 1130][index] ?? 0,
+          viewerLiked: false,
+        },
+      }))
+    : []),
+];

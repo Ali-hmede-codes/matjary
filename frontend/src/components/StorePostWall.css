@@ -274,6 +274,131 @@
   scroll-snap-align: start;
 }
 
+/* Drift: an edge-to-edge 4:3 ribbon that moves by itself. The ribbon repeats
+   its set so the loop has no seam; hovering, focusing or pressing Pause stops
+   it without hiding any photo. */
+.shop-post-wall.layout-drift {
+  position: relative;
+  display: block;
+  margin-bottom: 24px;
+}
+.shop-post-drift {
+  overflow: hidden;
+  /* Feather the edges so tiles enter and leave softly instead of being cut by
+     the content column. */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 4%,
+    #000 96%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 4%,
+    #000 96%,
+    transparent
+  );
+}
+.shop-post-drift-track {
+  display: flex;
+  width: max-content;
+  animation: shop-post-drift-move var(--drift-duration, 44s) linear infinite;
+}
+.shop-post-wall.layout-drift:hover .shop-post-drift-track,
+.shop-post-wall.layout-drift:focus-within .shop-post-drift-track,
+.layout-drift.is-stopped .shop-post-drift-track {
+  animation-play-state: paused;
+}
+.shop-post-drift-set {
+  display: flex;
+  gap: 8px;
+  padding-inline-end: 8px;
+}
+.shop-post-drift-set .shop-post-tile {
+  flex: 0 0 clamp(196px, 56vw, 340px);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 12px);
+  background: var(--wash);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease;
+  cursor: pointer;
+}
+/* Paused by the visitor's own button: the ribbon becomes a normal swipe strip
+   so every photo stays reachable without resuming the motion. */
+.layout-drift.is-stopped .shop-post-drift {
+  overflow-x: auto;
+  -webkit-mask-image: none;
+  mask-image: none;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.layout-drift.is-stopped .shop-post-drift::-webkit-scrollbar {
+  display: none;
+}
+.shop-post-wall.layout-drift .shop-post-thumbnail img {
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes shop-post-drift-move {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(calc(0% - var(--drift-shift, 50%)), 0, 0);
+  }
+}
+/* RTL lays the strip out from the right, so the next copy enters from the
+   left and the ribbon has to travel the other way. */
+@keyframes shop-post-drift-move-rtl {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--drift-shift, 50%), 0, 0);
+  }
+}
+[dir='rtl'] .shop-post-drift-track {
+  animation-name: shop-post-drift-move-rtl;
+}
+/* A small, always-visible control: moving content must be stoppable. */
+.shop-post-drift-toggle {
+  position: absolute;
+  z-index: 4;
+  top: 10px;
+  inset-inline-start: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-post-wall.layout-drift .shop-post-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px color-mix(in srgb, var(--ink) 16%, transparent);
+  }
+  .shop-post-wall.layout-drift .shop-post-tile:hover .shop-post-thumbnail img {
+    transform: scale(1.055);
+  }
+}
+@media (max-width: 700px) {
+  .shop-post-drift-set .shop-post-tile {
+    flex-basis: clamp(168px, 62vw, 260px);
+  }
+  .shop-post-drift-toggle {
+    top: 8px;
+    inset-inline-start: 8px;
+    min-height: 32px;
+    padding: 0 10px;
+  }
+}
+
 /* Motion: a short rise-and-fade on first paint, then a quiet lift and photo
    zoom on hover. The animation uses backwards fill so it releases the
    transform as soon as it ends and hover keeps working. */
@@ -318,6 +443,17 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .shop-post-drift-track {
+    animation: none;
+  }
+  .shop-post-wall.layout-drift .shop-post-tile,
+  .shop-post-wall.layout-drift .shop-post-thumbnail img {
+    transition: none;
+  }
+  .shop-post-wall.layout-drift .shop-post-tile:hover,
+  .shop-post-wall.layout-drift .shop-post-tile:hover .shop-post-thumbnail img {
+    transform: none;
+  }
   .shop-post-wall.layout-tiles .shop-post-tile,
   .shop-post-wall.layout-reel .shop-post-tile,
   .shop-post-wall.layout-stagger .shop-post-tile {

@@ -14,7 +14,9 @@ import type { StoreCategoryList } from '../../lib/api';
 import {
   catalogLayoutInfo,
   catalogLayouts,
+  designPresets,
   designRhythms,
+  designWithPreset,
   densityChoices,
   hasSavedDesign,
   heroChoices,
@@ -135,6 +137,12 @@ const postWires: Record<PostLayout, WireBoxes> = {
     [2, 15, 11, 8],
     [15, 19, 11, 8],
     [28, 15, 10, 8],
+  ],
+  drift: [
+    [1, 9, 11, 8],
+    [14, 9, 11, 8],
+    [27, 9, 11, 8],
+    [40, 9, 4, 8],
   ],
 };
 
@@ -349,6 +357,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   const preview = storePresentation({ ...store, designSettings: design });
   const typography = typographyChoices();
   const palettes = paletteChoices();
+  const paletteByKey = new Map(palettes.map((choice) => [choice.key, choice]));
   const shapes = shapeChoices();
   const densities = densityChoices();
   const heroes = heroChoices();
@@ -441,7 +450,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
       <PageTitle
         eyebrow="SHOP DESIGN"
         title="Choose your layouts."
-        description="Pick how posts look, then how your menu sections repeat. Colors and type are just below."
+        description="Start from a complete look, or fine-tune the posts, sections, colors and type yourself."
         action={
           store.status === 'active' && (
             <Link
@@ -465,6 +474,63 @@ function DesignStudio({ store }: { store: OwnerStore }) {
         <div className="design-studio-main">
           <StudioSection
             step="01"
+            title="Start from a look"
+            hint="One tap sets the palette, type, cover and layouts. Everything stays editable below."
+          >
+            <div
+              className="design-presets"
+              role="group"
+              aria-label="Starting looks"
+            >
+              {designPresets.map((preset) => {
+                const colors = paletteByKey.get(preset.palette);
+                // A look is selected only while every one of its choices is
+                // still in place, so a tweak afterwards does not lie.
+                const active =
+                  design.palette === preset.palette &&
+                  design.typography === preset.typography &&
+                  design.shape === preset.shape &&
+                  design.density === preset.density &&
+                  design.hero === preset.hero &&
+                  design.postsLayout === preset.postsLayout &&
+                  design.catalogLayout === preset.catalogLayout &&
+                  design.accentLayout === preset.accentLayout &&
+                  design.thirdLayout === preset.thirdLayout &&
+                  design.rhythm === preset.rhythm;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`design-preset ${active ? 'is-selected' : ''}`}
+                    aria-pressed={active}
+                    title={preset.tagline}
+                    onClick={() =>
+                      setDesign(designWithPreset(preset.id, design))
+                    }
+                  >
+                    <span
+                      className="design-preset-art"
+                      style={{
+                        background: colors?.surface,
+                        borderColor: colors?.ink,
+                      }}
+                      aria-hidden="true"
+                    >
+                      <i style={{ background: colors?.accent }} />
+                      <b style={{ background: colors?.ink }} />
+                    </span>
+                    <span className="design-preset-copy">
+                      <strong>{preset.name}</strong>
+                      <small>{preset.bestFor}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </StudioSection>
+
+          <StudioSection
+            step="02"
             title="Post layout"
             hint={`${postLayouts.length} arrangements. Pick the one that fits your shop.`}
           >
@@ -480,7 +546,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </StudioSection>
 
           <StudioSection
-            step="02"
+            step="03"
             title={preview.restaurant ? 'Menu sections' : 'Product sections'}
             hint="Choose one layout for every section, or repeat two or three layouts."
           >
@@ -535,7 +601,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </StudioSection>
 
           <StudioSection
-            step="03"
+            step="04"
             title="Colors & type"
             hint="Keep it simple: one palette, one type."
           >

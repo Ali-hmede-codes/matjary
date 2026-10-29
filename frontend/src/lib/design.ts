@@ -19,6 +19,7 @@ export const designTemplates = [
   'roast',
   'fresh',
   'arcade',
+  'pulse',
 ] as const;
 export type DesignTemplate = (typeof designTemplates)[number];
 
@@ -72,6 +73,7 @@ export const postLayouts = [
   'tiles',
   'reel',
   'stagger',
+  'drift',
 ] as const;
 export type PostLayout = (typeof postLayouts)[number];
 
@@ -327,6 +329,10 @@ export const postLayoutInfo: Record<
     label: 'Staggered',
     hint: '4:3 tiles with an offset, editorial rhythm.',
   },
+  drift: {
+    label: 'Drift',
+    hint: 'A 4:3 strip that drifts on its own. Hover or pause to stop it.',
+  },
 };
 
 export const catalogLayoutInfo: Record<
@@ -387,7 +393,7 @@ export interface DesignPreset {
   rhythm: DesignRhythm;
 }
 
-// Eleven starting points, each a complete system rather than a colour swap.
+// Twelve starting points, each a complete system rather than a colour swap.
 export const designPresets: readonly DesignPreset[] = [
   {
     id: 'atelier',
@@ -563,6 +569,22 @@ export const designPresets: readonly DesignPreset[] = [
     catalogLayout: 'cards',
     accentLayout: 'menu',
     thirdLayout: 'gallery',
+    rhythm: 'repeat2',
+  },
+  {
+    id: 'pulse',
+    name: 'Pulse',
+    tagline: 'A quiet 4:3 window that keeps moving.',
+    bestFor: 'Drops · streetwear · coffee',
+    palette: 'ocean',
+    typography: 'modern',
+    shape: 'round',
+    density: 'compact',
+    hero: 'minimal',
+    postsLayout: 'drift',
+    catalogLayout: 'cards',
+    accentLayout: 'compact',
+    thirdLayout: 'featured',
     rhythm: 'repeat2',
   },
 ];

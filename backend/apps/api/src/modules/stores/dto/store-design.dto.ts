@@ -25,6 +25,7 @@ export const DESIGN_TEMPLATE_KEYS = [
   'roast',
   'fresh',
   'arcade',
+  'pulse',
 ] as const;
 
 export const DESIGN_PALETTE_KEYS = [
@@ -72,6 +73,7 @@ export const DESIGN_POST_LAYOUT_KEYS = [
   'tiles',
   'reel',
   'stagger',
+  'drift',
 ] as const;
 
 export const DESIGN_CATALOG_LAYOUT_KEYS = [

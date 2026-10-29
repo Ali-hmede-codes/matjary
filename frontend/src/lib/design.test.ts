@@ -194,6 +194,13 @@ test('applying a preset keeps the owner’s overrides and visibility choices', (
   assert.equal(next.showProductDescriptions, false);
 });
 
+test('pulse pairs the drifting 4:3 wall with a quiet cover', () => {
+  const design = designWithPreset('pulse');
+  assert.equal(design.postsLayout, 'drift');
+  assert.equal(design.hero, 'minimal');
+  assert.equal(design.rhythm, 'repeat2');
+});
+
 test('theme tokens expose palette, type, shape and spacing', () => {
   const design = normalizeDesign({
     template: 'table',
