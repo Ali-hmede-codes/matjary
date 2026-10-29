@@ -5,6 +5,9 @@
 # Run on the Linux VPS as root, after deploy-matgari-app.sh completed:
 #   sudo bash migrate-matgari-app.sh
 #   sudo bash migrate-matgari-app.sh --from-domain old.example.com
+# For a site deployed by the GitHub workflow (no saved setup state), pass its
+# environment file and Compose project instead:
+#   sudo bash migrate-matgari-app.sh --from-env /opt/matjary/backend/.env --from-project <project>
 #
 # The old website's database and media volume are only read, never modified.
 # The matgari.app database and media volume are replaced with the copies.
@@ -15,6 +18,9 @@ umask 077
 TARGET_DOMAIN='matgari.app'
 STATE_ROOT='/var/lib/matjary-setup'
 FROM_DOMAIN=''
+FROM_ENV=''
+FROM_PROJECT=''
+FROM_DB=''
 DUMP=''
 FINISHED=0
 TARGET_TOUCHED=0
@@ -73,7 +79,10 @@ trap on_exit EXIT
 while (( $# )); do
   case "$1" in
     --from-domain) (( $# >= 2 )) && [[ -n "$2" ]] || die 'Missing value for --from-domain'; FROM_DOMAIN=${2,,}; shift 2 ;;
-    --help|-h) sed -n '2,10p' "$0"; exit 0 ;;
+    --from-env) (( $# >= 2 )) && [[ -n "$2" ]] || die 'Missing value for --from-env'; FROM_ENV=$2; shift 2 ;;
+    --from-project) (( $# >= 2 )) && [[ -n "$2" ]] || die 'Missing value for --from-project'; FROM_PROJECT=$2; shift 2 ;;
+    --from-db) (( $# >= 2 )) && [[ -n "$2" ]] || die 'Missing value for --from-db'; FROM_DB=$2; shift 2 ;;
+    --help|-h) sed -n '2,14p' "$0"; exit 0 ;;
     *) die "Unknown option: $1 (use --help)" ;;
   esac
 done
@@ -99,6 +108,9 @@ for file in "${env_files[@]}"; do
   if [[ "$domain" == "$TARGET_DOMAIN" ]]; then
     [[ -z "$NEW_ENV" ]] || die 'More than one saved deployment exists for the target domain.'
     NEW_ENV=$file
+  elif [[ -n "$FROM_ENV" ]]; then
+    # An explicit source environment file is used instead of saved state.
+    continue
   elif [[ -n "$FROM_DOMAIN" ]]; then
     [[ "$domain" != "$FROM_DOMAIN" ]] || { OLD_ENV=$file; OLD_DOMAIN=$domain; }
   elif [[ -z "$OLD_ENV" ]]; then
@@ -107,27 +119,44 @@ for file in "${env_files[@]}"; do
     die "More than one existing deployment found. Choose the source with --from-domain (for example --from-domain $domain)."
   fi
 done
+if [[ -n "$FROM_ENV" ]]; then
+  [[ -f "$FROM_ENV" && ! -L "$FROM_ENV" && -r "$FROM_ENV" ]] || die 'The --from-env file is not a readable regular file.'
+  OLD_ENV=$FROM_ENV
+  [[ -n "$OLD_DOMAIN" ]] || OLD_DOMAIN=$FROM_DOMAIN
+  if [[ -z "$OLD_DOMAIN" ]]; then
+    origin=$(env_get "$OLD_ENV" APP_ORIGIN)
+    OLD_DOMAIN=${origin#https://}; OLD_DOMAIN=${OLD_DOMAIN#http://}; OLD_DOMAIN=${OLD_DOMAIN%%/*}
+  fi
+fi
 [[ -n "$NEW_ENV" ]] || die "No saved deployment for $TARGET_DOMAIN. Run deploy-matgari-app.sh first."
-[[ -n "$OLD_ENV" ]] || die 'No other installer-managed deployment was found. Pass --from-domain, or migrate manually.'
+[[ -n "$OLD_ENV" ]] || die 'No other installer-managed deployment was found. Pass --from-env and --from-project for a CI-deployed site, or migrate manually.'
+[[ -n "$OLD_DOMAIN" ]] || die 'Cannot determine the source deployment domain.'
 [[ "$OLD_DOMAIN" != "$TARGET_DOMAIN" ]] || die 'The source and target domains must differ.'
 
 NEW_STATE=${NEW_ENV%/production.env}
-OLD_STATE=${OLD_ENV%/production.env}
 NEW_PROJECT=$(compose_project_env "$NEW_ENV" "$TARGET_DOMAIN")
-OLD_PROJECT=$(compose_project_env "$OLD_ENV" "$OLD_DOMAIN")
+if [[ -n "$FROM_PROJECT" ]]; then
+  OLD_PROJECT=$FROM_PROJECT
+else
+  OLD_PROJECT=$(compose_project_env "$OLD_ENV" "$OLD_DOMAIN")
+fi
 NEW_REPO=$(env_get "$NEW_ENV" SETUP_REPO_DIR)
 NEW_DB=$(env_get "$NEW_ENV" MYSQL_DATABASE); NEW_DB=${NEW_DB:-matjary}
-OLD_DB=$(env_get "$OLD_ENV" MYSQL_DATABASE); OLD_DB=${OLD_DB:-matjary}
+OLD_DB=$(env_get "$OLD_ENV" MYSQL_DATABASE)
+[[ -z "$FROM_DB" ]] || OLD_DB=$FROM_DB
+OLD_DB=${OLD_DB:-matjary}
 NEW_PORT=$(env_get "$NEW_ENV" API_PORT)
 NEW_WEB_ROOT=$(env_get "$NEW_ENV" SETUP_WEB_ROOT)
-[[ "$NEW_PROJECT" =~ ^matjary-[0-9a-f]{12}$ && "$OLD_PROJECT" =~ ^matjary-[0-9a-f]{12}$ ]] || die 'Unexpected saved project name; restore the deployment configuration.'
+[[ "$NEW_PROJECT" =~ ^matjary-[0-9a-f]{12}$ ]] || die 'Unexpected saved project name; restore the deployment configuration.'
+[[ "$OLD_PROJECT" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || die 'The source Compose project name is invalid.'
 [[ "$NEW_DB" =~ ^[a-zA-Z0-9_]+$ && "$OLD_DB" =~ ^[a-zA-Z0-9_]+$ ]] || die 'Unexpected database name in the saved environment.'
 [[ -n "$NEW_REPO" && -f "$NEW_REPO/backend/infra/compose.yaml" ]] || die 'The saved matgari.app repository path is invalid.'
 [[ "$NEW_PORT" =~ ^[1-9][0-9]{3,4}$ ]] || die 'The saved matgari.app API port is missing.'
 [[ "$NEW_WEB_ROOT" == /* && -d "$NEW_WEB_ROOT/stores" ]] || die 'The saved matgari.app document root is invalid.'
 [[ -f "$NEW_STATE/compose.setup.yaml" ]] || die 'The saved matgari.app Compose overlay is missing; rerun its setup.'
 [[ $(env_get "$NEW_ENV" STORAGE_PROVIDER) == local ]] || die 'This migration only supports the target deployment on local media storage.'
-[[ $(env_get "$OLD_ENV" STORAGE_PROVIDER) == local ]] || die 'The source deployment is not using local media storage.'
+old_provider=$(env_get "$OLD_ENV" STORAGE_PROVIDER)
+[[ -z "$old_provider" || "$old_provider" == local ]] || die 'The source deployment is not using local media storage.'
 [[ "$NEW_PROJECT" != "$OLD_PROJECT" ]] || die 'The source and target projects must differ.'
 for volume in "${OLD_PROJECT}_media-data" "${NEW_PROJECT}_media-data"; do
   docker volume inspect "$volume" >/dev/null 2>&1 || die "Volume $volume is missing. Finish the new setup before migrating."
