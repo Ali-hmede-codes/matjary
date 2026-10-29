@@ -41,7 +41,13 @@ project_of() {
   printf 'matjary-%s' "$(printf '%s' "$1" | sha256sum | cut -c1-12)"
 }
 compose_project_env() {
-  [[ -n "$(env_get "$1" SETUP_PROJECT)" ]] || project_of "$2"
+  local value
+  value=$(env_get "$1" SETUP_PROJECT)
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+  else
+    project_of "$2"
+  fi
 }
 container_of() {
   local flags=(-q)
