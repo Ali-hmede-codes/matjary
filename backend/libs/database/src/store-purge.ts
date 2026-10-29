@@ -111,6 +111,12 @@ export async function purgeStoreRecords(
   await manager.query('DELETE FROM store_branches WHERE store_id = ?', [
     storeId,
   ]);
+  // Verification applications belong to the shop's history; the FK would
+  // otherwise block the permanent deletion of a store.
+  await manager.query(
+    'DELETE FROM store_verification_requests WHERE store_id = ?',
+    [storeId],
+  );
   await manager.query('DELETE FROM stores WHERE id = ?', [storeId]);
 
   return keys;

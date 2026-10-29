@@ -125,6 +125,12 @@ export function panelError(error: unknown): string {
       return 'That is your own account. Team access is for other people.';
     if (error.code === 'TEAM_ACCOUNT_UNAVAILABLE')
       return 'This account cannot be added right now.';
+    if (error.code === 'VERIFICATION_PHONE_INVALID')
+      return 'Enter a valid Lebanese phone number, for example 03 123 456.';
+    if (error.code === 'VERIFICATION_NOT_AVAILABLE')
+      return 'Verification is not available on your current plan. Choose another plan or contact an administrator.';
+    if (error.code === 'VERIFICATION_NOT_GRANTED')
+      return 'This shop has no verification badge to extend.';
     if (error.status === 401)
       return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'Your account cannot perform this action.';

@@ -581,6 +581,9 @@ export function PlanEditor({
                 value={form.maxBadges}
                 onChange={(e) => update({ maxBadges: e.target.value })}
               />
+              <small>
+                Monthly badges included with this plan. Blank means unlimited.
+              </small>
             </label>
           </div>
           <label>
@@ -592,8 +595,8 @@ export function PlanEditor({
               placeholder="0.00"
             />
             <small>
-              Empty or 0 keeps badges free. 0 badges disables them for this
-              plan.
+              Monthly price for a badge beyond the included ones. Empty or 0
+              means owners cannot buy an extra badge.
             </small>
           </label>
         </details>

@@ -92,15 +92,22 @@ export function storeLifecycleActions(store: {
   ];
 }
 
+// Mirrors VERIFICATION_GRACE_DAYS in the backend policy: after the paid month
+// ends, the blue tick stays visible for these days while the owner renews.
+export const VERIFICATION_GRACE_DAYS = 5;
+const VERIFICATION_DAY_MS = 86_400_000;
+
 export function isStoreVerified(
   store?: Pick<Store, 'hasVerificationBadge' | 'verificationBadgeExpiresAt'>,
   now = Date.now(),
 ): boolean {
   // The API decides eligibility; an expired or invalid timestamp cannot add trust.
+  if (store?.hasVerificationBadge !== true) return false;
+  if (store.verificationBadgeExpiresAt == null) return true;
+  const expiresAt = Date.parse(store.verificationBadgeExpiresAt);
   return (
-    store?.hasVerificationBadge === true &&
-    (store.verificationBadgeExpiresAt == null ||
-      Date.parse(store.verificationBadgeExpiresAt) > now)
+    Number.isFinite(expiresAt) &&
+    expiresAt + VERIFICATION_GRACE_DAYS * VERIFICATION_DAY_MS > now
   );
 }
 

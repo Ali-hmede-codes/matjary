@@ -17,6 +17,9 @@ export interface SubscriptionPlan {
     maxStories?: number | null;
     maxCategories?: number | null;
     maxStorageBytes?: number | null;
+    // Monthly verification badge slots and the add-on price beyond them.
+    maxVerificationBadges?: number | null;
+    verificationBadgePriceCents?: number | null;
     enableCart?: boolean;
     enableWhatsAppCheckout?: boolean;
     enableAnalytics?: boolean;
@@ -61,6 +64,19 @@ function storageQuota(bytes: number | null | undefined): string {
   return `${value} ${units[index]}`;
 }
 
+function verificationFeature(limits: SubscriptionPlan['limits']) {
+  const included = limits.maxVerificationBadges;
+  const price = limits.verificationBadgePriceCents;
+  const extra =
+    typeof price === 'number' && price > 0
+      ? `+${formatProductPrice(String(price), 'USD')}/mo`
+      : null;
+  if (included === null) return extra ? `Unlimited · ${extra}` : 'Unlimited';
+  if (typeof included === 'number' && included > 0)
+    return extra ? `${included} included · ${extra}` : `${included} included`;
+  return extra ?? false;
+}
+
 export function planFeatures(plan: SubscriptionPlan) {
   const limits = plan.limits;
   return [
@@ -69,6 +85,7 @@ export function planFeatures(plan: SubscriptionPlan) {
     { label: 'Max posts', value: quota(limits.maxTotalPosts) },
     { label: 'Max products', value: quota(limits.maxProducts) },
     { label: 'Story slots per shop', value: quota(limits.maxStories) },
+    { label: 'Verification badge', value: verificationFeature(limits) },
     { label: 'Media storage', value: storageQuota(limits.maxStorageBytes) },
     { label: 'Shopping cart', value: limits.enableCart === true },
     {

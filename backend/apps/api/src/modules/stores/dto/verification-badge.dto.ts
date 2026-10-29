@@ -18,6 +18,8 @@ export class CheckBadgeEligibilityResponseDto {
   currentBadges!: number;
   maxBadges!: number | null;
   badgePriceCents!: number | null;
+  // True when the current plan bundles a badge slot at no extra charge.
+  included?: boolean;
 }
 
 export class BadgeOperationResponseDto {

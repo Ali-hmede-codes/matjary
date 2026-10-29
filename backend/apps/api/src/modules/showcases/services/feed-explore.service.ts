@@ -32,6 +32,7 @@ import {
   businessCategoryGroupLabel,
   businessCategoryLabel,
   isBusinessCategory,
+  verificationBadgeInfo,
 } from '@app/database';
 import { ResolvedViewer } from '../engagement/post-engagement.service';
 import { LocationService } from '../../stores/services/location.service';
@@ -1161,10 +1162,7 @@ export class FeedExploreService {
               slug: store.slug,
               logoKey: store.logoKey,
               brandColor: store.brandColor,
-              hasVerificationBadge:
-                store.hasVerificationBadge &&
-                (!store.verificationBadgeExpiresAt ||
-                  store.verificationBadgeExpiresAt > new Date()),
+              hasVerificationBadge: verificationBadgeInfo(store).visible,
               verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
               // Shoppable posts print the linked price; the card needs the
               // shop's own display choice to add the LBP line.

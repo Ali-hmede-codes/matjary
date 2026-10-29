@@ -35,6 +35,7 @@ import {
   STORY_OFFLINE_CODE,
   assertStoreAccess,
   storeAccessBySlug,
+  verificationBadgeInfo,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { deleteStoredObjects } from '../media-cleanup';
@@ -492,10 +493,7 @@ export class StoriesService {
       slug: store.slug,
       logoKey: store.logoKey,
       brandColor: store.brandColor,
-      hasVerificationBadge:
-        store.hasVerificationBadge &&
-        (!store.verificationBadgeExpiresAt ||
-          store.verificationBadgeExpiresAt > now),
+      hasVerificationBadge: verificationBadgeInfo(store, now).visible,
       verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
       businessCategoryLabel: businessCategoryLabel(store.businessCategory),
     };

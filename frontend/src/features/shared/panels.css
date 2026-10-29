@@ -454,6 +454,30 @@
 .panel-feature > a {
   margin-top: auto;
 }
+/* Owner verification: the four-step explanation and the compact review card. */
+.verification-steps {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.verification-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--panel-muted);
+  font-size: 13px;
+}
+.verification-steps svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--panel-green);
+}
+.verification-request-details {
+  grid-template-columns: 1fr 1fr;
+  padding: 14px 0 6px;
+}
 .panel-note {
   display: flex;
   align-items: center;

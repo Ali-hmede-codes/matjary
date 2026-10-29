@@ -28,6 +28,11 @@ import {
   assertQuota,
   assertContentAvailable,
   purgeStoreRecords,
+  nextVerificationExpiry,
+  verificationBadgeVisible,
+  StoreVerificationRequest,
+  VerificationRequestStatus,
+  VERIFICATION_PERIOD_DAYS,
   type AdminActor,
 } from '@app/database';
 import { StorageService } from '@app/storage';
@@ -296,18 +301,56 @@ export class AdminCatalogService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!store) throw new NotFoundException('Store not found');
-      store.hasVerificationBadge = enabled;
-      store.verificationBadgeGrantedAt = enabled ? new Date() : null;
-      store.verificationBadgeGrantedBy = enabled ? actor.id : null;
-      store.verificationBadgeExpiresAt = null;
+      // Granting an already-visible badge is a no-op; the verification queue
+      // owns month-by-month extensions.
+      if (enabled && verificationBadgeVisible(store)) return { id, enabled };
+      const now = new Date();
+      const pending = await manager.find(StoreVerificationRequest, {
+        where: { storeId: id, status: VerificationRequestStatus.PENDING },
+      });
+      if (enabled) {
+        // Manual grants follow the same monthly rule as approvals: one month
+        // from today, or from a still-running period. Pending applications for
+        // the shop are closed so the queue never keeps a stale row.
+        store.hasVerificationBadge = true;
+        store.verificationBadgeGrantedAt = now;
+        store.verificationBadgeGrantedBy = actor.id;
+        store.verificationBadgeExpiresAt = nextVerificationExpiry(
+          store.verificationBadgeExpiresAt,
+          now,
+        );
+        for (const request of pending) {
+          request.status = VerificationRequestStatus.APPROVED;
+          request.reviewedBy = actor.id;
+          request.reviewedAt = now;
+          request.reviewNote = actor.reason ?? null;
+          request.periodStartsAt = new Date(
+            store.verificationBadgeExpiresAt.getTime() -
+              VERIFICATION_PERIOD_DAYS * 86_400_000,
+          );
+          request.periodEndsAt = store.verificationBadgeExpiresAt;
+        }
+      } else {
+        store.hasVerificationBadge = false;
+        store.verificationBadgeGrantedAt = null;
+        store.verificationBadgeGrantedBy = null;
+        store.verificationBadgeExpiresAt = null;
+        for (const request of pending) {
+          request.status = VerificationRequestStatus.REJECTED;
+          request.reviewedBy = actor.id;
+          request.reviewedAt = now;
+          request.reviewNote = actor.reason ?? 'Verification revoked';
+        }
+      }
       await manager.save(store);
+      if (pending.length) await manager.save(pending);
       await appendAdminAudit(
         manager,
         actor,
         'stores',
         id,
         enabled ? 'badge.grant' : 'badge.revoke',
-        ['hasVerificationBadge'],
+        ['hasVerificationBadge', 'verificationBadgeExpiresAt'],
       );
       return { id, enabled };
     });

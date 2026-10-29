@@ -8,6 +8,7 @@ import {
   DesignSettings,
   businessCategoryDefinition,
   businessCategoryLabel,
+  verificationBadgeInfo,
 } from '@app/database';
 
 function coordinateValue(value: number | string | null | undefined) {
@@ -215,10 +216,7 @@ export function toStoreResponseDto(
     createdAt: store.createdAt,
     updatedAt: store.updatedAt,
     // Verification Badge fields
-    hasVerificationBadge:
-      store.hasVerificationBadge &&
-      (!store.verificationBadgeExpiresAt ||
-        store.verificationBadgeExpiresAt > new Date()),
+    hasVerificationBadge: verificationBadgeInfo(store).visible,
     verificationBadgeGrantedAt: store.verificationBadgeGrantedAt,
     verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
     viewerIsOwner: includeOwnerId,

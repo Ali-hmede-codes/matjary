@@ -57,6 +57,7 @@ import {
   appendAdminAudit,
   adminContext,
   actorContext,
+  verificationBadgeInfo,
   type AdminActor,
 } from '@app/database';
 
@@ -1483,11 +1484,9 @@ export class BoostService {
         targetName = showcase.title;
         targetSlug = showcase.slug;
         targetStoreSlug = showcase.store?.slug;
-        targetHasVerificationBadge = Boolean(
-          showcase.store?.hasVerificationBadge &&
-          (!showcase.store.verificationBadgeExpiresAt ||
-            showcase.store.verificationBadgeExpiresAt > new Date()),
-        );
+        targetHasVerificationBadge = showcase.store
+          ? verificationBadgeInfo(showcase.store).visible
+          : false;
         targetImageKey = await this.postPreviewKey(showcase.id);
       } else {
         const store = await this.storeRepo.findOne({
@@ -1497,10 +1496,7 @@ export class BoostService {
         targetName = store.name;
         targetSlug = store.slug;
         targetStoreSlug = store.slug;
-        targetHasVerificationBadge =
-          store.hasVerificationBadge &&
-          (!store.verificationBadgeExpiresAt ||
-            store.verificationBadgeExpiresAt > new Date());
+        targetHasVerificationBadge = verificationBadgeInfo(store).visible;
         targetImageKey = store.logoKey || undefined;
       }
 

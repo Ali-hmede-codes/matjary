@@ -4,8 +4,10 @@ import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import {
   ArrowUpRight,
   BadgeCheck,
+  Clock3,
   Coins,
   CreditCard,
+  Phone,
   Plus,
   Search,
   ShieldCheck,
@@ -94,14 +96,7 @@ export default function AdminPanel({ session }: { session: Session }) {
         <Route path="boost" element={<AdminBoost id={session.user.id} />} />
         <Route
           path="verification"
-          element={
-            <AdminList
-              key="verification"
-              resource="stores"
-              id={session.user.id}
-              verification
-            />
-          }
+          element={<AdminVerification id={session.user.id} />}
         />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
@@ -415,15 +410,7 @@ function AdminPlans({ id }: { id: string }) {
     </>
   );
 }
-function AdminList({
-  resource,
-  id,
-  verification = false,
-}: {
-  resource: Resource;
-  id: string;
-  verification?: boolean;
-}) {
+function AdminList({ resource, id }: { resource: Resource; id: string }) {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
@@ -443,9 +430,8 @@ function AdminList({
     queryFn: ({ signal }) =>
       getJson<Page<PanelRecord>>(`admin/data/${resource}?${params}`, signal),
   });
-  const title = verification
-    ? 'Verification'
-    : resource === 'products' || resource === 'posts'
+  const title =
+    resource === 'products' || resource === 'posts'
       ? 'Content'
       : resource[0]!.toUpperCase() + resource.slice(1);
   return (
@@ -454,11 +440,9 @@ function AdminList({
         eyebrow="ADMINISTRATION"
         title={title}
         description={
-          verification
-            ? 'Recognize genuine stores with a verified badge.'
-            : resource === 'subscriptions'
-              ? 'Assign a plan to a user. They take care of their store.'
-              : 'Find, review, and support the people behind the platform.'
+          resource === 'subscriptions'
+            ? 'Assign a plan to a user. They take care of their store.'
+            : 'Find, review, and support the people behind the platform.'
         }
         action={
           resource === 'subscriptions' && (
@@ -666,6 +650,301 @@ function AdminList({
     </>
   );
 }
+
+interface VerificationQueueRequest {
+  id: string;
+  status: string;
+  applicantName: string;
+  phone: string;
+  note: string | null;
+  includedInPlan: boolean;
+  priceCents: string;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  store: {
+    id: string;
+    name: string;
+    slug: string;
+    logoKey: string | null;
+    state: string;
+    visible: boolean;
+    expiresAt: string | null;
+    graceEndsAt: string | null;
+    daysRemaining: number | null;
+  } | null;
+  owner: { displayName: string; email: string } | null;
+}
+
+interface VerificationQueueStore {
+  id: string;
+  name: string;
+  slug: string;
+  logoKey: string | null;
+  owner: { displayName: string; email: string } | null;
+  state: string;
+  visible: boolean;
+  expiresAt: string | null;
+  graceEndsAt: string | null;
+  daysRemaining: number | null;
+}
+
+const badgeStateLabel = (state: string) =>
+  state === 'active'
+    ? 'Active'
+    : state === 'grace'
+      ? 'Renewal window'
+      : state === 'expired'
+        ? 'Ended'
+        : 'Not verified';
+
+// The verification queue: pending applications on top, then every store that
+// holds a badge with its monthly end date and one-click renewal.
+function AdminVerification({ id }: { id: string }) {
+  const [action, setAction] = useState<{
+    path: string;
+    title: string;
+    description?: string;
+    reasons: string[];
+  }>();
+  const requests = useQuery({
+    queryKey: ['panel', id, 'verification-requests'],
+    queryFn: ({ signal }) =>
+      getJson<Page<VerificationQueueRequest>>(
+        'admin/verification/requests?status=pending&limit=50',
+        signal,
+      ),
+  });
+  const stores = useQuery({
+    queryKey: ['panel', id, 'verification-stores'],
+    queryFn: ({ signal }) =>
+      getJson<Page<VerificationQueueStore>>(
+        'admin/verification/stores?limit=100',
+        signal,
+      ),
+  });
+  const pending = requests.data?.items ?? [];
+  const shops = stores.data?.items ?? [];
+  const visibleBadges = shops.filter((store) => store.visible).length;
+  const lapsing = shops.filter(
+    (store) => store.state === 'grace' || store.state === 'expired',
+  ).length;
+  const priceText = (request: VerificationQueueRequest) =>
+    request.includedInPlan
+      ? 'Included in the plan'
+      : `${formatProductPrice(request.priceCents, 'USD')} per month`;
+  return (
+    <>
+      <PageTitle
+        eyebrow="ADMINISTRATION"
+        title="Verification"
+        description="Review identity details, approve a month, and keep trusted shops ticking. Each approval covers 30 days; a lapsed badge stays visible for 5 grace days."
+      />
+      <div className="panel-stats">
+        <div className="panel-stat">
+          <span>
+            Waiting for review <Clock3 size={17} />
+          </span>
+          <strong>{requests.data?.total ?? 0}</strong>
+          <small>Shop owners who sent their details</small>
+        </div>
+        <div className="panel-stat">
+          <span>
+            Visible blue ticks <BadgeCheck size={17} />
+          </span>
+          <strong>{visibleBadges}</strong>
+          <small>Paid months and renewal windows</small>
+        </div>
+        <div className="panel-stat">
+          <span>Ended or in grace</span>
+          <strong>{lapsing}</strong>
+          <small>Give another month with one click</small>
+        </div>
+      </div>
+      <section className="panel-card panel-list-card">
+        <h2>Requests waiting for review</h2>
+        {requests.isPending ? (
+          <Loading />
+        ) : requests.isError ? (
+          <Retry error={requests.error} retry={() => void requests.refetch()} />
+        ) : pending.length ? (
+          <div className="panel-record-list">
+            {pending.map((request) => (
+              <article className="panel-record" key={request.id}>
+                <div className="panel-record-icon">
+                  {request.store?.logoKey ? (
+                    <img src={storeMediaUrl(request.store.logoKey)} alt="" />
+                  ) : (
+                    <BadgeCheck size={20} />
+                  )}
+                </div>
+                <div className="panel-record-info">
+                  <h3 className="notranslate">
+                    {request.store?.name ?? 'Shop'}
+                  </h3>
+                  <p>
+                    {request.owner
+                      ? `${request.owner.displayName} · ${request.owner.email}`
+                      : 'Shop owner'}
+                  </p>
+                  <small>
+                    {request.applicantName} ·{' '}
+                    <a href={`tel:${request.phone}`}>
+                      <Phone size={12} />{' '}
+                      <span className="notranslate">{request.phone}</span>
+                    </a>{' '}
+                    · Requested {dateLabel(request.createdAt)}
+                  </small>
+                  {request.note && <small>{request.note}</small>}
+                </div>
+                <span className="panel-pill">{priceText(request)}</span>
+                <button
+                  className="panel-primary"
+                  onClick={() =>
+                    setAction({
+                      path: `admin/verification/requests/${request.id}/approve`,
+                      title: `Approve verification for ${request.store?.name ?? 'this shop'}`,
+                      description: `One month starts on approval. Call ${request.applicantName} on ${request.phone}. ${priceText(request)}.`,
+                      reasons: [
+                        'Payment received',
+                        'Identity and business confirmed',
+                        'Included in the plan',
+                      ],
+                    })
+                  }
+                >
+                  Approve month
+                </button>
+                <button
+                  onClick={() =>
+                    setAction({
+                      path: `admin/verification/requests/${request.id}/reject`,
+                      title: `Reject verification for ${request.store?.name ?? 'this shop'}`,
+                      description:
+                        'The owner will see this reason on their Verification tab and can send new details.',
+                      reasons: [
+                        'Details could not be verified',
+                        'Phone number unreachable',
+                        'Required business details missing',
+                      ],
+                    })
+                  }
+                >
+                  Reject
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No requests waiting">
+            <p>
+              New applications from shop Verification tabs appear here with the
+              owner's name and Lebanese phone number.
+            </p>
+          </Empty>
+        )}
+      </section>
+      <section className="panel-card panel-list-card">
+        <h2>Verified shops</h2>
+        {stores.isPending ? (
+          <Loading />
+        ) : stores.isError ? (
+          <Retry error={stores.error} retry={() => void stores.refetch()} />
+        ) : shops.length ? (
+          <div className="panel-record-list">
+            {shops.map((store) => (
+              <article className="panel-record" key={store.id}>
+                <div className="panel-record-icon">
+                  {store.logoKey ? (
+                    <img src={storeMediaUrl(store.logoKey)} alt="" />
+                  ) : (
+                    <Store size={20} />
+                  )}
+                </div>
+                <div className="panel-record-info">
+                  <h3 className="notranslate">
+                    {store.name}{' '}
+                    {store.visible && (
+                      <BadgeCheck
+                        size={17}
+                        className="panel-verified"
+                        aria-label="Visible verification badge"
+                      />
+                    )}
+                  </h3>
+                  <p>
+                    {store.owner
+                      ? `${store.owner.displayName} · ${store.owner.email}`
+                      : 'Shop owner'}
+                  </p>
+                  <small>
+                    {store.expiresAt
+                      ? store.state === 'active'
+                        ? `Renews ${dateLabel(store.expiresAt)} · ${store.daysRemaining ?? 0} days left`
+                        : store.state === 'grace'
+                          ? `Ended ${dateLabel(store.expiresAt)} · tick hides ${dateLabel(store.graceEndsAt)}`
+                          : `Ended ${dateLabel(store.expiresAt)} · tick hidden`
+                      : 'Lifetime grant with no end date'}
+                  </small>
+                </div>
+                <span className={`panel-pill ${store.visible ? '' : 'muted'}`}>
+                  {badgeStateLabel(store.state)}
+                </span>
+                <button
+                  className="panel-primary"
+                  onClick={() =>
+                    setAction({
+                      path: `admin/verification/stores/${store.id}/extend`,
+                      title: `Give ${store.name} another month`,
+                      description:
+                        'The new month starts where the current one ends, or today if it already lapsed. Any pending renewal from this shop is approved too.',
+                      reasons: [
+                        'Monthly renewal paid',
+                        'Payment received by transfer',
+                        'Administrator adjustment',
+                      ],
+                    })
+                  }
+                >
+                  +1 month
+                </button>
+                <button
+                  onClick={() =>
+                    setAction({
+                      path: `admin/verification/stores/${store.id}/revoke`,
+                      title: `Revoke ${store.name}'s blue tick`,
+                      description:
+                        'The tick disappears immediately and pending renewal requests for this shop are closed.',
+                      reasons: [
+                        'Verification no longer valid',
+                        'Owner requested removal',
+                        'Identity concern',
+                      ],
+                    })
+                  }
+                >
+                  Revoke
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No verified shops yet">
+            <p>Approve a request above to start the first monthly badge.</p>
+          </Empty>
+        )}
+      </section>
+      {action && (
+        <ConfirmAction
+          {...action}
+          id={id}
+          close={() => setAction(undefined)}
+          done={() => setAction(undefined)}
+        />
+      )}
+    </>
+  );
+}
 function Detail({
   resource,
   item,
@@ -772,6 +1051,16 @@ function Detail({
                     {data.adminArchivedAt ? 'Hidden by administrator' : 'None'}
                   </dd>
                 </div>
+                <div>
+                  <dt>Verification</dt>
+                  <dd>
+                    {isStoreVerified(data)
+                      ? data.verificationBadgeExpiresAt
+                        ? `Active until ${dateLabel(data.verificationBadgeExpiresAt)}`
+                        : 'Lifetime grant'
+                      : 'Not active'}
+                  </dd>
+                </div>
               </>
             )}
             {resource === 'subscriptions' && (
@@ -840,6 +1129,25 @@ function Detail({
                   <Link className="panel-secondary" to={`/stores/${data.slug}`}>
                     Open storefront
                   </Link>
+                )}
+                {isStoreVerified(data) && (
+                  <button
+                    onClick={() =>
+                      setAction({
+                        path: `admin/verification/stores/${data.id}/extend`,
+                        title: `Give ${recordName(data)} another month`,
+                        description:
+                          'The new month starts where the current one ends. Any pending renewal from this shop is approved too.',
+                        reasons: [
+                          'Monthly renewal paid',
+                          'Payment received by transfer',
+                          'Administrator adjustment',
+                        ],
+                      })
+                    }
+                  >
+                    +1 month
+                  </button>
                 )}
                 <button
                   className="panel-primary"

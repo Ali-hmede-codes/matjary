@@ -137,7 +137,7 @@ test('owner price entry is exact and rejects invalid or unsafe amounts', () => {
   assert.equal(decimalPrice('1250'), '12.50');
 });
 
-test('verification requires an active API badge and rejects expired timestamps', () => {
+test('verification requires an active badge and keeps a five-day grace window', () => {
   const now = Date.parse('2026-10-24T12:00:00Z');
   assert.equal(isStoreVerified(undefined, now), false);
   assert.equal(isStoreVerified({}, now), false);
@@ -158,9 +158,23 @@ test('verification requires an active API badge and rejects expired timestamps',
       false,
     );
   }
+  // The tick stays visible while the five-day renewal window runs.
   for (const expires of [
-    '2026-10-23T12:00:00Z',
     '2026-10-24T12:00:00Z',
+    '2026-10-23T12:00:00Z',
+    '2026-10-20T12:00:00Z',
+  ]) {
+    assert.equal(
+      isStoreVerified(
+        { hasVerificationBadge: true, verificationBadgeExpiresAt: expires },
+        now,
+      ),
+      true,
+    );
+  }
+  for (const expires of [
+    '2026-10-19T12:00:00Z',
+    '2026-10-18T12:00:00Z',
     'invalid',
     '',
   ]) {

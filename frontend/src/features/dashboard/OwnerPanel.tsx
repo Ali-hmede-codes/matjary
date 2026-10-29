@@ -52,6 +52,7 @@ import { StoreDesignStudio } from './StoreDesignStudio';
 import { ShopSettings } from './ShopSettings';
 import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
+import { OwnerVerification } from './OwnerVerification';
 import { StoreManager } from './StoreManager';
 import { TeamPanel } from './TeamPanel';
 
@@ -344,6 +345,20 @@ export default function OwnerPanel({ session }: { session: Session }) {
                     <OwnerOnly />
                   ) : (
                     <ShopSettings key={store.id} />
+                  )
+                ) : (
+                  <NoStore />
+                )
+              }
+            />
+            <Route
+              path="verification"
+              element={
+                store ? (
+                  member ? (
+                    <OwnerOnly />
+                  ) : (
+                    <OwnerVerification key={store.id} />
                   )
                 ) : (
                   <NoStore />
@@ -738,6 +753,16 @@ function OwnerHome() {
             <ArrowUpRight />
           </Link>
         )}
+        {!member && (
+          <Link to="/dashboard/verification">
+            <BadgeCheck />
+            <strong>
+              {isStoreVerified(store) ? 'Renew verification' : 'Get verified'}
+            </strong>
+            <span>Send your details for the blue tick.</span>
+            <ArrowUpRight />
+          </Link>
+        )}
       </div>
       {member ? (
         <TeamAccessCard store={store} />
@@ -864,8 +889,8 @@ function OwnerPlan() {
           </h2>
           <p>
             {isStoreVerified(store)
-              ? 'Your verification badge is visible on your storefront.'
-              : 'Verification is reviewed and granted by an administrator. A subscription alone does not verify your store.'}
+              ? 'Your verification badge is visible on your storefront. Renew it month by month from its own tab.'
+              : 'Verification is reviewed and granted by an administrator. Apply from the Verification tab of your shop.'}
           </p>
           <div className="panel-usage">
             <span>Shopping cart</span>
@@ -881,6 +906,9 @@ function OwnerPlan() {
                 : 'Not included'}
             </strong>
           </div>
+          <Link className="panel-secondary" to="/dashboard/verification">
+            Manage verification <ArrowUpRight size={16} />
+          </Link>
         </section>
       </div>
     </>

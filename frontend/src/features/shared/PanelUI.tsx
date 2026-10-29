@@ -63,6 +63,7 @@ export function PanelShell({
           ['/store', 'Store editor'],
           ['/design', 'Shop design'],
           ['/settings', 'Shop settings'],
+          ['/verification', 'Verification'],
           ['/products', 'Products / menu'],
           ['/posts', 'Posts'],
           ['/boost', 'Boost'],

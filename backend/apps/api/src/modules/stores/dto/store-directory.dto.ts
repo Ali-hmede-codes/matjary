@@ -3,6 +3,7 @@ import {
   StoreType,
   businessCategoryDefinition,
   businessCategoryGroupLabel,
+  verificationBadgeInfo,
 } from '@app/database';
 
 // The directory paints one compact card per shop. It deliberately leaves out
@@ -55,11 +56,9 @@ export function toStoreDirectoryItemDto(
   productsCount = 0,
 ): StoreDirectoryItemDto {
   const category = businessCategoryDefinition(store.businessCategory);
-  // An expired badge must never keep looking like an active one.
-  const badgeActive =
-    store.hasVerificationBadge &&
-    (!store.verificationBadgeExpiresAt ||
-      store.verificationBadgeExpiresAt > new Date());
+  // An expired badge must never keep looking like an active one; the grace
+  // window is part of the visible period until the tick disappears.
+  const badgeActive = verificationBadgeInfo(store).visible;
   return {
     id: store.id,
     name: store.name,

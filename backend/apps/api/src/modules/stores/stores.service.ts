@@ -48,6 +48,13 @@ import {
   defaultBusinessCategoryForStoreType,
   isBusinessCategory,
   canManageStore,
+  nextVerificationExpiry,
+  verificationPricing,
+  verificationBadgeVisible,
+  StoreVerificationRequest,
+  VerificationRequestStatus,
+  VERIFICATION_GRACE_DAYS,
+  VERIFICATION_PERIOD_DAYS,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
@@ -1363,6 +1370,7 @@ export class StoresService {
     currentBadges: number;
     maxBadges: number | null;
     badgePriceCents: number | null;
+    included: boolean;
   }> {
     const store = await this.stores.findOneBy({
       id: storeId,
@@ -1381,20 +1389,19 @@ export class StoresService {
       limits.maxVerificationBadges === undefined
         ? 0
         : limits.maxVerificationBadges;
-    const alreadyActive =
-      store.hasVerificationBadge &&
-      (!store.verificationBadgeExpiresAt ||
-        store.verificationBadgeExpiresAt > new Date());
-    const eligible =
-      alreadyActive || maxBadges === null || currentBadges < maxBadges;
+    const pricing = verificationPricing(limits, {
+      hasBadge: store.hasVerificationBadge,
+      activeBadges: currentBadges,
+    });
     return {
-      eligible,
-      reason: eligible
+      eligible: pricing.available,
+      reason: pricing.available
         ? undefined
-        : 'Badge limit reached for your subscription',
+        : 'Verification is not available on your plan',
       currentBadges,
       maxBadges,
-      badgePriceCents: limits.verificationBadgePriceCents ?? 0,
+      badgePriceCents: pricing.priceCents,
+      included: pricing.included,
     };
   }
 
@@ -1402,14 +1409,44 @@ export class StoresService {
     manager: import('typeorm').EntityManager,
     ownerId: string,
   ): Promise<number> {
+    // Badges past their grace window no longer occupy a plan slot.
+    const graceBorder = new Date(
+      Date.now() - VERIFICATION_GRACE_DAYS * 86_400_000,
+    );
     return manager
       .getRepository(Store)
       .createQueryBuilder('store')
-      .where(
-        'store.ownerId = :ownerId AND store.hasVerificationBadge = true AND (store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :now)',
-        { ownerId, now: new Date() },
+      .where('store.ownerId = :ownerId', { ownerId })
+      .andWhere('store.hasVerificationBadge = true')
+      .andWhere(
+        '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
+        { graceBorder },
       )
       .getCount();
+  }
+
+  // The legacy admin badge endpoints and the verification queue must agree:
+  // an approval closes any pending application for the same shop.
+  private async settleVerificationRequests(
+    manager: EntityManager,
+    storeId: string,
+    reviewerId: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    const pending = await manager.find(StoreVerificationRequest, {
+      where: { storeId, status: VerificationRequestStatus.PENDING },
+    });
+    const now = new Date();
+    for (const request of pending) {
+      request.status = VerificationRequestStatus.APPROVED;
+      request.reviewedBy = reviewerId;
+      request.reviewedAt = now;
+      request.periodStartsAt = new Date(
+        expiresAt.getTime() - VERIFICATION_PERIOD_DAYS * 86_400_000,
+      );
+      request.periodEndsAt = expiresAt;
+    }
+    if (pending.length) await manager.save(pending);
   }
 
   /**
@@ -1443,17 +1480,24 @@ export class StoresService {
         });
         if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
           throw new ForbiddenException('Administrator access required');
-        if (
-          store.hasVerificationBadge &&
-          (!store.verificationBadgeExpiresAt ||
-            store.verificationBadgeExpiresAt > new Date())
-        )
-          return { success: true };
-        store.verificationBadgeExpiresAt = null;
+        // Granting is idempotent while the tick is already visible; giving
+        // another month has its own explicit action in the verification queue.
+        if (verificationBadgeVisible(store)) return { success: true };
+        const now = new Date();
+        store.verificationBadgeExpiresAt = nextVerificationExpiry(
+          store.verificationBadgeExpiresAt,
+          now,
+        );
         store.hasVerificationBadge = true;
-        store.verificationBadgeGrantedAt = new Date();
+        store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = grantedBy;
         await manager.save(store);
+        await this.settleVerificationRequests(
+          manager,
+          storeId,
+          grantedBy,
+          store.verificationBadgeExpiresAt,
+        );
         await appendAdminAudit(
           manager,
           actorContext(grantedBy),
@@ -1506,6 +1550,19 @@ export class StoresService {
         store.verificationBadgeGrantedBy = null;
         store.verificationBadgeExpiresAt = null;
         await manager.save(store);
+        const pending = await manager.find(StoreVerificationRequest, {
+          where: {
+            storeId,
+            status: VerificationRequestStatus.PENDING,
+          },
+        });
+        for (const request of pending) {
+          request.status = VerificationRequestStatus.REJECTED;
+          request.reviewedBy = actorId;
+          request.reviewedAt = new Date();
+          request.reviewNote = 'Verification revoked';
+        }
+        if (pending.length) await manager.save(pending);
         await appendAdminAudit(
           manager,
           actorContext(actorId),

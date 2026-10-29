@@ -81,8 +81,11 @@ test('public shop badges disappear after expiration or revocation', (t) => {
   }
   for (const expires of [now, new Date(now.getTime() - 1000)]) {
     store.verificationBadgeExpiresAt = expires;
-    assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
+    // The five-day renewal window keeps the tick visible after the month ends.
+    assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
   }
+  store.verificationBadgeExpiresAt = new Date(now.getTime() - 6 * 86_400_000);
+  assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
   store.hasVerificationBadge = false;
   store.verificationBadgeExpiresAt = null;
   assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
@@ -119,7 +122,12 @@ test('shop verification requires administrators even with an eligible subscripti
     getRepository: (target: unknown) => {
       const query = {
         where: (sql: string) => {
-          assert.match(sql, /verificationBadgeExpiresAt > :now/);
+          assert.match(sql, /store\.ownerId = :ownerId/);
+          return query;
+        },
+        andWhere: (sql: string) => {
+          if (/verificationBadgeExpiresAt/.test(sql))
+            assert.match(sql, /verificationBadgeExpiresAt > :graceBorder/);
           return query;
         },
         getCount: async () =>
@@ -131,6 +139,7 @@ test('shop verification requires administrators even with an eligible subscripti
         createQueryBuilder: () => query,
       };
     },
+    find: async () => [],
     save: async () => {
       saves++;
       return store;
@@ -189,7 +198,9 @@ test('shop verification requires administrators even with an eligible subscripti
   );
   await service.grantVerificationBadge('shop', 'admin');
   assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
-  assert.equal(store.verificationBadgeExpiresAt, null);
+  const grantedExpiry = store.verificationBadgeExpiresAt as Date | null;
+  assert.ok(grantedExpiry instanceof Date);
+  assert.ok(grantedExpiry.getTime() > Date.now());
   assert.equal(store.verificationBadgeGrantedBy, 'admin');
   assert.equal(audits.length, 3);
 });

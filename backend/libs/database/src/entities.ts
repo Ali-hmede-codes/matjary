@@ -1977,6 +1977,100 @@ export class StoreInvitation extends BaseEntity {
   expiresAt!: Date;
 }
 
+export enum VerificationRequestStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  WITHDRAWN = 'withdrawn',
+}
+
+// One application for a monthly verification badge. The owner supplies the
+// identity an administrator reviews; the price is snapshotted so a later plan
+// change cannot rewrite what the admin was asked to collect. Approval starts
+// or extends the badge on the store itself.
+@Entity({ name: 'store_verification_requests', engine: 'InnoDB' })
+@Index('idx_store_verification_requests_status', ['status', 'createdAt'])
+@Index('idx_store_verification_requests_store', ['storeId', 'createdAt'])
+@Index('idx_store_verification_requests_owner', ['ownerId', 'createdAt'])
+export class StoreVerificationRequest extends BaseEntity {
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_store_verification_requests_store',
+  })
+  store!: Relation<Store>;
+
+  @Column({ name: 'owner_id', type: 'varchar', length: 36 })
+  ownerId!: string;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'owner_id',
+    foreignKeyConstraintName: 'fk_store_verification_requests_owner',
+  })
+  owner!: Relation<User>;
+
+  @Column({ name: 'applicant_name', type: 'varchar', length: 120 })
+  applicantName!: string;
+
+  // Normalized to +961XXXXXXXX before it is stored, so the admin always sees
+  // one callable Lebanese number regardless of how it was typed.
+  @Column({ type: 'varchar', length: 20 })
+  phone!: string;
+
+  @Column({ type: 'text', nullable: true })
+  note!: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: VerificationRequestStatus,
+    default: VerificationRequestStatus.PENDING,
+  })
+  status: VerificationRequestStatus = VerificationRequestStatus.PENDING;
+
+  // Plans may bundle the badge (price 0) or sell it monthly (price > 0).
+  @Column({ name: 'included_in_plan', type: 'boolean', default: false })
+  includedInPlan!: boolean;
+
+  @Column({ name: 'price_cents', type: 'bigint', unsigned: true, default: 0 })
+  priceCents!: string;
+
+  // The paid month the approval granted. Kept on the request so the admin
+  // queue and the owner can see exactly what an approval produced.
+  @Column({
+    name: 'period_starts_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  periodStartsAt!: Date | null;
+
+  @Column({
+    name: 'period_ends_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  periodEndsAt!: Date | null;
+
+  @Column({ name: 'reviewed_by', type: 'varchar', length: 36, nullable: true })
+  reviewedBy!: string | null;
+
+  @Column({
+    name: 'reviewed_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  reviewedAt!: Date | null;
+
+  @Column({ name: 'review_note', type: 'varchar', length: 500, nullable: true })
+  reviewNote!: string | null;
+}
+
 export const databaseEntities = [
   WebsiteSettings,
   AdminAuditLog,
@@ -1987,6 +2081,7 @@ export const databaseEntities = [
   StoreBranch,
   StoreMember,
   StoreInvitation,
+  StoreVerificationRequest,
   StoreCategory,
   Product,
   Cart,

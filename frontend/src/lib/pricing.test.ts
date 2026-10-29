@@ -69,6 +69,27 @@ test('pricing distinguishes zero, unlimited, missing quotas and disabled feature
   assert.equal(value('Shopping cart'), true);
   assert.equal(value('WhatsApp checkout'), false);
   assert.equal(value('Analytics'), false);
+  const verification = (limits: SubscriptionPlan['limits']) =>
+    planFeatures({ ...plan, limits }).find(
+      (feature) => feature.label === 'Verification badge',
+    )?.value;
+  assert.equal(verification({ maxVerificationBadges: 0 }), false);
+  assert.equal(verification({ maxVerificationBadges: 1 }), '1 included');
+  assert.equal(
+    verification({
+      maxVerificationBadges: 1,
+      verificationBadgePriceCents: 500,
+    }),
+    '1 included · +$5.00/mo',
+  );
+  assert.equal(
+    verification({
+      maxVerificationBadges: 0,
+      verificationBadgePriceCents: 500,
+    }),
+    '+$5.00/mo',
+  );
+  assert.equal(verification({ maxVerificationBadges: null }), 'Unlimited');
   for (const [bytes, expected] of [
     [null, 'Unlimited'],
     [0, '0 B'],

@@ -7,6 +7,8 @@ import { SeoModule } from '../seo/seo.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { BoostModule } from '../boost/boost.module';
 import { ShowcasesModule } from '../showcases/showcases.module';
+import { VerificationModule } from '../verification/verification.module';
+import { AdminVerificationController } from '../verification/admin-verification.controller';
 import { AdminAccessService } from './admin-access.service';
 import { AdminCatalogService } from './admin-catalog.service';
 import { AdminQueriesService } from './admin-queries.service';
@@ -29,6 +31,7 @@ import {
     ShowcasesModule,
     StorageModule,
     QueueModule,
+    VerificationModule,
   ],
   controllers: [
     AdminWebsiteSettingsController,
@@ -36,6 +39,7 @@ import {
     AdminPageController,
     AdminBusinessController,
     AdminCatalogController,
+    AdminVerificationController,
   ],
   providers: [
     WebsiteSettingsService,
