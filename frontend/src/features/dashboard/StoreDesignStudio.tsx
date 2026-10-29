@@ -1,16 +1,7 @@
 import './StoreDesignStudio.css';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import {
-  ArrowUpRight,
-  ChevronDown,
-  LoaderCircle,
-  Palette,
-  Undo2,
-  Wand2,
-} from 'lucide-react';
-import type { StoreCategoryList } from '../../lib/api';
+import { ArrowUpRight, ChevronDown, Palette, Undo2, Wand2 } from 'lucide-react';
 import {
   catalogLayoutInfo,
   catalogLayouts,
@@ -34,7 +25,7 @@ import {
   type StoreDesign,
 } from '../../lib/design.ts';
 import { storeMediaUrl, storePresentation } from '../../lib/storefront';
-import { getJson, mutate, panelError } from '../shared/panel-api';
+import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 
@@ -314,7 +305,7 @@ function LayoutSlot({
 }
 
 function DesignStudio({ store }: { store: OwnerStore }) {
-  const { session, savedStore } = useOwner();
+  const { savedStore } = useOwner();
   const [design, setDesign] = useState<StoreDesign>(() =>
     normalizeDesign(store.designSettings),
   );
@@ -335,25 +326,6 @@ function DesignStudio({ store }: { store: OwnerStore }) {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const categories = useQuery({
-    queryKey: ['panel', session.user.id, 'design-categories', store.id],
-    queryFn: ({ signal }) =>
-      getJson<StoreCategoryList>(
-        `stores/${encodeURIComponent(store.slug)}/categories`,
-        signal,
-      ),
-    staleTime: 30_000,
-  });
-  const categoryItems = categories.data?.items ?? [];
-  const overrideOf = (categoryId: string) =>
-    design.categoryLayouts.find((entry) => entry.categoryId === categoryId)
-      ?.layout ?? '';
-  const staleOverrides = categories.isSuccess
-    ? design.categoryLayouts.filter(
-        (entry) =>
-          !categoryItems.some((category) => category.id === entry.categoryId),
-      ).length
-    : 0;
   const preview = storePresentation({ ...store, designSettings: design });
   const typography = typographyChoices();
   const palettes = paletteChoices();
@@ -374,18 +346,6 @@ function DesignStudio({ store }: { store: OwnerStore }) {
 
   const update = (patch: Partial<StoreDesign>) =>
     setDesign((current) => ({ ...current, ...patch }));
-
-  function setCategoryLayout(categoryId: string, layout: CatalogLayout | '') {
-    setDesign((current) => {
-      const rest = current.categoryLayouts.filter(
-        (entry) => entry.categoryId !== categoryId,
-      );
-      return {
-        ...current,
-        categoryLayouts: layout ? [...rest, { categoryId, layout }] : rest,
-      };
-    });
-  }
 
   function undo() {
     setDesign(JSON.parse(baseline) as StoreDesign);
@@ -758,105 +718,6 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                     />
                     Show product descriptions
                   </label>
-                </div>
-              </div>
-
-              <div className="design-advanced-block">
-                <h3>One style per section (optional)</h3>
-                <div className="design-overrides">
-                  <div className="design-overrides-head">
-                    <div>
-                      <small className="panel-muted">
-                        Overrides the repeat for that section only.
-                      </small>
-                    </div>
-                    {design.categoryLayouts.length > 0 && (
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => update({ categoryLayouts: [] })}
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  {categories.isPending ? (
-                    <p className="panel-muted">
-                      <LoaderCircle className="spin" size={14} /> Loading
-                      sections…
-                    </p>
-                  ) : categories.isError ? (
-                    <Notice error>
-                      Sections could not load.{' '}
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => void categories.refetch()}
-                      >
-                        Try again
-                      </button>
-                    </Notice>
-                  ) : categoryItems.length === 0 ? (
-                    <p className="panel-muted">
-                      Add sections in{' '}
-                      <Link to="/dashboard/products">
-                        {preview.restaurant ? 'Menu' : 'Products'}
-                      </Link>{' '}
-                      first.
-                    </p>
-                  ) : (
-                    <ul className="design-section-list">
-                      {categoryItems.map((category, index) => {
-                        const effective = resolveCategoryLayout(
-                          design,
-                          index,
-                          category.id,
-                        );
-                        return (
-                          <li key={category.id}>
-                            <div className="design-section-copy">
-                              <strong className="notranslate">
-                                {category.name}
-                              </strong>
-                              <small>
-                                {category.productCount ?? 0}{' '}
-                                {(category.productCount ?? 0) === 1
-                                  ? 'item'
-                                  : 'items'}{' '}
-                                · {catalogLayoutInfo[effective].label}
-                              </small>
-                            </div>
-                            <select
-                              aria-label={`Layout for ${category.name}`}
-                              value={overrideOf(category.id)}
-                              onChange={(event) =>
-                                setCategoryLayout(
-                                  category.id,
-                                  event.target.value as CatalogLayout | '',
-                                )
-                              }
-                            >
-                              <option value="">Follow the rhythm</option>
-                              {catalogLayouts.map((layout) => (
-                                <option key={layout} value={layout}>
-                                  {catalogLayoutInfo[layout].label}
-                                </option>
-                              ))}
-                            </select>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  {staleOverrides > 0 && (
-                    <p className="panel-muted design-fineprint">
-                      {staleOverrides}{' '}
-                      {staleOverrides === 1
-                        ? 'saved style belongs'
-                        : 'saved styles belong'}{' '}
-                      to a removed section and will be cleaned up on save.
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
