@@ -42,10 +42,10 @@ export function usePageSeo(input: PageSeoInput | null | undefined) {
     const previousDescription = descriptionTag?.content;
     const nodes: Element[] = [];
 
-    // Prerendered share shells already carry preview tags. Replace them so the
-    // live document never ends up with two sets of crawler metadata.
+    // Prerendered share shells already carry preview tags and structured data.
+    // Replace them so the live document never ends up with two sets.
     for (const node of head.querySelectorAll(
-      'meta[property^="og:"], meta[name^="twitter:"], meta[name="robots"], link[rel="canonical"]',
+      'meta[property^="og:"], meta[name^="twitter:"], meta[name="robots"], link[rel="canonical"], script[type="application/ld+json"]',
     )) {
       if (!node.hasAttribute('data-matjary-seo')) node.remove();
     }

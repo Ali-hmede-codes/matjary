@@ -49,6 +49,9 @@ export function renderShareHeadTags(meta: MetaTags): string {
     `<title>${escapeXml(meta.title)}</title>`,
     `<meta name="description" content="${escapeXml(meta.description)}">`,
     `<meta name="robots" content="${escapeXml(meta.robots)}">`,
+    meta.keywords
+      ? `<meta name="keywords" content="${escapeXml(meta.keywords)}">`
+      : '',
     `<link rel="canonical" href="${escapeXml(meta.canonical)}">`,
     `<meta property="og:type" content="${escapeXml(meta.og.type)}">`,
     `<meta property="og:title" content="${escapeXml(meta.og.title)}">`,
@@ -67,9 +70,18 @@ export function renderShareHeadTags(meta: MetaTags): string {
     meta.twitter.image
       ? `<meta name="twitter:image" content="${escapeXml(meta.twitter.image)}">`
       : '',
+    // Verification and structured data belong in the first response: search
+    // engines and AI agents must find them without running the SPA.
+    ...(meta.verificationMeta ?? []),
+    meta.jsonLd?.length ? renderJsonLd(meta.jsonLd) : '',
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/** One script element; '<' is escaped so page copy cannot close it early. */
+function renderJsonLd(jsonLd: Record<string, unknown>[]): string {
+  return `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</gu, '\\u003c')}</script>`;
 }
 
 function escapeXml(value: string): string {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -14,10 +15,16 @@ import {
 } from '@app/database';
 import { AdminAccessService } from './admin-access.service';
 import { UpdateWebsiteSettingsDto } from './website-settings.dto';
+import { ShareShellSignal } from '../seo/share-shell.signal';
 
 @Injectable()
 export class WebsiteSettingsService {
-  constructor(private readonly access: AdminAccessService) {}
+  constructor(
+    private readonly access: AdminAccessService,
+    // Explicit token: a defaulted parameter emits `Object` as its metadata.
+    @Inject(ShareShellSignal)
+    private readonly shells: ShareShellSignal = new ShareShellSignal(),
+  ) {}
 
   private publicValues(settings: WebsiteSettings): WebsiteSettingsValues {
     return Object.fromEntries(
@@ -86,6 +93,8 @@ export class WebsiteSettingsService {
           'update',
           changed,
         );
+        // The home link preview and fallback images read this row.
+        this.shells.request();
       }
       return this.publicValues(settings);
     });

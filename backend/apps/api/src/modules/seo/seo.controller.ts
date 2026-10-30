@@ -228,6 +228,22 @@ export class SeoController {
     await pipeline(card.stream, res).catch(() => res.destroy());
   }
 
+  @Get('share')
+  @ApiOperation({
+    summary: 'Server-rendered Open Graph page for the shared site link',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Minimal HTML document with OG/Twitter tags',
+    content: { 'text/html': {} },
+  })
+  async getHomeSharePage(
+    @Req() request: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.sendSharePage('', request, res);
+  }
+
   @Get('share/{*path}')
   @ApiOperation({
     summary: 'Server-rendered Open Graph page for social link previews',
@@ -243,12 +259,22 @@ export class SeoController {
     @Res() res: Response,
   ): Promise<void> {
     const target = Array.isArray(path) ? path.join('/') : (path ?? '');
+    await this.sendSharePage(target, request, res);
+  }
+
+  private async sendSharePage(
+    target: string,
+    request: Request,
+    res: Response,
+  ): Promise<void> {
     const html = await this.seoService.renderShareHtml(
       target,
       request.headers['user-agent'],
     );
     res.set('Content-Type', 'text/html; charset=utf-8');
-    res.set('Cache-Control', 'public, max-age=300');
+    // Short enough that a corrected title or image is visible within a
+    // minute, long enough to absorb a crawler retrying the same link.
+    res.set('Cache-Control', 'public, max-age=60');
     // The preview URL is a sharing device; the clean storefront URL is canonical.
     res.set('X-Robots-Tag', 'noindex');
     res.send(html);

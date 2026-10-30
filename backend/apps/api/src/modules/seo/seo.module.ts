@@ -4,6 +4,7 @@ import { SeoService } from './seo.service';
 import { SeoController } from './seo.controller';
 import { ShareShellController } from './share-shell.controller';
 import { ShareShellService } from './share-shell.service';
+import { ShareShellSignal } from './share-shell.signal';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '@app/storage';
 import { Store, Product, Showcase } from '@app/database';
@@ -31,7 +32,7 @@ import {
     ]),
   ],
   controllers: [SeoController, ShareShellController],
-  providers: [SeoService, ShareShellService],
-  exports: [SeoService],
+  providers: [SeoService, ShareShellService, ShareShellSignal],
+  exports: [SeoService, ShareShellSignal],
 })
 export class SeoModule {}

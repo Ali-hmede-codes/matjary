@@ -12,6 +12,9 @@ import { storefrontRouteFromPath, postSlugFromPath } from './lib/storefront';
 import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 import { useSeenStories, useStoryGroups } from './hooks/useStories';
 import { StoryViewer } from './components/stories/StoryViewer';
+import { usePageSeo } from './hooks/usePageSeo';
+import { assetUrl } from './lib/api';
+import { brandingUrl } from './lib/website';
 
 import { documentLanguage, requestTranslation } from './lib/language';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -205,6 +208,20 @@ function DiscoveryPage() {
     setSelected,
     setNotice,
   } = discovery;
+
+  // The home page is the most-shared address. Crawlers that execute scripts
+  // and browser share sheets read these tags, which follow live branding.
+  usePageSeo({
+    title: `${settings.siteName} — ${settings.tagline || 'Discover something good'}`,
+    description:
+      settings.description ||
+      'Discover independent stores, beautiful finds, and everyday inspiration.',
+    image:
+      brandingUrl(assetUrl(settings.bannerUrl)) ||
+      brandingUrl(assetUrl(settings.logoUrl)),
+    canonical: '/',
+    siteName: settings.siteName,
+  });
 
   return (
     <div className={`app ${searchOpen ? 'search-open' : ''}`} style={theme}>

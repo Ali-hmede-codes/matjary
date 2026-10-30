@@ -565,12 +565,12 @@ function SettingsForm({
   const homeTitle = `${draft.siteName.trim() || 'Website'} — ${
     draft.tagline.trim() || 'Discover something good'
   }`;
-  const previewTitle = draft.defaultTitle.trim() || homeTitle;
-  const previewDescription =
-    draft.defaultDescription.trim() ||
+  // The shared home link follows the website branding; the default SEO title
+  // and description are the fallback for pages without copy of their own.
+  const homeDescription =
     draft.siteDescription.trim() ||
+    draft.defaultDescription.trim() ||
     'Discover independent stores, beautiful finds, and everyday inspiration.';
-  const homeDescription = draft.siteDescription.trim() || previewDescription;
 
   return (
     <form
@@ -1200,8 +1200,8 @@ function SettingsForm({
             )}
             <div className="seo-social-body">
               <small>{window.location.hostname}</small>
-              <strong>{previewTitle}</strong>
-              <p>{previewDescription}</p>
+              <strong>{homeTitle}</strong>
+              <p>{homeDescription}</p>
             </div>
           </div>
           <a

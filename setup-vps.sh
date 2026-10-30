@@ -258,11 +258,13 @@ location ~* ^/(?:logo\.png|favicon(?:-96x96)?\.(?:ico|png|svg)|apple-touch-icon\
 # Social crawlers never run the SPA. Send only those user agents to the API's
 # Open Graph document so shared shop/category/product/post links show real
 # titles and images; browsers and search engine renderers keep the React app.
+# -1 stops a cached shell from booting an old bundle after a release.
 location ^~ /stores/ {
     error_page 418 = @matjary_share;
     if (\$http_user_agent ~* "(facebookexternalhit|facebookbot|meta-externalagent|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly|redditbot|Mastodon|Misskey)") {
         return 418;
     }
+    expires -1;
     try_files \$uri \$uri/ /index.html;
 }
 
@@ -273,6 +275,18 @@ location ^~ /post/ {
     if (\$http_user_agent ~* "(facebookexternalhit|facebookbot|meta-externalagent|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly|redditbot|Mastodon|Misskey)") {
         return 418;
     }
+    expires -1;
+    try_files \$uri \$uri/ /index.html;
+}
+
+# The home link is the one most often shared. Answering it from the API keeps
+# the website name, tagline, and sharing image current without a redeploy.
+location = / {
+    error_page 418 = @matjary_share;
+    if (\$http_user_agent ~* "(facebookexternalhit|facebookbot|meta-externalagent|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly|redditbot|Mastodon|Misskey)") {
+        return 418;
+    }
+    expires -1;
     try_files \$uri \$uri/ /index.html;
 }
 
@@ -712,6 +726,7 @@ printf 'Preview metadata is prerendered into %s/stores, so this location is opti
 printf 'If these matching locations are already installed, no Vhost change is necessary.\n\n'
 cat "$STATE/cloudpanel.locations.conf"
 printf '\nVerify social previews with a crawler user agent (use a real shop and post slug):\n'
+printf '  curl -s -A "WhatsApp/2.0" https://%s/ | grep -E "og:title|og:image"\n' "$DOMAIN"
 printf '  curl -s -A "WhatsApp/2.0" https://%s/stores/YOUR-SHOP-SLUG | grep -E "og:title|og:image"\n' "$DOMAIN"
 printf '  curl -s -A "WhatsApp/2.0" https://%s/stores/YOUR-SHOP-SLUG/post/YOUR-POST-SLUG | grep -E "og:title|og:image"\n' "$DOMAIN"
 printf 'A shop or post title means the crawler locations are active. If the site HTML comes back, the locations above are missing.\n'

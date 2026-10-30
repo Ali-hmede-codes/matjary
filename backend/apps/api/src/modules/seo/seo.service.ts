@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -71,8 +72,10 @@ import {
   productFromPriceCents,
   readProductOptions,
   storeAccess,
+  WebsiteSettings,
   type AdminActor,
 } from '@app/database';
+import { ShareShellSignal } from './share-shell.signal';
 
 export interface MetaTags {
   title: string;
@@ -173,6 +176,10 @@ export class SeoService {
     private readonly dataSource: DataSource,
     private readonly admin: AdminGuard,
     private readonly storage: StorageService,
+    // A default value keeps manual construction (tests, scoped copies) short;
+    // the explicit token keeps Nest from seeing the emitted `Object` type.
+    @Inject(ShareShellSignal)
+    private readonly shells: ShareShellSignal = new ShareShellSignal(),
   ) {
     this.baseUrl =
       this.configService.get<string>('APP_ORIGIN') || 'http://localhost:3000';
@@ -247,12 +254,13 @@ export class SeoService {
       this.dataSource,
       this.admin,
       this.storage,
+      this.shells,
     );
   }
 
   async autoGenerateAdminSeo(kind: SeoKind, id: string, actor: AdminActor) {
     try {
-      return await adminContext.run(actor, () =>
+      const saved = await adminContext.run(actor, () =>
         this.adminWrite(
           actor.id,
           'metadata.generate',
@@ -282,6 +290,8 @@ export class SeoService {
           },
         ),
       );
+      this.shells.request();
+      return saved;
     } catch (error) {
       this.logger.warn('Admin SEO generation failed');
       throw error;
@@ -310,7 +320,7 @@ export class SeoService {
           : ShowcaseSeoDto,
       input,
     );
-    return adminContext.run(actor, () =>
+    const saved = await adminContext.run(actor, () =>
       this.adminWrite(
         actor.id,
         'metadata.update',
@@ -357,6 +367,8 @@ export class SeoService {
         },
       ),
     );
+    this.shells.request();
+    return saved;
   }
 
   private async ownedEntity(
@@ -444,7 +456,7 @@ export class SeoService {
   }
 
   async autoGenerateOwnedSeo(kind: SeoKind, id: string, actorId: string) {
-    return this.ownerWrite(kind, id, actorId, async (manager) => {
+    const saved = await this.ownerWrite(kind, id, actorId, async (manager) => {
       const { store, product, showcase } = await this.ownedEntity(
         kind,
         id,
@@ -457,6 +469,8 @@ export class SeoService {
         return scoped.autoGenerateProductSeo(product, store);
       return scoped.autoGenerateStoreSeo(store!);
     });
+    this.shells.request();
+    return saved;
   }
 
   async getMetaBySlug(
@@ -510,6 +524,9 @@ export class SeoService {
    */
   async renderShareHtml(path: string, userAgent?: string): Promise<string> {
     const target = path.replace(/[?#].*$/u, '').replace(/^\/+|\/+$/gu, '');
+    // The root of the site is shared as its own URL; a redirect there would
+    // reload the same document forever, so the home always answers inline.
+    if (!target) return renderShareDocument(await this.generateSiteMetaTags());
     const route = SHARE_STORE_ROUTE.exec(target);
     let meta: MetaTags;
     if (route?.[1]) {
@@ -625,11 +642,12 @@ export class SeoService {
       ? `Explore ${count} ${count === 1 ? 'item' : 'items'} in ${name}, a menu section at ${store.name}.`
       : `${count} ${count === 1 ? 'item' : 'items'} in ${name} at ${store.name}.`;
     const canonical = `${this.baseUrl}/stores/${store.slug}/c/${this.categoryPathSlug(name)}`;
-    // The shop's logo card identifies the section; a dish photo is the fallback.
+    // A current banner leads, then a dish photo, and the logo card last: a
+    // replaced banner must not stay hidden behind an older generated card.
     const ogImage =
-      (await this.buildStoreShareImageUrl(store)) ??
-      (first ? await this.buildProductImageUrl(first) : undefined) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (first ? await this.buildProductImageUrl(first) : undefined) ??
+      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.defaultSharingImage(settings));
     return {
@@ -754,7 +772,7 @@ export class SeoService {
       if (key && !(await this.buildImageUrl(key)))
         throw new BadRequestException('Image must be a public ready variant');
     }
-    return this.adminWrite(
+    const saved = await this.adminWrite(
       actorId,
       'settings.update',
       'global',
@@ -770,6 +788,9 @@ export class SeoService {
         return { ...(await manager.save(settings)), indexNowKey: null };
       },
     );
+    // The home preview and every fallback image read these defaults.
+    this.shells.request();
+    return saved;
   }
 
   // ============================================
@@ -794,9 +815,11 @@ export class SeoService {
     } else {
       Object.assign(seo, data);
     }
-    return this.ownerWrite('store', storeId, actorId, (manager) =>
+    const saved = await this.ownerWrite('store', storeId, actorId, (manager) =>
       manager.save(seo),
     );
+    this.shells.request();
+    return saved;
   }
 
   async deleteStoreSeo(storeId: string, actorId: string): Promise<void> {
@@ -804,6 +827,7 @@ export class SeoService {
     await this.ownerWrite('store', storeId, actorId, (manager) =>
       manager.delete(StoreSeo, { storeId }),
     );
+    this.shells.request();
   }
 
   // ============================================
@@ -833,9 +857,14 @@ export class SeoService {
     } else {
       Object.assign(seo, data);
     }
-    return this.ownerWrite('product', productId, actorId, (manager) =>
-      manager.save(seo),
+    const saved = await this.ownerWrite(
+      'product',
+      productId,
+      actorId,
+      (manager) => manager.save(seo),
     );
+    this.shells.request();
+    return saved;
   }
 
   async deleteProductSeo(productId: string, actorId: string): Promise<void> {
@@ -843,6 +872,7 @@ export class SeoService {
     await this.ownerWrite('product', productId, actorId, (manager) =>
       manager.delete(ProductSeo, { productId }),
     );
+    this.shells.request();
   }
 
   // ============================================
@@ -874,9 +904,14 @@ export class SeoService {
     } else {
       Object.assign(seo, data);
     }
-    return this.ownerWrite('showcase', showcaseId, actorId, (manager) =>
-      manager.save(seo),
+    const saved = await this.ownerWrite(
+      'showcase',
+      showcaseId,
+      actorId,
+      (manager) => manager.save(seo),
     );
+    this.shells.request();
+    return saved;
   }
 
   async deleteShowcaseSeo(showcaseId: string, actorId: string): Promise<void> {
@@ -884,6 +919,7 @@ export class SeoService {
     await this.ownerWrite('showcase', showcaseId, actorId, (manager) =>
       manager.delete(ShowcaseSeo, { showcaseId }),
     );
+    this.shells.request();
   }
 
   // ============================================
@@ -1278,6 +1314,58 @@ export class SeoService {
   // Meta Tags Generation (Enhanced with Auto-Fallback)
   // ============================================
 
+  /**
+   * Home page metadata. The built index.html is static, so a shared site link
+   * would keep advertising whatever title and image it was compiled with; this
+   * follows the live website branding and the administrator's sharing defaults.
+   */
+  async generateSiteMetaTags(): Promise<MetaTags> {
+    const settings = await this.getSettings();
+    // Branding is edited in its own table; a missing row must not take the
+    // home preview down, so SEO defaults remain the fallback.
+    const branding = await this.dataSource.manager
+      .findOneBy(WebsiteSettings, { id: 1 })
+      .catch(() => null);
+    const siteName = branding?.siteName?.trim() || settings.siteName;
+    const tagline = branding?.tagline?.trim() || '';
+    // The home title is the website's own name and tagline, matching the tab
+    // and the admin preview. `defaultTitle` fills pages without copy of their
+    // own, so it must not freeze the home card after a rename.
+    const title = tagline ? `${siteName} — ${tagline}` : siteName;
+    const description =
+      branding?.description?.trim() ||
+      settings.defaultDescription?.trim() ||
+      '';
+    const brandingImage = branding?.bannerUrl || branding?.logoUrl;
+    const ogImage =
+      (await this.defaultSharingImage(settings)) ||
+      (brandingImage ? this.absoluteImageUrl(brandingImage) : undefined);
+    return {
+      title: this.truncate(title, 60),
+      description: this.truncate(description, 160),
+      robots: RobotsDirective.INDEX_FOLLOW,
+      canonical: this.baseUrl,
+      og: {
+        title: this.truncate(title, 60),
+        description: this.truncate(description, 160),
+        image: ogImage,
+        type: 'website',
+        siteName,
+        url: this.baseUrl,
+        locale: 'en_US',
+      },
+      twitter: {
+        card: ogImage ? 'summary_large_image' : 'summary',
+        site: settings.twitterSite ?? undefined,
+        title: this.truncate(title, 70),
+        description: this.truncate(description, 200),
+        image: ogImage,
+      },
+      jsonLd: await this.buildSiteJsonLd(settings),
+      verificationMeta: this.buildVerificationMeta(settings),
+    };
+  }
+
   async generateStoreMetaTags(store: Store): Promise<MetaTags> {
     // Ensure SEO exists (auto-generate if needed)
     let seo = await this.getStoreSeo(store.id);
@@ -1304,13 +1392,13 @@ export class SeoService {
     const canonical =
       seo.canonicalUrl || this.baseUrl + '/stores/' + store.slug;
 
-    // Prefer a wide banner, then the logo, and only then the platform default.
-    // All three are store-owned READY variants, so a share card never leaks
-    // an unpublished asset.
+    // Prefer the owner's chosen image, then the wide banner, then the logo
+    // card, and only then the platform default. The banner comes before the
+    // generated card so a newly uploaded banner is what a share preview shows.
     const ogImage =
-      (await this.buildStoreShareImageUrl(store)) ??
       (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || store.name;
@@ -1391,8 +1479,8 @@ export class SeoService {
         ? await this.buildImageUrl(preferredImageKey)
         : undefined) ??
       (await this.buildProductImageUrl(product)) ??
-      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || product.name;
@@ -1473,16 +1561,19 @@ export class SeoService {
       seo.ogImageKey && (await this.showcaseOwnsImage(showcase, seo.ogImageKey))
         ? seo.ogImageKey
         : undefined;
-    const storeImageKey = store?.bannerKey ?? store?.logoKey;
     const ogImage =
       (preferredImageKey
         ? await this.buildImageUrl(preferredImageKey)
         : undefined) ??
       (await this.buildShowcaseImageUrl(showcase)) ??
+      (store
+        ? await this.buildStoreImageUrl(store, store.bannerKey)
+        : undefined) ??
       (store ? await this.buildStoreShareImageUrl(store) : undefined) ??
-      (storeImageKey
-        ? await this.buildImageUrl(storeImageKey)
-        : await this.defaultSharingImage(settings));
+      (store
+        ? await this.buildStoreImageUrl(store, store.logoKey)
+        : undefined) ??
+      (await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || showcase.title;
     const ogDescription =
       seo.ogDescription || showcase.description || description;
@@ -1561,9 +1652,8 @@ export class SeoService {
   // JSON-LD Structured Data Builders (Enhanced 2026)
   // ============================================
 
-  private async buildStoreJsonLd(
-    store: Store,
-    seo: StoreSeo | null,
+  /** Organization and WebSite schema shared by the home page and shop pages. */
+  private async buildSiteJsonLd(
     settings: SeoSettings,
   ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
@@ -1595,6 +1685,16 @@ export class SeoService {
         'query-input': 'required name=search_term_string',
       },
     });
+
+    return jsonLd;
+  }
+
+  private async buildStoreJsonLd(
+    store: Store,
+    seo: StoreSeo | null,
+    settings: SeoSettings,
+  ): Promise<Record<string, unknown>[]> {
+    const jsonLd = await this.buildSiteJsonLd(settings);
 
     // Store/Restaurant schema
     if (seo?.structuredData) {

@@ -26,6 +26,7 @@ import {
   StoreCategory,
   StoreType,
 } from '../../libs/database/src/entities';
+import { WebsiteSettings } from '../../libs/database/src/website-settings.entity';
 
 const canonical = 'https://matjary.test/stores/alabdalla/c/offers';
 const meta: MetaTags = {
@@ -103,6 +104,8 @@ test('storefront shells inject preview tags into the published SPA document', ()
   const template =
     '<!doctype html><html><head><title>Matjary — Discover something good</title>' +
     '<meta name="description" content="Discover independent stores, beautiful finds, and everyday inspiration on Matjary.">' +
+    '<meta property="og:title" content="Matjary — Discover something good">' +
+    '<meta property="og:image" content="/banner.jpg">' +
     '<script type="module" src="/assets/index.js"></script></head>' +
     '<body><div id="root"></div></body></html>';
   const html = renderShareShell(template, meta);
@@ -115,6 +118,9 @@ test('storefront shells inject preview tags into the published SPA document', ()
   assert.match(html, /src="\/assets\/index\.js"/u);
   assert.doesNotMatch(html, /Discover independent stores/u);
   assert.equal((html.match(/<title>/gu) ?? []).length, 1);
+  // The template's own default image must not survive next to the page's.
+  assert.equal((html.match(/property="og:image"/gu) ?? []).length, 1);
+  assert.doesNotMatch(html, /\/banner\.jpg/u);
 });
 
 test('shell path segments only accept storefront slugs', () => {
@@ -399,6 +405,71 @@ test('menu shops read as a menu in share metadata', async () => {
   assert.equal(retail.description, 'Home-style Syrian food.');
 });
 
+test('the shared site link follows live website branding', async () => {
+  const settings: Record<string, unknown> = {
+    siteName: 'Matjary',
+    defaultTitle: 'Old saved title',
+    defaultDescription: null,
+    defaultOgImageKey: null,
+    defaultOgImageUrl: '/logo.png',
+    twitterSite: null,
+    organizationName: null,
+    organizationUrl: null,
+    organizationLogoKey: null,
+    organizationLogoUrl: null,
+    organizationSameAs: null,
+    googleSiteVerification: null,
+    bingSiteVerification: null,
+    yandexSiteVerification: null,
+  };
+  const branding = Object.assign(new WebsiteSettings(), {
+    siteName: 'Sooq',
+    tagline: 'Made in Lebanon',
+    description: 'Handmade finds from Lebanese makers.',
+    bannerUrl: '/banner.jpg',
+    logoUrl: '/logo.png',
+  });
+  const repository = { find: async () => [settings] };
+  const manager = {
+    findOneBy: async (target: unknown) =>
+      target === WebsiteSettings ? branding : null,
+  };
+  const service = new SeoService(
+    repository as never,
+    repository as never,
+    repository as never,
+    repository as never,
+    repository as never,
+    new ConfigService({ APP_ORIGIN: 'https://matjary.test' }) as never,
+    { manager } as never,
+    {} as never,
+    {} as never,
+  );
+
+  const home = await service.generateSiteMetaTags();
+  // A previously saved default title must not freeze the home card after a
+  // rename; the website name and tagline are the home identity.
+  assert.equal(home.title, 'Sooq — Made in Lebanon');
+  assert.equal(home.description, 'Handmade finds from Lebanese makers.');
+  // The administrator's sharing image wins over the website banner.
+  assert.equal(home.og.image, 'https://matjary.test/logo.png');
+  assert.equal(home.og.siteName, 'Sooq');
+  assert.equal(home.canonical, 'https://matjary.test');
+  assert.equal(home.og.url, 'https://matjary.test');
+
+  // Sharing the root must not send the crawler to the same URL again.
+  const html = await service.renderShareHtml('');
+  assert.match(
+    html,
+    /<meta property="og:title" content="Sooq — Made in Lebanon">/u,
+  );
+  assert.doesNotMatch(html, /location\.replace/u);
+  assert.match(html, /<link rel="canonical" href="https:\/\/matjary\.test">/u);
+  // Structured data ships in the first response for search engines.
+  assert.match(html, /<script type="application\/ld\+json">/u);
+  assert.match(html, /"@type":"WebSite"/u);
+});
+
 test('the refresher writes one shell per public storefront page', async () => {
   await fs.mkdir('.tmp', { recursive: true });
   const directory = await fs.mkdtemp(path.join('.tmp', 'share-shell-'));
@@ -414,6 +485,7 @@ test('the refresher writes one shell per public storefront page', async () => {
     const category = { id: 'category-1', name: 'Offers', sortOrder: 1 };
     const product = { id: 'product-1', slug: 'item-x' };
     const post = { id: 'post-1', slug: 'spring-drop' };
+    let products = [product];
     const manager = {
       find: async (target: unknown) =>
         target === Store
@@ -421,7 +493,7 @@ test('the refresher writes one shell per public storefront page', async () => {
           : target === StoreCategory
             ? [category]
             : target === Product
-              ? [product]
+              ? products
               : target === Showcase
                 ? [post]
                 : [],
@@ -457,6 +529,24 @@ test('the refresher writes one shell per public storefront page', async () => {
       assert.match(html, /<meta property="og:title" content="Offers/u);
       assert.doesNotMatch(html, />Default</u);
     }
+
+    // A page dropped from the catalogue, and a leftover from an older slug,
+    // must both stop answering with their old metadata.
+    await fs.mkdir(path.join(root, 'old-shop'), { recursive: true });
+    await fs.writeFile(
+      path.join(root, 'old-shop', 'index.html'),
+      '<title>Old shop</title>',
+    );
+    products = [];
+    assert.equal(await service.refreshAll(), 3);
+    for (const relative of [
+      'alabdalla/p/item-x/index.html',
+      'alabdalla/p/item-x',
+      'old-shop/index.html',
+      'old-shop',
+    ])
+      await assert.rejects(fs.access(path.join(root, relative)));
+    await fs.access(path.join(root, 'alabdalla', 'index.html'));
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
