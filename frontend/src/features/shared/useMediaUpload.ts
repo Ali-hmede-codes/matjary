@@ -44,6 +44,9 @@ export function useMediaUpload({
   onReady: (media: UploadedMedia) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // Bytes in flight only. Encoding continues after this turns false, so an
+  // editor can let the owner publish while the worker finishes the media.
+  const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
   const [pendingId, setPendingId] = useState<string>();
@@ -91,7 +94,7 @@ export function useMediaUpload({
         return;
       }
       setProgress(
-        `Uploaded. Optimizing your media… ${Math.max(1, Math.round((Date.now() - waitingSince) / 1000))}s`,
+        `Uploaded. Finishing in the background… ${Math.max(1, Math.round((Date.now() - waitingSince) / 1000))}s`,
       );
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
     }
@@ -138,6 +141,7 @@ export function useMediaUpload({
     }
     lock.current = true;
     setBusy(true);
+    setUploading(true);
     setError('');
     setProgress('Preparing upload…');
     let negotiatedId: string | undefined;
@@ -187,6 +191,8 @@ export function useMediaUpload({
       uploaded = true;
       setPendingId(negotiated.mediaId);
       await mutate(`media/${negotiated.mediaId}/complete`);
+      // The bytes are safe and queued; only the worker is still busy.
+      if (alive.current) setUploading(false);
       await finish(negotiated.mediaId);
     } catch (e) {
       if (!uploaded && negotiatedId)
@@ -199,9 +205,20 @@ export function useMediaUpload({
         );
     } finally {
       lock.current = false;
-      if (alive.current) setBusy(false);
+      if (alive.current) {
+        setUploading(false);
+        setBusy(false);
+      }
     }
   }
 
-  return { busy, progress, error, pendingId, upload, check };
+  return {
+    busy,
+    uploading,
+    progress,
+    error,
+    pendingId,
+    upload,
+    check,
+  };
 }

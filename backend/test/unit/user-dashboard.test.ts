@@ -396,6 +396,16 @@ test('visibility policies distinguish public active stores from editable retaine
       assert.match(sql, /suspended_at IS NULL/);
     }
   }
+  // A post published while its video is still encoding waits for the first
+  // processed variant in public listings; owners keep seeing their post.
+  const publicPostSql = publicVisibilitySql('post', 'item');
+  assert.match(publicPostSql, /media_assets/);
+  assert.match(publicPostSql, /'pending'/);
+  assert.match(publicPostSql, /'processing'/);
+  assert.match(publicPostSql, /'ready'/);
+  assert.doesNotMatch(ownerVisibilitySql('post', 'item'), /media_assets/);
+  assert.doesNotMatch(publicVisibilitySql('store', 'item'), /media_assets/);
+  assert.throws(() => publicVisibilitySql('post', 'unsafe;alias'));
   assert.throws(() => publicVisibilitySql('store', 'unsafe;alias'));
 });
 

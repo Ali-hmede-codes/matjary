@@ -530,13 +530,14 @@ export async function encodeVideo(
       '2',
       '-c:v',
       'libx264',
+      // "veryfast" is several times quicker than "medium" at the same 720p
+      // frame. CRF 22 still keeps phone-screen detail and the 4 Mbit/s
+      // ceiling bounds the file, so uploads spend much less time encoding
+      // without a visible quality drop.
       '-preset',
-      'medium',
-      // Higher detail within the unchanged 720p frame: a lower CRF plus a
-      // roomier rate ceiling. 4 Mbit/s still keeps a 90 s clip well under the
-      // 200 MiB output guard and the small-host CPU budget.
+      'veryfast',
       '-crf',
-      '20',
+      '22',
       '-maxrate',
       '4M',
       '-bufsize',
@@ -555,35 +556,13 @@ export async function encodeVideo(
       '+faststart',
       '-y',
       output,
-    ],
-    options,
-  );
-  const result = await probe(output, options);
-  const video = result.streams?.find((item) => item.codec_type === 'video');
-  const actualDuration = Number(result.format?.duration);
-  if (
-    !video?.width ||
-    !video.height ||
-    !Number.isFinite(actualDuration) ||
-    actualDuration <= 0 ||
-    Math.abs(actualDuration - duration) > 1
-  )
-    throw new InvalidMediaError('Incomplete video output');
-  await run(
-    options.ffmpeg,
-    [
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-nostdin',
-      '-protocol_whitelist',
-      'file,pipe',
-      '-threads',
-      '2',
-      '-i',
-      output,
+      // The poster is captured from the same decode pass. A second ffmpeg
+      // start plus another demux of the finished MP4 used to extend every
+      // upload for a single frame.
       '-map',
       '0:v:0',
+      '-vf',
+      scale,
       '-frames:v',
       '1',
       // The poster is the feed preview for videos, so keep it near-lossless
@@ -601,6 +580,17 @@ export async function encodeVideo(
     ],
     options,
   );
+  const result = await probe(output, options);
+  const video = result.streams?.find((item) => item.codec_type === 'video');
+  const actualDuration = Number(result.format?.duration);
+  if (
+    !video?.width ||
+    !video.height ||
+    !Number.isFinite(actualDuration) ||
+    actualDuration <= 0 ||
+    Math.abs(actualDuration - duration) > 1
+  )
+    throw new InvalidMediaError('Incomplete video output');
   const posterInfo = await sharp(poster).metadata();
   const durationMs = Math.round(actualDuration * 1000);
   const variants: EncodedVariant[] = [

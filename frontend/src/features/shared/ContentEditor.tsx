@@ -504,6 +504,9 @@ export function ContentEditor({
     setSeo(next);
     setSeoBaseline(JSON.stringify(next));
   }, [seoQuery.isSuccess, seoQuery.data, seo]);
+  // A post may go live while the worker is still encoding its media; the API
+  // holds it out of public listings until the first processed variant exists,
+  // so publishing never has to wait for a long video encode.
   const existingPending =
     !product &&
     media.data?.some(
@@ -809,7 +812,11 @@ export function ContentEditor({
   }
 
   async function save(status: string) {
-    if (busy || uploading || processing) return;
+    // A product's photo keys only exist after processing, so that flow still
+    // waits. A post attaches media by row on the server and may publish while
+    // the worker encodes it in the background.
+    if (busy || uploading || (product && processing)) return;
+    const awaitingMedia = !product && (processing || Boolean(existingPending));
     const cleanName = name.trim();
     if (!cleanName) {
       setError(product ? 'Enter an item name.' : 'Enter a post title.');
@@ -1063,7 +1070,9 @@ export function ContentEditor({
             ? 'Item archived.'
             : status === 'out_of_stock'
               ? 'Saved. Shoppers now see this item as out of stock.'
-              : 'Your changes are live.',
+              : awaitingMedia
+                ? 'Your post is live. Its media will appear as soon as processing finishes.'
+                : 'Your changes are live.',
       );
     } catch (e) {
       setError(panelError(e));
@@ -1886,9 +1895,10 @@ export function ContentEditor({
               : 'Add a title, then choose photos or videos. They upload right away.'}
           </p>
         )}
-        {existingPending && (
-          <p className="panel-muted">
-            Wait for media processing to finish before publishing.
+        {!product && (processing || existingPending) && (
+          <p className="panel-muted" role="status">
+            Media is still processing. You can publish now; it will appear
+            automatically when it is ready.
           </p>
         )}
         {existingFailed && (
@@ -1913,8 +1923,7 @@ export function ContentEditor({
             disabled={
               busy ||
               uploading ||
-              processing ||
-              Boolean(existingPending) ||
+              (product && processing) ||
               (!product &&
                 Boolean(record) &&
                 (media.isPending || media.isError))

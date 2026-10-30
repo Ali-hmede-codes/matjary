@@ -46,11 +46,21 @@ export function MediaUpload({
     allowVideo,
     onReady: ({ key }) => onChange(isGallery ? [...keys, key] : [key]),
   });
-  const { busy, progress, error, pendingId, upload: start, check } = upload;
+  const {
+    busy,
+    uploading,
+    progress,
+    error,
+    pendingId,
+    upload: start,
+    check,
+  } = upload;
 
+  // Report only the network phase: once the bytes are queued the worker keeps
+  // encoding, and a post editor may publish without waiting for that.
   useEffect(() => {
-    onBusy(busy);
-  }, [busy, onBusy]);
+    onBusy(uploading);
+  }, [uploading, onBusy]);
   useEffect(() => {
     onPending?.(Boolean(pendingId));
   }, [pendingId, onPending]);

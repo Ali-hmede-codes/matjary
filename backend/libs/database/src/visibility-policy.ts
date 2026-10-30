@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Raw, type EntityManager } from 'typeorm';
 import {
   MediaAsset,
+  MediaStatus,
   Product,
   ProductStatus,
   Showcase,
@@ -69,7 +70,20 @@ function lifecycleSql(
 }
 
 export function publicVisibilitySql(kind: ContentKind, alias: string): string {
-  return `(${visibilitySql(kind, alias)}) AND (${lifecycleSql(kind, alias, true)})`;
+  const base = `(${visibilitySql(kind, alias)}) AND (${lifecycleSql(kind, alias, true)})`;
+  return kind === 'post'
+    ? `${base} AND ${publicPostMediaReadinessSql(alias)}`
+    : base;
+}
+
+// A post may be published while its photos or video are still uploading or
+// encoding. Until the first processed variant commits READY, a public card
+// would have no picture to show, so public listings and shared links skip the
+// post; it appears automatically when the worker finishes. Owner queries use
+// ownerVisibilitySql and still see it meanwhile. A post that already has a
+// READY asset keeps its place while additional media is processed.
+function publicPostMediaReadinessSql(alias: string): string {
+  return `((NOT EXISTS (SELECT 1 FROM media_assets public_in_flight_media WHERE public_in_flight_media.showcase_id = ${alias}.id AND public_in_flight_media.status IN ('${MediaStatus.PENDING}', '${MediaStatus.PROCESSING}'))) OR EXISTS (SELECT 1 FROM media_assets public_ready_media WHERE public_ready_media.showcase_id = ${alias}.id AND public_ready_media.status = '${MediaStatus.READY}'))`;
 }
 
 export function ownerVisibilitySql(kind: ContentKind, alias: string): string {
