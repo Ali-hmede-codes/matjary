@@ -68,6 +68,7 @@ export interface AppEnvironment extends DatabaseEnvironment {
   // template simply disable the refresher (development default).
   SHARE_SHELL_TEMPLATE: string;
   SHARE_SHELL_ROOT: string;
+  // Change-check interval; unchanged shells reconcile only after an hour.
   SHARE_SHELL_REFRESH_SECONDS: number;
   SHARE_SHELL_TOKEN: string;
 }

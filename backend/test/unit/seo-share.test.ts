@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import {
   isShareCrawler,
@@ -550,6 +550,155 @@ test('the refresher writes one shell per public storefront page', async () => {
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+async function shellSchedulerFixture(t: TestContext, withTemplate = true) {
+  await fs.mkdir('.tmp', { recursive: true });
+  const directory = await fs.mkdtemp(path.join('.tmp', 'shell-scheduler-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const templatePath = path.join(directory, 'template.html');
+  if (withTemplate) await fs.writeFile(templatePath, '<html>template</html>');
+  const state = {
+    revision: 1,
+    scans: 0,
+    passes: 0,
+    onScan: undefined as (() => Promise<void>) | undefined,
+    onPass: undefined as (() => Promise<void>) | undefined,
+  };
+  const service = new ShareShellService(
+    {
+      query: async () => {
+        state.scans++;
+        const snapshot = [{ revision: state.revision }];
+        await state.onScan?.();
+        return snapshot;
+      },
+    } as never,
+    {} as never,
+    new ConfigService({
+      SHARE_SHELL_TEMPLATE: templatePath,
+      SHARE_SHELL_ROOT: path.join(directory, 'stores'),
+      SHARE_SHELL_REFRESH_SECONDS: 120,
+    }) as never,
+  );
+  t.after(() => service.onApplicationShutdown());
+  const scheduler = service as unknown as {
+    pending?: Promise<number>;
+    refreshIfNeeded(): Promise<number>;
+    runRefresh(template: string): Promise<number>;
+  };
+  t.mock.method(scheduler, 'runRefresh', async () => {
+    state.passes++;
+    await state.onPass?.();
+    return 1;
+  });
+  return { service, scheduler, state, templatePath };
+}
+
+test('shell scheduling skips unchanged polls and keeps hourly recovery and forced refreshes', async (t) => {
+  const { service, scheduler, state } = await shellSchedulerFixture(t);
+  t.mock.timers.enable({
+    apis: ['setTimeout', 'setInterval', 'Date'],
+    now: 1_800_000_000_000,
+  });
+  service.onModuleInit();
+  t.mock.timers.tick(10_000);
+  await scheduler.pending;
+  assert.equal(state.passes, 1);
+  assert.equal(state.scans, 1);
+
+  // There must be no independent 15-second database watcher.
+  t.mock.timers.tick(15_000);
+  assert.equal(state.scans, 1);
+  t.mock.timers.tick(95_000);
+  await scheduler.pending;
+  assert.equal(state.scans, 2);
+  assert.equal(state.passes, 1);
+
+  state.revision++;
+  t.mock.timers.tick(120_000);
+  await scheduler.pending;
+  assert.equal(state.passes, 2);
+  assert.equal(await service.refreshAll(), 1);
+  assert.equal(state.passes, 3);
+
+  t.mock.timers.setTime(Date.now() + 60 * 60_000);
+  assert.equal(await scheduler.refreshIfNeeded(), 1);
+  assert.equal(state.passes, 4);
+});
+
+test('shell refreshes are database-idle without a usable template and recover when it appears', async (t) => {
+  const { service, scheduler, state, templatePath } =
+    await shellSchedulerFixture(t, false);
+  assert.equal(await service.refreshAll(), 0);
+  await fs.writeFile(templatePath, '');
+  assert.equal(await scheduler.refreshIfNeeded(), 0);
+  assert.equal(state.scans, 0);
+  assert.equal(state.passes, 0);
+
+  await fs.writeFile(templatePath, '<html>available</html>');
+  assert.equal(await scheduler.refreshIfNeeded(), 1);
+  assert.equal(state.scans, 1);
+  assert.equal(state.passes, 1);
+  await fs.writeFile(templatePath, '<html>new deployed template</html>');
+  assert.equal(await scheduler.refreshIfNeeded(), 1);
+  assert.equal(state.passes, 2);
+});
+
+test('shell polls share slow queries and retain changes and requests arriving during a pass', async (t) => {
+  const { service, scheduler, state } = await shellSchedulerFixture(t);
+  let release!: () => void;
+  let started!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const scanning = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  state.onScan = async () => {
+    started();
+    await blocked;
+  };
+  state.onPass = async () => {
+    state.revision++;
+  };
+  const first = scheduler.refreshIfNeeded();
+  const second = scheduler.refreshIfNeeded();
+  assert.equal(first, second);
+  await scanning;
+  assert.equal(state.scans, 1);
+  release();
+  await first;
+  assert.equal(state.passes, 1);
+
+  state.onScan = undefined;
+  state.onPass = undefined;
+  // The pass must not acknowledge a newer fingerprint sampled after its work.
+  assert.equal(await scheduler.refreshIfNeeded(), 1);
+  assert.equal(state.passes, 2);
+  assert.equal(await scheduler.refreshIfNeeded(), 0);
+
+  state.onPass = async () => {
+    void service.refreshAll();
+  };
+  await service.refreshAll();
+  state.onPass = undefined;
+  assert.equal(await scheduler.refreshIfNeeded(), 1);
+  assert.equal(state.passes, 4);
+  assert.equal(await scheduler.refreshIfNeeded(), 0);
+});
+
+test('a failed forced shell refresh remains retryable with an unchanged fingerprint', async (t) => {
+  const { service, scheduler, state } = await shellSchedulerFixture(t);
+  await service.refreshAll();
+  state.onPass = async () => {
+    throw new Error('simulated render failure');
+  };
+  await assert.rejects(service.refreshAll(), /simulated render failure/u);
+  state.onPass = undefined;
+  assert.equal(await scheduler.refreshIfNeeded(), 1);
+  assert.equal(state.passes, 3);
+  assert.equal(await scheduler.refreshIfNeeded(), 0);
 });
 
 test('link preview fetchers are recognised so they get no redirect', () => {

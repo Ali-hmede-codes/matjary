@@ -34,18 +34,19 @@ import { ShareShellSignal } from './share-shell.signal';
  */
 @Injectable()
 export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
-  // Content changes are detected from a cheap aggregate query between full
-  // passes, so a saved title or banner reaches crawlers in seconds.
-  private static readonly WATCH_MS = 15_000;
+  // Recover changes the aggregate fingerprint cannot see without rebuilding
+  // the entire catalog on every poll. Explicit refresh requests still run now.
+  private static readonly RECONCILE_MS = 60 * 60_000;
   private readonly logger = new Logger(ShareShellService.name);
   private readonly templatePath: string;
   private readonly root: string;
   private readonly intervalMs: number;
   private timer?: NodeJS.Timeout;
-  private watch?: NodeJS.Timeout;
   private first?: NodeJS.Timeout;
   private fingerprint?: string;
   private pending?: Promise<number>;
+  private lastRefreshAt = 0;
+  private refreshRequested = false;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -63,162 +64,170 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
 
   onModuleInit(): void {
     this.signal.register(() => this.refreshAll());
-    // A full pass on the configured interval rewrites every page from live
-    // data, so a change the fingerprint cannot see still heals on its own.
-    this.timer = setInterval(() => void this.fullPass(), this.intervalMs);
+    // One configurable poll replaces the independent 15-second database scan.
+    this.timer = setInterval(() => void this.tick(), this.intervalMs);
     this.timer.unref();
     // Let boot and migrations settle before the first pass.
-    this.first = setTimeout(() => void this.fullPass(false), 10_000);
+    this.first = setTimeout(() => void this.tick(), 10_000);
     this.first.unref();
-    this.watch = setInterval(
-      () => void this.tick(),
-      ShareShellService.WATCH_MS,
-    );
-    this.watch.unref();
   }
 
   onApplicationShutdown(): void {
     if (this.timer) clearInterval(this.timer);
-    if (this.watch) clearInterval(this.watch);
     if (this.first) clearTimeout(this.first);
     this.signal.cancel();
   }
 
-  /** Writes every public storefront shell; returns the written page count. */
+  /** Forces a full pass; a request during a pass also leaves the next poll dirty. */
   refreshAll(): Promise<number> {
+    this.refreshRequested = true;
+    return this.refreshIfNeeded();
+  }
+
+  private refreshIfNeeded(): Promise<number> {
     if (!this.pending) {
-      this.pending = this.runRefresh().finally(() => {
+      // Single flight includes the fingerprint query, not just file generation.
+      this.pending = this.checkAndRefresh().finally(() => {
         this.pending = undefined;
       });
     }
     return this.pending;
   }
 
-  /**
-   * A scheduled pass is quiet: it runs every interval and would otherwise log
-   * the same line forever. Change-triggered passes report their work.
-   */
-  private async fullPass(quiet = true): Promise<void> {
-    if (this.pending) return;
-    try {
-      const pages = await this.refreshAll();
-      if (pages && !quiet) {
-        this.logger.log(`Refreshed ${pages} storefront share pages`);
-      }
-    } catch {
-      this.logger.warn('Storefront share page refresh failed');
-    }
-  }
-
-  /** Refreshes early when the lightweight content fingerprint changed. */
   private async tick(): Promise<void> {
     if (this.pending) return;
     try {
-      if ((await this.contentFingerprint()) === this.fingerprint) return;
-      await this.fullPass(false);
+      const pages = await this.refreshIfNeeded();
+      if (pages) this.logger.log(`Refreshed ${pages} storefront share pages`);
     } catch {
       this.logger.warn('Storefront share page refresh failed');
     }
   }
 
-  private async runRefresh(): Promise<number> {
+  private async checkAndRefresh(): Promise<number> {
+    // Missing/unreadable templates must leave the optional refresher DB-idle.
+    // Snapshot before reading so a template replaced mid-pass is seen next time.
+    const stat = await fs.stat(this.templatePath).catch(() => undefined);
+    const template = stat?.isFile()
+      ? await fs.readFile(this.templatePath, 'utf8').catch(() => undefined)
+      : undefined;
+    if (!template || !stat) {
+      this.fingerprint = undefined;
+      return 0;
+    }
+
+    const force = this.refreshRequested;
+    this.refreshRequested = false;
     try {
-      const template = await fs
-        .readFile(this.templatePath, 'utf8')
-        .catch(() => undefined);
-      if (!template) return 0;
-      const manager = this.dataSource.manager;
-      const stores = await manager.find(Store, { where: publicWhere('store') });
-      // Pages written in this pass; anything else under the root is obsolete
-      // (a renamed slug, an unpublished post) and must stop answering.
-      const keep = new Set<string>();
-      let pages = 0;
-      for (const store of stores) {
+      const fingerprint = await this.contentFingerprint(stat);
+      if (
+        !force &&
+        fingerprint === this.fingerprint &&
+        Date.now() - this.lastRefreshAt < ShareShellService.RECONCILE_MS
+      )
+        return 0;
+
+      const pages = await this.runRefresh(template);
+      // Only acknowledge the snapshot taken before a successful pass. A save
+      // during generation (including SEO auto-generation) is checked next poll.
+      this.fingerprint = fingerprint;
+      this.lastRefreshAt = Date.now();
+      return pages;
+    } catch (error) {
+      // A forced refresh may fail even when the fingerprint is unchanged.
+      this.refreshRequested = true;
+      throw error;
+    }
+  }
+
+  private async runRefresh(template: string): Promise<number> {
+    const manager = this.dataSource.manager;
+    const stores = await manager.find(Store, { where: publicWhere('store') });
+    // Pages written in this pass; anything else under the root is obsolete
+    // (a renamed slug, an unpublished post) and must stop answering.
+    const keep = new Set<string>();
+    let pages = 0;
+    for (const store of stores) {
+      pages += Number(
+        await this.writePage(
+          [store.slug],
+          await this.seo.generateStoreMetaTags(store),
+          template,
+          keep,
+        ),
+      );
+      const categories = await manager.find(StoreCategory, {
+        where: { storeId: store.id },
+        order: { sortOrder: 'ASC', name: 'ASC' },
+      });
+      for (const category of categories) {
         pages += Number(
           await this.writePage(
-            [store.slug],
-            await this.seo.generateStoreMetaTags(store),
+            [store.slug, 'c', this.seo.categoryPathSlug(category.name)],
+            await this.seo.generateCategoryMetaTags(store, category),
             template,
             keep,
           ),
         );
-        const categories = await manager.find(StoreCategory, {
-          where: { storeId: store.id },
-          order: { sortOrder: 'ASC', name: 'ASC' },
-        });
-        for (const category of categories) {
-          pages += Number(
-            await this.writePage(
-              [store.slug, 'c', this.seo.categoryPathSlug(category.name)],
-              await this.seo.generateCategoryMetaTags(store, category),
-              template,
-              keep,
-            ),
-          );
-        }
-        // Products without an owner category live on the "More items" page.
-        const uncategorized = await manager.count(Product, {
-          where: {
-            storeId: store.id,
-            categoryId: IsNull(),
-            status: In([...PUBLIC_PRODUCT_STATUSES]),
-            ...publicWhere('product'),
-          },
-        });
-        if (uncategorized > 0) {
-          pages += Number(
-            await this.writePage(
-              [store.slug, 'c', 'more-items'],
-              await this.seo.generateUncategorizedShareMeta(store),
-              template,
-              keep,
-            ),
-          );
-        }
-        const products = await manager.find(Product, {
-          where: {
-            storeId: store.id,
-            status: In([...PUBLIC_PRODUCT_STATUSES]),
-            ...publicWhere('product'),
-          },
-        });
-        for (const product of products) {
-          pages += Number(
-            await this.writePage(
-              [store.slug, 'p', product.slug],
-              await this.seo.generateProductMetaTags(product, store),
-              template,
-              keep,
-            ),
-          );
-        }
-        // Posts live under their shop, so one shared link previews from a file
-        // this directory already serves. Shop-less posts keep the API route.
-        const posts = await manager.find(Showcase, {
-          where: {
-            storeId: store.id,
-            status: ShowcaseStatus.PUBLISHED,
-            ...publicWhere('post'),
-          },
-        });
-        for (const post of posts) {
-          pages += Number(
-            await this.writePage(
-              [store.slug, 'post', post.slug],
-              await this.seo.generateShowcaseMetaTags(post, store),
-              template,
-              keep,
-            ),
-          );
-        }
       }
-      await this.prune(keep);
-      return pages;
-    } finally {
-      // SEO auto-generation writes rows; snapshot after the pass so the same
-      // changes do not trigger another refresh on the next tick.
-      this.fingerprint = await this.contentFingerprint().catch(() => undefined);
+      // Products without an owner category live on the "More items" page.
+      const uncategorized = await manager.count(Product, {
+        where: {
+          storeId: store.id,
+          categoryId: IsNull(),
+          status: In([...PUBLIC_PRODUCT_STATUSES]),
+          ...publicWhere('product'),
+        },
+      });
+      if (uncategorized > 0) {
+        pages += Number(
+          await this.writePage(
+            [store.slug, 'c', 'more-items'],
+            await this.seo.generateUncategorizedShareMeta(store),
+            template,
+            keep,
+          ),
+        );
+      }
+      const products = await manager.find(Product, {
+        where: {
+          storeId: store.id,
+          status: In([...PUBLIC_PRODUCT_STATUSES]),
+          ...publicWhere('product'),
+        },
+      });
+      for (const product of products) {
+        pages += Number(
+          await this.writePage(
+            [store.slug, 'p', product.slug],
+            await this.seo.generateProductMetaTags(product, store),
+            template,
+            keep,
+          ),
+        );
+      }
+      // Posts live under their shop, so one shared link previews from a file
+      // this directory already serves. Shop-less posts keep the API route.
+      const posts = await manager.find(Showcase, {
+        where: {
+          storeId: store.id,
+          status: ShowcaseStatus.PUBLISHED,
+          ...publicWhere('post'),
+        },
+      });
+      for (const post of posts) {
+        pages += Number(
+          await this.writePage(
+            [store.slug, 'post', post.slug],
+            await this.seo.generateShowcaseMetaTags(post, store),
+            template,
+            keep,
+          ),
+        );
+      }
     }
+    await this.prune(keep);
+    return pages;
   }
 
   private async writePage(
@@ -234,8 +243,8 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
     // Defense in depth: never write outside the mounted share directory.
     if (!target.startsWith(`${this.root}${path.sep}`)) return false;
     const html = renderShareShell(template, meta);
-    // Scheduled passes rewrite every page; skipping identical documents keeps
-    // the disk quiet without weakening the guarantee that content is current.
+    // A changed page or reconciliation still revisits unchanged siblings;
+    // avoid writing their identical bytes again.
     const current = await fs.readFile(target, 'utf8').catch(() => undefined);
     if (current === html) {
       keep.add(target);
@@ -282,7 +291,10 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
-  private async contentFingerprint(): Promise<string> {
+  private async contentFingerprint(template: {
+    mtimeMs: number;
+    size: number;
+  }): Promise<string> {
     const rows: unknown = await this.dataSource.query(
       `SELECT
         (SELECT COUNT(*) FROM stores) AS stores,
@@ -300,10 +312,9 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
         (SELECT MAX(updated_at) FROM seo_settings) AS settings_at,
         (SELECT MAX(updated_at) FROM website_settings) AS branding_at`,
     );
-    const stat = await fs.stat(this.templatePath).catch(() => undefined);
     return JSON.stringify({
       row: Array.isArray(rows) ? rows[0] : null,
-      template: stat ? [stat.mtimeMs, stat.size] : null,
+      template: [template.mtimeMs, template.size],
     });
   }
 }
