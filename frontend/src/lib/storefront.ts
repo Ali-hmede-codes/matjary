@@ -40,6 +40,17 @@ export function selectOwnerStore<
       )
     : stores.find((store) => isCurrentStore(store) && !store.restricted);
 }
+// Branding uploads must use the shop being edited. Creating a shop here while
+// editing would consume another plan slot and attach the image to the wrong shop.
+export function resolveStoreUploadTarget(
+  store: { id: string } | undefined,
+  created: { id: string } | null,
+  creating: Promise<string> | null,
+  create: () => Promise<string>,
+): string | Promise<string> {
+  return store?.id ?? created?.id ?? creating ?? create();
+}
+
 // The owner panel remounts on every tab change, so the chosen store must be
 // remembered per account. Without this the workspace silently fell back to
 // the first current store whenever a tab was opened.

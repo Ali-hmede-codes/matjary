@@ -12,6 +12,7 @@ import {
   linkCompareAtPriceCents,
   readOwnerStoreId,
   rememberOwnerStore,
+  resolveStoreUploadTarget,
   selectOwnerStore,
   storeLifecycleActions,
   isCurrentStore,
@@ -63,6 +64,71 @@ test('owner selection never defaults to archived, trashed, or restricted stores'
   assert.deepEqual(
     stores.filter(isCurrentStore).map((s) => s.id),
     ['restricted', 'off'],
+  );
+});
+
+test('repeated logo and cover replacements use the edited shop without consuming a shop slot', async () => {
+  const store = { id: 'existing-shop' };
+  const create = async (): Promise<string> => {
+    assert.fail('Editing shop photos must never create another shop');
+  };
+  for (const _purpose of ['store_logo', 'store_banner']) {
+    for (let replacement = 0; replacement < 3; replacement++) {
+      assert.equal(
+        await resolveStoreUploadTarget(store, null, null, create),
+        store.id,
+      );
+    }
+  }
+  // The edited shop also wins over any stale new-shop state.
+  assert.equal(
+    resolveStoreUploadTarget(
+      store,
+      { id: 'other-shop' },
+      Promise.resolve('pending-shop'),
+      create,
+    ),
+    store.id,
+  );
+});
+
+test('new-shop uploads share an in-flight creation and reuse its ID for later pictures', async () => {
+  let created: { id: string } | null = null;
+  let creating: Promise<string> | null = null;
+  let calls = 0;
+  const create = () => {
+    calls++;
+    creating = Promise.resolve().then(() => {
+      created = { id: 'new-shop' };
+      creating = null;
+      return created.id;
+    });
+    return creating;
+  };
+  const logo = resolveStoreUploadTarget(undefined, created, creating, create);
+  const cover = resolveStoreUploadTarget(undefined, created, creating, create);
+  assert.equal(logo, cover);
+  assert.deepEqual(await Promise.all([logo, cover]), ['new-shop', 'new-shop']);
+  for (let replacement = 0; replacement < 3; replacement++) {
+    assert.equal(
+      resolveStoreUploadTarget(undefined, created, creating, create),
+      'new-shop',
+    );
+  }
+  assert.equal(calls, 1);
+});
+
+test('failed new-shop creation does not change the target of an existing-shop upload', async () => {
+  const create = async (): Promise<string> => {
+    throw new Error('Store limit reached');
+  };
+  await assert.rejects(
+    async () => resolveStoreUploadTarget(undefined, null, null, create),
+    /Store limit reached/u,
+  );
+  assert.equal(
+    resolveStoreUploadTarget({ id: 'existing-shop' }, null, null, create),
+    'existing-shop',
   );
 });
 

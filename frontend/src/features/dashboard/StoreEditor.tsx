@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getJson, type ShopCategoryCatalog } from '../../lib/api';
 import {
+  resolveStoreUploadTarget,
   storeMediaUrl,
   storePresentation,
   storeStatusLabel,
@@ -239,12 +240,15 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
     }
   }
 
-  // Media picks may fire before a shop exists; the first one creates it and
-  // later picks reuse the same shop instead of creating a second one.
+  // Existing-shop edits and new-shop uploads must resolve to the same target
+  // as Save; only a genuinely new shop may reserve a plan slot.
   function ensureShop(): string | Promise<string> {
-    if (createdRef.current) return createdRef.current.id;
-    if (creating.current) return creating.current;
-    return createShop();
+    return resolveStoreUploadTarget(
+      store,
+      createdRef.current,
+      creating.current,
+      createShop,
+    );
   }
 
   async function save(e: FormEvent) {
