@@ -466,6 +466,8 @@ test('HTTP SEO wildcard registration, admin boundaries, DTOs and sitemap categor
     const assignment = {
       userId: '00000000-0000-4000-8000-000000000001',
       planId: '00000000-0000-4000-8000-000000000002',
+      phone: '+961 3 123 456',
+      phoneCountryCode: '+961',
     };
     assert.equal(
       (
@@ -478,6 +480,16 @@ test('HTTP SEO wildcard registration, admin boundaries, DTOs and sitemap categor
       ).status,
       403,
     );
+    // The administrator must record how to reach the recipient.
+    assert.equal(
+      (
+        await request('/admin/subscriptions/plans/assign', 'POST', 'admin', {
+          userId: assignment.userId,
+          planId: assignment.planId,
+        })
+      ).status,
+      400,
+    );
     assert.equal(
       (
         await request(
@@ -489,11 +501,17 @@ test('HTTP SEO wildcard registration, admin boundaries, DTOs and sitemap categor
       ).status,
       201,
     );
-    assert.deepEqual(calls.at(-1)?.slice(0, 4), [
+    assert.deepEqual(calls.at(-1), [
       'assign',
-      assignment.userId,
-      assignment.planId,
-      'admin',
+      {
+        userId: assignment.userId,
+        planId: assignment.planId,
+        assignedBy: 'admin',
+        phone: assignment.phone,
+        phoneCountryCode: assignment.phoneCountryCode,
+        expiresAt: undefined,
+        notes: undefined,
+      },
     ]);
     assert.equal(
       (

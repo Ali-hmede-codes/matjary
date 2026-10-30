@@ -243,6 +243,11 @@ export class User extends BaseEntity {
   @Column({ name: 'display_name', type: 'varchar', length: 120 })
   displayName!: string;
 
+  // Contact number recorded when an administrator assigns a plan manually.
+  // Any country is accepted, so it is stored normalized as +<country><number>.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phone!: string | null;
+
   // Google accounts have no local password. Preserve hashes for existing accounts.
   @Column({
     name: 'password_hash',

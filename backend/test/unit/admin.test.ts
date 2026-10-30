@@ -793,18 +793,36 @@ test('subscription management preserves free fallback and historical assignments
     verificationBadgeExpiresAt: new Date(Date.now() + 86_400_000),
   });
   const paidExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  const first = await plans.assignSubscription(
-    ownerId,
-    paid.id,
-    adminId,
-    paidExpiry,
+  const first = await plans.assignSubscription({
+    userId: ownerId,
+    planId: paid.id,
+    assignedBy: adminId,
+    phone: '03 123 456',
+    expiresAt: paidExpiry,
+  });
+  // The assignment records a callable number for the recipient.
+  assert.equal(
+    f.rows(User).find((row) => row.id === ownerId)?.phone,
+    '+9613123456',
   );
+  assert.ok(f.rows(AdminAuditLog).some((row) => row.action === 'phone.update'));
   // A bundled badge follows the subscription that pays for it.
   assert.equal(
     new Date(f.rows(Store)[0]?.verificationBadgeExpiresAt as Date).getTime(),
     paidExpiry.getTime(),
   );
-  await plans.assignSubscription(ownerId, free.id, adminId);
+  await plans.assignSubscription({
+    userId: ownerId,
+    planId: free.id,
+    assignedBy: adminId,
+    // No Lebanese line: the country code is supplied by the form.
+    phone: '050 123 4567',
+    phoneCountryCode: '+971',
+  });
+  assert.equal(
+    f.rows(User).find((row) => row.id === ownerId)?.phone,
+    '+971501234567',
+  );
   // A plan without badge slots ends the bundled badge (grace still applies)
   // instead of letting it run on a subscription that no longer bundles it.
   assert.equal(f.rows(Store)[0]?.verificationIncludedInPlan, false);
@@ -825,15 +843,28 @@ test('subscription management preserves free fallback and historical assignments
     new Date(freeAssignment.startsAt as Date).getTime();
   assert.equal(trialMs, 3 * 24 * 60 * 60 * 1000);
   await assert.rejects(
-    plans.assignSubscription(
-      ownerId,
-      free.id,
-      adminId,
-      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    ),
+    plans.assignSubscription({
+      userId: ownerId,
+      planId: free.id,
+      assignedBy: adminId,
+      phone: '03 123 456',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }),
     (error: any) =>
       error instanceof BadRequestException &&
       (error.getResponse() as { code?: string }).code === 'FREE_TRIAL_CAP',
+  );
+  await assert.rejects(
+    plans.assignSubscription({
+      userId: ownerId,
+      planId: free.id,
+      assignedBy: adminId,
+      phone: 'not a number',
+    }),
+    (error: any) =>
+      error instanceof BadRequestException &&
+      (error.getResponse() as { code?: string }).code ===
+        'SUBSCRIPTION_PHONE_INVALID',
   );
   await plans.cancelAssignment(freeAssignment.id as string, adminId);
   assert.ok(

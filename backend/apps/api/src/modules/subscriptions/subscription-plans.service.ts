@@ -33,6 +33,21 @@ import {
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
 import { SubscriptionPlanResponseDto } from './dto/subscription-plan-response.dto';
+import { normalizeSubscriptionPhone } from './subscription-phone';
+
+const PHONE_INVALID_CODE = 'SUBSCRIPTION_PHONE_INVALID';
+
+export interface AssignSubscriptionInput {
+  userId: string;
+  planId: string;
+  assignedBy: string;
+  // The recipient's contact number, national format for `phoneCountryCode` or
+  // a complete number typed with its own + code.
+  phone: string;
+  phoneCountryCode?: string;
+  expiresAt?: Date;
+  notes?: string;
+}
 
 @Injectable()
 export class SubscriptionPlansService {
@@ -423,17 +438,27 @@ export class SubscriptionPlansService {
   }
 
   /**
-   * Assign a subscription plan to a user (admin action)
+   * Assign a subscription plan to a user (admin action). The assignment also
+   * records the recipient's phone number for follow-up calls.
    */
-  async assignSubscription(
-    userId: string,
-    planId: string,
-    assignedBy: string,
-    expiresAt?: Date,
-    notes?: string,
-  ): Promise<UserSubscription> {
+  async assignSubscription({
+    userId,
+    planId,
+    assignedBy,
+    phone: phoneInput,
+    phoneCountryCode,
+    expiresAt,
+    notes,
+  }: AssignSubscriptionInput): Promise<UserSubscription> {
     try {
       const now = new Date();
+      // Normalize before the transaction so a typo never locks user rows.
+      const phone = normalizeSubscriptionPhone(phoneInput, phoneCountryCode);
+      if (!phone)
+        throw new BadRequestException({
+          code: PHONE_INVALID_CODE,
+          message: 'Enter a valid phone number with its country code',
+        });
       if (
         expiresAt &&
         (!Number.isFinite(expiresAt.getTime()) || expiresAt <= now)
@@ -455,6 +480,13 @@ export class SubscriptionPlansService {
           });
           if (!user || user.suspendedAt)
             throw new NotFoundException('Active user not found');
+          // The number is part of the record, so a later assignment replaces it
+          // and the change is audited on the user row.
+          const phoneChanged = user.phone !== phone;
+          if (phoneChanged) {
+            user.phone = phone;
+            await manager.save(user);
+          }
           const plan = await manager.findOne(SubscriptionPlan, {
             where: { id: planId },
             lock: { mode: 'pessimistic_read' },
@@ -514,6 +546,15 @@ export class SubscriptionPlansService {
               ? ['planId', 'expiresAt', 'verificationBadgeExpiresAt']
               : ['planId', 'expiresAt'],
           );
+          if (phoneChanged)
+            await appendAdminAudit(
+              manager,
+              actor,
+              'users',
+              userId,
+              'phone.update',
+              ['phone'],
+            );
           return saved;
         },
       );

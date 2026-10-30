@@ -21,6 +21,7 @@ export interface Person {
   id: string;
   displayName: string;
   email: string;
+  phone?: string | null;
 }
 // Mirrors SubscriptionLimits in @app/database; null means unlimited.
 export interface PlanLimits {
@@ -52,6 +53,8 @@ export interface PanelRecord {
   title?: string;
   displayName?: string;
   email?: string;
+  // Contact number recorded when a plan is assigned by an administrator.
+  phone?: string | null;
   slug?: string;
   description?: string | null;
   status?: string;
@@ -138,6 +141,8 @@ export function panelError(error: unknown): string {
       return 'This account cannot be added right now.';
     if (error.code === 'VERIFICATION_PHONE_INVALID')
       return 'Enter a valid Lebanese phone number, for example 03 123 456.';
+    if (error.code === 'SUBSCRIPTION_PHONE_INVALID')
+      return 'Enter a phone number with its country code, or choose the right country first.';
     if (error.code === 'VERIFICATION_NOT_AVAILABLE')
       return 'Verification is not available on your current plan. Choose another plan or contact an administrator.';
     if (error.code === 'VERIFICATION_NOT_GRANTED')

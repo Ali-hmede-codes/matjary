@@ -44,13 +44,15 @@ export class SubscriptionPlansController {
     @Body() dto: AssignSubscriptionDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.plans.assignSubscription(
-      dto.userId,
-      dto.planId,
-      request.user.id,
-      dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      dto.notes,
-    );
+    return this.plans.assignSubscription({
+      userId: dto.userId,
+      planId: dto.planId,
+      assignedBy: request.user.id,
+      phone: dto.phone,
+      phoneCountryCode: dto.phoneCountryCode,
+      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+      notes: dto.notes,
+    });
   }
 
   @Post()

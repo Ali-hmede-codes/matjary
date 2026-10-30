@@ -52,9 +52,10 @@ export const ADMIN_RESOURCES: Record<string, Resource> = {
   users: {
     target: User,
     fields: fields(
-      'id email displayName role adminScope suspendedAt createdAt updatedAt',
+      'id email displayName phone role adminScope suspendedAt createdAt updatedAt',
     ),
-    search: ['email', 'displayName'],
+    // Support can find an owner by the number recorded on assignment.
+    search: ['email', 'displayName', 'phone'],
     archive: 'suspendedAt',
   },
   stores: {
@@ -457,7 +458,7 @@ export class AdminQueriesService {
     const users = ownerIds.length
       ? await manager.find(User, {
           where: { id: In(ownerIds) },
-          select: ['id', 'displayName', 'email'],
+          select: ['id', 'displayName', 'email', 'phone'],
         })
       : [];
     const ownerMap = new Map(users.map((user) => [user.id, user]));

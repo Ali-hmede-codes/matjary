@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Link,
@@ -51,6 +51,7 @@ import {
   isStoreVerified,
 } from '../../lib/storefront';
 import { BILLING_LABELS, PlanEditor, planSummary } from './PlanEditor';
+import { PHONE_COUNTRIES, dialCodeFor, phoneDraft } from '../../lib/phone';
 import { AdminBoost } from './AdminBoost';
 import { AdminSettings } from './AdminSettings';
 import { AdminSeo } from './AdminSeo';
@@ -561,6 +562,11 @@ function AdminList({
                               item.slug || 'Subscription assignment'
                             ))}
                       </p>
+                      {resource === 'users' && item.phone && (
+                        <small>
+                          <span className="notranslate">{item.phone}</span>
+                        </small>
+                      )}
                       {resource === 'subscriptions' && (
                         <small>Expires {dateLabel(item.expiresAt)}</small>
                       )}
@@ -601,6 +607,7 @@ function AdminList({
                             id: item.userId ?? item.owner!.id,
                             displayName: item.owner?.displayName,
                             email: item.owner?.email,
+                            phone: item.owner?.phone,
                           })
                         }
                       >
@@ -1056,6 +1063,16 @@ function Detail({
               <dt>Created</dt>
               <dd>{dateLabel(data.createdAt)}</dd>
             </div>
+            {resource === 'users' && data.phone && (
+              <div>
+                <dt>Phone</dt>
+                <dd>
+                  <a href={`tel:${data.phone}`} className="notranslate">
+                    {data.phone}
+                  </a>
+                </dd>
+              </div>
+            )}
             {resource === 'users' && (
               <div>
                 <dt>Role</dt>
@@ -1317,6 +1334,7 @@ function Detail({
                     id: data.userId ?? data.owner?.id ?? '',
                     displayName: data.owner?.displayName,
                     email: data.owner?.email,
+                    phone: data.owner?.phone,
                   })
                 }
               >
@@ -1741,6 +1759,8 @@ function AssignSubscription({
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
   const [planId, setPlanId] = useState('');
+  const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState('LB');
   const [date, setDate] = useState('');
   const [custom, setCustom] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1772,15 +1792,24 @@ function AssignSubscription({
   });
   const freePlan =
     plans.data?.items.find((plan) => plan.id === planId)?.slug === 'free';
+  // Re-assigning shows the number already on record. The country list only
+  // supplies the dial code for a national format; a typed + number stands alone.
+  useEffect(() => {
+    const draft = phoneDraft(selected?.phone);
+    setCountry(draft.country);
+    setPhone(draft.number);
+  }, [selected?.id, selected?.phone]);
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!selected || !planId || busy) return;
+    if (!selected || !planId || !phone.trim() || busy) return;
     setBusy(true);
     setError('');
     try {
       await mutate('admin/subscriptions/assign', {
         userId: selected.id,
         planId,
+        phone: phone.trim(),
+        phoneCountryCode: dialCodeFor(country),
         ...(custom
           ? { expiresAt: new Date(`${date}T23:59:59`).toISOString() }
           : {}),
@@ -1815,7 +1844,7 @@ function AssignSubscription({
           >
             <input
               aria-label="Find a user"
-              placeholder="Search name or email"
+              placeholder="Search name, email or phone"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               maxLength={100}
@@ -1836,6 +1865,7 @@ function AssignSubscription({
                 >
                   <strong>{u.displayName}</strong>
                   <small>{u.email}</small>
+                  {u.phone && <small className="notranslate">{u.phone}</small>}
                 </button>
               ))}
               {!users.data.items.length && <p>No matching users.</p>}
@@ -1874,6 +1904,42 @@ function AssignSubscription({
               . A new assignment replaces the current subscription.
             </p>
           )}
+          <fieldset>
+            <legend>Contact phone</legend>
+            <div className="panel-field-grid">
+              <label>
+                Country
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                >
+                  {PHONE_COUNTRIES.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.name} ({item.dialCode})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Phone number
+                <input
+                  required
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  maxLength={30}
+                  placeholder={country === 'LB' ? '03 123 456' : '50 123 4567'}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </label>
+            </div>
+            <p className="panel-muted">
+              No Lebanese number? Choose the person&apos;s country above, or
+              type the complete number starting with + for any other country.
+              Only administrators can see it.
+            </p>
+          </fieldset>
           <fieldset>
             <legend>Choose a plan</legend>
             {plans.isPending ? (
@@ -1954,7 +2020,13 @@ function AssignSubscription({
           {error && <Notice error>{error}</Notice>}
           <button
             className="panel-primary"
-            disabled={busy || !planId || current.isPending || current.isError}
+            disabled={
+              busy ||
+              !planId ||
+              !phone.trim() ||
+              current.isPending ||
+              current.isError
+            }
           >
             {busy ? 'Assigning…' : 'Confirm subscription'}
           </button>

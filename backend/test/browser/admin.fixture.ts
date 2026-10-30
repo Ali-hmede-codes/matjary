@@ -64,6 +64,7 @@ const rows: Record<string, Row[]> = {
       id: ownerId,
       email: 'owner@example.test',
       displayName: 'Sample Owner',
+      phone: '+9613123456',
       suspendedAt: null,
       createdAt: now,
     },
