@@ -1565,10 +1565,20 @@ export class SeoService {
     const canonical =
       seo.canonicalUrl || this.baseUrl + '/stores/' + store.slug;
 
+    // Older releases persisted the shop logo in ogImageKey as an automatic
+    // value. A row that no longer carries its auto-generated marker would keep
+    // that key as a manual override and hide the generated card from every
+    // share, so a key that resolves to this shop's own logo is not an override.
+    const preferredImageKey =
+      seo.ogImageKey && !(await this.isLegacyStoreLogo(store, seo.ogImageKey))
+        ? seo.ogImageKey
+        : undefined;
     // Explicit overrides win. Otherwise use the automatic 1200x630 card;
     // banners and raw logos are fallbacks while the worker builds it.
     const ogImage =
-      (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
+      (preferredImageKey
+        ? await this.buildImageUrl(preferredImageKey)
+        : undefined) ??
       (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
@@ -2828,6 +2838,22 @@ export class SeoService {
       })
       .catch(() => null);
     return asset?.id ?? null;
+  }
+
+  /**
+   * True when a saved OG key is one of this shop's logo variants. Older
+   * releases stored the logo automatically; a row that lost its auto-generated
+   * marker must not let that key outrank the generated share card.
+   */
+  private async isLegacyStoreLogo(store: Store, key: string): Promise<boolean> {
+    if (key === store.logoKey) return true;
+    const assetId = mediaAssetIdFromKey(key);
+    if (!assetId) return false;
+    return this.dataSource.manager
+      .exists(MediaAsset, {
+        where: { id: assetId, storeId: store.id, purpose: 'store_logo' },
+      })
+      .catch(() => false);
   }
 
   /** Newest ready shop image, used when a saved logo/banner key is stale. */
