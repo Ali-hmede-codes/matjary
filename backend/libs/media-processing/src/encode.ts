@@ -190,6 +190,11 @@ export interface ShareCardOptions {
   deadline: number;
 }
 
+export interface StoreCardOptions {
+  signal: AbortSignal;
+  deadline: number;
+}
+
 // Social clients crop link images to a wide card. Draw the shop logo on a
 // branded 1200x630 panel so the preview is readable in every client instead
 // of stretching a square logo.
@@ -317,6 +322,91 @@ export async function encodeShareCard(
   } catch {
     remaining(options);
     throw new InvalidMediaError('Share card encoding failed');
+  }
+}
+
+// A shop without a logo still gets a real picture: its name on the shop's
+// brand color. The font list prefers the faces the worker image installs; if
+// none resolve, the card still renders as a clean branded image.
+const SHARE_CARD_FONT =
+  'DejaVu Sans, KacstOne, Noto Sans, Noto Sans Arabic, sans-serif';
+
+function readableInk(background: string): string {
+  const channels = [1, 3, 5].map((start) => {
+    const channel = parseInt(background.slice(start, start + 2), 16) / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const [r = 0, g = 0, b = 0] = channels;
+  return r * 0.2126 + g * 0.7152 + b * 0.0722 > 0.42 ? '#17231e' : '#ffffff';
+}
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+export async function encodeStoreNameCard(
+  name: string,
+  brandColor: string | null | undefined,
+  directory: string,
+  options: StoreCardOptions,
+): Promise<EncodedVariant> {
+  const color = brandColor ?? '';
+  const background = /^#[0-9a-f]{6}$/iu.test(color)
+    ? color
+    : SHARE_CARD_BACKGROUND;
+  const ink = readableInk(background);
+  const label = (name.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim() || 'Shop')
+    .replace(/\s+/gu, ' ')
+    .slice(0, 48);
+  // Approximate average glyph width: shrink longer names until they fit.
+  const size = Math.max(
+    38,
+    Math.min(104, Math.floor((900 / Math.max(label.length, 1)) * 1.9)),
+  );
+  const baseline = Math.round(SHARE_CARD_HEIGHT / 2 + size * 0.34);
+  const file = path.join(directory, 'store-name-card.jpg');
+  const timeout = {
+    seconds: Math.max(1, Math.ceil(remaining(options) / 1000)),
+  };
+  const frame =
+    Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" viewBox="0 0 ${SHARE_CARD_WIDTH} ${SHARE_CARD_HEIGHT}">
+<defs>
+<linearGradient id="shade" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#ffffff" stop-opacity="0.1"/>
+<stop offset="1" stop-color="#000000" stop-opacity="0.24"/>
+</linearGradient>
+</defs>
+<rect width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" fill="${background}"/>
+<rect width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" fill="url(#shade)"/>
+<circle cx="1060" cy="80" r="240" fill="#ffffff" fill-opacity="0.07"/>
+<circle cx="120" cy="580" r="200" fill="#ffffff" fill-opacity="0.05"/>
+<text x="${Math.round(SHARE_CARD_WIDTH / 2)}" y="${baseline}" text-anchor="middle" font-family="${SHARE_CARD_FONT}" font-size="${size}" font-weight="700" fill="${ink}">${escapeSvgText(label)}</text>
+</svg>`);
+  try {
+    const info = await sharp(frame)
+      .jpeg({ quality: 86 })
+      .timeout(timeout)
+      .toFile(file);
+    remaining(options);
+    return {
+      label: 'store-card-1200',
+      file,
+      mimeType: 'image/jpeg',
+      width: info.width,
+      height: info.height,
+      sizeBytes: String(info.size),
+      durationMs: null,
+    };
+  } catch {
+    remaining(options);
+    throw new InvalidMediaError('Store card encoding failed');
   }
 }
 

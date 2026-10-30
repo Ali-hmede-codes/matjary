@@ -283,16 +283,24 @@ export function ShopCart({
                       <CartThumbnail product={product} />
                       <div className="shop-cart-item-copy">
                         <h3 className="notranslate">{item.productName}</h3>
-                        <p>
-                          {formatProductPrice(
-                            item.unitPriceCents,
-                            cart.currency,
-                          )}{' '}
-                          each
-                          {unitLbp && (
-                            <small className="price-lbp">{unitLbp} each</small>
-                          )}
-                        </p>
+                        {/* One amount per row: with a single unit the line
+                            total already is the unit price, so repeating it
+                            here printed the same USD + LBP pair twice. The
+                            unit price only adds information past one unit. */}
+                        {item.quantity > 1 && (
+                          <p>
+                            {formatProductPrice(
+                              item.unitPriceCents,
+                              cart.currency,
+                            )}{' '}
+                            each
+                            {unitLbp && (
+                              <small className="price-lbp">
+                                {unitLbp} each
+                              </small>
+                            )}
+                          </p>
+                        )}
                         {item.selectedOptions?.length ? (
                           <p className="shop-cart-item-options">
                             {item.selectedOptions.map((option) => (

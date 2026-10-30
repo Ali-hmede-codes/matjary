@@ -53,7 +53,10 @@
               return '';
             }
           }
-          var image = absolute(s.bannerUrl) || absolute(s.logoUrl);
+          var image =
+            absolute(s.bannerUrl) ||
+            absolute(s.logoUrl) ||
+            window.location.origin + '/banner.jpg';
           meta('name', 'description', description);
           meta('property', 'og:type', 'website');
           meta('property', 'og:title', title);

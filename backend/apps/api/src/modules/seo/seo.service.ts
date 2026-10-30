@@ -21,6 +21,8 @@ import { AdminGuard } from '../auth/guards/auth.guards';
 import {
   StorageService,
   mediaAssetIdFromKey,
+  storeBrandCardKey,
+  storeBrandCardVersion,
   storeShareCardKey,
 } from '@app/storage';
 import type { Readable } from 'node:stream';
@@ -818,10 +820,14 @@ export class SeoService {
       storedName && storedName !== siteName
         ? [`${storedName} — `, `${storedName} - `]
         : [];
+    const tagline = branding?.tagline?.trim() ?? '';
     const inheritedTitles = new Set(
       [
         LEGACY_SEO_TITLE,
         siteName,
+        // A title that is only the tagline (an older form could save that
+        // when the name was empty) must not hide the website name.
+        tagline,
         brandingTitle,
         brandingTitle.replace(' — ', ' - '),
         storedName,
@@ -1495,8 +1501,11 @@ export class SeoService {
     const siteName = branding?.siteName?.trim() || settings.siteName;
     const tagline = branding?.tagline?.trim() || '';
     // Explicit SEO copy wins; empty defaults inherit live website branding.
+    // A stored copy of only the tagline (possible with older forms) is not a
+    // complete title: the website name belongs in front of it.
+    const customTitle = settings.defaultTitle?.trim() ?? '';
     const title =
-      settings.defaultTitle?.trim() ||
+      (customTitle && customTitle !== tagline ? customTitle : '') ||
       (tagline ? `${siteName} — ${tagline}` : siteName);
     const description =
       settings.defaultDescription?.trim() ||
@@ -1505,7 +1514,7 @@ export class SeoService {
     const brandingImage = branding?.bannerUrl || branding?.logoUrl;
     const ogImage =
       (await this.defaultSharingImage(settings)) ||
-      (brandingImage ? this.absoluteImageUrl(brandingImage) : undefined) ||
+      (brandingImage ? await this.publicImageUrl(brandingImage) : undefined) ||
       this.fallbackSharingImage();
     return {
       title: this.truncate(title, 60),
@@ -2730,22 +2739,38 @@ export class SeoService {
   }
 
   /**
-   * The auto-generated card built from the shop's logo. The worker stores it at
-   * a deterministic key, so a replaced logo gets a fresh card automatically.
+   * The auto-generated card for a shop. The logo card wins; a shop without a
+   * logo still gets a generated name card, so every shop link has a picture.
+   * The worker stores both at deterministic keys.
    */
   private async buildStoreShareImageUrl(
     store: Store,
   ): Promise<string | undefined> {
     const assetId = await this.storeLogoAssetId(store);
-    if (!assetId) return undefined;
+    if (assetId) {
+      const logoCard = await this.cardUrl(store, assetId);
+      if (logoCard) return logoCard;
+    }
+    return this.cardUrl(store, this.brandCardVersion(store));
+  }
+
+  private brandCardVersion(store: Store): string {
+    return `brand-${storeBrandCardVersion(store.name, store.brandColor)}`;
+  }
+
+  private async cardUrl(
+    store: Store,
+    version: string,
+  ): Promise<string | undefined> {
+    const key = version.startsWith('brand-')
+      ? storeBrandCardKey(store.id, version.slice('brand-'.length))
+      : storeShareCardKey(store.id, version);
     try {
-      const { size } = await this.storage.statObject(
-        storeShareCardKey(store.id, assetId),
-      );
-      // The asset id busts caches after a logo replacement; the size also
+      const { size } = await this.storage.statObject(key);
+      // The version busts caches after a logo or name change; the size also
       // changes when a missing card is generated after an early share, so a
       // preview client that cached "no image" fetches the new one.
-      return `${this.baseUrl}/api/v1/seo/og/${encodeURIComponent(store.slug)}.jpg?v=${assetId}-${size}`;
+      return `${this.baseUrl}/api/v1/seo/og/${encodeURIComponent(store.slug)}.jpg?v=${version}-${size}`;
     } catch {
       return undefined;
     }
@@ -2754,22 +2779,25 @@ export class SeoService {
   /** Public stream of the card referenced by a store's share metadata. */
   async openShareCard(
     storeSlug: string,
-    versionAssetId?: string,
+    version?: string,
   ): Promise<{ stream: Readable; size: number } | undefined> {
     const store = await this.dataSource.manager.findOneBy(Store, {
       slug: storeSlug,
       ...publicWhere('store'),
     });
     if (!store) return undefined;
-    // A shell generated before a logo replacement still points at the older
+    // A shell generated before a logo/name change still points at the older
     // card; serving it keeps an in-flight share preview from going blank.
     // Only keys under this store's own card directory are ever opened.
     const candidates = [
-      versionAssetId,
+      version,
       await this.storeLogoAssetId(store),
+      this.brandCardVersion(store),
     ].filter((value): value is string => Boolean(value));
-    for (const assetId of new Set(candidates)) {
-      const key = storeShareCardKey(store.id, assetId);
+    for (const candidate of new Set(candidates)) {
+      const key = candidate.startsWith('brand-')
+        ? storeBrandCardKey(store.id, candidate.slice('brand-'.length))
+        : storeShareCardKey(store.id, candidate);
       try {
         const { size } = await this.storage.statObject(key);
         return { stream: await this.storage.openReadStream(key), size };
@@ -2847,9 +2875,35 @@ export class SeoService {
   private async defaultSharingImage(
     settings: SeoSettings,
   ): Promise<string | undefined> {
-    return settings.defaultOgImageUrl
-      ? this.absoluteImageUrl(settings.defaultOgImageUrl)
-      : this.buildImageUrl(settings.defaultOgImageKey || this.defaultImageKey);
+    // A configured address wins, but a local upload is checked and narrowed
+    // to a public JPEG/PNG variant; an unreadable local one falls through to
+    // the live branding instead of advertising a broken or unsupported image.
+    if (settings.defaultOgImageUrl)
+      return this.publicImageUrl(settings.defaultOgImageUrl);
+    return this.buildImageUrl(
+      settings.defaultOgImageKey || this.defaultImageKey,
+    );
+  }
+
+  /**
+   * Resolve one public image address. Media variants served by the API are
+   * verified and narrowed to a JPEG/PNG sibling; static paths and external
+   * HTTPS addresses are used as given.
+   */
+  private async publicImageUrl(
+    value: string | null | undefined,
+  ): Promise<string | undefined> {
+    if (!value) return undefined;
+    const local = /^\/api\/v1\/uploads\/([^?#]+)/u.exec(value)?.[1];
+    if (local) {
+      try {
+        return await this.buildImageUrl(decodeURIComponent(local));
+      } catch {
+        // A malformed encoded key must not become an absolute broken URL.
+        return undefined;
+      }
+    }
+    return this.absoluteImageUrl(value);
   }
 
   /**
@@ -2865,7 +2919,7 @@ export class SeoService {
     settings: SeoSettings,
   ): Promise<string | undefined> {
     return settings.organizationLogoUrl
-      ? this.absoluteImageUrl(settings.organizationLogoUrl)
+      ? this.publicImageUrl(settings.organizationLogoUrl)
       : this.buildImageUrl(settings.organizationLogoKey);
   }
 

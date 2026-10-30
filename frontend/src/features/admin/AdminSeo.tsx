@@ -545,12 +545,20 @@ function SettingsForm({
   const fallbackImage =
     brandingUrl(assetUrl(branding.bannerUrl)) ||
     brandingUrl(assetUrl(branding.logoUrl));
-  const socialImage = logo || fallbackImage;
+  // Mirror the public resolver: every shared link falls back to the shipped
+  // banner, and a title saved as only the tagline still shows the site name.
+  const socialImage = logo || fallbackImage || brandingUrl('/banner.jpg');
+  const composedTitle = [
+    draft.siteName.trim() || 'Website',
+    draft.tagline.trim(),
+  ]
+    .filter(Boolean)
+    .join(' — ');
+  const storedTitle = draft.defaultTitle.trim();
   const homeTitle =
-    draft.defaultTitle.trim() ||
-    [draft.siteName.trim() || 'Website', draft.tagline.trim()]
-      .filter(Boolean)
-      .join(' — ');
+    storedTitle && storedTitle !== draft.tagline.trim()
+      ? storedTitle
+      : composedTitle;
   const homeDescription =
     draft.defaultDescription.trim() ||
     draft.siteDescription.trim() ||

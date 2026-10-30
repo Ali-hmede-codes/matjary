@@ -243,7 +243,8 @@ function DiscoveryPage() {
       'Discover independent stores, beautiful finds, and everyday inspiration.',
     image:
       brandingUrl(assetUrl(settings.bannerUrl)) ||
-      brandingUrl(assetUrl(settings.logoUrl)),
+      brandingUrl(assetUrl(settings.logoUrl)) ||
+      brandingUrl('/banner.jpg'),
     canonical: '/',
     siteName: settings.siteName,
   });

@@ -53,6 +53,7 @@ import type { QueueService } from '../../libs/queue/src/queue.service';
 import {
   encodeImage,
   encodeShareCard,
+  encodeStoreNameCard,
   encodeVideo,
   validateSignature,
   InvalidMediaError,
@@ -68,6 +69,8 @@ import { Product, ProductStatus } from '../../libs/database/src/entities';
 import { assertMediaAttachment } from '../../libs/database/src/media-target';
 import {
   mediaAssetIdFromKey,
+  storeBrandCardKey,
+  storeBrandCardVersion,
   storeShareCardKey,
 } from '../../libs/storage/src/share-card-key';
 import { OwnerMediaTargets1793832000000 } from '../../libs/database/src/migrations/1793832000000-OwnerMediaTargets';
@@ -976,6 +979,38 @@ test('share card keys derive from the logo asset', () => {
     storeShareCardKey(storeId, assetId),
     `og/store/${storeId}/${assetId}.jpg`,
   );
+});
+
+test('stores without a logo still get a deterministic generated name card', async () => {
+  const storeId = '11111111-1111-4111-8111-111111111111';
+  const version = storeBrandCardVersion('Sunday Studio', '#204030');
+  assert.match(version, /^[0-9a-f]{12}$/u);
+  assert.equal(version, storeBrandCardVersion('  Sunday Studio ', ' #204030 '));
+  assert.notEqual(version, storeBrandCardVersion('Sunday Studio', '#999999'));
+  assert.equal(
+    storeBrandCardKey(storeId, version),
+    `og/store/${storeId}/brand-${version}.jpg`,
+  );
+  const directory = await tempDirectory();
+  try {
+    const card = await encodeStoreNameCard(
+      'Sunday Studio',
+      '#204030',
+      directory,
+      {
+        signal: AbortSignal.timeout(30000),
+        deadline: Date.now() + 30000,
+      },
+    );
+    assert.equal(card.mimeType, 'image/jpeg');
+    assert.equal(card.width, 1200);
+    assert.equal(card.height, 630);
+    const info = await sharp(card.file).metadata();
+    assert.equal(info.format, 'jpeg');
+    assert.ok(Number(card.sizeBytes) > 2000);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('FFmpeg smoke: valid MP4/poster, overlong rejection and bounded deadlines', async (t) => {

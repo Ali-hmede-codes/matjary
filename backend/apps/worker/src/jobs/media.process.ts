@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { IsNull, Not, type Repository } from 'typeorm';
+import type { Repository } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
 import {
   MediaAsset,
@@ -25,12 +25,15 @@ import {
 } from '@app/queue';
 import {
   StorageService,
+  storeBrandCardKey,
+  storeBrandCardVersion,
   storeShareCardKey,
   mediaAssetIdFromKey,
 } from '@app/storage';
 import {
   encodeImage,
   encodeShareCard,
+  encodeStoreNameCard,
   encodeVideo,
   validateSignature,
   InvalidMediaError,
@@ -289,12 +292,15 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
     }
   }
 
-  /** Builds logo cards for shops that were uploaded before this feature. */
+  /**
+   * Builds the generated cards for every shop, including shops that never had
+   * a logo. Logo cards are derived from the logo asset; shops without one get
+   * a name card on their brand color, so no shared shop link is text-only.
+   */
   private async backfillShareCards(): Promise<void> {
     const batch = 50;
     for (let skip = 0; ; skip += batch) {
       const stores = await this.mediaAssets.manager.find(Store, {
-        where: { logoKey: Not(IsNull()) },
         order: { createdAt: 'DESC' },
         take: batch,
         skip,
@@ -304,13 +310,34 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
         await this.backfillShareCard(store).catch(() =>
           this.logger.warn('Share card backfill item failed'),
         );
+        await this.backfillNameCard(store).catch(() =>
+          this.logger.warn('Store name card backfill item failed'),
+        );
       }
       if (stores.length < batch) return;
     }
   }
 
+  /**
+   * The logo asset behind the card. A saved key that no longer encodes an
+   * asset id (older rows) falls back to the shop's newest ready logo.
+   */
+  private async storeLogoAssetId(store: Store): Promise<string | null> {
+    const fromKey = mediaAssetIdFromKey(store.logoKey);
+    if (fromKey) return fromKey;
+    const asset = await this.mediaAssets.manager.findOne(MediaAsset, {
+      where: {
+        storeId: store.id,
+        purpose: 'store_logo',
+        status: MediaStatus.READY,
+      },
+      order: { createdAt: 'DESC' },
+    });
+    return asset?.id ?? null;
+  }
+
   private async backfillShareCard(store: Store): Promise<void> {
-    const assetId = mediaAssetIdFromKey(store.logoKey);
+    const assetId = await this.storeLogoAssetId(store);
     if (!assetId) return;
     try {
       await this.storage.statObject(storeShareCardKey(store.id, assetId));
@@ -349,6 +376,48 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
       );
     } catch {
       /* A missing card falls back to the logo variant in the API. */
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  }
+
+  private async backfillNameCard(store: Store): Promise<void> {
+    const version = storeBrandCardVersion(store.name, store.brandColor);
+    const key = storeBrandCardKey(store.id, version);
+    try {
+      await this.storage.statObject(key);
+      return;
+    } catch {
+      /* No current name card; build one below. */
+    }
+    const directory = await fs.mkdtemp(
+      path.join(this.config.get('MEDIA_TEMP_DIR', { infer: true }), 'name-'),
+    );
+    try {
+      const card = await encodeStoreNameCard(
+        store.name,
+        store.brandColor,
+        directory,
+        {
+          signal: AbortSignal.timeout(30_000),
+          deadline: Date.now() + 30_000,
+        },
+      );
+      await this.storage.uploadFile(
+        key,
+        card.file,
+        card.mimeType,
+        AbortSignal.timeout(30_000),
+      );
+      // The shell fingerprint watches store timestamps; a card that appears
+      // after a share was previewed must trigger a fresh shell.
+      await this.mediaAssets.manager.update(
+        Store,
+        { id: store.id },
+        { updatedAt: new Date() },
+      );
+    } catch {
+      this.logger.warn(`Store name card generation failed for ${store.id}`);
     } finally {
       await fs.rm(directory, { recursive: true, force: true });
     }

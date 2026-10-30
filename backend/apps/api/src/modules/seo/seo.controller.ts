@@ -228,15 +228,15 @@ export class SeoController {
     @Res() res: Response,
   ): Promise<void> {
     const slug = /^([a-z0-9]+(?:-[a-z0-9]+)*)\.jpg$/u.exec(file)?.[1];
-    // The shell may still reference the card of the logo it rendered, while
-    // the shop already carries a newer logo. Serve that asset when it is one
-    // of the shop's own cards; the key is always built from the shop id.
-    const versionAssetId =
-      /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-\d+)?$/iu.exec(
+    // The shell may still reference the card it rendered (an older logo, or
+    // the name card), while the shop already changed. Serve that card when it
+    // is one of the shop's own; the key is always built from the shop id.
+    const requested =
+      /^(brand-[0-9a-f]{12}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-\d+)?$/iu.exec(
         version ?? '',
       )?.[1];
     const card = slug
-      ? await this.seoService.openShareCard(slug, versionAssetId)
+      ? await this.seoService.openShareCard(slug, requested)
       : undefined;
     if (!card) throw new NotFoundException('Image not found');
     res.set('Content-Type', 'image/jpeg');

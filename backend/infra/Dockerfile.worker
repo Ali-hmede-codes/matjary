@@ -23,8 +23,11 @@ FROM node:22-slim
 WORKDIR /app
 
 # Sharp supplies its matching libvips through npm platform packages.
-# Only the worker needs the system FFmpeg/ffprobe executables.
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+# Only the worker needs the system FFmpeg/ffprobe executables. The fonts let
+# the generated shop name cards render Latin and Arabic names; without them an
+# SVG text card would be a plain color panel.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg fonts-dejavu-core fonts-kacst \
     && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /var/lib/matjary/media /app/.tmp/media && chown -R node:node /var/lib/matjary /app
 
