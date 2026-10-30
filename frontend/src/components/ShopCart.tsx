@@ -44,7 +44,6 @@ export function ShopCart({
   store,
   products,
   controller,
-  demo,
   lbpRate,
   onBrowse,
   onContact,
@@ -52,7 +51,6 @@ export function ShopCart({
   store: Store;
   products: Product[];
   controller: ShopCartController;
-  demo: boolean;
   lbpRate?: number | null;
   onBrowse: () => void;
   onContact: () => void;
@@ -131,11 +129,6 @@ export function ShopCart({
           </button>
         </header>
         <div className="shop-cart-body" aria-busy={busy || loading}>
-          {demo && (
-            <p className="shop-cart-hint">
-              Demo cart · Saved only in this browser. No orders will be sent.
-            </p>
-          )}
           {(busy || loading) && (
             <p className="shop-cart-progress" role="status">
               <LoaderCircle className="spin" size={16} aria-hidden="true" />
@@ -547,18 +540,16 @@ export function ShopCart({
               className="primary-button"
               type="submit"
               form="shop-cart-checkout"
-              disabled={disabled || demo || !orderWhatsApp}
+              disabled={disabled || !orderWhatsApp}
             >
               {busy ? (
                 <LoaderCircle className="spin" size={18} />
               ) : (
                 <MessageCircle size={18} />
               )}
-              {demo
-                ? 'Checkout unavailable in preview'
-                : 'Prepare WhatsApp order'}
+              Prepare WhatsApp order
             </button>
-            {!demo && !orderWhatsApp && (
+            {!orderWhatsApp && (
               <p>
                 {branches.length > 0
                   ? 'This branch hasn’t set a WhatsApp number yet. Choose another branch or contact the shop.'

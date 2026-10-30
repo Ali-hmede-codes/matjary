@@ -911,13 +911,11 @@ function CatalogRibbon({
   products,
   cart,
   shopSlug,
-  demo,
   lbpRate,
 }: {
   products: Product[];
   cart: ShopCartController;
   shopSlug: string;
-  demo: boolean;
   lbpRate?: number | null;
 }) {
   const [stopped, setStopped] = useState(false);
@@ -951,7 +949,7 @@ function CatalogRibbon({
                   key={product.id}
                   product={product}
                   cart={cart}
-                  href={storeProductPath(shopSlug, product.slug, demo)}
+                  href={storeProductPath(shopSlug, product.slug)}
                   lbpRate={lbpRate}
                   clone={copy > 0}
                 />
@@ -1093,7 +1091,6 @@ export function CatalogItem({
   cart,
   layout,
   shopSlug,
-  demo,
   lbpRate,
   showDescriptions = true,
   delay,
@@ -1103,13 +1100,12 @@ export function CatalogItem({
   cart: ShopCartController;
   layout: CatalogLayout;
   shopSlug: string;
-  demo: boolean;
   lbpRate?: number | null;
   showDescriptions?: boolean;
   delay?: number;
   position?: number;
 }) {
-  const href = storeProductPath(shopSlug, product.slug, demo);
+  const href = storeProductPath(shopSlug, product.slug);
   if (layout === 'cards')
     return (
       <PhotoCard
@@ -1263,7 +1259,6 @@ export function CatalogItems({
   cart,
   layout,
   shopSlug,
-  demo,
   lbpRate,
   showImages = true,
   showDescriptions = true,
@@ -1272,7 +1267,6 @@ export function CatalogItems({
   cart: ShopCartController;
   layout: CatalogLayout;
   shopSlug: string;
-  demo: boolean;
   lbpRate?: number | null;
   showImages?: boolean;
   showDescriptions?: boolean;
@@ -1291,7 +1285,6 @@ export function CatalogItems({
       cart={cart}
       layout={variant}
       shopSlug={shopSlug}
-      demo={demo}
       lbpRate={lbpRate}
       showDescriptions={showDescriptions}
       position={index + 1}
@@ -1324,7 +1317,6 @@ export function CatalogItems({
         products={products}
         cart={cart}
         shopSlug={shopSlug}
-        demo={demo}
         lbpRate={lbpRate}
       />
     );

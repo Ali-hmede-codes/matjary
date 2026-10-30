@@ -254,12 +254,8 @@ test('verification requires an active badge and keeps a five-day grace window', 
   }
 });
 
-test('shop URLs support deep links and keep preview mode explicit', () => {
+test('shop URLs support deep links', () => {
   assert.equal(storePath('olive-kitchen'), '/stores/olive-kitchen');
-  assert.equal(
-    storePath('olive-kitchen', true),
-    '/stores/olive-kitchen?demo=1',
-  );
   assert.equal(storeSlugFromPath('/stores/olive-kitchen'), 'olive-kitchen');
   assert.equal(storeSlugFromPath('/stores/olive-kitchen/'), 'olive-kitchen');
   assert.equal(storeSlugFromPath('/stores/%6flive-kitchen'), 'olive-kitchen');
@@ -449,20 +445,12 @@ test('category slugs stay readable, stable, and unique for other scripts', () =>
   );
   assert.equal(storeMenuPath('olive'), '/stores/olive?view=catalog');
   assert.equal(
-    storeMenuPath('olive', true),
-    '/stores/olive?view=catalog&demo=1',
-  );
-  assert.equal(
-    storeProductPath('olive', 'harvest-bowl', true),
-    '/stores/olive/p/harvest-bowl?demo=1',
+    storeProductPath('olive', 'harvest-bowl'),
+    '/stores/olive/p/harvest-bowl',
   );
   assert.equal(
     storePostPath('olive', 'spring-drop'),
     '/stores/olive/post/spring-drop',
-  );
-  assert.equal(
-    storePostPath('olive', 'spring-drop', true),
-    '/stores/olive/post/spring-drop?demo=1',
   );
   // A shared post keeps its shop; a shop-less post uses the platform path.
   assert.equal(

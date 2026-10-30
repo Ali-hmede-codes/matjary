@@ -66,6 +66,6 @@ test('toggling a favorite appends it once and removes it later', () => {
   assert.deepEqual(toggleFavoriteShopIds([id(1)], id(2)), [id(1), id(2)]);
   assert.deepEqual(toggleFavoriteShopIds([id(1), id(2)], id(1)), [id(2)]);
   assert.deepEqual(toggleFavoriteShopIds([id(1)], id(1)), []);
-  // Demo shops use synthetic ids, so an invalid id must change nothing.
+  // An invalid id must change nothing.
   assert.deepEqual(toggleFavoriteShopIds([], 'not-a-shop-id'), []);
 });

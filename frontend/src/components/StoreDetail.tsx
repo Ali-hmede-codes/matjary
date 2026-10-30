@@ -34,7 +34,6 @@ export function absoluteMediaUrl(
  */
 export function StoreDetailShell({
   store,
-  demo,
   cart,
   products,
   notice,
@@ -42,7 +41,6 @@ export function StoreDetailShell({
   children,
 }: {
   store: Store;
-  demo: boolean;
   cart: ShopCartController;
   products: Product[];
   notice?: string;
@@ -50,7 +48,7 @@ export function StoreDetailShell({
   children: ReactNode;
 }) {
   const presentation = storePresentation(store);
-  const shopHref = storePath(store.slug, demo);
+  const shopHref = storePath(store.slug);
   const count = cart.cart?.itemCount ?? 0;
   return (
     <div
@@ -115,7 +113,6 @@ export function StoreDetailShell({
           store={store}
           products={products}
           controller={cart}
-          demo={demo}
           lbpRate={lbpRate}
           onBrowse={() => {
             cart.setOpen(false);

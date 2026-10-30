@@ -6,16 +6,14 @@ export function StatusBanner({
   action,
   onAction,
   icon,
-  demo = false,
 }: {
   children: ReactNode;
   action: ReactNode;
   onAction: () => void;
   icon?: ReactNode;
-  demo?: boolean;
 }) {
   return (
-    <div className={`status-banner ${demo ? 'demo-banner' : ''}`} role="status">
+    <div className="status-banner" role="status">
       {icon}
       <span>{children}</span>
       <button onClick={onAction}>{action}</button>

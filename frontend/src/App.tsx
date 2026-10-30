@@ -1,4 +1,3 @@
-import { ArrowRight, Sparkles } from 'lucide-react';
 import { DiscoveryRail } from './components/DiscoveryRail';
 import { FeedPosts } from './components/FeedPosts';
 import { FeedToolbar } from './components/FeedToolbar';
@@ -156,14 +155,12 @@ export default function App() {
 function StoreRoute() {
   const { pathname } = useLocation();
   const route = storefrontRouteFromPath(pathname);
-  const demo = new URLSearchParams(window.location.search).get('demo') === '1';
   if (route?.postSlug)
     return (
       <PostPage
         key={pathname}
         shopSlug={route.shopSlug}
         postSlug={route.postSlug}
-        demo={demo}
       />
     );
   if (route?.productSlug)
@@ -172,7 +169,6 @@ function StoreRoute() {
         key={pathname}
         shopSlug={route.shopSlug}
         productSlug={route.productSlug}
-        demo={demo}
       />
     );
   if (route?.categorySlug)
@@ -181,13 +177,11 @@ function StoreRoute() {
         key={pathname}
         shopSlug={route.shopSlug}
         categorySlug={route.categorySlug}
-        demo={demo}
       />
     );
   // Posts without a shop use the platform path.
   const postSlug = postSlugFromPath(pathname);
-  if (postSlug)
-    return <PostPage key={pathname} postSlug={postSlug} demo={demo} />;
+  if (postSlug) return <PostPage key={pathname} postSlug={postSlug} />;
   return <StorePage key={pathname} slug={route?.shopSlug ?? null} />;
 }
 
@@ -195,10 +189,10 @@ function DiscoveryPage() {
   const discovery = useDiscoveryFeed();
   // Only the chip ring and the viewer need stories on this page; there is no
   // separate rail. Tapping a shop with a story asks what to open first.
-  const storiesQuery = useStoryGroups(undefined, !discovery.demo);
+  const storiesQuery = useStoryGroups(undefined, true);
   const { seen, markSeen } = useSeenStories();
   const [storyStoreId, setStoryStoreId] = useState<string | null>(null);
-  const storyGroups = discovery.demo ? [] : (storiesQuery.data?.groups ?? []);
+  const storyGroups = storiesQuery.data?.groups ?? [];
   const openStoryGroup = storyGroups.find(
     (group) => group.store.id === storyStoreId,
   );
@@ -210,7 +204,6 @@ function DiscoveryPage() {
     search,
     searchOpen,
     isLoading,
-    demo,
     stores,
     storesQuery,
     store,
@@ -223,7 +216,6 @@ function DiscoveryPage() {
     notice,
     liking,
     navigate,
-    toggleDemo,
     savePost,
     likePost,
     registerView,
@@ -265,20 +257,6 @@ function DiscoveryPage() {
       <div className="page-shell">
         <main className="main-content">
           <div className="feed-column">
-            {demo && (
-              <StatusBanner
-                demo
-                icon={<Sparkles size={17} />}
-                action={
-                  <>
-                    View live feed <ArrowRight size={15} />
-                  </>
-                }
-                onAction={toggleDemo}
-              >
-                Design preview · Sample stores and photos, not live content.
-              </StatusBanner>
-            )}
             {settingsQuery.isError && (
               <StatusBanner
                 action="Retry settings"
@@ -295,12 +273,11 @@ function DiscoveryPage() {
               stores={stores}
               selectedStore={store}
               posts={source}
-              demo={demo}
               storyGroups={storyGroups}
               seen={seen}
               onOpenStory={setStoryStoreId}
             />
-            {!demo && storesQuery.isError && (
+            {storesQuery.isError && (
               <StatusBanner
                 action="Retry stores"
                 onAction={() => void storesQuery.refetch()}
@@ -308,7 +285,7 @@ function DiscoveryPage() {
                 Stores couldn’t load right now.
               </StatusBanner>
             )}
-            {!demo && view === 'trending' && <TrendingStores />}
+            {view === 'trending' && <TrendingStores />}
             <section
               id="discover-feed"
               className="discover-feed"
@@ -322,14 +299,9 @@ function DiscoveryPage() {
             stores={stores}
             savedCount={saved.length}
             settings={settings}
-            demo={demo}
             onOpenSaved={() => navigate('saved')}
           />
-          <SiteFooter
-            settings={settings}
-            demo={demo}
-            onToggleDemo={toggleDemo}
-          />
+          <SiteFooter settings={settings} />
         </main>
       </div>
       <Toast message={notice} />
@@ -361,7 +333,6 @@ function DiscoveryPage() {
             if (feed.hasNextPage && !feed.isFetchingNextPage)
               void feed.fetchNextPage();
           }}
-          demo={demo}
           onClose={() => setSelected(null)}
         />
       )}

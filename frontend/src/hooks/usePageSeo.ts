@@ -7,13 +7,12 @@ export type { PageSeoInput } from '../lib/page-seo';
 
 /** Browser tabs and share crawlers resolve the same saved page metadata. */
 export function usePageSeo(input: PageSeoInput | null | undefined) {
-  const { pathname, search } = useLocation();
-  const demo = new URLSearchParams(search).get('demo') === '1';
+  const { pathname } = useLocation();
   const publicPage =
     /^\/(?:$|shops\/?$|pricing\/?$|terms\/?$|privacy\/?$|favorites\/?$|stores\/|post\/)/u.test(
       pathname,
     );
-  const enabled = !!input && publicPage && !demo;
+  const enabled = !!input && publicPage;
   const seo = useQuery({
     queryKey: ['page-seo', pathname],
     queryFn: ({ signal }) =>

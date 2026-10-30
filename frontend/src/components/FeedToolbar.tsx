@@ -14,7 +14,6 @@ type FeedToolbarProps = Pick<
   | 'explore'
   | 'exploreActive'
   | 'selectExplore'
-  | 'demo'
   | 'filtersOpen'
   | 'categories'
   | 'categoryFacets'
@@ -37,7 +36,6 @@ export function FeedToolbar({
   explore,
   exploreActive,
   selectExplore,
-  demo,
   filtersOpen,
   categories,
   categoryFacets,
@@ -170,7 +168,6 @@ export function FeedToolbar({
             <select
               className="notranslate"
               value={algorithm}
-              disabled={demo}
               onChange={(event) => {
                 setAlgorithm(event.target.value as Algorithm);
                 if (view === 'trending') setView('discover');

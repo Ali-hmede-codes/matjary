@@ -11,7 +11,6 @@ export function StoreStrip({
   stores,
   selectedStore,
   posts,
-  demo,
   storyGroups = [],
   seen = [],
   onOpenStory,
@@ -19,7 +18,6 @@ export function StoreStrip({
   stores: Store[];
   selectedStore: Store | null;
   posts: Post[];
-  demo: boolean;
   storyGroups?: StoryGroup[];
   seen?: readonly string[];
   onOpenStory: (storeId: string) => void;
@@ -82,7 +80,7 @@ export function StoreStrip({
           <a
             className={`story ${selectedStore?.id === item.id ? 'selected' : ''}`}
             key={item.id}
-            href={storePath(item.slug, demo)}
+            href={storePath(item.slug)}
           >
             <span className="story-ring">
               <StoreAvatar store={item} large preview={preview} />
@@ -96,7 +94,6 @@ export function StoreStrip({
         <StoreStorySheet
           store={sheetStore}
           group={{ ...sheetGroup, stories: liveStories(sheetGroup) }}
-          demo={demo}
           onViewStory={() => {
             const storeId = sheetStore.id;
             setSheetStoreId(null);

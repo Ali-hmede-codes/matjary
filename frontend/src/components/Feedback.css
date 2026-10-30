@@ -22,10 +22,6 @@
   text-decoration: underline;
   color: var(--primary);
 }
-.demo-banner {
-  border-color: color-mix(in srgb, var(--secondary) 40%, var(--surface));
-  background: color-mix(in srgb, var(--secondary) 9%, var(--surface));
-}
 .loading-bar {
   position: fixed;
   inset: 0 0 auto;

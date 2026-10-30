@@ -14,54 +14,8 @@ import {
   type Store,
 } from '../lib/api';
 import type { Algorithm, FeedLayout, View } from '../lib/feed';
-import { demoPosts, demoStores } from '../lib/demo';
 import { usePostEngagement } from './usePostEngagement';
 import { useWebsiteSettings } from './useWebsiteSettings';
-
-const sampleCategories: ShopCategoryFacet[] = [
-  {
-    slug: 'restaurants',
-    label: 'Restaurant',
-    group: 'food_drink',
-    groupLabel: 'Food & drink',
-    count: 1,
-  },
-  {
-    slug: 'cafe',
-    label: 'Café / coffee shop',
-    group: 'food_drink',
-    groupLabel: 'Food & drink',
-    count: 1,
-  },
-  {
-    slug: 'home_furniture',
-    label: 'Furniture',
-    group: 'retail_fashion',
-    groupLabel: 'Retail & fashion',
-    count: 1,
-  },
-  {
-    slug: 'handmade_crafts',
-    label: 'Handmade & crafts',
-    group: 'arts_culture',
-    groupLabel: 'Arts & culture',
-    count: 1,
-  },
-  {
-    slug: 'flower_shop',
-    label: 'Flowers',
-    group: 'retail_fashion',
-    groupLabel: 'Retail & fashion',
-    count: 1,
-  },
-  {
-    slug: 'clothing_store',
-    label: 'Clothing store',
-    group: 'retail_fashion',
-    groupLabel: 'Retail & fashion',
-    count: 1,
-  },
-];
 
 export function useDiscoveryFeed() {
   const [view, setView] = useState<View>(() => {
@@ -82,9 +36,6 @@ export function useDiscoveryFeed() {
   const [store, setStore] = useState<Store | null>(null);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim().toLowerCase());
-  const [demo, setDemo] = useState(
-    () => new URLSearchParams(window.location.search).get('demo') === '1',
-  );
   const [selected, setSelected] = useState<Post | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [notice, setNotice] = useState('');
@@ -92,14 +43,13 @@ export function useDiscoveryFeed() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [layout, setLayout] = useState<FeedLayout>('feed');
   const { saved, liking, likePost, savePost, registerView, withLikes } =
-    usePostEngagement({ demo, onNotice: setNotice });
+    usePostEngagement({ onNotice: setNotice });
 
-  const { settingsQuery, settings, theme } = useWebsiteSettings(true, !demo);
+  const { settingsQuery, settings, theme } = useWebsiteSettings(true, true);
   const storesQuery = useQuery({
     queryKey: ['stores'],
     queryFn: ({ signal }) =>
       getJson<{ items: Store[] }>('stores?limit=7', signal),
-    enabled: !demo,
   });
   const categoryKey = [...categories].sort().join(',');
   const feed = useInfiniteQuery({
@@ -116,7 +66,6 @@ export function useDiscoveryFeed() {
       return getJson<Feed>(`${endpoint}?${params}`, signal);
     },
     getNextPageParam: (page) => (page.hasMore ? page.nextCursor : undefined),
-    enabled: !demo,
     // Keep the current cards on screen while a filter change loads, and reuse
     // a page for a moment when the visitor comes back to it.
     placeholderData: keepPreviousData,
@@ -124,32 +73,25 @@ export function useDiscoveryFeed() {
   });
   // Filters and sponsored cards never paint the first screen, so they wait for
   // the feed instead of competing with it for the visitor's connection.
-  const feedSettled = demo || !feed.isPending;
+  const feedSettled = !feed.isPending;
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
     queryFn: ({ signal }) =>
       getJson<ShopCategoryFacet[]>('feed/explore/categories', signal),
-    enabled: !demo && feedSettled,
+    enabled: feedSettled,
     staleTime: 60_000,
   });
   const adsQuery = useQuery({
     queryKey: ['boost', 'feed-ads'],
     queryFn: ({ signal }) => getFeedAds(signal),
-    enabled: !demo && feedSettled,
+    enabled: feedSettled,
     staleTime: 120_000,
     retry: 0,
   });
-  const stores = demo ? demoStores : (storesQuery.data?.items ?? []);
-  const categoryFacets = demo ? sampleCategories : (categoriesQuery.data ?? []);
-  const ads: BoostAd[] = demo ? [] : (adsQuery.data ?? []);
-  const source = demo
-    ? demoPosts.filter(
-        (post) =>
-          (categories.length === 0 ||
-            categories.includes(post.store?.businessCategory ?? '')) &&
-          (!store || post.store?.id === store.id),
-      )
-    : (feed.data?.pages.flatMap((page) => page.items) ?? []);
+  const stores = storesQuery.data?.items ?? [];
+  const categoryFacets = categoriesQuery.data ?? [];
+  const ads: BoostAd[] = adsQuery.data ?? [];
+  const source = feed.data?.pages.flatMap((page) => page.items) ?? [];
   const posts = [
     ...new Map(source.map((post) => [post.id, post])).values(),
   ].filter((post) => {
@@ -196,19 +138,10 @@ export function useDiscoveryFeed() {
   function clearCategories() {
     setCategories([]);
   }
-  function toggleDemo() {
-    const url = new URL(window.location.href);
-    if (demo) url.searchParams.delete('demo');
-    else url.searchParams.set('demo', '1');
-    window.history.replaceState(null, '', url);
-    setDemo(!demo);
-    navigate('discover');
-  }
   const isLoading =
-    settingsQuery.isLoading ||
-    (!demo && (feed.isLoading || storesQuery.isLoading));
-  // The tile grid only exists on the discovery surface; a selected shop,
-  // search view or demo switch always falls back to the card feed.
+    settingsQuery.isLoading || feed.isLoading || storesQuery.isLoading;
+  // The tile grid only exists on the discovery surface; a selected shop or
+  // search view always falls back to the card feed.
   const exploreActive = explore && view === 'discover' && !store;
   const feedTitle =
     store?.name ||
@@ -235,7 +168,6 @@ export function useDiscoveryFeed() {
     categories,
     store,
     search,
-    demo,
     selected,
     selectedIndex,
     notice,
@@ -270,7 +202,6 @@ export function useDiscoveryFeed() {
     navigate,
     toggleCategory,
     clearCategories,
-    toggleDemo,
     savePost,
     likePost,
     registerView,

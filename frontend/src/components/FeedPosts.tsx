@@ -15,7 +15,6 @@ import { PostCard } from './PostCard';
 
 type FeedPostsProps = Pick<
   DiscoveryFeedController,
-  | 'demo'
   | 'feed'
   | 'layout'
   | 'view'
@@ -29,13 +28,10 @@ type FeedPostsProps = Pick<
   | 'saved'
   | 'savePost'
   | 'openPost'
-  | 'source'
   | 'navigate'
-  | 'toggleDemo'
 >;
 
 export function FeedPosts({
-  demo,
   feed,
   layout,
   view,
@@ -49,13 +45,11 @@ export function FeedPosts({
   saved,
   savePost,
   openPost,
-  source,
   navigate,
-  toggleDemo,
 }: FeedPostsProps) {
   return (
     <>
-      {!demo && feed.isPending && (
+      {feed.isPending && (
         <div
           className={
             exploreActive
@@ -79,7 +73,7 @@ export function FeedPosts({
               ))}
         </div>
       )}
-      {!demo && feed.isError && (
+      {feed.isError && (
         <div className="empty-state" role="status">
           <span className="empty-icon">
             <RefreshCw size={25} />
@@ -95,14 +89,11 @@ export function FeedPosts({
               <RefreshCw size={15} />
               Try again
             </button>
-            <button className="secondary-button" onClick={toggleDemo}>
-              Preview the design
-            </button>
           </div>
         </div>
       )}
       {posts.length > 0 && exploreActive && (
-        <ExploreGrid posts={posts} demo={demo} onOpen={openPost} />
+        <ExploreGrid posts={posts} onOpen={openPost} />
       )}
       {posts.length > 0 && !exploreActive && (
         <div
@@ -129,7 +120,6 @@ export function FeedPosts({
                   saved={saved.includes(post.id)}
                   onSave={() => savePost(post.id)}
                   onOpen={(index) => openPost(post, index)}
-                  demo={demo}
                 />
                 {ad && <AdCard ad={ad} />}
               </Fragment>
@@ -137,7 +127,7 @@ export function FeedPosts({
           })}
         </div>
       )}
-      {(demo || (!feed.isPending && !feed.isError)) && posts.length === 0 && (
+      {!feed.isPending && !feed.isError && posts.length === 0 && (
         <div className="empty-state">
           <span className="empty-icon">
             {view === 'saved' ? <Bookmark size={26} /> : <Compass size={26} />}
@@ -158,14 +148,9 @@ export function FeedPosts({
           >
             Explore all finds <ArrowRight size={15} />
           </button>
-          {!demo && !source.length && (
-            <button className="text-button" onClick={toggleDemo}>
-              See a sample of the design
-            </button>
-          )}
         </div>
       )}
-      {!demo && feed.hasNextPage && (
+      {feed.hasNextPage && (
         <button
           className="load-more secondary-button"
           disabled={feed.isFetching}
@@ -179,7 +164,7 @@ export function FeedPosts({
           Load more posts
         </button>
       )}
-      {posts.length > 0 && (demo || !feed.hasNextPage) && (
+      {posts.length > 0 && !feed.hasNextPage && (
         <div className="feed-end">
           <Check size={17} />
           <span>You’re all caught up.</span>

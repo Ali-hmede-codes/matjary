@@ -41,15 +41,6 @@
   color: var(--muted);
   margin-top: 4px;
 }
-.sample-label {
-  margin-inline-start: auto;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--muted);
-  padding: 5px 7px;
-  background: var(--wash);
-  border-radius: 6px;
-}
 .post-media {
   position: relative;
 }
@@ -178,7 +169,6 @@
   aspect-ratio: 1;
 }
 .compact-grid .post-caption,
-.compact-grid .sample-label,
 .compact-grid .store-identity small {
   display: none;
 }

@@ -45,7 +45,6 @@ type PostDialogProps = PostDialogEngagement & {
   initialPostId: string;
   initialMediaIndex?: number;
   notice?: string;
-  demo: boolean;
   onClose: () => void;
   /** Fired for every post that becomes the visible one, so views stay honest. */
   onActivePost?: (post: Post) => void;
@@ -74,7 +73,6 @@ function PostSlide({
   total,
   active,
   initialMediaIndex,
-  demo,
   lbpExchangeRate,
   notice,
   saved,
@@ -88,7 +86,6 @@ function PostSlide({
   total: number;
   active: boolean;
   initialMediaIndex: number;
-  demo: boolean;
   lbpExchangeRate: number;
   notice?: string;
   saved: boolean;
@@ -116,9 +113,7 @@ function PostSlide({
     post.link?.compareAtPriceCents,
     post.link?.priceCents,
   );
-  const location = demo
-    ? 'Sample showcase'
-    : post.store?.location?.city || 'Independent store';
+  const location = post.store?.location?.city || 'Independent store';
   const published = sharedDate(post.publishedAt);
   // Off-screen posts must not take tab focus or be read out; swiping still
   // works because the track itself handles the gesture.
@@ -152,7 +147,7 @@ function PostSlide({
         <header className="reel-head">
           <a
             className="reel-store"
-            href={post.store ? storePath(post.store.slug, demo) : undefined}
+            href={post.store ? storePath(post.store.slug) : undefined}
           >
             <StoreAvatar store={post.store} preview={media} expandable />
             <span>
@@ -206,11 +201,10 @@ function PostSlide({
                 className="reel-product"
                 href={
                   post.link.type === 'product' && post.link.slug
-                    ? storeProductPath(post.store.slug, post.link.slug, demo)
+                    ? storeProductPath(post.store.slug, post.link.slug)
                     : storeCategoryPath(
                         post.store.slug,
                         categorySlug(post.link.name),
-                        demo,
                       )
                 }
               >
@@ -249,7 +243,7 @@ function PostSlide({
             <p className="reel-caption" dir="auto">
               <a
                 className="reel-caption-author notranslate"
-                href={post.store ? storePath(post.store.slug, demo) : undefined}
+                href={post.store ? storePath(post.store.slug) : undefined}
               >
                 {storeName}
               </a>{' '}
@@ -272,12 +266,11 @@ function PostSlide({
               onLike={onLike}
               onSave={onSave}
               onNotice={onNotice}
-              demo={demo}
             />
             {post.store && (
               <a
                 className="reel-visit"
-                href={storePath(post.store.slug, demo)}
+                href={storePath(post.store.slug)}
                 aria-label={`Visit ${storeName}`}
               >
                 <ArrowUpRight size={19} aria-hidden="true" />
@@ -296,7 +289,6 @@ export function PostDialog({
   initialPostId,
   initialMediaIndex = 0,
   notice,
-  demo,
   saved,
   liking,
   onLike,
@@ -309,7 +301,7 @@ export function PostDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const wheelLock = useRef(0);
-  const { settings } = useWebsiteSettings(false, !demo);
+  const { settings } = useWebsiteSettings(false, true);
   const [startIndex] = useState(() =>
     Math.max(
       0,
@@ -461,7 +453,6 @@ export function PostDialog({
             total={posts.length}
             active={index === active}
             initialMediaIndex={index === startIndex ? initialMediaIndex : 0}
-            demo={demo}
             lbpExchangeRate={settings.lbpExchangeRate}
             notice={notice}
             saved={saved.includes(post.id)}

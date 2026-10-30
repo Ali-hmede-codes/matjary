@@ -9,7 +9,6 @@ import {
   type Store,
   type StoreCategoryList,
 } from '../lib/api';
-import { demoProducts, demoStores } from '../lib/demo';
 import {
   categorySlug,
   categoryIndexGroups,
@@ -17,8 +16,6 @@ import {
   formatProductPrice,
   lbpPriceLabel,
   lbpRateFor,
-  menuCategoryGroups,
-  productCategoryKey,
   productCompareAtPriceCents,
   productDiscountPercent,
   productFromPriceCents,
@@ -50,13 +47,11 @@ function absoluteMedia(value: string | null | undefined): string | undefined {
 export function StoreProductPage({
   shopSlug,
   productSlug,
-  demo,
 }: {
   shopSlug: string;
   productSlug: string;
-  demo: boolean;
 }) {
-  const { settings } = useWebsiteSettings(false, !demo);
+  const { settings } = useWebsiteSettings(false, true);
   const [imageIndex, setImageIndex] = useState(0);
   const [chosenOptions, setChosenOptions] = useState<Record<string, string>>(
     {},
@@ -65,20 +60,13 @@ export function StoreProductPage({
     queryKey: ['storefront', shopSlug],
     queryFn: ({ signal }) =>
       getJson<Store>(`stores/${encodeURIComponent(shopSlug)}`, signal),
-    enabled: !demo,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 1,
   });
   const notFound =
-    !demo &&
-    storeQuery.error instanceof ApiError &&
-    storeQuery.error.status === 404;
-  const store = notFound
-    ? undefined
-    : demo
-      ? demoStores.find((item) => item.slug === shopSlug)
-      : storeQuery.data;
-  const cart = useShopCart(store, demo);
+    storeQuery.error instanceof ApiError && storeQuery.error.status === 404;
+  const store = notFound ? undefined : storeQuery.data;
+  const cart = useShopCart(store);
   const productQuery = useQuery({
     queryKey: ['storefront-product', shopSlug, productSlug],
     queryFn: ({ signal }) =>
@@ -86,7 +74,7 @@ export function StoreProductPage({
         `stores/${encodeURIComponent(shopSlug)}/products/${encodeURIComponent(productSlug)}`,
         signal,
       ),
-    enabled: Boolean(store) && !demo,
+    enabled: Boolean(store),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 1,
   });
@@ -97,45 +85,31 @@ export function StoreProductPage({
         `stores/${encodeURIComponent(shopSlug)}/categories`,
         signal,
       ),
-    enabled: Boolean(store) && !demo,
+    enabled: Boolean(store),
     staleTime: 5 * 60_000,
   });
-  const demoItem = demo
-    ? demoProducts.find(
-        (item) => item.storeId === store?.id && item.slug === productSlug,
-      )
-    : undefined;
-  const fetchedProduct = demo ? demoItem : productQuery.data;
   // The product endpoint is slug-global; a shop URL must never render an item
   // that belongs to a different shop.
   const product =
-    fetchedProduct && (!store || fetchedProduct.storeId === store.id)
-      ? fetchedProduct
+    productQuery.data && (!store || productQuery.data.storeId === store.id)
+      ? productQuery.data
       : undefined;
-  const groups = demo
-    ? menuCategoryGroups(
-        demoProducts.filter((item) => item.storeId === store?.id),
-      )
-    : categoryIndexGroups(
-        categoriesQuery.data?.items ?? [],
-        categoriesQuery.data?.uncategorized ?? 0,
-      );
+  const groups = categoryIndexGroups(
+    categoriesQuery.data?.items ?? [],
+    categoriesQuery.data?.uncategorized ?? 0,
+  );
   const group = product
     ? groups.find(
-        (entry) =>
-          entry.key ===
-          (demo
-            ? productCategoryKey(product)
-            : (product.categoryId ?? 'uncategorized')),
+        (entry) => entry.key === (product.categoryId ?? 'uncategorized'),
       )
     : undefined;
   const categoryHref = group
-    ? storeCategoryPath(shopSlug, categorySlug(group.name), demo)
+    ? storeCategoryPath(shopSlug, categorySlug(group.name))
     : undefined;
   const share = useShare();
   const images = product?.imageKeys?.filter(Boolean) ?? [];
   const heroImage = images[imageIndex] ?? images[0];
-  const shareUrl = `${window.location.origin}${storeProductPath(shopSlug, productSlug, demo)}`;
+  const shareUrl = `${window.location.origin}${storeProductPath(shopSlug, productSlug)}`;
   const price = product ? decimalPrice(productFromPriceCents(product)) : '';
 
   usePageSeo(
@@ -150,7 +124,7 @@ export function StoreProductPage({
           image:
             absoluteMedia(images[0] || store.logoKey) ??
             brandingUrl(assetUrl(settings.logoUrl)),
-          canonical: storeProductPath(shopSlug, productSlug, demo),
+          canonical: storeProductPath(shopSlug, productSlug),
           type: 'product',
           siteName: settings.siteName,
           jsonLd: {
@@ -178,7 +152,7 @@ export function StoreProductPage({
       : null,
   );
 
-  if (storeQuery.isPending && !demo && !notFound)
+  if (storeQuery.isPending && !notFound)
     return <StoreDetailLoading label="Opening the shop…" />;
   if (!store)
     return (
@@ -189,14 +163,14 @@ export function StoreProductPage({
         homeLabel="Back to discoveries"
       />
     );
-  if (!product && productQuery.isPending && !demo)
+  if (!product && productQuery.isPending)
     return <StoreDetailLoading label="Loading the item…" />;
   if (!product)
     return (
       <StoreDetailMissing
         title="This item isn’t available."
         description="It may have been sold, hidden, or removed by the shop."
-        home={storePath(shopSlug, demo)}
+        home={storePath(shopSlug)}
         homeLabel={`Back to ${store.name}`}
       />
     );
@@ -239,14 +213,13 @@ export function StoreProductPage({
   return (
     <StoreDetailShell
       store={store}
-      demo={demo}
       cart={cart}
       products={[product]}
       notice={share.notice}
       lbpRate={lbpRate}
     >
       <nav className="shop-crumbs" aria-label="Breadcrumb">
-        <a className="notranslate" href={storePath(shopSlug, demo)}>
+        <a className="notranslate" href={storePath(shopSlug)}>
           {store.name}
         </a>
         {group && categoryHref && (

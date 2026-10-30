@@ -1,16 +1,8 @@
-import { Mail, Sparkles } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import type { WebsiteSettings } from '../lib/website';
 import { useUiLabel } from '../hooks/useUiLabel';
 
-export function SiteFooter({
-  settings,
-  demo = false,
-  onToggleDemo,
-}: {
-  settings: WebsiteSettings;
-  demo?: boolean;
-  onToggleDemo?: () => void;
-}) {
+export function SiteFooter({ settings }: { settings: WebsiteSettings }) {
   const uiText = useUiLabel();
   return (
     <footer className="site-footer">
@@ -33,16 +25,6 @@ export function SiteFooter({
         <a href="/privacy">
           <span className="notranslate">{uiText('Privacy Policy')}</span>
         </a>
-        {onToggleDemo && (
-          <button className="text-button" onClick={onToggleDemo}>
-            <Sparkles size={15} />
-            <span className="notranslate">
-              {demo
-                ? uiText('Back to live feed')
-                : uiText('Preview the design')}
-            </span>
-          </button>
-        )}
         {settings.contactEmail && (
           <a href={`mailto:${settings.contactEmail}`}>
             <Mail size={14} />{' '}

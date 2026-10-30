@@ -1,30 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, SelectedProductOption, Store } from '../lib/api';
-import { demoProducts } from '../lib/demo';
-import { productHasOptions, selectedOptionsKey } from '../lib/storefront';
+import { productHasOptions } from '../lib/storefront';
 import {
   cartApi,
   cartErrorMessage,
   checkoutUrl,
-  demoCartKey,
-  emptyCart,
+  MAX_CART_QUANTITY,
   productCartLimit,
-  restoreDemoCart,
-  serializeDemoCart,
-  updateDemoCart,
   type CartCheckout,
   type CartItem,
   type CheckoutDetails,
   type ShopCart,
 } from '../lib/cart';
 
-export function useShopCart(store: Store | undefined, demo: boolean) {
+export function useShopCart(store: Store | undefined) {
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const unsavedPreview = useRef<ShopCart | undefined>(undefined);
   const [message, setMessage] = useState('');
   const [checkout, setCheckout] = useState<CartCheckout>();
   // Adding to the cart must not steal the page: a short toast confirms the
@@ -44,27 +38,18 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
     const timeout = window.setTimeout(() => setFlash(undefined), 3600);
     return () => window.clearTimeout(timeout);
   }, [flash]);
-  const queryKey = ['shop-cart', demo ? 'demo' : 'live', store?.slug];
+  const queryKey = ['shop-cart', store?.slug];
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {
       if (!store) throw new Error('Shop unavailable');
-      if (!demo) return cartApi.get(store.slug, signal);
-      if (unsavedPreview.current?.storeId === store.id)
-        return unsavedPreview.current;
-      let raw: string | null = null;
-      try {
-        raw = window.localStorage.getItem(demoCartKey(store.slug));
-      } catch {
-        return client.getQueryData<ShopCart>(queryKey) ?? emptyCart(store);
-      }
-      return restoreDemoCart(store, demoProducts, raw);
+      return cartApi.get(store.slug, signal);
     },
     enabled: Boolean(store) && !busy,
     retry: false,
-    staleTime: demo ? Infinity : 30_000,
+    staleTime: 30_000,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: !demo,
+    refetchOnWindowFocus: true,
   });
   const cart = query.data;
   // Wait for the first GET to establish the HttpOnly anonymous cart cookie.
@@ -84,27 +69,13 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
       await client.cancelQueries({ queryKey });
       const updated = await operation(cart);
       client.setQueryData(queryKey, updated);
-      if (demo) {
-        try {
-          window.localStorage.setItem(
-            demoCartKey(store.slug),
-            serializeDemoCart(updated),
-          );
-          unsavedPreview.current = undefined;
-        } catch {
-          unsavedPreview.current = updated;
-          setMessage(
-            'Your demo cart is available for this visit, but this browser couldn’t save it.',
-          );
-        }
-      }
       saved = true;
     } catch (error) {
       const failure = cartErrorMessage(error, action);
       setMessage(failure);
       notify('error', failure);
       // Reconcile an uncertain write, but never automatically replay it.
-      if (!demo) await query.refetch();
+      await query.refetch();
     } finally {
       lock.current = false;
       setBusy(false);
@@ -124,12 +95,6 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
       notify('error', failure);
       return;
     }
-    const optionKey = selectedOptionsKey(selectedOptions);
-    const line = cart?.items.find(
-      (item) =>
-        item.productId === product.id &&
-        selectedOptionsKey(item.selectedOptions) === optionKey,
-    );
     const productQuantity =
       cart?.items
         .filter((item) => item.productId === product.id)
@@ -147,15 +112,8 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
       notify('error', failure);
       return;
     }
-    void change(async (current) =>
-      demo
-        ? updateDemoCart(
-            current,
-            product,
-            (line?.quantity ?? 0) + 1,
-            selectedOptions,
-          )
-        : cartApi.add(store.slug, product.id, selectedOptions),
+    void change(async () =>
+      cartApi.add(store.slug, product.id, selectedOptions),
     ).then((ok) => {
       if (ok) notify('success', `${product.name} added to cart`);
     });
@@ -163,13 +121,8 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
 
   function update(item: CartItem, quantity: number) {
     if (!store || !Number.isInteger(quantity) || quantity < 0) return;
-    const product = demoProducts.find((entry) => entry.id === item.productId);
-    if (quantity > productCartLimit(demo ? product : undefined)) return;
-    void change(async (current) => {
-      if (demo) {
-        if (!product) return current;
-        return updateDemoCart(current, product, quantity, item.selectedOptions);
-      }
+    if (quantity > MAX_CART_QUANTITY) return;
+    void change(async () => {
       if (quantity > 0) return cartApi.update(store.slug, item.id, quantity);
       await cartApi.remove(store.slug, item.id);
       return cartApi.get(store.slug);
@@ -179,14 +132,13 @@ export function useShopCart(store: Store | undefined, demo: boolean) {
   function clear() {
     if (!store) return;
     void change(async () => {
-      if (demo) return emptyCart(store);
       await cartApi.clear(store.slug);
       return cartApi.get(store.slug);
     });
   }
 
   function prepareCheckout(details: CheckoutDetails) {
-    if (!store || demo || !cart?.items.length) return;
+    if (!store || !cart?.items.length) return;
     void change(async (current) => {
       const result = await cartApi.checkout(store.slug, details);
       const url = checkoutUrl(result.whatsappUrl);

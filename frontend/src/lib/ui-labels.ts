@@ -35,8 +35,6 @@ export const ARABIC_UI_LABELS: Record<string, string> = {
   'Terms & Conditions': 'الشروط والأحكام',
   'Privacy Policy': 'سياسة الخصوصية',
   'Get in touch': 'تواصل معنا',
-  'Preview the design': 'معاينة التصميم',
-  'Back to live feed': 'العودة إلى البث المباشر',
 
   // Owner and admin panel sections.
   Overview: 'نظرة عامة',

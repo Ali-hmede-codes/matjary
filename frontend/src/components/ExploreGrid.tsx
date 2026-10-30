@@ -7,11 +7,9 @@ import { MediaView } from './MediaView';
 export function ExploreGrid({
   posts,
   onOpen,
-  demo,
 }: {
   posts: Post[];
   onOpen: (post: Post, mediaIndex: number) => void;
-  demo: boolean;
 }) {
   return (
     <div className="explore-grid">
@@ -20,7 +18,7 @@ export function ExploreGrid({
         const hasVideo = post.media.some((item) => item.kind === 'video');
         return (
           <button
-            key={`${demo ? 'demo' : 'live'}:${post.id}`}
+            key={post.id}
             type="button"
             className="explore-tile"
             aria-label={`Open ${post.title}`}

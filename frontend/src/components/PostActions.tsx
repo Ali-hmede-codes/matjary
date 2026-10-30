@@ -19,12 +19,11 @@ export function PostActions({
   onLike,
   onSave,
   onNotice,
-  demo = false,
-}: PostActionProps & { demo?: boolean }) {
+}: PostActionProps) {
   const [sharing, setSharing] = useState(false);
   // A shared post links to its own page. The media file behind it has no title,
   // preview image, or canonical URL for a link preview to read.
-  const shareUrl = `${window.location.origin}${postPath(post, demo)}`;
+  const shareUrl = `${window.location.origin}${postPath(post)}`;
 
   async function sharePost() {
     if (sharing) return;

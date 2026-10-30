@@ -22,12 +22,10 @@ export function PostCard({
   onSave,
   onNotice,
   onOpen,
-  demo,
 }: PostActionProps & {
   index: number;
   preferVideo: boolean;
   onOpen: (index: number) => void;
-  demo: boolean;
 }) {
   const [mediaIndex, setMediaIndex] = useState(() =>
     preferVideo
@@ -46,7 +44,7 @@ export function PostCard({
       <header className="post-header">
         <a
           className="store-identity"
-          href={post.store ? storePath(post.store.slug, demo) : undefined}
+          href={post.store ? storePath(post.store.slug) : undefined}
         >
           <StoreAvatar store={post.store} expandable />
           <span>
@@ -59,22 +57,14 @@ export function PostCard({
               <StoreVerifiedBadge store={post.store} size={15} />
             </strong>
             <small>
-              {demo ? (
-                'Sample showcase'
-              ) : (
-                <span className="notranslate">
-                  {[
-                    post.store?.businessCategoryLabel,
-                    post.store?.location?.city,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || 'Independent store'}
-                </span>
-              )}
+              <span className="notranslate">
+                {[post.store?.businessCategoryLabel, post.store?.location?.city]
+                  .filter(Boolean)
+                  .join(' · ') || 'Independent store'}
+              </span>
             </small>
           </span>
         </a>
-        {demo && <span className="sample-label">SAMPLE</span>}
       </header>
       <div className="post-media">
         {media?.kind === 'video' ? (
@@ -146,12 +136,11 @@ export function PostCard({
           onLike={onLike}
           onSave={onSave}
           onNotice={onNotice}
-          demo={demo}
         />
         <p className="post-caption" dir="auto">
           <a
             className="post-caption-author notranslate"
-            href={post.store ? storePath(post.store.slug, demo) : undefined}
+            href={post.store ? storePath(post.store.slug) : undefined}
           >
             {post.store?.name || 'Independent creator'}
           </a>{' '}

@@ -9,7 +9,6 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { ApiError, assetUrl, getPost } from '../lib/api';
-import { demoPosts } from '../lib/demo';
 import {
   categorySlug,
   formatProductPrice,
@@ -49,41 +48,30 @@ function sharedDate(value: string | null): string | null {
 export function PostPage({
   shopSlug,
   postSlug,
-  demo,
 }: {
   shopSlug?: string;
   postSlug: string;
-  demo: boolean;
 }) {
-  const { settings } = useWebsiteSettings(false, !demo);
+  const { settings } = useWebsiteSettings(false, true);
   const [mediaIndex, setMediaIndex] = useState(0);
   const [notice, setNotice] = useState('');
   const { saved, liking, likePost, savePost, registerView, withLikes } =
-    usePostEngagement({ demo, onNotice: setNotice });
+    usePostEngagement({ onNotice: setNotice });
   const postQuery = useQuery({
     queryKey: ['post', postSlug],
     queryFn: ({ signal }) => getPost(postSlug, signal),
-    enabled: !demo,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 1,
   });
-  const sample = demo
-    ? demoPosts.find(
-        (item) =>
-          item.slug === postSlug &&
-          (!shopSlug || item.store?.slug === shopSlug),
-      )
-    : undefined;
-  const loaded = demo ? sample : postQuery.data;
   // The address carries the shop, so another shop's post must never render here.
   const post =
-    loaded && (!shopSlug || loaded.store?.slug === shopSlug)
-      ? withLikes(loaded)
+    postQuery.data && (!shopSlug || postQuery.data.store?.slug === shopSlug)
+      ? withLikes(postQuery.data)
       : undefined;
   const postId = post?.id;
   const media = post?.media[mediaIndex] ?? post?.media[0];
   const shop = post?.store;
-  const home = demo ? '/?demo=1' : '/';
+  const home = '/';
   const previewImage =
     post?.media.find((item) => item.kind === 'image')?.primaryUrl ??
     post?.media[0]?.posterUrl ??
@@ -104,7 +92,7 @@ export function PostPage({
             post.description?.trim() ||
             `A post shared by ${shop?.name ?? settings.siteName}.`,
           image: previewImage,
-          canonical: postPath(post, demo),
+          canonical: postPath(post),
           type: 'article',
           siteName: settings.siteName,
           jsonLd: {
@@ -120,21 +108,21 @@ export function PostPage({
             },
             mainEntityOfPage: {
               '@type': 'WebPage',
-              '@id': `${window.location.origin}${postPath(post, demo)}`,
+              '@id': `${window.location.origin}${postPath(post)}`,
             },
           },
         }
       : null,
   );
 
-  if (!demo && postQuery.isPending)
+  if (postQuery.isPending)
     return <StoreDetailLoading label="Opening the post…" />;
   if (!post || !media)
     return (
       <StoreDetailMissing
         title="This post isn’t available."
         description="It may have been removed, hidden, or the shop changed its address."
-        home={shopSlug ? storePath(shopSlug, demo) : home}
+        home={shopSlug ? storePath(shopSlug) : home}
         homeLabel={shopSlug ? 'Back to the shop' : 'Back to discoveries'}
       />
     );
@@ -158,10 +146,7 @@ export function PostPage({
   return (
     <div className="app storefront storefront-detail post-page">
       <header className="post-page-bar">
-        <a
-          className="post-page-back"
-          href={shop ? storePath(shop.slug, demo) : home}
-        >
+        <a className="post-page-back" href={shop ? storePath(shop.slug) : home}>
           <ArrowLeft size={17} aria-hidden="true" />
           {shop ? (
             <span className="notranslate">{shop.name}</span>
@@ -222,7 +207,7 @@ export function PostPage({
             {shop && (
               <a
                 className="store-identity"
-                href={storePath(shop.slug, demo)}
+                href={storePath(shop.slug)}
                 aria-label={`Visit ${shop.name}`}
               >
                 <StoreAvatar store={shop} preview={media} expandable />
@@ -257,12 +242,8 @@ export function PostPage({
                 className="post-page-link"
                 href={
                   link.type === 'product' && link.slug
-                    ? storeProductPath(shop.slug, link.slug, demo)
-                    : storeCategoryPath(
-                        shop.slug,
-                        categorySlug(link.name),
-                        demo,
-                      )
+                    ? storeProductPath(shop.slug, link.slug)
+                    : storeCategoryPath(shop.slug, categorySlug(link.name))
                 }
               >
                 {link.type === 'product' ? (
@@ -294,7 +275,6 @@ export function PostPage({
             <div className="post-page-actions">
               <PostActions
                 post={post}
-                demo={demo}
                 saved={saved.includes(post.id)}
                 liking={liking}
                 onLike={() => void likePost(post)}
@@ -314,7 +294,7 @@ export function PostPage({
               </p>
             )}
             {shop && (
-              <a className="post-page-shop" href={storePath(shop.slug, demo)}>
+              <a className="post-page-shop" href={storePath(shop.slug)}>
                 <span>
                   Visit <span className="notranslate">{shop.name}</span>
                 </span>

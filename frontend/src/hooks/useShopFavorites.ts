@@ -30,7 +30,7 @@ export function useShopFavorites(onNotice: (message: string) => void) {
     const current = latest.current;
     const removing = current.includes(id);
     const next = toggleFavoriteShopIds(current, id);
-    // An invalid id (demo shops use non-UUID ids) must not pretend to save.
+    // An invalid id must not pretend to save.
     if (next === current) return;
     latest.current = next;
     setFavorites(next);

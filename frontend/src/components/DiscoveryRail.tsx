@@ -8,13 +8,11 @@ export function DiscoveryRail({
   stores,
   savedCount,
   settings,
-  demo,
   onOpenSaved,
 }: {
   stores: Store[];
   savedCount: number;
   settings: WebsiteSettings;
-  demo: boolean;
   onOpenSaved: () => void;
 }) {
   return (
@@ -30,7 +28,7 @@ export function DiscoveryRail({
         <a
           className="suggested-store"
           key={item.id}
-          href={storePath(item.slug, demo)}
+          href={storePath(item.slug)}
         >
           <StoreAvatar store={item} />
           <span>

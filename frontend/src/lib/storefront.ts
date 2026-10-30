@@ -122,39 +122,31 @@ export function isStoreVerified(
   );
 }
 
-export function storePath(slug: string, demo = false): string {
-  return `/stores/${encodeURIComponent(slug)}${demo ? '?demo=1' : ''}`;
+export function storePath(slug: string): string {
+  return `/stores/${encodeURIComponent(slug)}`;
 }
 
 export function storeCategoryPath(
   shopSlug: string,
   categorySlug: string,
-  demo = false,
 ): string {
-  return `/stores/${encodeURIComponent(shopSlug)}/c/${encodeURIComponent(categorySlug)}${demo ? '?demo=1' : ''}`;
+  return `/stores/${encodeURIComponent(shopSlug)}/c/${encodeURIComponent(categorySlug)}`;
 }
 
 /** Shop URL that opens the catalogue tab directly ("All items" links). */
-export function storeMenuPath(shopSlug: string, demo = false): string {
-  const params = new URLSearchParams({ view: 'catalog' });
-  if (demo) params.set('demo', '1');
-  return `/stores/${encodeURIComponent(shopSlug)}?${params}`;
+export function storeMenuPath(shopSlug: string): string {
+  return `/stores/${encodeURIComponent(shopSlug)}?view=catalog`;
 }
 
 export function storeProductPath(
   shopSlug: string,
   productSlug: string,
-  demo = false,
 ): string {
-  return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}${demo ? '?demo=1' : ''}`;
+  return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}`;
 }
 
-export function storePostPath(
-  shopSlug: string,
-  postSlug: string,
-  demo = false,
-): string {
-  return `/stores/${encodeURIComponent(shopSlug)}/post/${encodeURIComponent(postSlug)}${demo ? '?demo=1' : ''}`;
+export function storePostPath(shopSlug: string, postSlug: string): string {
+  return `/stores/${encodeURIComponent(shopSlug)}/post/${encodeURIComponent(postSlug)}`;
 }
 
 /**
@@ -162,13 +154,13 @@ export function storePostPath(
  * rule and the prerendered share shells cover them; a shop-less post uses the
  * platform path.
  */
-export function postPath(
-  post: { slug: string; store?: { slug: string } | null },
-  demo = false,
-): string {
+export function postPath(post: {
+  slug: string;
+  store?: { slug: string } | null;
+}): string {
   return post.store
-    ? storePostPath(post.store.slug, post.slug, demo)
-    : `/post/${encodeURIComponent(post.slug)}${demo ? '?demo=1' : ''}`;
+    ? storePostPath(post.store.slug, post.slug)
+    : `/post/${encodeURIComponent(post.slug)}`;
 }
 
 export interface StorefrontRoute {

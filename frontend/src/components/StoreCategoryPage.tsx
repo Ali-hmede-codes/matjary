@@ -8,14 +8,11 @@ import {
   type Store,
   type StoreCategoryList,
 } from '../lib/api';
-import { demoProducts, demoStores } from '../lib/demo';
 import { resolveCategoryLayout } from '../lib/design.ts';
 import {
   categorySlug,
   catalogLayout,
-  menuCategoryGroups,
   categoryIndexGroups,
-  productCategoryKey,
   storeCategoryPath,
   storeMediaUrl,
   storeMenuPath,
@@ -39,31 +36,22 @@ import { StatusBanner } from './Feedback';
 export function StoreCategoryPage({
   shopSlug,
   categorySlug: categoryParam,
-  demo,
 }: {
   shopSlug: string;
   categorySlug: string;
-  demo: boolean;
 }) {
-  const { settings } = useWebsiteSettings(false, !demo);
+  const { settings } = useWebsiteSettings(false, true);
   const storeQuery = useQuery({
     queryKey: ['storefront', shopSlug],
     queryFn: ({ signal }) =>
       getJson<Store>(`stores/${encodeURIComponent(shopSlug)}`, signal),
-    enabled: !demo,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 1,
   });
   const notFound =
-    !demo &&
-    storeQuery.error instanceof ApiError &&
-    storeQuery.error.status === 404;
-  const store = notFound
-    ? undefined
-    : demo
-      ? demoStores.find((item) => item.slug === shopSlug)
-      : storeQuery.data;
-  const cart = useShopCart(store, demo);
+    storeQuery.error instanceof ApiError && storeQuery.error.status === 404;
+  const store = notFound ? undefined : storeQuery.data;
+  const cart = useShopCart(store);
   const categoriesQuery = useQuery({
     queryKey: ['storefront-categories', shopSlug],
     queryFn: ({ signal }) =>
@@ -71,17 +59,13 @@ export function StoreCategoryPage({
         `stores/${encodeURIComponent(shopSlug)}/categories`,
         signal,
       ),
-    enabled: Boolean(store) && !demo,
+    enabled: Boolean(store),
     staleTime: 5 * 60_000,
   });
-  const groups = demo
-    ? menuCategoryGroups(
-        demoProducts.filter((item) => item.storeId === store?.id),
-      )
-    : categoryIndexGroups(
-        categoriesQuery.data?.items ?? [],
-        categoriesQuery.data?.uncategorized ?? 0,
-      );
+  const groups = categoryIndexGroups(
+    categoriesQuery.data?.items ?? [],
+    categoriesQuery.data?.uncategorized ?? 0,
+  );
   const categoryPosition = groups.findIndex(
     (group) => categorySlug(group.name) === categoryParam,
   );
@@ -104,17 +88,9 @@ export function StoreCategoryPage({
       page.items.length && offset + page.items.length < page.total
         ? offset + page.items.length
         : undefined,
-    enabled: Boolean(store) && Boolean(group) && !demo,
+    enabled: Boolean(store) && Boolean(group),
   });
-  const demoItems = demo
-    ? demoProducts.filter(
-        (item) =>
-          item.storeId === store?.id && productCategoryKey(item) === group?.key,
-      )
-    : [];
-  const items = demo
-    ? demoItems
-    : (productsQuery.data?.pages.flatMap((page) => page.items) ?? []);
+  const items = productsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const share = useShare();
 
   usePageSeo(
@@ -128,7 +104,7 @@ export function StoreCategoryPage({
           image:
             assetUrl(storeMediaUrl(store.bannerKey || store.logoKey)) ??
             brandingUrl(assetUrl(settings.logoUrl)),
-          canonical: storeCategoryPath(shopSlug, categoryParam, demo),
+          canonical: storeCategoryPath(shopSlug, categoryParam),
           siteName: settings.siteName,
           jsonLd: {
             '@context': 'https://schema.org',
@@ -138,13 +114,13 @@ export function StoreCategoryPage({
                 '@type': 'ListItem',
                 position: 1,
                 name: store.name,
-                item: `${window.location.origin}${storePath(shopSlug, demo)}`,
+                item: `${window.location.origin}${storePath(shopSlug)}`,
               },
               {
                 '@type': 'ListItem',
                 position: 2,
                 name: group.name,
-                item: `${window.location.origin}${storeCategoryPath(shopSlug, categoryParam, demo)}`,
+                item: `${window.location.origin}${storeCategoryPath(shopSlug, categoryParam)}`,
               },
             ],
           },
@@ -152,7 +128,7 @@ export function StoreCategoryPage({
       : null,
   );
 
-  if (storeQuery.isPending && !demo && !notFound)
+  if (storeQuery.isPending && !notFound)
     return <StoreDetailLoading label="Opening the shop…" />;
   if (!store)
     return (
@@ -163,14 +139,14 @@ export function StoreCategoryPage({
         homeLabel="Back to discoveries"
       />
     );
-  if (!group && !demo && categoriesQuery.isPending)
+  if (!group && categoriesQuery.isPending)
     return <StoreDetailLoading label="Opening the category…" />;
-  if (!group && !demo && categoriesQuery.isError)
+  if (!group && categoriesQuery.isError)
     return (
       <StoreDetailMissing
         title="This section couldn’t load."
         description="Please try again in a moment."
-        home={storePath(shopSlug, demo)}
+        home={storePath(shopSlug)}
         homeLabel={`Back to ${store.name}`}
       />
     );
@@ -179,7 +155,7 @@ export function StoreCategoryPage({
       <StoreDetailMissing
         title="This category isn’t available."
         description="It may have been renamed or removed by the shop owner."
-        home={storePath(shopSlug, demo)}
+        home={storePath(shopSlug)}
         homeLabel={`Back to ${store.name}`}
       />
     );
@@ -190,18 +166,17 @@ export function StoreCategoryPage({
   const layout = presentation.design
     ? resolveCategoryLayout(presentation.design, categoryPosition, group.key)
     : catalogLayout(categoryPosition);
-  const shareUrl = `${window.location.origin}${storeCategoryPath(shopSlug, categoryParam, demo)}`;
+  const shareUrl = `${window.location.origin}${storeCategoryPath(shopSlug, categoryParam)}`;
   return (
     <StoreDetailShell
       store={store}
-      demo={demo}
       cart={cart}
       products={items}
       notice={share.notice}
       lbpRate={lbpRate}
     >
       <nav className="shop-crumbs" aria-label="Breadcrumb">
-        <a className="notranslate" href={storePath(shopSlug, demo)}>
+        <a className="notranslate" href={storePath(shopSlug)}>
           {store.name}
         </a>
         <span aria-hidden="true">/</span>
@@ -250,7 +225,7 @@ export function StoreCategoryPage({
         </button>
       </header>
       <nav className="shop-category-switcher" aria-label="Shop categories">
-        <a className="shop-switcher-all" href={storeMenuPath(shopSlug, demo)}>
+        <a className="shop-switcher-all" href={storeMenuPath(shopSlug)}>
           <LayoutGrid size={15} aria-hidden="true" />
           All items
         </a>
@@ -259,7 +234,7 @@ export function StoreCategoryPage({
           return (
             <a
               key={entry.key}
-              href={storeCategoryPath(shopSlug, categorySlug(entry.name), demo)}
+              href={storeCategoryPath(shopSlug, categorySlug(entry.name))}
               aria-current={active ? 'page' : undefined}
               className={active ? 'is-active' : undefined}
             >
@@ -269,7 +244,7 @@ export function StoreCategoryPage({
           );
         })}
       </nav>
-      {!demo && productsQuery.isError && (
+      {productsQuery.isError && (
         <StatusBanner
           action="Try again"
           onAction={() => void productsQuery.refetch()}
@@ -277,7 +252,7 @@ export function StoreCategoryPage({
           This section couldn’t load. Please try again.
         </StatusBanner>
       )}
-      {!demo && productsQuery.isPending ? (
+      {productsQuery.isPending ? (
         <CatalogLoading layout={layout} />
       ) : items.length ? (
         <CatalogItems
@@ -285,7 +260,6 @@ export function StoreCategoryPage({
           cart={cart}
           layout={layout}
           shopSlug={shopSlug}
-          demo={demo}
           lbpRate={lbpRate}
           showImages={presentation.design?.showProductImages}
           showDescriptions={presentation.design?.showProductDescriptions}
@@ -294,14 +268,14 @@ export function StoreCategoryPage({
         <div className="shop-inline-state">
           <h2>Nothing here yet.</h2>
           <p>The shop hasn’t added items to this section.</p>
-          <a className="secondary-button" href={storePath(shopSlug, demo)}>
+          <a className="secondary-button" href={storePath(shopSlug)}>
             <span>
               Back to <span className="notranslate">{store.name}</span>
             </span>
           </a>
         </div>
       )}
-      {!demo && productsQuery.hasNextPage && (
+      {productsQuery.hasNextPage && (
         <div className="shop-pagination">
           <p>
             Showing {items.length} of {group.count} items in this section.

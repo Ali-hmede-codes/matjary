@@ -40,15 +40,12 @@ import {
   type Store,
   type StoreCategoryList,
 } from '../lib/api';
-import { demoPosts, demoProducts, demoStores } from '../lib/demo';
 import { resolveCategoryLayout } from '../lib/design.ts';
 import {
   categoryIndexGroups,
   categorySlug,
   catalogLayout,
-  menuCategoryGroups,
   menuShareDescription,
-  productCategoryKey,
   lbpRateFor,
   storeCategoryPath,
   storeMediaUrl,
@@ -173,8 +170,7 @@ function ShopPageLoading() {
 }
 
 export function StorePage({ slug }: { slug: string | null }) {
-  const demo = new URLSearchParams(window.location.search).get('demo') === '1';
-  const { settings } = useWebsiteSettings(false, !demo);
+  const { settings } = useWebsiteSettings(false, true);
   const [search, setSearch] = useState('');
   // "All items" links ask this page to open on the catalogue; a restaurant
   // lands there by default once its store details arrive.
@@ -202,14 +198,11 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [quickNotice, setQuickNotice] = useState('');
   const client = useQueryClient();
   // Stories are public and short-lived; the owner view adds the remaining slots.
-  const storyGroups = useStoryGroups(
-    slug ? [slug] : undefined,
-    Boolean(slug) && !demo,
-  );
+  const storyGroups = useStoryGroups(slug ? [slug] : undefined, Boolean(slug));
   const { seen, markSeen } = useSeenStories();
   const shopFavorites = useShopFavorites(setFavoriteNotice);
   const { saved, liking, likePost, savePost, registerView, withLikes } =
-    usePostEngagement({ demo, onNotice: setPostNotice });
+    usePostEngagement({ onNotice: setPostNotice });
   useEffect(() => {
     if (!postNotice) return;
     const timer = window.setTimeout(() => setPostNotice(''), 4000);
@@ -242,21 +235,15 @@ export function StorePage({ slug }: { slug: string | null }) {
     queryKey: ['storefront', slug],
     queryFn: ({ signal }) =>
       getJson<Store>(`stores/${encodeURIComponent(slug!)}`, signal),
-    enabled: Boolean(slug) && !demo,
+    enabled: Boolean(slug),
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 1,
   });
   const notFound =
     !slug ||
-    (!demo &&
-      storeQuery.error instanceof ApiError &&
-      storeQuery.error.status === 404);
-  const store = notFound
-    ? undefined
-    : demo
-      ? demoStores.find((item) => item.slug === slug)
-      : storeQuery.data;
-  const viewerIsOwner = Boolean(store?.viewerIsOwner) && !demo;
+    (storeQuery.error instanceof ApiError && storeQuery.error.status === 404);
+  const store = notFound ? undefined : storeQuery.data;
+  const viewerIsOwner = Boolean(store?.viewerIsOwner);
   const myStories = useMyStories(store?.slug ?? null, viewerIsOwner);
   const shopStoryGroup = storyGroups.data?.groups.find(
     (group) => group.store.id === store?.id,
@@ -296,7 +283,7 @@ export function StorePage({ slug }: { slug: string | null }) {
           postsSectionEnabled
         ? 'posts'
         : preferredTab;
-  const cart = useShopCart(store, demo);
+  const cart = useShopCart(store);
   const categoriesQuery = useQuery({
     queryKey: ['storefront-categories', slug],
     queryFn: ({ signal }) =>
@@ -304,7 +291,7 @@ export function StorePage({ slug }: { slug: string | null }) {
         `stores/${encodeURIComponent(slug!)}/categories`,
         signal,
       ),
-    enabled: Boolean(store) && !demo && productsSectionEnabled,
+    enabled: Boolean(store) && productsSectionEnabled,
     staleTime: 5 * 60_000,
   });
   const postsQuery = useInfiniteQuery({
@@ -321,8 +308,7 @@ export function StorePage({ slug }: { slug: string | null }) {
     getNextPageParam: (page) => (page.hasMore ? page.nextCursor : undefined),
     // Restaurants open on the menu, so their feed is fetched only when the
     // Posts tab is actually opened. A turned-off section never fetches.
-    enabled:
-      Boolean(store) && !demo && postsSectionEnabled && activeTab === 'posts',
+    enabled: Boolean(store) && postsSectionEnabled && activeTab === 'posts',
   });
   const presentation = storePresentation(store ?? { brandColor: null });
   // Only sections that are on get a tab; the same flags gate their queries and
@@ -343,7 +329,7 @@ export function StorePage({ slug }: { slug: string | null }) {
   ];
   // Prices stay in USD; this rate only adds the small LBP line the owner opted into.
   const lbpRate = lbpRateFor(settings.lbpExchangeRate, store);
-  const missing = notFound || (demo && !store);
+  const missing = notFound;
   const loadingShop = !store && !missing && !storeQuery.isError;
   const share = useShare();
   useEffect(() => {
@@ -384,7 +370,7 @@ export function StorePage({ slug }: { slug: string | null }) {
           image:
             absoluteMediaUrl(store.bannerKey || store.logoKey) ??
             brandingUrl(assetUrl(settings.logoUrl)),
-          canonical: storePath(store.slug, demo),
+          canonical: storePath(store.slug),
           siteName: settings.siteName,
           jsonLd: {
             '@context': 'https://schema.org',
@@ -395,7 +381,7 @@ export function StorePage({ slug }: { slug: string | null }) {
             image:
               absoluteMediaUrl(store.bannerKey || store.logoKey) ??
               brandingUrl(assetUrl(settings.logoUrl)),
-            url: `${window.location.origin}${storePath(store.slug, demo)}`,
+            url: `${window.location.origin}${storePath(store.slug)}`,
           },
         }
       : null,
@@ -415,10 +401,8 @@ export function StorePage({ slug }: { slug: string | null }) {
     setFocusContact(false);
   }, [contactOpen, focusContact]);
 
-  const home = demo ? '/?demo=1' : '/';
-  const posts = demo
-    ? demoPosts.filter((item) => item.store?.id === store?.id)
-    : (postsQuery.data?.pages.flatMap((page) => page.items) ?? []);
+  const home = '/';
+  const posts = postsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   // The grid and the viewer page through one de-duplicated list, so the tile a
   // shopper taps is exactly the post the viewer opens.
   const shopPosts = [...new Map(posts.map((post) => [post.id, post])).values()];
@@ -431,14 +415,10 @@ export function StorePage({ slug }: { slug: string | null }) {
   // The menu loads its items inline so every section is browsable without a
   // detour. One request covers a typical menu; long catalogues append another
   // page on request, and a section chip filters server-side.
-  const groups = demo
-    ? menuCategoryGroups(
-        demoProducts.filter((item) => item.storeId === store?.id),
-      )
-    : categoryIndexGroups(
-        categoriesQuery.data?.items ?? [],
-        categoriesQuery.data?.uncategorized ?? 0,
-      );
+  const groups = categoryIndexGroups(
+    categoriesQuery.data?.items ?? [],
+    categoriesQuery.data?.uncategorized ?? 0,
+  );
   // A chosen chip can outlive its section if the owner renames or removes it.
   const menuFilterKey = groups.some((group) => group.key === menuFilter)
     ? menuFilter
@@ -466,25 +446,14 @@ export function StorePage({ slug }: { slug: string | null }) {
         ? offset + page.items.length
         : undefined,
     enabled:
-      Boolean(store) &&
-      !demo &&
-      productsSectionEnabled &&
-      activeTab === 'catalog',
+      Boolean(store) && productsSectionEnabled && activeTab === 'catalog',
   });
   const catalogTotal = groups.reduce((sum, group) => sum + group.count, 0);
   const searchTerm = search.trim().toLowerCase();
-  const menuItems = demo
-    ? demoProducts.filter(
-        (item) =>
-          item.storeId === store?.id &&
-          (menuFilterKey === 'all' ||
-            productCategoryKey(item) === menuFilterKey),
-      )
-    : (menuQuery.data?.pages.flatMap((page) => page.items) ?? []);
+  const menuItems = menuQuery.data?.pages.flatMap((page) => page.items) ?? [];
   // Categories with an owner row arrive as ids; older products without one
   // stay reachable through the "More items" group.
-  const menuKeyOf = (item: Product) =>
-    demo ? productCategoryKey(item) : (item.categoryId ?? 'uncategorized');
+  const menuKeyOf = (item: Product) => item.categoryId ?? 'uncategorized';
   const matchingItems = searchTerm
     ? menuItems.filter((item) =>
         `${item.name} ${item.description ?? ''}`
@@ -503,9 +472,7 @@ export function StorePage({ slug }: { slug: string | null }) {
       items: matchingItems.filter((item) => menuKeyOf(item) === group.key),
     }))
     .filter((section) => section.items.length > 0);
-  const menuTotal = demo
-    ? menuItems.length
-    : Number(menuQuery.data?.pages[0]?.total ?? 0);
+  const menuTotal = Number(menuQuery.data?.pages[0]?.total ?? 0);
   const branches = storeBranches(store);
   const mainBranch = primaryBranch(branches);
   const branchOpenStates = branches
@@ -560,34 +527,30 @@ export function StorePage({ slug }: { slug: string | null }) {
             role="group"
             aria-label="Shop quick actions"
           >
-            {!demo && (
-              <button
-                type="button"
-                className="shop-glass"
-                aria-pressed={shopFavorites.isFavorite(store.id)}
-                aria-label={
-                  shopFavorites.isFavorite(store.id)
-                    ? `Remove ${store.name} from favorite shops`
-                    : `Add ${store.name} to favorite shops`
+            <button
+              type="button"
+              className="shop-glass"
+              aria-pressed={shopFavorites.isFavorite(store.id)}
+              aria-label={
+                shopFavorites.isFavorite(store.id)
+                  ? `Remove ${store.name} from favorite shops`
+                  : `Add ${store.name} to favorite shops`
+              }
+              title={
+                shopFavorites.isFavorite(store.id)
+                  ? 'Remove from favorites'
+                  : 'Add to favorites'
+              }
+              onClick={() => shopFavorites.toggleFavorite(store.id, store.name)}
+            >
+              <Heart
+                size={21}
+                aria-hidden="true"
+                fill={
+                  shopFavorites.isFavorite(store.id) ? 'currentColor' : 'none'
                 }
-                title={
-                  shopFavorites.isFavorite(store.id)
-                    ? 'Remove from favorites'
-                    : 'Add to favorites'
-                }
-                onClick={() =>
-                  shopFavorites.toggleFavorite(store.id, store.name)
-                }
-              >
-                <Heart
-                  size={21}
-                  aria-hidden="true"
-                  fill={
-                    shopFavorites.isFavorite(store.id) ? 'currentColor' : 'none'
-                  }
-                />
-              </button>
-            )}
+              />
+            </button>
             {productsSectionEnabled && (
               <button
                 type="button"
@@ -619,7 +582,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                         `Browse the menu at ${store.name} — dishes, prices, and photos.`,
                       )
                     : (store.description ?? undefined),
-                  url: `${window.location.origin}${storePath(store.slug, demo)}`,
+                  url: `${window.location.origin}${storePath(store.slug)}`,
                 })
               }
             >
@@ -848,16 +811,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                 />
               </div>
             </section>
-            {demo && (
-              <StatusBanner
-                demo
-                action="View live discoveries"
-                onAction={() => window.location.assign('/')}
-              >
-                Design preview · Sample shop and products, not live content.
-              </StatusBanner>
-            )}
-            {!demo && storeQuery.isError && (
+            {storeQuery.isError && (
               <StatusBanner
                 action="Retry shop details"
                 onAction={() => void storeQuery.refetch()}
@@ -961,10 +915,10 @@ export function StorePage({ slug }: { slug: string | null }) {
                   {activeTab === 'posts' && (
                     <>
                       <h2 className="sr-only">Posts</h2>
-                      {!demo && postsQuery.isPending && (
+                      {postsQuery.isPending && (
                         <ShopCardsLoading label="Loading posts…" />
                       )}
-                      {!demo && postsQuery.isError && (
+                      {postsQuery.isError && (
                         <StatusBanner
                           action="Retry posts"
                           onAction={() => void postsQuery.refetch()}
@@ -982,7 +936,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                         }
                         onOpen={openStorePost}
                       />
-                      {!posts.length && (demo || postsQuery.isSuccess) && (
+                      {!posts.length && postsQuery.isSuccess && (
                         <div className="shop-inline-state">
                           <p>
                             {viewerIsOwner
@@ -1001,7 +955,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                           )}
                         </div>
                       )}
-                      {!demo && postsQuery.hasNextPage && (
+                      {postsQuery.hasNextPage && (
                         <button
                           className="secondary-button"
                           disabled={postsQuery.isFetching}
@@ -1082,7 +1036,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       )}
                     </div>
                   </div>
-                  {!demo && categoriesQuery.isPending && (
+                  {categoriesQuery.isPending && (
                     <div className="shop-menu-chips" aria-hidden="true">
                       {[0, 1, 2, 3].map((index) => (
                         <span
@@ -1092,7 +1046,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       ))}
                     </div>
                   )}
-                  {!demo && categoriesQuery.isError && (
+                  {categoriesQuery.isError && (
                     <StatusBanner
                       action="Try again"
                       onAction={() => void categoriesQuery.refetch()}
@@ -1136,7 +1090,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       ))}
                     </div>
                   )}
-                  {!demo && menuQuery.isError && (
+                  {menuQuery.isError && (
                     <StatusBanner
                       action="Try again"
                       onAction={() => void menuQuery.refetch()}
@@ -1144,7 +1098,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       The menu couldn’t load. Please try again.
                     </StatusBanner>
                   )}
-                  {!demo && menuQuery.isPending ? (
+                  {menuQuery.isPending ? (
                     <CatalogLoading layout="list" />
                   ) : menuSections.length ? (
                     <div className="shop-menu-sections">
@@ -1175,7 +1129,6 @@ export function StorePage({ slug }: { slug: string | null }) {
                                 href={storeCategoryPath(
                                   store.slug,
                                   categorySlug(group.name),
-                                  demo,
                                 )}
                               >
                                 View section
@@ -1188,7 +1141,6 @@ export function StorePage({ slug }: { slug: string | null }) {
                                 cart={cart}
                                 layout={layout}
                                 shopSlug={store.slug}
-                                demo={demo}
                                 lbpRate={lbpRate}
                                 showImages={
                                   presentation.design?.showProductImages
@@ -1221,7 +1173,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       })}
                     </div>
                   ) : !menuQuery.isError ? (
-                    (demo || categoriesQuery.isSuccess) && (
+                    categoriesQuery.isSuccess && (
                       <div className="shop-inline-state">
                         <h3>
                           {searchTerm
@@ -1275,7 +1227,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                       </div>
                     )
                   ) : null}
-                  {!demo && menuQuery.hasNextPage && (
+                  {menuQuery.hasNextPage && (
                     <div className="shop-pagination">
                       <p>
                         Showing {menuItems.length} of {menuTotal} items.
@@ -1333,7 +1285,6 @@ export function StorePage({ slug }: { slug: string | null }) {
           store={store}
           products={[]}
           controller={cart}
-          demo={demo}
           lbpRate={lbpRate}
           onBrowse={() => {
             cart.setOpen(false);
@@ -1353,7 +1304,6 @@ export function StorePage({ slug }: { slug: string | null }) {
             withLikes({ ...post, store: post.store ?? store }),
           )}
           initialPostId={selectedPost.id}
-          demo={demo}
           notice={postNotice}
           saved={saved}
           liking={liking}

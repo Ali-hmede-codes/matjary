@@ -10,13 +10,11 @@ import { StoreAvatar, StoreVerifiedBadge } from '../StoreAvatar';
 export function StoreStorySheet({
   store,
   group,
-  demo = false,
   onViewStory,
   onClose,
 }: {
   store: Store;
   group: StoryGroup;
-  demo?: boolean;
   onViewStory: () => void;
   onClose: () => void;
 }) {
@@ -88,7 +86,7 @@ export function StoreStorySheet({
         </button>
         <a
           className="store-story-choice"
-          href={storePath(store.slug, demo)}
+          href={storePath(store.slug)}
           onClick={onClose}
         >
           <span className="store-story-choice-icon" aria-hidden="true">

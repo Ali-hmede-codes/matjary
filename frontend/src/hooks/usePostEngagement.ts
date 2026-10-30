@@ -10,10 +10,8 @@ type Engagement = Pick<Post['engagement'], 'likes' | 'viewerLiked'>;
  * and a like is never toggled twice while the first request is in flight.
  */
 export function usePostEngagement({
-  demo,
   onNotice,
 }: {
-  demo: boolean;
   onNotice: (message: string) => void;
 }) {
   const [likes, setLikes] = useState<Record<string, Engagement>>({});
@@ -57,10 +55,8 @@ export function usePostEngagement({
     };
     setLikes((current) => ({ ...current, [post.id]: optimistic }));
     try {
-      if (!demo) {
-        const result = await togglePostLike(post.id);
-        setLikes((current) => ({ ...current, [post.id]: result }));
-      }
+      const result = await togglePostLike(post.id);
+      setLikes((current) => ({ ...current, [post.id]: result }));
     } catch {
       setLikes((current) => ({ ...current, [post.id]: previous }));
       onNotice('Couldn’t update your like. Please try again.');
@@ -73,7 +69,7 @@ export function usePostEngagement({
   async function registerView(post: Post) {
     // Opening a post is the view. One request per post and visit keeps the
     // server's dedupe window from being hit by repeated viewer visits.
-    if (demo || viewed.current.has(post.id)) return;
+    if (viewed.current.has(post.id)) return;
     viewed.current.add(post.id);
     try {
       const result = await registerPostView(post.id);

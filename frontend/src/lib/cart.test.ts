@@ -6,12 +6,7 @@ import {
   cartApi,
   cartErrorMessage,
   checkoutUrl,
-  demoCartKey,
-  emptyCart,
   productCartLimit,
-  restoreDemoCart,
-  serializeDemoCart,
-  updateDemoCart,
 } from './cart.ts';
 
 const store: Store = {
@@ -33,198 +28,23 @@ const product: Product = {
   imageKeys: null,
   tags: null,
 };
+const emptyCart = {
+  id: 'cart-a',
+  storeId: store.id,
+  storeSlug: store.slug,
+  storeName: store.name,
+  currency: 'USD',
+  storeWhatsApp: null,
+  items: [],
+  subtotalCents: '0',
+  itemCount: 0,
+};
 
-test('cart adds, updates, and removes lines without mutating previous state', () => {
-  const empty = emptyCart(store);
-  const first = updateDemoCart(empty, product, 1);
-  const second = updateDemoCart(first, product, 3);
-  assert.equal(empty.itemCount, 0);
-  assert.equal(first.itemCount, 1);
-  assert.equal(second.items.length, 1);
-  assert.equal(second.itemCount, 3);
-  assert.equal(second.subtotalCents, '3750');
-  assert.equal(second.items[0]?.lineTotalCents, '3750');
-  const another = updateDemoCart(
-    second,
-    { ...product, id: 'product-b', priceCents: '501' },
-    2,
-  );
-  assert.equal(another.subtotalCents, '4752');
-  assert.equal(another.itemCount, 5);
-  const removed = updateDemoCart(second, product, 0);
-  assert.deepEqual(removed.items, []);
-  assert.equal(removed.itemCount, 0);
-  assert.equal(removed.subtotalCents, '0');
-});
-
-test('totals preserve integer cents beyond the safe number range', () => {
-  const cart = updateDemoCart(
-    emptyCart(store),
-    { ...product, priceCents: '9007199254740999' },
-    3,
-  );
-  assert.equal(cart.subtotalCents, '27021597764222997');
-});
-
-test('cart enforces whole quantities, stock limits, store isolation, and currency', () => {
+test('cart quantity limits honour stock, sell-out, and the global cap', () => {
   assert.equal(productCartLimit(), 99);
   assert.equal(productCartLimit({ ...product, stockQuantity: 0 }), 0);
   assert.equal(productCartLimit({ ...product, stockQuantity: 3 }), 3);
   assert.equal(productCartLimit({ ...product, stockQuantity: 200 }), 99);
-  for (const quantity of [-1, 1.5, NaN, Infinity, 100]) {
-    assert.throws(
-      () => updateDemoCart(emptyCart(store), product, quantity),
-      CartRequestError,
-    );
-  }
-  assert.throws(() =>
-    updateDemoCart(emptyCart(store), { ...product, stockQuantity: 1 }, 2),
-  );
-  assert.throws(() =>
-    updateDemoCart(emptyCart(store), { ...product, stockQuantity: 0 }, 1),
-  );
-  assert.throws(() =>
-    updateDemoCart(emptyCart(store), { ...product, storeId: 'other-shop' }, 1),
-  );
-  assert.throws(() =>
-    updateDemoCart(emptyCart(store), { ...product, currency: 'EUR' }, 1),
-  );
-  assert.throws(() =>
-    updateDemoCart(emptyCart(store), { ...product, priceCents: '-1' }, 1),
-  );
-});
-
-test('option combinations become separate cart lines and survive restore', () => {
-  const configurable: Product = {
-    ...product,
-    options: [
-      {
-        name: 'Size',
-        values: [
-          { label: 'S', priceCents: null },
-          // The value's own price replaces the product's base price.
-          { label: 'M', priceCents: '1500' },
-        ],
-      },
-      {
-        name: 'Color',
-        values: [
-          { label: 'Red', priceCents: null },
-          { label: 'Blue', priceCents: null },
-        ],
-      },
-    ],
-  };
-  const redSmall = [
-    { name: 'Size', value: 'S', priceCents: null },
-    { name: 'Color', value: 'Red', priceCents: null },
-  ];
-  const blueMedium = [
-    { name: 'Size', value: 'M', priceCents: '1500' },
-    { name: 'Color', value: 'Blue', priceCents: null },
-  ];
-  let cart = updateDemoCart(emptyCart(store), configurable, 1, redSmall);
-  cart = updateDemoCart(cart, configurable, 2, blueMedium);
-  assert.equal(cart.items.length, 2);
-  assert.equal(cart.itemCount, 3);
-  assert.equal(cart.subtotalCents, '4250');
-  assert.equal(cart.items[0]?.unitPriceCents, '1250');
-  assert.equal(cart.items[1]?.unitPriceCents, '1500');
-  assert.deepEqual(cart.items[0]?.selectedOptions, redSmall);
-  assert.deepEqual(cart.items[1]?.selectedOptions, blueMedium);
-
-  const raw = serializeDemoCart(cart);
-  assert.deepEqual(JSON.parse(raw), [
-    {
-      productId: product.id,
-      quantity: 1,
-      selectedOptions: [
-        { name: 'Size', value: 'S' },
-        { name: 'Color', value: 'Red' },
-      ],
-    },
-    {
-      productId: product.id,
-      quantity: 2,
-      selectedOptions: [
-        { name: 'Size', value: 'M' },
-        { name: 'Color', value: 'Blue' },
-      ],
-    },
-  ]);
-  assert.deepEqual(restoreDemoCart(store, [configurable], raw), cart);
-
-  const removed = updateDemoCart(cart, configurable, 0, redSmall);
-  assert.equal(removed.items.length, 1);
-  assert.equal(removed.itemCount, 2);
-  assert.deepEqual(removed.items[0]?.selectedOptions, blueMedium);
-});
-
-test('products with options reject an incomplete or stale choice', () => {
-  const configurable: Product = {
-    ...product,
-    options: [
-      {
-        name: 'Size',
-        values: [
-          { label: 'S', priceCents: null },
-          { label: 'M', priceCents: null },
-        ],
-      },
-    ],
-  };
-  assert.throws(
-    () => updateDemoCart(emptyCart(store), configurable, 1),
-    CartRequestError,
-  );
-  assert.throws(
-    () =>
-      updateDemoCart(emptyCart(store), configurable, 1, [
-        { name: 'Size', value: 'XL', priceCents: null },
-      ]),
-    CartRequestError,
-  );
-});
-
-test('preview carts persist only quantities and product IDs in separate shop keys', () => {
-  const cart = updateDemoCart(emptyCart(store), product, 2);
-  const raw = serializeDemoCart(cart);
-  assert.deepEqual(JSON.parse(raw), [{ productId: product.id, quantity: 2 }]);
-  assert.deepEqual(restoreDemoCart(store, [product], raw), cart);
-  const other = { ...store, id: 'store-b', slug: 'shop-b' };
-  assert.notEqual(demoCartKey(store.slug), demoCartKey(other.slug));
-  assert.equal(restoreDemoCart(other, [product], raw).itemCount, 0);
-  assert.equal(restoreDemoCart(store, [], raw).itemCount, 0);
-});
-
-test('preview restore rejects malformed entries and uses current prices and stock', () => {
-  for (const raw of [null, '', '{', '{}', 'null', '[null, 1, "x", {}]']) {
-    assert.equal(restoreDemoCart(store, [product], raw).itemCount, 0);
-  }
-  const raw = JSON.stringify([
-    { productId: product.id, quantity: 0 },
-    { productId: product.id, quantity: '2' },
-    { productId: product.id, quantity: -2 },
-    { productId: product.id, quantity: 1.5 },
-    { productId: 'other', quantity: 3 },
-    {
-      productId: product.id,
-      quantity: 90,
-      unitPriceCents: '1',
-      lineTotalCents: '1',
-    },
-  ]);
-  const restored = restoreDemoCart(
-    store,
-    [{ ...product, stockQuantity: 2 }],
-    raw,
-  );
-  assert.equal(restored.itemCount, 2);
-  assert.equal(restored.subtotalCents, '2500');
-  assert.equal(
-    restoreDemoCart(store, [{ ...product, stockQuantity: 0 }], raw).itemCount,
-    0,
-  );
 });
 
 test('checkout links are restricted to WhatsApp and preserve the order message', () => {
@@ -255,7 +75,7 @@ test('live cart requests use cookie identity, encoded shop paths, and API DTOs',
     'fetch',
     async (url: string, options: RequestInit) => {
       requests.push({ url, options });
-      return new Response(JSON.stringify(emptyCart(store)), { status: 200 });
+      return new Response(JSON.stringify(emptyCart), { status: 200 });
     },
   );
   await cartApi.get('shop /a');
