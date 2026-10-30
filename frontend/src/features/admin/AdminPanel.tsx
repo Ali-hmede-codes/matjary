@@ -1142,6 +1142,19 @@ function Detail({
                   <dt>Expires</dt>
                   <dd>{dateLabel(data.expiresAt)}</dd>
                 </div>
+                {data.owner?.phone && (
+                  <div>
+                    <dt>Phone</dt>
+                    <dd>
+                      <a
+                        href={`tel:${data.owner.phone}`}
+                        className="notranslate"
+                      >
+                        {data.owner.phone}
+                      </a>
+                    </dd>
+                  </div>
+                )}
               </>
             )}
           </dl>
