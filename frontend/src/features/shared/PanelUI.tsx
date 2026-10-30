@@ -49,6 +49,7 @@ export function PanelShell({
         ['/subscriptions', 'Subscriptions'],
         ['/subscriptions/plans', 'Plans'],
         ['/verification', 'Verification'],
+        ['/settings', 'Website settings'],
       ]
     : member
       ? [

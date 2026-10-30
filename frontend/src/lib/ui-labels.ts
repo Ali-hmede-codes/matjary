@@ -46,6 +46,7 @@ export const ARABIC_UI_LABELS: Record<string, string> = {
   Subscriptions: 'الاشتراكات',
   Plans: 'الخطط',
   Verification: 'التحقق',
+  'Website settings': 'إعدادات الموقع',
   'My shops': 'متاجري',
   'My stores': 'متاجري',
   'Products / menu': 'المنتجات / القائمة',
