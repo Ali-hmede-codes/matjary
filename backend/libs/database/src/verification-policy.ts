@@ -128,12 +128,21 @@ export interface VerificationPricing {
 // slot renews that same slot; any other shop needs a free slot, otherwise it is
 // an add-on with its own monthly price. Add-on badges never consume a bundled
 // slot, so a paid badge on one shop cannot push another shop onto the add-on.
+//
+// The platform-wide price (verification_settings) is the fallback for plans that
+// do not set their own add-on price, so an owner whose plan bundles no badge can
+// still buy one. Callers pass it only while the owner has an active subscription,
+// because a lapsed plan fails every quota closed.
 export function verificationPricing(
   limits: Pick<
     SubscriptionLimits,
     'maxVerificationBadges' | 'verificationBadgePriceCents'
   >,
-  input: { includedBadge: boolean; activeIncludedBadges: number },
+  input: {
+    includedBadge: boolean;
+    activeIncludedBadges: number;
+    fallbackPriceCents?: number;
+  },
 ): VerificationPricing {
   const maxBadges =
     limits.maxVerificationBadges === undefined
@@ -143,8 +152,11 @@ export function verificationPricing(
     maxBadges === null ||
     (maxBadges > 0 &&
       (input.includedBadge || input.activeIncludedBadges < maxBadges));
+  const planPrice = Math.max(0, limits.verificationBadgePriceCents ?? 0);
   const priceCents = included
     ? 0
-    : Math.max(0, limits.verificationBadgePriceCents ?? 0);
+    : planPrice > 0
+      ? planPrice
+      : Math.max(0, input.fallbackPriceCents ?? 0);
   return { included, priceCents, available: included || priceCents > 0 };
 }

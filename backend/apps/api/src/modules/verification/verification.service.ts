@@ -14,6 +14,7 @@ import {
   StoreVerificationRequest,
   User,
   VerificationRequestStatus,
+  VerificationSettings,
   appendAdminAudit,
   effectiveLimits,
   effectiveSubscription,
@@ -22,6 +23,7 @@ import {
   ownerWhere,
   requireAdmin,
   verificationBadgeInfo,
+  verificationBadgeVisible,
   verificationPricing,
   VERIFICATION_GRACE_DAYS,
   VERIFICATION_PERIOD_DAYS,
@@ -33,6 +35,7 @@ import type {
   AdminVerificationListDto,
   AdminVerificationStoresDto,
   SubmitVerificationDto,
+  UpdateVerificationSettingsDto,
 } from './dto/verification.dto';
 
 const DAY_MS = 86_400_000;
@@ -62,7 +65,8 @@ export class VerificationService {
 
   /**
    * Everything the shop's Verification tab renders: the current badge state,
-   * what the plan includes, the monthly add-on price, and the latest request.
+   * what the plan includes, the monthly add-on price, the platform's payment
+   * number, and the latest request.
    */
   async status(storeId: string, userId: string) {
     try {
@@ -73,21 +77,28 @@ export class VerificationService {
       });
       if (!store) throw new NotFoundException('Store not found');
       this.assertOwner(store, userId);
-      const [limits, subscription, includedBadges, pending, latest] =
-        await Promise.all([
-          effectiveLimits(manager, store.ownerId),
-          effectiveSubscription(manager, store.ownerId),
-          this.includedBadgeCount(manager, store.ownerId),
-          this.latestRequest(
-            manager,
-            storeId,
-            VerificationRequestStatus.PENDING,
-          ),
-          this.latestRequest(manager, storeId),
-        ]);
+      const [
+        limits,
+        subscription,
+        includedBadges,
+        includedShops,
+        platform,
+        pending,
+        latest,
+      ] = await Promise.all([
+        effectiveLimits(manager, store.ownerId),
+        effectiveSubscription(manager, store.ownerId),
+        this.includedBadgeCount(manager, store.ownerId),
+        this.includedBadgeShops(manager, store.ownerId),
+        this.platformSettings(manager),
+        this.latestRequest(manager, storeId, VerificationRequestStatus.PENDING),
+        this.latestRequest(manager, storeId),
+      ]);
       const pricing = verificationPricing(limits, {
-        includedBadge: store.verificationIncludedInPlan,
+        includedBadge: this.usesBundledSlot(store),
         activeIncludedBadges: includedBadges,
+        // A lapsed subscription fails every quota closed, including this one.
+        fallbackPriceCents: subscription ? platform.priceCents : 0,
       });
       return {
         store: {
@@ -107,6 +118,13 @@ export class VerificationService {
           activeBadges: includedBadges,
           // Bundled badges end here; the tab explains the link to the plan.
           endsAt: subscription?.expiresAt ?? null,
+          // Which shops already hold the owner's bundled slots. The tab names
+          // them so an owner adding a second shop understands the price.
+          includedShops: includedShops.map((shop) => ({
+            id: shop.id,
+            name: shop.name,
+            slug: shop.slug,
+          })),
         },
         eligibility: {
           available: pricing.available,
@@ -115,8 +133,12 @@ export class VerificationService {
           currency: 'USD',
           reason: pricing.available
             ? null
-            : 'Your plan does not include another verification badge and has no monthly badge price set.',
+            : subscription
+              ? 'The platform has not set a monthly badge price yet. Contact an administrator.'
+              : 'Choose an active plan before adding verification to this shop.',
         },
+        // Owners call or message this number to pay for an add-on badge month.
+        payment: { contactPhone: platform.contactPhone },
         pendingRequest: pending ? this.requestView(pending) : null,
         latestRequest: latest ? this.requestView(latest) : null,
       };
@@ -155,13 +177,17 @@ export class VerificationService {
             code: UNLIMITED_CODE,
             message: 'This shop already has unlimited verification.',
           });
-        const [limits, includedBadges] = await Promise.all([
-          effectiveLimits(manager, store.ownerId),
-          this.includedBadgeCount(manager, store.ownerId),
-        ]);
+        const [limits, includedBadges, subscription, platform] =
+          await Promise.all([
+            effectiveLimits(manager, store.ownerId),
+            this.includedBadgeCount(manager, store.ownerId),
+            effectiveSubscription(manager, store.ownerId),
+            this.platformSettings(manager),
+          ]);
         const pricing = verificationPricing(limits, {
-          includedBadge: store.verificationIncludedInPlan,
+          includedBadge: this.usesBundledSlot(store),
           activeIncludedBadges: includedBadges,
+          fallbackPriceCents: subscription ? platform.priceCents : 0,
         });
         if (!pricing.available)
           throw new ForbiddenException({
@@ -224,6 +250,70 @@ export class VerificationService {
   // ============================================
   // ADMIN
   // ============================================
+
+  /**
+   * Platform badge economics. The price is the fallback for plans without a
+   * bundled slot or their own add-on price; the phone is where owners pay.
+   */
+  async adminGetSettings(actor: AdminActor) {
+    try {
+      const manager = this.database.manager;
+      await this.requireAdmin(manager, actor);
+      const settings = await this.platformSettings(manager);
+      return this.settingsView(settings);
+    } catch (error) {
+      this.sanitize(error);
+    }
+  }
+
+  async adminUpdateSettings(
+    actor: AdminActor,
+    dto: UpdateVerificationSettingsDto,
+  ) {
+    try {
+      return await this.database.transaction(async (manager) => {
+        await this.requireAdmin(manager, actor);
+        let settings = await manager.findOne(VerificationSettings, {
+          where: { id: 1 },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!settings)
+          settings = manager.create(VerificationSettings, { id: 1 });
+        const changed: string[] = [];
+        if (
+          dto.badgePriceCents !== undefined &&
+          dto.badgePriceCents !== settings.badgePriceCents
+        ) {
+          settings.badgePriceCents = dto.badgePriceCents;
+          changed.push('badgePriceCents');
+        }
+        if (
+          dto.contactPhone !== undefined &&
+          dto.contactPhone !== settings.contactPhone
+        ) {
+          settings.contactPhone = dto.contactPhone;
+          changed.push('contactPhone');
+        }
+        if (changed.length) {
+          await manager.save(settings);
+          await appendAdminAudit(
+            manager,
+            actor,
+            'verification-settings',
+            '1',
+            'update',
+            changed,
+          );
+        }
+        return this.settingsView({
+          priceCents: Math.max(0, settings.badgePriceCents),
+          contactPhone: settings.contactPhone,
+        });
+      });
+    } catch (error) {
+      this.sanitize(error);
+    }
+  }
 
   async adminListRequests(actor: AdminActor, query: AdminVerificationListDto) {
     try {
@@ -361,7 +451,7 @@ export class VerificationService {
                 'The owner has no active subscription. Assign a plan or reject this request.',
             });
           const pricing = verificationPricing(limits, {
-            includedBadge: store.verificationIncludedInPlan,
+            includedBadge: this.usesBundledSlot(store),
             activeIncludedBadges: includedBadges,
           });
           if (!pricing.included)
@@ -645,6 +735,15 @@ export class VerificationService {
       );
   }
 
+  /**
+   * A bundled badge holds its plan slot only while it is still visible. Once
+   * the paid month and its grace window end, another shop may take the slot,
+   * so the lapsed shop has to compete for a free one (or pay the add-on).
+   */
+  private usesBundledSlot(store: Store): boolean {
+    return store.verificationIncludedInPlan && verificationBadgeVisible(store);
+  }
+
   private async requireAdmin(
     manager: EntityManager,
     actor: AdminActor,
@@ -663,6 +762,61 @@ export class VerificationService {
         'A reason between 3 and 500 characters is required',
       );
     return { ...actor, reason: trimmed };
+  }
+
+  /**
+   * The platform-wide price and payment number. A missing row means the paid
+   * add-on is off: owners still see the plan economics, with price zero.
+   */
+  private async platformSettings(
+    manager: EntityManager,
+  ): Promise<{ priceCents: number; contactPhone: string | null }> {
+    const settings = await manager
+      .getRepository(VerificationSettings)
+      .findOneBy({ id: 1 });
+    return {
+      priceCents: Math.max(0, settings?.badgePriceCents ?? 0),
+      contactPhone: settings?.contactPhone ?? null,
+    };
+  }
+
+  private settingsView(input: {
+    priceCents: number;
+    contactPhone: string | null;
+  }) {
+    return {
+      badgePriceCents: String(input.priceCents),
+      currency: 'USD',
+      contactPhone: input.contactPhone,
+    };
+  }
+
+  /**
+   * The owner's shops that still occupy a bundled slot: the paid period and
+   * its grace window. The verification tab names them so an owner knows which
+   * shop already used the included badge before paying for another one.
+   */
+  private includedBadgeShops(
+    manager: EntityManager,
+    ownerId: string,
+    now = new Date(),
+  ): Promise<Store[]> {
+    const graceBorder = new Date(
+      now.getTime() - VERIFICATION_GRACE_DAYS * DAY_MS,
+    );
+    return manager
+      .getRepository(Store)
+      .createQueryBuilder('store')
+      .select(['store.id', 'store.name', 'store.slug'])
+      .where('store.ownerId = :ownerId', { ownerId })
+      .andWhere('store.hasVerificationBadge = true')
+      .andWhere('store.verificationIncludedInPlan = true')
+      .andWhere(
+        '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
+        { graceBorder },
+      )
+      .orderBy('store.name', 'ASC')
+      .getMany();
   }
 
   private async latestRequest(

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import {
   VERIFICATION_GRACE_DAYS,
   VERIFICATION_PERIOD_DAYS,
@@ -12,8 +14,10 @@ import {
   verificationPricing,
 } from '../../libs/database/src/verification-policy';
 import { Store } from '../../libs/database/src/entities';
+import { VerificationSettings } from '../../libs/database/src/verification-settings.entity';
 import { normalizeLebanesePhone } from '../../apps/api/src/modules/verification/verification-phone';
 import { VerificationService } from '../../apps/api/src/modules/verification/verification.service';
+import { UpdateVerificationSettingsDto } from '../../apps/api/src/modules/verification/dto/verification.dto';
 
 const now = new Date('2026-10-29T12:00:00Z');
 const day = 86_400_000;
@@ -178,6 +182,44 @@ test('pricing bundles a badge slot or sells the monthly add-on', () => {
     verificationPricing({}, { includedBadge: false, activeIncludedBadges: 0 }),
     { included: false, priceCents: 0, available: false },
   );
+  // The platform-wide price fills in when the plan sets no add-on price, so an
+  // owner whose bundled slots are used can still buy a badge for this shop.
+  assert.deepEqual(
+    verificationPricing(
+      { maxVerificationBadges: 1, verificationBadgePriceCents: null },
+      {
+        includedBadge: false,
+        activeIncludedBadges: 1,
+        fallbackPriceCents: 500,
+      },
+    ),
+    { included: false, priceCents: 500, available: true },
+  );
+  // A plan that sets its own price keeps it instead of the platform fallback.
+  assert.deepEqual(
+    verificationPricing(
+      { maxVerificationBadges: 0, verificationBadgePriceCents: 700 },
+      {
+        includedBadge: false,
+        activeIncludedBadges: 0,
+        fallbackPriceCents: 500,
+      },
+    ),
+    { included: false, priceCents: 700, available: true },
+  );
+  // A free bundled slot never becomes a paid add-on just because the platform
+  // sells badges to plans without one.
+  assert.deepEqual(
+    verificationPricing(
+      { maxVerificationBadges: 1, verificationBadgePriceCents: null },
+      {
+        includedBadge: false,
+        activeIncludedBadges: 0,
+        fallbackPriceCents: 500,
+      },
+    ),
+    { included: true, priceCents: 0, available: true },
+  );
 });
 
 test('a bundled badge ends with the subscription that pays for it', () => {
@@ -231,6 +273,89 @@ test('a bundled badge ends with the subscription that pays for it', () => {
     ),
     null,
   );
+});
+
+test('platform badge settings accept a price and a callable number only', () => {
+  const validate = (input: object) =>
+    validateSync(plainToInstance(UpdateVerificationSettingsDto, input), {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+  assert.equal(validate({ badgePriceCents: 500 }).length, 0);
+  assert.equal(validate({ contactPhone: ' +961 3 123 456 ' }).length, 0);
+  assert.equal(validate({ contactPhone: null }).length, 0);
+  assert.equal(
+    plainToInstance(UpdateVerificationSettingsDto, { contactPhone: '   ' })
+      .contactPhone,
+    null,
+  );
+  for (const value of [-1, 1.5, '500', null])
+    assert.ok(validate({ badgePriceCents: value }).length, String(value));
+  for (const value of ['call-me', '+961 3 123 456 ext 9', 11])
+    assert.ok(validate({ contactPhone: value }).length, String(value));
+});
+
+test('an administrator controls the platform badge price and payment number', async () => {
+  const row = Object.assign(new VerificationSettings(), {
+    id: 1,
+    badgePriceCents: 0,
+    contactPhone: null,
+  });
+  const audits: { action?: string; changedFields?: string[] }[] = [];
+  const manager = {
+    findOneBy: async (target: unknown) =>
+      target === Store
+        ? null
+        : { id: 'admin', email: 'admin@example.test', suspendedAt: null },
+    findOne: async (target: unknown, options: unknown) => {
+      assert.equal(target, VerificationSettings);
+      assert.deepEqual(Reflect.get(options as object, 'where'), { id: 1 });
+      return row;
+    },
+    getRepository: (target: unknown) => {
+      assert.equal(target, VerificationSettings);
+      return { findOneBy: async () => row };
+    },
+    save: async (value: unknown) => value,
+    insert: async (
+      _target: unknown,
+      value: { action?: string; changedFields?: string[] },
+    ) => {
+      audits.push(value);
+    },
+  };
+  const service = new VerificationService(
+    {
+      manager,
+      transaction: async (work: (value: unknown) => Promise<unknown>) =>
+        work(manager),
+    } as never,
+    { get: () => 'admin@example.test' } as never,
+  );
+  const actor = { id: 'admin', requestId: 'request' };
+  assert.deepEqual(await service.adminGetSettings(actor), {
+    badgePriceCents: '0',
+    currency: 'USD',
+    contactPhone: null,
+  });
+  assert.deepEqual(
+    await service.adminUpdateSettings(actor, {
+      badgePriceCents: 500,
+      contactPhone: '+961 3 123 456',
+    }),
+    {
+      badgePriceCents: '500',
+      currency: 'USD',
+      contactPhone: '+961 3 123 456',
+    },
+  );
+  assert.equal(row.badgePriceCents, 500);
+  assert.equal(row.contactPhone, '+961 3 123 456');
+  assert.equal(audits.at(-1)?.action, 'update');
+  assert.deepEqual(audits.at(-1)?.changedFields, [
+    'badgePriceCents',
+    'contactPhone',
+  ]);
 });
 
 test('an administrator can give a special shop unlimited verification', async () => {

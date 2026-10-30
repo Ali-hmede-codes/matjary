@@ -53,6 +53,7 @@ import {
   verificationBadgeVisible,
   StoreVerificationRequest,
   VerificationRequestStatus,
+  VerificationSettings,
   VERIFICATION_GRACE_DAYS,
   VERIFICATION_PERIOD_DAYS,
   requireAdmin,
@@ -1416,7 +1417,13 @@ export class StoresService {
     if (!store || !actor) throw new NotFoundException('Store not found');
     if (store.ownerId !== actorId && !this.admin.isAdmin(actor))
       throw new ForbiddenException('You do not own this store');
-    const limits = await effectiveLimits(this.stores.manager, store.ownerId);
+    const [limits, subscription, settings] = await Promise.all([
+      effectiveLimits(this.stores.manager, store.ownerId),
+      effectiveSubscription(this.stores.manager, store.ownerId),
+      this.stores.manager
+        .getRepository(VerificationSettings)
+        .findOneBy({ id: 1 }),
+    ]);
     const currentBadges = await this.activeBadgeCount(
       this.stores.manager,
       store.ownerId,
@@ -1426,8 +1433,16 @@ export class StoresService {
         ? 0
         : limits.maxVerificationBadges;
     const pricing = verificationPricing(limits, {
-      includedBadge: store.verificationIncludedInPlan,
+      // A lapsed bundled badge no longer holds its slot; another shop may have
+      // taken it, so this shop competes for a free one or pays the add-on.
+      includedBadge:
+        store.verificationIncludedInPlan && verificationBadgeVisible(store),
       activeIncludedBadges: currentBadges,
+      // The platform-wide price fills in for plans that set none. A lapsed
+      // subscription still fails every quota closed.
+      fallbackPriceCents: subscription
+        ? Math.max(0, settings?.badgePriceCents ?? 0)
+        : 0,
     });
     return {
       eligible: pricing.available,

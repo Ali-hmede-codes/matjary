@@ -31,6 +31,8 @@ import {
   panelError,
   recordName,
   dateLabel,
+  decimalPrice,
+  priceInput,
   type Page,
   type PanelRecord,
   type Session,
@@ -750,6 +752,7 @@ function AdminVerification({ id }: { id: string }) {
         title="Verification"
         description="Review identity details, approve a month, and keep trusted shops ticking. Each approval covers 30 days; a lapsed badge stays visible for 5 grace days. Special shops can be verified with no end date."
       />
+      <VerificationPlatformSettings id={id} />
       <div className="panel-stats">
         <div className="panel-stat">
           <span>
@@ -816,7 +819,7 @@ function AdminVerification({ id }: { id: string }) {
                       title: `Approve verification for ${request.store?.name ?? 'this shop'}`,
                       description: request.includedInPlan
                         ? `Included in the owner's plan, so the badge ends when the subscription ends. Call ${request.applicantName} on ${request.phone} to confirm.`
-                        : `One month starts on approval. Call ${request.applicantName} on ${request.phone}. ${priceText(request)}.`,
+                        : `One month starts on approval. Confirm the ${priceText(request)} payment with ${request.applicantName} on ${request.phone}, then approve.`,
                       reasons: [
                         'Payment received',
                         'Identity and business confirmed',
@@ -984,6 +987,151 @@ function AdminVerification({ id }: { id: string }) {
         />
       )}
     </>
+  );
+}
+
+interface VerificationPlatformSettings {
+  badgePriceCents: string;
+  currency: string;
+  contactPhone: string | null;
+}
+
+// Platform badge economics: the monthly price owners pay when their plan bundles
+// no free badge (or its slots are used), and the number they call to pay it.
+// A plan that sets its own badge price keeps it; this is the fallback.
+function VerificationPlatformSettings({ id }: { id: string }) {
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ['panel', id, 'verification-settings'],
+    queryFn: ({ signal }) =>
+      getJson<VerificationPlatformSettings>(
+        'admin/verification/settings',
+        signal,
+      ),
+  });
+  const [price, setPrice] = useState('');
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!query.data) return;
+    setPrice(decimalPrice(query.data.badgePriceCents));
+    setPhone(query.data.contactPhone ?? '');
+  }, [query.data]);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy || !query.data) return;
+    // An empty price turns the paid add-on off platform-wide.
+    const cents = price.trim() ? priceInput(price.trim()) : 0;
+    if (cents === null) {
+      setError(
+        'Enter a monthly price such as 5.00, or leave the field empty to stop selling badges.',
+      );
+      setNotice('');
+      return;
+    }
+    const contactPhone = phone.trim() || null;
+    if (contactPhone && !/^\+?[0-9][0-9 ()-]{6,18}$/u.test(contactPhone)) {
+      setError('Enter a callable number such as +961 3 123 456.');
+      setNotice('');
+      return;
+    }
+    if (
+      cents === Number(query.data.badgePriceCents) &&
+      contactPhone === (query.data.contactPhone ?? null)
+    ) {
+      setError('');
+      setNotice('No changes to save.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const saved = await mutate<VerificationPlatformSettings>(
+        'admin/verification/settings',
+        { badgePriceCents: cents, contactPhone },
+        'PATCH',
+      );
+      client.setQueryData(['panel', id, 'verification-settings'], saved);
+      // Owner Verification tabs read the new price and number on their next
+      // load; the admin queue itself only shows already-snapshotted prices.
+      setNotice(
+        saved.badgePriceCents === '0'
+          ? 'Saved. Paid badges are off; plans without a bundled badge cannot apply.'
+          : `Saved. Owners pay ${formatProductPrice(saved.badgePriceCents, saved.currency)} per month for a badge outside their plan.`,
+      );
+    } catch (reason) {
+      setError(panelError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel-card" id="badge-price">
+      <h2>Badge price and payment number</h2>
+      <p className="panel-muted">
+        Owners with a free badge slot included in their plan never pay. This
+        monthly price applies to every other shop — the plan bundles no badge,
+        or its free badge is already used by another shop. Owners contact you on
+        this number, pay, and then you approve their month. A plan that sets its
+        own badge price keeps it instead of this one.
+      </p>
+      {query.isPending ? (
+        <Loading />
+      ) : query.isError ? (
+        <Retry error={query.error} retry={() => void query.refetch()} />
+      ) : (
+        <form className="panel-form" onSubmit={(event) => void submit(event)}>
+          <div className="panel-two-fields">
+            <label>
+              Monthly price (USD)
+              <input
+                inputMode="decimal"
+                value={price}
+                placeholder="0.00"
+                disabled={busy}
+                onChange={(event) => {
+                  setPrice(event.target.value);
+                  setNotice('');
+                }}
+              />
+              <small>
+                Leave empty or 0 to stop selling badges outside plans. Owners
+                see this as the per-month price on their Verification tab.
+              </small>
+            </label>
+            <label>
+              Payment phone
+              <input
+                type="tel"
+                inputMode="tel"
+                maxLength={20}
+                value={phone}
+                placeholder="+961 3 123 456"
+                disabled={busy}
+                onChange={(event) => {
+                  setPhone(event.target.value);
+                  setNotice('');
+                }}
+              />
+              <small>
+                Shown only on owner Verification tabs so they can call or
+                message to arrange payment. Leave empty to hide it.
+              </small>
+            </label>
+          </div>
+          {error && <Notice error>{error}</Notice>}
+          {notice && <Notice>{notice}</Notice>}
+          <div className="panel-actions">
+            <button className="panel-primary" disabled={busy}>
+              {busy ? 'Saving…' : 'Save badge settings'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 function Detail({

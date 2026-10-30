@@ -10,11 +10,14 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { VerificationRequestStatus } from '@app/database';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
+const trimmedOrNull = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() || null : value;
 
 export class SubmitVerificationDto {
   // The legal or trading name shown to shoppers once the badge is granted.
@@ -79,4 +82,26 @@ export class VerificationReasonDto {
   @IsString()
   @Length(3, 500)
   reason!: string;
+}
+
+// Platform-wide badge economics. Only a global administrator may change these:
+// the price is the fallback for plans that bundle no badge slot, and the phone
+// is where owners call or message to pay for a month.
+export class UpdateVerificationSettingsDto {
+  // Monthly price in US cents. Zero turns the paid add-on off platform-wide.
+  // ValidateIf keeps null invalid: a cleared price must be an explicit zero,
+  // never a NULL write against the NOT NULL column.
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000)
+  badgePriceCents?: number;
+
+  // Any callable number (for example +961 3 123 456). Null clears it.
+  @Transform(trimmedOrNull)
+  @IsOptional()
+  @IsString()
+  @Length(7, 20)
+  @Matches(/^\+?[0-9][0-9 ()-]*$/u)
+  contactPhone?: string | null;
 }

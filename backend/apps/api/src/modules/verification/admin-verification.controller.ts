@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -19,6 +20,7 @@ import { VerificationService } from './verification.service';
 import {
   AdminVerificationListDto,
   AdminVerificationStoresDto,
+  UpdateVerificationSettingsDto,
   VerificationReasonDto,
 } from './dto/verification.dto';
 
@@ -35,6 +37,21 @@ export class AdminVerificationController {
     @Actor() actor: AdminActor,
   ) {
     return this.verification.adminListRequests(actor, query);
+  }
+
+  // The platform-wide badge price and payment number: the fallback for owners
+  // whose plans bundle no free slot.
+  @Get('settings')
+  settings(@Actor() actor: AdminActor) {
+    return this.verification.adminGetSettings(actor);
+  }
+
+  @Patch('settings')
+  updateSettings(
+    @Body() dto: UpdateVerificationSettingsDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.verification.adminUpdateSettings(actor, dto);
   }
 
   @Get('stores')

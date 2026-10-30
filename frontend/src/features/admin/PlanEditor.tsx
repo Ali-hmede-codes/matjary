@@ -597,8 +597,8 @@ export function PlanEditor({
             />
             <small>
               Monthly price for a badge beyond the included ones. Extra shops
-              renew month by month. Empty or 0 means owners cannot buy an extra
-              badge.
+              renew month by month. Empty or 0 uses the platform badge price set
+              on the Verification page.
             </small>
           </label>
         </details>

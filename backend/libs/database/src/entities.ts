@@ -14,6 +14,7 @@ import {
 
 import { AdminAuditLog, SystemErrorRecord } from './admin.entities';
 import { WebsiteSettings } from './website-settings.entity';
+import { VerificationSettings } from './verification-settings.entity';
 
 import {
   StoreSeo,
@@ -133,7 +134,9 @@ export interface SubscriptionLimits {
 
   // Verification Badge limits
   maxVerificationBadges?: number | null; // null = unlimited, 0 = no badges allowed
-  verificationBadgePriceCents?: number | null; // price per badge in cents (0 or null = free)
+  // Monthly add-on price for a badge beyond the bundled slots. Zero or null
+  // falls back to the platform-wide price in verification_settings.
+  verificationBadgePriceCents?: number | null;
 }
 
 // One owner-chosen layout override for a single menu section. Layout keys are
@@ -2148,6 +2151,7 @@ export const databaseEntities = [
   StoreInvitation,
   AdminStoreAssignment,
   StoreVerificationRequest,
+  VerificationSettings,
   StoreCategory,
   Product,
   Cart,
