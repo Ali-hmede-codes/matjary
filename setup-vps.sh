@@ -279,6 +279,13 @@ location ^~ /post/ {
     try_files \$uri \$uri/ /index.html;
 }
 
+# Site shells live in the existing writable share mount; only internal
+# requests may read these implementation paths.
+location ^~ /stores/.site/ {
+    internal;
+    expires -1;
+}
+
 # The home link is the one most often shared. Answering it from the API keeps
 # the website name, tagline, and sharing image current without a redeploy.
 location = / {
@@ -287,7 +294,7 @@ location = / {
         return 418;
     }
     expires -1;
-    try_files \$uri \$uri/ /index.html;
+    try_files /stores/.site/home/index.html /index.html;
 }
 
 location @matjary_share {
@@ -299,6 +306,16 @@ location @matjary_share {
     proxy_set_header Connection "";
     proxy_connect_timeout 10s;
     proxy_read_timeout 30s;
+}
+
+# Public informational pages also need live metadata on shared links.
+location ~ ^/(?<matjary_page>shops|pricing|terms|privacy|favorites)/?\$ {
+    error_page 418 = @matjary_share;
+    if (\$http_user_agent ~* "(facebookexternalhit|facebookbot|meta-externalagent|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|Discordbot|Pinterest|vkShare|SkypeUriPreview|Iframely|Embedly|redditbot|Mastodon|Misskey)") {
+        return 418;
+    }
+    expires -1;
+    try_files /stores/.site/\$matjary_page/index.html /index.html;
 }
 
 location / {

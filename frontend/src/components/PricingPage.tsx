@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { usePageSeo } from '../hooks/usePageSeo';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -198,15 +198,12 @@ export function PricingPage() {
     ? (paidPlans[Math.floor((paidPlans.length - 1) / 2)]?.slug ?? null)
     : null;
 
-  useEffect(() => {
-    document.title = `Plans & pricing — ${settings.siteName}`;
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute(
-        'content',
-        `Explore ${settings.siteName} plans. Compare prices, post limits, product allowances, and features for your business.`,
-      );
-  }, [settings]);
+  usePageSeo({
+    title: `Plans & pricing — ${settings.siteName}`,
+    description: `Explore ${settings.siteName} plans. Compare prices, post limits, product allowances, and features for your business.`,
+    siteName: settings.siteName,
+    canonical: '/pricing',
+  });
 
   return (
     <div className="app pricing-page" style={theme}>

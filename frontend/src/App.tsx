@@ -13,6 +13,7 @@ import { useDiscoveryFeed } from './hooks/useDiscoveryFeed';
 import { useSeenStories, useStoryGroups } from './hooks/useStories';
 import { StoryViewer } from './components/stories/StoryViewer';
 import { usePageSeo } from './hooks/usePageSeo';
+import { useWebsiteSettings } from './hooks/useWebsiteSettings';
 import { assetUrl } from './lib/api';
 import { brandingUrl } from './lib/website';
 
@@ -93,10 +94,34 @@ function TranslateSync() {
   return null;
 }
 
+function PanelPageSeo() {
+  const { pathname } = useLocation();
+  const { settings } = useWebsiteSettings(false);
+  const label =
+    pathname === '/login'
+      ? 'Sign in'
+      : pathname.startsWith('/admin')
+        ? 'Administration'
+        : pathname.startsWith('/dashboard')
+          ? 'Dashboard'
+          : null;
+  usePageSeo(
+    label
+      ? {
+          title: `${label} — ${settings.siteName}`,
+          siteName: settings.siteName,
+          robots: 'noindex, nofollow',
+        }
+      : null,
+  );
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <TranslateSync />
+      <PanelPageSeo />
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<DiscoveryPage />} />

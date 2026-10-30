@@ -147,6 +147,26 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
     // (a renamed slug, an unpublished post) and must stop answering.
     const keep = new Set<string>();
     let pages = 0;
+    // Keep the public site pages current too. They share the writable mount,
+    // in an internal namespace that can never collide with a shop slug.
+    for (const route of [
+      '',
+      'shops',
+      'pricing',
+      'terms',
+      'privacy',
+      'favorites',
+    ]) {
+      pages += Number(
+        await this.writePage(
+          [route || 'home'],
+          await this.seo.getPageMeta(`/${route}`),
+          template,
+          keep,
+          true,
+        ),
+      );
+    }
     for (const store of stores) {
       pages += Number(
         await this.writePage(
@@ -235,10 +255,15 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
     meta: MetaTags,
     template: string,
     keep: Set<string>,
+    sitePage = false,
   ): Promise<boolean> {
     const safe = shareShellSegments(...segments);
     if (!safe) return false;
-    const directory = path.join(this.root, ...safe);
+    const directory = path.join(
+      this.root,
+      ...(sitePage ? ['.site'] : []),
+      ...safe,
+    );
     const target = path.join(directory, 'index.html');
     // Defense in depth: never write outside the mounted share directory.
     if (!target.startsWith(`${this.root}${path.sep}`)) return false;

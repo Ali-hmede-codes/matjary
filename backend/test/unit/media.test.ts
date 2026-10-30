@@ -33,6 +33,7 @@ import {
   UserSubscription,
 } from '../../libs/database/src/entities';
 import { MediaService } from '../../apps/api/src/modules/showcases/media.service';
+import { MediaProcessor } from '../../apps/worker/src/jobs/media.process';
 import {
   MediaController,
   parseMediaRange,
@@ -824,6 +825,103 @@ test('share cards compose a branded 1200x630 JPEG from a shop logo', async () =>
       }),
       InvalidMediaError,
     );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('missing share cards retry after failures without overlapping sweeps or restarting', async (t) => {
+  const processor = new MediaProcessor(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  const jobs = processor as unknown as {
+    retryShareCards(): void;
+    backfillShareCards(): Promise<void>;
+    shareCardBackfill?: Promise<void>;
+  };
+  let passes = 0;
+  let release!: () => void;
+  t.mock.method(jobs, 'backfillShareCards', async () => {
+    passes++;
+    if (passes === 1) {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      throw new Error('temporary failure');
+    }
+  });
+  jobs.retryShareCards();
+  jobs.retryShareCards();
+  assert.equal(passes, 1);
+  release();
+  await jobs.shareCardBackfill;
+  jobs.retryShareCards();
+  await jobs.shareCardBackfill;
+  assert.equal(passes, 2);
+  await processor.beforeApplicationShutdown();
+  jobs.retryShareCards();
+  assert.equal(passes, 2);
+});
+
+test('share card publication updates the media fingerprint only after upload succeeds', async () => {
+  const directory = await tempDirectory();
+  try {
+    const input = path.join(directory, 'logo.png');
+    await sharp({
+      create: { width: 100, height: 100, channels: 3, background: '#204030' },
+    })
+      .png()
+      .toFile(input);
+    const events: string[] = [];
+    let fail = false;
+    const processor = new MediaProcessor(
+      {
+        manager: {
+          findOneBy: async () => ({ id: 'store-1', brandColor: '#204030' }),
+        },
+        update: async (_where: unknown, changes: { updatedAt: Date }) => {
+          assert.ok(changes.updatedAt instanceof Date);
+          events.push('timestamp');
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      {
+        uploadFile: async () => {
+          if (fail) throw new Error('storage unavailable');
+          events.push('upload');
+        },
+      } as never,
+      {} as never,
+    );
+    const job = processor as unknown as {
+      generateShareCard(
+        storeId: string,
+        assetId: string,
+        input: string,
+        directory: string,
+        signal: AbortSignal,
+        deadline: number,
+      ): Promise<void>;
+    };
+    const run = () =>
+      job.generateShareCard(
+        'store-1',
+        'asset-1',
+        input,
+        directory,
+        AbortSignal.timeout(30_000),
+        Date.now() + 30_000,
+      );
+    await run();
+    assert.deepEqual(events, ['upload', 'timestamp']);
+    fail = true;
+    await run();
+    assert.deepEqual(events, ['upload', 'timestamp']);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

@@ -30,6 +30,7 @@ import { WebsiteSettings1793659200000 } from '../../libs/database/src/migrations
 import { LbpPriceDisplay1794868800000 } from '../../libs/database/src/migrations/1794868800000-LbpPriceDisplay';
 import { AdminAccessService } from '../../apps/api/src/modules/admin/admin-access.service';
 import { WebsiteSettingsService } from '../../apps/api/src/modules/admin/website-settings.service';
+import { SeoSettings } from '../../libs/database/src/seo.entities';
 import { UpdateWebsiteSettingsDto } from '../../apps/api/src/modules/admin/website-settings.dto';
 import {
   AdminWebsiteSettingsController,
@@ -59,6 +60,7 @@ const config = new ConfigService({
 function fixture() {
   const state = {
     row: new WebsiteSettings() as WebsiteSettings | null,
+    seo: null as SeoSettings | null,
     audits: [] as Record<string, unknown>[],
     failure: '',
     user: {
@@ -82,7 +84,16 @@ function fixture() {
       fail('read');
       return data.row;
     },
+    update: async (
+      target: unknown,
+      _where: unknown,
+      patch: Partial<SeoSettings>,
+    ) => {
+      assert.equal(target, SeoSettings);
+      if (data.seo) Object.assign(data.seo, patch);
+    },
     findOne: async (target: unknown, options: unknown) => {
+      if (target === SeoSettings) return data.seo;
       assert.equal(target, WebsiteSettings);
       assert.deepEqual(options, {
         where: { id: 1 },
@@ -121,6 +132,7 @@ function fixture() {
         const draft = structuredClone(state);
         const result = await action(manager(draft) as unknown as EntityManager);
         state.row = draft.row;
+        state.seo = draft.seo;
         state.audits = draft.audits;
         state.saves = draft.saves;
         return result;
@@ -134,6 +146,60 @@ function fixture() {
   );
   return { state, service };
 }
+
+test('branding edits release legacy inherited SEO copies but preserve custom overrides atomically', async () => {
+  const { service, state } = fixture();
+  Object.assign(state.row!, {
+    siteName: 'Old brand',
+    tagline: 'Old tagline',
+    description: 'Old copy',
+    logoUrl: '/old.png',
+    bannerUrl: '/old.jpg',
+  });
+  state.seo = Object.assign(new SeoSettings(), {
+    id: 'seo',
+    defaultTitle: 'Old brand — Old tagline',
+    defaultDescription: 'Old copy',
+    defaultOgImageUrl: '/old.jpg',
+    organizationName: 'Old brand',
+    organizationLogoUrl: '/old.png',
+  });
+  const changes = {
+    siteName: 'New brand',
+    tagline: 'New tagline',
+    description: 'New copy',
+    logoUrl: '/new.png',
+    bannerUrl: '/new.jpg',
+  };
+  state.failure = 'audit';
+  await assert.rejects(service.update(changes, actor));
+  assert.equal(state.row!.siteName, 'Old brand');
+  assert.equal(state.seo.defaultTitle, 'Old brand — Old tagline');
+  state.failure = '';
+  await service.update(changes, actor);
+  for (const key of [
+    'defaultTitle',
+    'defaultDescription',
+    'defaultOgImageUrl',
+    'organizationName',
+    'organizationLogoUrl',
+  ] as const)
+    assert.equal(state.seo[key], null);
+  state.seo.defaultTitle = 'Independent SEO title';
+  state.seo.defaultDescription = 'Independent SEO description';
+  state.seo.defaultOgImageUrl = '/custom.jpg';
+  await service.update(
+    {
+      siteName: 'Next brand',
+      description: 'Next copy',
+      bannerUrl: '/next.jpg',
+    },
+    actor,
+  );
+  assert.equal(state.seo.defaultTitle, 'Independent SEO title');
+  assert.equal(state.seo.defaultDescription, 'Independent SEO description');
+  assert.equal(state.seo.defaultOgImageUrl, '/custom.jpg');
+});
 
 const validate = (input: object) =>
   validateSync(plainToInstance(UpdateWebsiteSettingsDto, input), {

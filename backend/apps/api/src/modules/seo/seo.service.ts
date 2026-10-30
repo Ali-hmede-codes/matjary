@@ -334,7 +334,7 @@ export class SeoService {
             const seo =
               (await manager.findOneBy(StoreSeo, { storeId: id })) ??
               manager.create(StoreSeo, { storeId: id });
-            Object.assign(seo, data);
+            this.applySeoInput(seo, data);
             return manager.save(seo);
           }
           if (kind === 'product') {
@@ -350,7 +350,7 @@ export class SeoService {
                 productId: id,
                 storeId: product.storeId,
               });
-            Object.assign(seo, data);
+            this.applySeoInput(seo, data);
             return manager.save(seo);
           }
           const post = await manager.findOneBy(Showcase, { id });
@@ -362,7 +362,7 @@ export class SeoService {
               showcaseId: id,
               storeId: post.storeId,
             });
-          Object.assign(seo, data);
+          this.applySeoInput(seo, data);
           return manager.save(seo);
         },
       ),
@@ -523,10 +523,38 @@ export class SeoService {
    * the tags; every other client is forwarded to the SPA page.
    */
   async renderShareHtml(path: string, userAgent?: string): Promise<string> {
+    const meta = await this.getPageMeta(path);
+    return renderShareDocument(
+      meta,
+      isShareCrawler(userAgent) || meta.canonical === this.baseUrl
+        ? undefined
+        : meta.canonical,
+    );
+  }
+
+  /** One public metadata resolver for browsers and non-JavaScript crawlers. */
+  async getPageMeta(path: string): Promise<MetaTags> {
+    if (typeof path !== 'string' || path.length > 2048)
+      throw new NotFoundException('Page not found');
     const target = path.replace(/[?#].*$/u, '').replace(/^\/+|\/+$/gu, '');
-    // The root of the site is shared as its own URL; a redirect there would
-    // reload the same document forever, so the home always answers inline.
-    if (!target) return renderShareDocument(await this.generateSiteMetaTags());
+    if (!target) return this.generateSiteMetaTags();
+    const pages: Record<string, string> = {
+      shops: 'All shops',
+      pricing: 'Plans & pricing',
+      terms: 'Terms of service',
+      privacy: 'Privacy policy',
+      favorites: 'Favorite shops',
+    };
+    if (Object.hasOwn(pages, target)) {
+      const site = await this.generateSiteMetaTags();
+      return this.generateGenericMetaTags(`/${target}`, {
+        title: `${pages[target]} — ${site.og.siteName}`,
+        robots:
+          target === 'favorites'
+            ? RobotsDirective.NOINDEX_NOFOLLOW
+            : RobotsDirective.INDEX_FOLLOW,
+      });
+    }
     const route = SHARE_STORE_ROUTE.exec(target);
     let meta: MetaTags;
     if (route?.[1]) {
@@ -544,10 +572,7 @@ export class SeoService {
       if (!post?.[1]) throw new NotFoundException('Page not found');
       meta = await this.generatePostShareMeta(post[1]);
     }
-    return renderShareDocument(
-      meta,
-      isShareCrawler(userAgent) ? undefined : meta.canonical,
-    );
+    return meta;
   }
 
   /** Published post metadata by its own slug, optionally scoped to a shop. */
@@ -746,10 +771,10 @@ export class SeoService {
 
   async getAdminSettings(actorId: string): Promise<SeoSettings> {
     await this.requireAdmin(actorId);
-    return { ...(await this.getSettings()), indexNowKey: null };
+    return { ...(await this.getSettings(false)), indexNowKey: null };
   }
 
-  private async getSettings(): Promise<SeoSettings> {
+  private async getSettings(resolveBranding = true): Promise<SeoSettings> {
     // The migration seeds settings. Reads must not create competing singleton
     // rows, and TypeORM findOne requires a where clause.
     const [settings] = await this.settingsRepo.find({
@@ -758,7 +783,37 @@ export class SeoService {
     });
     if (!settings)
       throw new ServiceUnavailableException('SEO settings are unavailable');
-    return settings;
+    if (!resolveBranding) return settings;
+    const branding = await this.dataSource.manager.findOneBy(WebsiteSettings, {
+      id: 1,
+    });
+    // Website settings own the brand identity. SEO fields are optional
+    // overrides, not a second frozen copy of the website name and images.
+    return {
+      ...settings,
+      siteName: branding?.siteName?.trim() || settings.siteName,
+      defaultTitle:
+        settings.defaultTitle === 'Matjary - Your Showcase Platform'
+          ? null
+          : settings.defaultTitle,
+      defaultDescription:
+        settings.defaultDescription ===
+        'Discover amazing stores, products, and posts on Matjary'
+          ? null
+          : settings.defaultDescription,
+      defaultOgImageUrl:
+        settings.defaultOgImageUrl ||
+        (!settings.defaultOgImageKey
+          ? branding?.bannerUrl || branding?.logoUrl
+          : null) ||
+        null,
+      organizationName:
+        settings.organizationName || branding?.siteName || settings.siteName,
+      organizationLogoUrl:
+        settings.organizationLogoUrl ||
+        (!settings.organizationLogoKey ? branding?.logoUrl : null) ||
+        null,
+    };
   }
 
   async updateSettings(
@@ -784,7 +839,12 @@ export class SeoService {
         });
         if (!settings)
           throw new ServiceUnavailableException('SEO settings are unavailable');
-        Object.assign(settings, data);
+        Object.assign(
+          settings,
+          Object.fromEntries(
+            Object.entries(data).filter(([, value]) => value !== undefined),
+          ),
+        );
         return { ...(await manager.save(settings)), indexNowKey: null };
       },
     );
@@ -813,7 +873,7 @@ export class SeoService {
     if (!seo) {
       seo = this.storeSeoRepo.create({ storeId, ...data });
     } else {
-      Object.assign(seo, data);
+      this.applySeoInput(seo, data);
     }
     const saved = await this.ownerWrite('store', storeId, actorId, (manager) =>
       manager.save(seo),
@@ -855,7 +915,7 @@ export class SeoService {
     if (!seo) {
       seo = this.productSeoRepo.create({ productId, storeId, ...data });
     } else {
-      Object.assign(seo, data);
+      this.applySeoInput(seo, data);
     }
     const saved = await this.ownerWrite(
       'product',
@@ -902,7 +962,7 @@ export class SeoService {
     if (!seo) {
       seo = this.showcaseSeoRepo.create({ showcaseId, storeId, ...data });
     } else {
-      Object.assign(seo, data);
+      this.applySeoInput(seo, data);
     }
     const saved = await this.ownerWrite(
       'showcase',
@@ -1001,13 +1061,68 @@ export class SeoService {
   // AUTOMATIC SEO GENERATION (Core Feature)
   // ============================================
 
+  private automaticSeoDraft<T extends StoreSeo | ProductSeo | ShowcaseSeo>(
+    saved: T | null,
+  ): T | null {
+    if (!saved) return null;
+    const draft = Object.assign(
+      Object.create(Object.getPrototypeOf(saved)),
+      saved,
+    ) as T;
+    // Only recorded automatic fields are replaced. Public reads render fresh
+    // defaults without writing rows or overwriting an editor's custom copy.
+    const automatic = new Set([
+      'metaTitle',
+      'metaDescription',
+      'metaKeywords',
+      'ogTitle',
+      'ogDescription',
+      'ogImageKey',
+      'ogSiteName',
+      'twitterSite',
+      'articleAuthor',
+      'articlePublishedTime',
+      'articleModifiedTime',
+    ]);
+    for (const field of saved.autoGeneratedFields ?? []) {
+      if (automatic.has(field)) Reflect.set(draft, field, null);
+    }
+    return draft;
+  }
+
+  private applySeoInput(
+    seo: StoreSeo | ProductSeo | ShowcaseSeo,
+    data: StoreSeoDto | ProductSeoDto | ShowcaseSeoDto,
+  ): void {
+    // Full forms also submit untouched generated values. Only changed fields
+    // become manual overrides; clearing a value opts back into live defaults.
+    const changed = new Set(
+      Object.entries(data)
+        .filter(
+          ([key, value]) =>
+            value !== undefined &&
+            JSON.stringify(value) !== JSON.stringify(Reflect.get(seo, key)),
+        )
+        .map(([key]) => key),
+    );
+    seo.autoGeneratedFields = (seo.autoGeneratedFields ?? []).filter(
+      (key) => !changed.has(key),
+    );
+    Object.assign(
+      seo,
+      Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined),
+      ),
+    );
+  }
+
   /**
    * Automatically generates SEO meta tags from entity content.
    * Called when SEO record doesn't exist or when auto-regeneration is triggered.
    * Users never need to manually configure SEO - it works out of the box.
    */
-  async autoGenerateStoreSeo(store: Store): Promise<StoreSeo> {
-    let seo = await this.getStoreSeo(store.id);
+  async autoGenerateStoreSeo(store: Store, persist = true): Promise<StoreSeo> {
+    let seo = this.automaticSeoDraft(await this.getStoreSeo(store.id));
     const settings = await this.getSettings();
     const autoFields: string[] = [];
 
@@ -1058,10 +1173,9 @@ export class SeoService {
       seo.ogDescription = this.generateMetaDescription(menuDescription, 160);
       autoFields.push('ogDescription');
     }
-    if (!seo.ogImageKey) {
-      seo.ogImageKey = store.logoKey || settings.defaultOgImageKey || null;
-      autoFields.push('ogImageKey');
-    }
+    // Resolve automatic images at render time. Persisting the logo here made
+    // it look like an explicit override and hid the generated share card.
+    if (!seo.ogImageKey) autoFields.push('ogImageKey');
     if (!seo.ogSiteName) {
       seo.ogSiteName = settings.siteName;
       autoFields.push('ogSiteName');
@@ -1090,14 +1204,15 @@ export class SeoService {
     seo.autoGeneratedFields = autoFields;
     seo.lastAutoGeneratedAt = new Date();
 
-    return this.storeSeoRepo.save(seo);
+    return persist ? this.storeSeoRepo.save(seo) : seo;
   }
 
   async autoGenerateProductSeo(
     product: Product,
     store: Store,
+    persist = true,
   ): Promise<ProductSeo> {
-    let seo = await this.getProductSeo(product.id);
+    let seo = this.automaticSeoDraft(await this.getProductSeo(product.id));
     const settings = await this.getSettings();
     const autoFields: string[] = [];
 
@@ -1186,14 +1301,15 @@ export class SeoService {
     seo.autoGeneratedFields = autoFields;
     seo.lastAutoGeneratedAt = new Date();
 
-    return this.productSeoRepo.save(seo);
+    return persist ? this.productSeoRepo.save(seo) : seo;
   }
 
   async autoGenerateShowcaseSeo(
     showcase: Showcase,
     store: Store | null,
+    persist = true,
   ): Promise<ShowcaseSeo> {
-    let seo = await this.getShowcaseSeo(showcase.id);
+    let seo = this.automaticSeoDraft(await this.getShowcaseSeo(showcase.id));
     const settings = await this.getSettings();
     const autoFields: string[] = [];
 
@@ -1278,7 +1394,7 @@ export class SeoService {
     seo.autoGeneratedFields = autoFields;
     seo.lastAutoGeneratedAt = new Date();
 
-    return this.showcaseSeoRepo.save(seo);
+    return persist ? this.showcaseSeoRepo.save(seo) : seo;
   }
 
   /**
@@ -1328,13 +1444,13 @@ export class SeoService {
       .catch(() => null);
     const siteName = branding?.siteName?.trim() || settings.siteName;
     const tagline = branding?.tagline?.trim() || '';
-    // The home title is the website's own name and tagline, matching the tab
-    // and the admin preview. `defaultTitle` fills pages without copy of their
-    // own, so it must not freeze the home card after a rename.
-    const title = tagline ? `${siteName} — ${tagline}` : siteName;
+    // Explicit SEO copy wins; empty defaults inherit live website branding.
+    const title =
+      settings.defaultTitle?.trim() ||
+      (tagline ? `${siteName} — ${tagline}` : siteName);
     const description =
-      branding?.description?.trim() ||
       settings.defaultDescription?.trim() ||
+      branding?.description?.trim() ||
       '';
     const brandingImage = branding?.bannerUrl || branding?.logoUrl;
     const ogImage =
@@ -1367,11 +1483,7 @@ export class SeoService {
   }
 
   async generateStoreMetaTags(store: Store): Promise<MetaTags> {
-    // Ensure SEO exists (auto-generate if needed)
-    let seo = await this.getStoreSeo(store.id);
-    if (!seo) {
-      seo = await this.autoGenerateStoreSeo(store);
-    }
+    const seo = await this.autoGenerateStoreSeo(store, false);
     const settings = await this.getSettings();
 
     // A menu shop must read as a menu in every preview. Owner copy is kept and
@@ -1392,13 +1504,12 @@ export class SeoService {
     const canonical =
       seo.canonicalUrl || this.baseUrl + '/stores/' + store.slug;
 
-    // Prefer the owner's chosen image, then the wide banner, then the logo
-    // card, and only then the platform default. The banner comes before the
-    // generated card so a newly uploaded banner is what a share preview shows.
+    // Explicit overrides win. Otherwise use the automatic 1200x630 card;
+    // banners and raw logos are fallbacks while the worker builds it.
     const ogImage =
       (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
-      (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreShareImageUrl(store)) ??
+      (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       (await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || store.name;
@@ -1450,11 +1561,7 @@ export class SeoService {
   ): Promise<MetaTags> {
     if (!isPublicProductStatus(product.status))
       throw new NotFoundException('Product not found');
-    // Ensure SEO exists (auto-generate if needed)
-    let seo = await this.getProductSeo(product.id);
-    if (!seo) {
-      seo = await this.autoGenerateProductSeo(product, store);
-    }
+    const seo = await this.autoGenerateProductSeo(product, store, false);
     const settings = await this.getSettings();
 
     const title = seo.metaTitle || product.name + ' - ' + store.name;
@@ -1541,11 +1648,7 @@ export class SeoService {
   ): Promise<MetaTags> {
     if (showcase.status !== ShowcaseStatus.PUBLISHED)
       throw new NotFoundException('Post not found');
-    // Ensure SEO exists (auto-generate if needed)
-    let seo = await this.getShowcaseSeo(showcase.id);
-    if (!seo) {
-      seo = await this.autoGenerateShowcaseSeo(showcase, store);
-    }
+    const seo = await this.autoGenerateShowcaseSeo(showcase, store, false);
     const settings = await this.getSettings();
 
     const title = seo.metaTitle || showcase.title;
@@ -1605,7 +1708,13 @@ export class SeoService {
         description: this.truncate(ogDescription, 200),
         image: ogImage,
       },
-      jsonLd: await this.buildArticleJsonLd(showcase, store, seo, ogImage),
+      jsonLd: await this.buildArticleJsonLd(
+        showcase,
+        store,
+        seo,
+        settings,
+        ogImage,
+      ),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
@@ -1621,30 +1730,27 @@ export class SeoService {
       ogType?: string;
     } = {},
   ): Promise<MetaTags> {
+    const site = await this.generateSiteMetaTags();
     const canonical = this.baseUrl + path;
-
+    const title = this.truncate(options.title || site.title, 60);
+    const description = this.truncate(
+      options.description ?? site.description,
+      160,
+    );
     return {
-      title: options.title ? this.truncate(options.title, 60) : 'Matjary',
-      description: options.description
-        ? this.truncate(options.description, 160)
-        : '',
-      robots: options.robots || RobotsDirective.INDEX_FOLLOW,
+      ...site,
+      title,
+      description,
       canonical,
+      robots: options.robots || RobotsDirective.INDEX_FOLLOW,
       og: {
-        title: options.title || 'Matjary',
-        description: options.description || '',
-        image: await this.buildImageUrl(this.defaultImageKey),
-        type: options.ogType || 'website',
-        siteName: 'Matjary',
+        ...site.og,
+        title,
+        description,
         url: canonical,
-        locale: 'en_US',
+        type: options.ogType || 'website',
       },
-      twitter: {
-        card: 'summary_large_image',
-        title: options.title || 'Matjary',
-        description: options.description || '',
-        image: await this.buildImageUrl(this.defaultImageKey),
-      },
+      twitter: { ...site.twitter, title, description },
     };
   }
 
@@ -1824,9 +1930,11 @@ export class SeoService {
     showcase: Showcase,
     store: Store | null,
     seo: ShowcaseSeo | null,
+    settings: SeoSettings,
     image?: string,
   ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
+    const logo = await this.organizationLogo(settings);
 
     const articleSchema: Record<string, unknown> = {
       '@context': 'https://schema.org',
@@ -1845,15 +1953,12 @@ export class SeoService {
         showcase.updatedAt.toISOString(),
       author: {
         '@type': 'Person',
-        name: seo?.articleAuthor || (store ? store.name : 'Matjary'),
+        name: seo?.articleAuthor || store?.name || settings.siteName,
       },
       publisher: {
         '@type': 'Organization',
-        name: 'Matjary',
-        logo: {
-          '@type': 'ImageObject',
-          url: (await this.buildImageUrl(this.defaultImageKey)) || this.baseUrl,
-        },
+        name: settings.organizationName || settings.siteName,
+        logo: logo ? { '@type': 'ImageObject', url: logo } : undefined,
       },
       mainEntityOfPage: {
         '@type': 'WebPage',
@@ -1949,7 +2054,7 @@ export class SeoService {
       url: this.baseUrl,
       description:
         settings.defaultDescription ||
-        'Welcome to Matjary - Your Showcase Platform',
+        `Welcome to ${settings.siteName} - Your Showcase Platform`,
       priority: 'high',
     });
 
@@ -2621,7 +2726,7 @@ export class SeoService {
   ): Promise<string | undefined> {
     return settings.defaultOgImageUrl
       ? this.absoluteImageUrl(settings.defaultOgImageUrl)
-      : this.buildImageUrl(settings.defaultOgImageKey);
+      : this.buildImageUrl(settings.defaultOgImageKey || this.defaultImageKey);
   }
 
   private async organizationLogo(

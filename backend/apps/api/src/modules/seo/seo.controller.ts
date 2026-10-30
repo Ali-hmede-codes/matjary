@@ -177,6 +177,14 @@ export class SeoController {
     return this.seoService.submitAdminIndexNow(body, req.user.id);
   }
 
+  @Get('meta/page')
+  @ApiOperation({
+    summary: 'Current public page metadata, including saved SEO overrides',
+  })
+  getPageMeta(@Query('path') path = '/'): Promise<MetaTags> {
+    return this.seoService.getPageMeta(path);
+  }
+
   @Get('meta/store/:storeSlug')
   @ApiOperation({ summary: 'Get meta tags for a store page' })
   @ApiResponse({ status: 200, description: 'Meta tags for store' })
@@ -275,6 +283,7 @@ export class SeoController {
     // Short enough that a corrected title or image is visible within a
     // minute, long enough to absorb a crawler retrying the same link.
     res.set('Cache-Control', 'public, max-age=60');
+    res.vary('User-Agent');
     // The preview URL is a sharing device; the clean storefront URL is canonical.
     res.set('X-Robots-Tag', 'noindex');
     res.send(html);

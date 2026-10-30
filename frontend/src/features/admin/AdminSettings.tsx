@@ -222,6 +222,7 @@ function SettingsForm({
       // Storefront pages read the public endpoint; refresh their cache so the
       // new branding shows the next time an open tab is viewed.
       await client.invalidateQueries({ queryKey: ['website-settings'] });
+      await client.invalidateQueries({ queryKey: ['page-seo'] });
       setNotice('Saved. The website now uses these settings.');
     } catch (reason) {
       setError(panelError(reason));

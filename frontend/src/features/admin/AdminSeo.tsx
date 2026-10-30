@@ -118,10 +118,6 @@ const entries = (value: string) =>
     .map((line) => line.trim())
     .filter(Boolean);
 const lines = (values: string[] | null) => (values ?? []).join('\n');
-const siteOrigin = () =>
-  ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
-    ? ''
-    : window.location.origin;
 
 function textIssue(value: string, max: number): string {
   const trimmed = value.trim();
@@ -157,8 +153,15 @@ function storedDraft(seo: SeoSettingsValues, branding: WebsiteSettings): Draft {
     siteName: branding.siteName,
     tagline: branding.tagline ?? '',
     siteDescription: branding.description ?? '',
-    defaultTitle: seo.defaultTitle ?? '',
-    defaultDescription: seo.defaultDescription ?? '',
+    defaultTitle:
+      seo.defaultTitle === 'Matjary - Your Showcase Platform'
+        ? ''
+        : (seo.defaultTitle ?? ''),
+    defaultDescription:
+      seo.defaultDescription ===
+      'Discover amazing stores, products, and posts on Matjary'
+        ? ''
+        : (seo.defaultDescription ?? ''),
     defaultOgImageUrl: seo.defaultOgImageUrl ?? '',
     twitterSite: seo.twitterSite ?? '',
     googleSiteVerification: seo.googleSiteVerification ?? '',
@@ -194,35 +197,9 @@ function inheritedDraft(
   seo: SeoSettingsValues,
   branding: WebsiteSettings,
 ): Draft {
-  const base = storedDraft(seo, branding);
-  const fill = (value: string, max: number) =>
-    value.length > max ? value.slice(0, max) : value;
-  // Branding images may be longer than the SEO column; never prefill a value
-  // the API would reject on the first save.
-  const shareImage = [branding.bannerUrl, branding.logoUrl].find(
-    (value): value is string =>
-      typeof value === 'string' && value.length <= 512,
-  );
-  return {
-    ...base,
-    defaultTitle:
-      base.defaultTitle ||
-      fill(
-        [branding.siteName, branding.tagline].filter(Boolean).join(' — '),
-        120,
-      ),
-    defaultDescription: base.defaultDescription
-      ? base.defaultDescription
-      : fill(branding.description ?? '', 320),
-    defaultOgImageUrl: base.defaultOgImageUrl || shareImage || '',
-    organizationName: base.organizationName || branding.siteName,
-    organizationUrl: base.organizationUrl || siteOrigin(),
-    organizationLogoUrl:
-      base.organizationLogoUrl ||
-      (branding.logoUrl && branding.logoUrl.length <= 512
-        ? branding.logoUrl
-        : ''),
-  };
+  // Empty overrides inherit branding on the server. Copying branding into
+  // these fields silently froze it after the next website settings change.
+  return storedDraft(seo, branding);
 }
 
 export function AdminSeo({ id }: { id: string }) {
@@ -514,6 +491,7 @@ function SettingsForm({
         client.setQueryData(['panel', id, 'website-settings'], savedBranding);
         // Storefront pages read the public endpoint; refresh them too.
         await client.invalidateQueries({ queryKey: ['website-settings'] });
+        await client.invalidateQueries({ queryKey: ['page-seo'] });
       }
     } catch (reason) {
       setError(panelError(reason));
@@ -527,7 +505,13 @@ function SettingsForm({
           seoPatch,
           'PUT',
         );
+      } else if (savedBranding) {
+        // A branding save can release legacy inherited SEO placeholders.
+        savedSeo = await getJson<SeoSettingsValues>('seo/settings');
+      }
+      if (savedSeo) {
         client.setQueryData(['panel', id, 'seo-settings'], savedSeo);
+        await client.invalidateQueries({ queryKey: ['page-seo'] });
       }
     } catch (reason) {
       if (savedBranding)
@@ -562,14 +546,14 @@ function SettingsForm({
     brandingUrl(assetUrl(branding.bannerUrl)) ||
     brandingUrl(assetUrl(branding.logoUrl));
   const socialImage = logo || fallbackImage;
-  const homeTitle = `${draft.siteName.trim() || 'Website'} — ${
-    draft.tagline.trim() || 'Discover something good'
-  }`;
-  // The shared home link follows the website branding; the default SEO title
-  // and description are the fallback for pages without copy of their own.
+  const homeTitle =
+    draft.defaultTitle.trim() ||
+    [draft.siteName.trim() || 'Website', draft.tagline.trim()]
+      .filter(Boolean)
+      .join(' — ');
   const homeDescription =
-    draft.siteDescription.trim() ||
     draft.defaultDescription.trim() ||
+    draft.siteDescription.trim() ||
     'Discover independent stores, beautiful finds, and everyday inspiration.';
 
   return (
@@ -638,7 +622,7 @@ function SettingsForm({
           <Field
             label="Default SEO title"
             error={issues.defaultTitle}
-            hint={`${titleLength(draft.defaultTitle)}/120 · used for pages without their own title.`}
+            hint={`${titleLength(draft.defaultTitle)}/120 · home/search title. Leave empty to follow Website settings.`}
           >
             <input
               value={draft.defaultTitle}
@@ -652,7 +636,7 @@ function SettingsForm({
           <Field
             label="Default SEO description"
             error={issues.defaultDescription}
-            hint={`${draft.defaultDescription.length}/320 · used when a page has no description.`}
+            hint={`${draft.defaultDescription.length}/320 · home/search description. Leave empty to follow Website settings.`}
           >
             <textarea
               value={draft.defaultDescription}

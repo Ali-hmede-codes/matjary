@@ -16,6 +16,8 @@ import {
 import { AdminAccessService } from './admin-access.service';
 import { UpdateWebsiteSettingsDto } from './website-settings.dto';
 import { ShareShellSignal } from '../seo/share-shell.signal';
+import { SeoSettings } from '../seo/seo.entities';
+import type { EntityManager } from 'typeorm';
 
 @Injectable()
 export class WebsiteSettingsService {
@@ -52,11 +54,11 @@ export class WebsiteSettingsService {
     return this.access.transaction(actor, (manager) => this.get(manager));
   }
 
-  update(
+  async update(
     input: UpdateWebsiteSettingsDto,
     actor: AdminActor,
   ): Promise<WebsiteSettingsValues> {
-    return this.access.transaction(actor, async (manager) => {
+    const result = await this.access.transaction(actor, async (manager) => {
       if (!input || typeof input !== 'object' || Array.isArray(input)) {
         throw new BadRequestException('Invalid website settings');
       }
@@ -79,6 +81,7 @@ export class WebsiteSettingsService {
         (key) => dto[key] !== undefined && dto[key] !== settings[key],
       );
       if (changed.length) {
+        await this.releaseInheritedSeo(manager, settings, changed);
         // Lock before merging partial changes so concurrent editors keep unrelated fields.
         Object.assign(
           settings,
@@ -93,10 +96,66 @@ export class WebsiteSettingsService {
           'update',
           changed,
         );
-        // The home link preview and fallback images read this row.
-        this.shells.request();
       }
       return this.publicValues(settings);
     });
+    // Refresh only after commit, so the shell cannot acknowledge old branding.
+    this.shells.request();
+    return result;
+  }
+
+  private async releaseInheritedSeo(
+    manager: EntityManager,
+    previous: WebsiteSettings,
+    changed: readonly string[],
+  ): Promise<void> {
+    const identityChanged = changed.some((key) =>
+      ['siteName', 'tagline'].includes(key),
+    );
+    const descriptionChanged = changed.includes('description');
+    const imagesChanged = changed.some((key) =>
+      ['logoUrl', 'bannerUrl'].includes(key),
+    );
+    if (!identityChanged && !descriptionChanged && !imagesChanged) return;
+    const seo = await manager.findOne(SeoSettings, {
+      where: {},
+      order: { createdAt: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!seo) return;
+    const patch: Partial<SeoSettings> = {};
+    // Older admin forms persisted their inherited placeholders. Release only
+    // exact copies of the previous branding; distinct custom SEO stays intact.
+    if (
+      identityChanged &&
+      seo.defaultTitle ===
+        [previous.siteName, previous.tagline].filter(Boolean).join(' — ')
+    )
+      patch.defaultTitle = null;
+    if (
+      changed.includes('siteName') &&
+      seo.organizationName === previous.siteName
+    )
+      patch.organizationName = null;
+    if (
+      descriptionChanged &&
+      previous.description &&
+      seo.defaultDescription === previous.description
+    )
+      patch.defaultDescription = null;
+    if (
+      imagesChanged &&
+      seo.defaultOgImageUrl &&
+      [previous.bannerUrl, previous.logoUrl].includes(seo.defaultOgImageUrl)
+    )
+      patch.defaultOgImageUrl = null;
+    if (
+      changed.includes('logoUrl') &&
+      previous.logoUrl &&
+      seo.organizationLogoUrl === previous.logoUrl
+    )
+      patch.organizationLogoUrl = null;
+    if (Object.keys(patch).length)
+      await manager.update(SeoSettings, { id: seo.id }, patch);
   }
 }

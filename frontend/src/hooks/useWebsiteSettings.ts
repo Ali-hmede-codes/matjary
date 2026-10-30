@@ -22,14 +22,8 @@ export function useWebsiteSettings(applyMetadata = true, enabled = true) {
   const settings = settingsQuery.data ?? defaults;
   useEffect(() => {
     if (!applyMetadata) return;
-    document.title = `${settings.siteName} — ${settings.tagline || 'Discover something good'}`;
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute(
-        'content',
-        settings.description ||
-          'Discover independent stores, beautiful finds, and everyday inspiration.',
-      );
+    // Page SEO owns titles/descriptions; a branding refetch must not replace
+    // the current shop or product's metadata with the home page defaults.
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', settings.primaryColor);

@@ -65,6 +65,15 @@ export function renderShareHeadTags(meta: MetaTags): string {
       ? `<meta property="og:image:alt" content="${escapeXml(meta.og.title)}">`
       : '',
     `<meta name="twitter:card" content="${escapeXml(meta.twitter.card)}">`,
+    meta.twitter.site
+      ? `<meta name="twitter:site" content="${escapeXml(meta.twitter.site)}">`
+      : '',
+    meta.twitter.creator
+      ? `<meta name="twitter:creator" content="${escapeXml(meta.twitter.creator)}">`
+      : '',
+    meta.og.locale
+      ? `<meta property="og:locale" content="${escapeXml(meta.og.locale)}">`
+      : '',
     `<meta name="twitter:title" content="${escapeXml(meta.twitter.title)}">`,
     `<meta name="twitter:description" content="${escapeXml(meta.twitter.description)}">`,
     meta.twitter.image

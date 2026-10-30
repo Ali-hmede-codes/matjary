@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { usePageSeo } from '../hooks/usePageSeo';
 import {
   ArrowLeft,
   ArrowRight,
@@ -98,12 +98,11 @@ export function LegalPage({
   const email = LEGAL_CONTACT_EMAIL || settings.contactEmail;
   const phone = LEGAL_CONTACT_PHONE;
 
-  useEffect(() => {
-    document.title = `${doc.title} — ${settings.siteName}`;
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute('content', doc.description);
-  }, [doc, settings.siteName]);
+  usePageSeo({
+    title: `${doc.title} — ${settings.siteName}`,
+    description: doc.description,
+    siteName: settings.siteName,
+  });
 
   return (
     <div className="app legal-page" style={theme}>

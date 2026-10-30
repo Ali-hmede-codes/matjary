@@ -27,6 +27,13 @@ import {
   StoreType,
 } from '../../libs/database/src/entities';
 import { WebsiteSettings } from '../../libs/database/src/website-settings.entity';
+import {
+  StoreSeo,
+  ProductSeo,
+  ShowcaseSeo,
+  SeoSettings,
+} from '../../libs/database/src/seo.entities';
+import { Readable } from 'node:stream';
 
 const canonical = 'https://matjary.test/stores/alabdalla/c/offers';
 const meta: MetaTags = {
@@ -226,6 +233,7 @@ test('a shared post previews with its own photo or video poster', async () => {
   let assets: { id: string }[] = [{ id: videoAsset }];
   let variants = videoVariants;
   const manager = {
+    findOneBy: async () => null,
     find: async (target: unknown) =>
       target === MediaAsset ? assets : target === MediaVariant ? variants : [],
     findOne: async (
@@ -348,6 +356,7 @@ test('menu shops read as a menu in share metadata', async () => {
     find: async () => [settings],
   };
   const manager = {
+    findOneBy: async () => null,
     count: async () => 12,
     find: async () => [],
     findOne: async () => null,
@@ -374,7 +383,7 @@ test('menu shops read as a menu in share metadata', async () => {
   } as Store;
 
   const menu = await service.generateStoreMetaTags(store);
-  assert.equal(menu.title, 'Alabdalla — Menu');
+  assert.equal(menu.title, 'Alabdalla — Menu | Matjary');
   assert.equal(menu.og.title, 'Alabdalla — Menu');
   // The administrator's URL is used when the shop has no image of its own.
   assert.equal(menu.og.image, 'https://cdn.test/share.jpg');
@@ -401,14 +410,14 @@ test('menu shops read as a menu in share metadata', async () => {
     ...store,
     storeType: StoreType.ECOMMERCE,
   });
-  assert.equal(retail.title, 'Alabdalla');
+  assert.equal(retail.title, 'Alabdalla | Matjary');
   assert.equal(retail.description, 'Home-style Syrian food.');
 });
 
 test('the shared site link follows live website branding', async () => {
   const settings: Record<string, unknown> = {
     siteName: 'Matjary',
-    defaultTitle: 'Old saved title',
+    defaultTitle: 'Matjary - Your Showcase Platform',
     defaultDescription: null,
     defaultOgImageKey: null,
     defaultOgImageUrl: '/logo.png',
@@ -499,7 +508,9 @@ test('the refresher writes one shell per public storefront page', async () => {
                 : [],
       count: async () => 0,
     };
+    let siteTitle = 'Current site title';
     const seo = {
+      getPageMeta: async () => ({ ...meta, title: siteTitle }),
       generateStoreMetaTags: async () => meta,
       generateCategoryMetaTags: async () => meta,
       generateUncategorizedShareMeta: async () => meta,
@@ -518,7 +529,20 @@ test('the refresher writes one shell per public storefront page', async () => {
       seo as never,
       config as never,
     );
-    assert.equal(await service.refreshAll(), 4);
+    assert.equal(await service.refreshAll(), 10);
+    for (const page of [
+      'home',
+      'shops',
+      'pricing',
+      'terms',
+      'privacy',
+      'favorites',
+    ]) {
+      assert.match(
+        await fs.readFile(path.join(root, '.site', page, 'index.html'), 'utf8'),
+        /<title>Current site title<\/title>/u,
+      );
+    }
     for (const relative of [
       'alabdalla/index.html',
       'alabdalla/c/offers/index.html',
@@ -538,7 +562,12 @@ test('the refresher writes one shell per public storefront page', async () => {
       '<title>Old shop</title>',
     );
     products = [];
-    assert.equal(await service.refreshAll(), 3);
+    siteTitle = 'Renamed site';
+    assert.equal(await service.refreshAll(), 9);
+    assert.match(
+      await fs.readFile(path.join(root, '.site', 'home', 'index.html'), 'utf8'),
+      /<title>Renamed site<\/title>/u,
+    );
     for (const relative of [
       'alabdalla/p/item-x/index.html',
       'alabdalla/p/item-x',
@@ -699,6 +728,263 @@ test('a failed forced shell refresh remains retryable with an unchanged fingerpr
   assert.equal(await scheduler.refreshIfNeeded(), 1);
   assert.equal(state.passes, 3);
   assert.equal(await scheduler.refreshIfNeeded(), 0);
+});
+
+function liveSeoFixture() {
+  const branding = Object.assign(new WebsiteSettings(), {
+    siteName: 'New brand',
+    tagline: 'Fresh finds',
+    description: 'Live website description',
+    bannerUrl: '/new-banner.jpg',
+  });
+  const settings: SeoSettings = Object.assign(new SeoSettings(), {
+    siteName: 'Old brand',
+    defaultTitle: null,
+    defaultDescription: null,
+  });
+  const store = Object.assign(new Store(), {
+    id: '22222222-2222-4222-8222-222222222222',
+    slug: 'shop',
+    name: 'Current shop',
+    description: 'Current shop description',
+    storeType: StoreType.ECOMMERCE,
+    logoKey:
+      'media/22222222-2222-4222-8222-222222222222/11111111-1111-4111-8111-111111111111/jpeg-1080.jpg',
+    bannerKey: 'banner-key',
+  });
+  const storeSeo: StoreSeo = Object.assign(new StoreSeo(), {
+    storeId: store.id,
+    metaTitle: 'Old shop | Old brand',
+    ogTitle: 'Old shop',
+    metaDescription: 'Old description',
+    ogDescription: 'Old description',
+    ogSiteName: 'Old brand',
+    ogImageKey: store.logoKey,
+    autoGeneratedFields: [
+      'metaTitle',
+      'ogTitle',
+      'metaDescription',
+      'ogDescription',
+      'ogSiteName',
+      'ogImageKey',
+    ],
+  });
+  const productSeo = Object.assign(new ProductSeo(), {
+    metaTitle: 'Old item | Old brand',
+    ogTitle: 'Old item',
+    autoGeneratedFields: ['metaTitle', 'ogTitle'],
+  });
+  const postSeo = Object.assign(new ShowcaseSeo(), {
+    metaTitle: 'Old post | Old brand',
+    ogTitle: 'Old post',
+    autoGeneratedFields: ['metaTitle', 'ogTitle'],
+  });
+  const state = { card: true, public: true, writes: 0 };
+  const repo = (row: object) => ({
+    findOneBy: async () => row,
+    find: async () => [settings],
+    save: async (value: unknown) => {
+      state.writes++;
+      return value;
+    },
+  });
+  const manager = {
+    findOneBy: async (target: unknown) =>
+      target === WebsiteSettings
+        ? branding
+        : target === Store && state.public
+          ? store
+          : null,
+    findOne: async (
+      target: unknown,
+      options: { where: { storageKey?: string } },
+    ) =>
+      target === MediaVariant && options.where.storageKey
+        ? {
+            storageKey: options.where.storageKey,
+            assetId: 'asset',
+            mimeType: 'image/jpeg',
+          }
+        : null,
+    find: async () => [],
+    count: async () => 0,
+    exists: async () => false,
+  };
+  const service = new SeoService(
+    repo(storeSeo) as never,
+    repo(productSeo) as never,
+    repo(postSeo) as never,
+    repo({}) as never,
+    repo(settings) as never,
+    new ConfigService({ APP_ORIGIN: 'https://matjary.test' }),
+    { manager } as never,
+    {} as never,
+    {
+      statObject: async () => {
+        if (!state.card) throw new Error('missing');
+        return { size: 100 };
+      },
+      openReadStream: async () => Readable.from(['jpeg']),
+      presignedGetUrl: async (key: string) =>
+        `https://matjary.test/api/v1/uploads/${encodeURIComponent(key)}`,
+    } as never,
+  );
+  return {
+    service,
+    branding,
+    settings,
+    store,
+    storeSeo,
+    productSeo,
+    postSeo,
+    state,
+  };
+}
+
+test('automatic metadata follows current content and branding without public writes', async () => {
+  const { service, store, storeSeo, branding, state } = liveSeoFixture();
+  const tags = await service.generateStoreMetaTags(store);
+  assert.equal(tags.title, 'Current shop | New brand');
+  assert.equal(tags.og.title, 'Current shop');
+  assert.equal(tags.description, 'Current shop description');
+  assert.equal(tags.og.siteName, 'New brand');
+  assert.ok(
+    tags.jsonLd?.some(
+      (entry) => entry['@type'] === 'WebSite' && entry.name === 'New brand',
+    ),
+  );
+  assert.equal(storeSeo.metaTitle, 'Old shop | Old brand');
+  branding.siteName = 'Renamed again';
+  store.name = 'Renamed shop';
+  assert.equal(
+    (await service.generateStoreMetaTags(store)).title,
+    'Renamed shop | Renamed again',
+  );
+  const product = Object.assign(new Product(), {
+    id: 'product-1',
+    slug: 'item',
+    name: 'Fresh item',
+    status: 'active',
+    priceCents: '100',
+    currency: 'USD',
+    imageKeys: [],
+    stockQuantity: null,
+  });
+  assert.match(
+    (await service.generateProductMetaTags(product, store)).title,
+    /^Fresh item - Renamed shop \| Renamed again$/u,
+  );
+  const post = Object.assign(new Showcase(), {
+    id: 'post-1',
+    slug: 'post',
+    title: 'Fresh post',
+    status: ShowcaseStatus.PUBLISHED,
+    updatedAt: new Date(),
+    publishedAt: new Date(),
+  });
+  const postMeta = await service.generateShowcaseMetaTags(post, store);
+  assert.equal(postMeta.title, 'Fresh post | Renamed again');
+  assert.equal(
+    (postMeta.jsonLd?.[0]?.publisher as { name: string }).name,
+    'Renamed again',
+  );
+  assert.equal(state.writes, 0);
+});
+
+test('manual edits survive regeneration and partial DTOs do not erase other overrides', async () => {
+  const { service, store, storeSeo } = liveSeoFixture();
+  const editor = service as unknown as {
+    applySeoInput(
+      seo: StoreSeo,
+      data: { metaTitle?: string; ogTitle?: string; metaDescription?: string },
+    ): void;
+  };
+  editor.applySeoInput(storeSeo, {
+    metaTitle: 'Handwritten title',
+    ogTitle: undefined,
+  });
+  assert.equal(storeSeo.ogTitle, 'Old shop');
+  assert.ok(!storeSeo.autoGeneratedFields?.includes('metaTitle'));
+  assert.ok(storeSeo.autoGeneratedFields?.includes('ogTitle'));
+  assert.equal(
+    (await service.generateStoreMetaTags(store)).title,
+    'Handwritten title',
+  );
+  await service.autoGenerateStoreSeo(store);
+  assert.equal(
+    (await service.generateStoreMetaTags(store)).title,
+    'Handwritten title',
+  );
+});
+
+test('store previews use generated cards before automatic logo/banner defaults and recover safely', async () => {
+  const { service, store, storeSeo, state } = liveSeoFixture();
+  const tags = await service.generateStoreMetaTags(store);
+  assert.match(tags.og.image!, /\/seo\/og\/shop\.jpg\?v=11111111/u);
+  assert.equal(tags.twitter.image, tags.og.image);
+  const card = await service.openShareCard(store.slug);
+  assert.equal(card?.size, 100);
+  card?.stream.destroy();
+  storeSeo.ogImageKey = 'custom.jpg';
+  storeSeo.autoGeneratedFields = storeSeo.autoGeneratedFields!.filter(
+    (key) => key !== 'ogImageKey',
+  );
+  assert.match(
+    (await service.generateStoreMetaTags(store)).og.image!,
+    /uploads\/custom.jpg$/u,
+  );
+  storeSeo.ogImageKey = null;
+  state.card = false;
+  assert.match(
+    (await service.generateStoreMetaTags(store)).og.image!,
+    /uploads\/banner-key$/u,
+  );
+  state.card = true;
+  assert.match(
+    (await service.generateStoreMetaTags(store)).og.image!,
+    /\/seo\/og\//u,
+  );
+  state.public = false;
+  assert.equal(await service.openShareCard(store.slug), undefined);
+  await assert.rejects(service.getPageMeta('/stores/shop'), /Page not found/u);
+});
+
+test('saved global SEO overrides apply to home; clearing them inherits live branding', async () => {
+  const { service, settings, branding } = liveSeoFixture();
+  settings.defaultTitle = 'Custom search title';
+  settings.defaultDescription = 'Custom search description';
+  settings.defaultOgImageUrl = '/custom.jpg';
+  const home = await service.getPageMeta('/');
+  assert.equal(home.title, 'Custom search title');
+  assert.equal(home.description, 'Custom search description');
+  assert.equal(home.og.image, 'https://matjary.test/custom.jpg');
+  settings.defaultTitle = null;
+  settings.defaultDescription = null;
+  settings.defaultOgImageUrl = null;
+  branding.siteName = 'Another brand';
+  assert.equal(
+    (await service.getPageMeta('/')).title,
+    'Another brand — Fresh finds',
+  );
+  assert.equal(
+    (await service.getPageMeta('/')).og.image,
+    'https://matjary.test/new-banner.jpg',
+  );
+  for (const route of ['shops', 'pricing', 'terms', 'privacy']) {
+    const page = await service.getPageMeta(`/${route}?tracking=1`);
+    assert.match(page.title, /Another brand$/u);
+    assert.equal(page.canonical, `https://matjary.test/${route}`);
+    const html = await service.renderShareHtml(route, 'WhatsApp');
+    assert.match(html, /Another brand/u);
+    assert.doesNotMatch(html, /location.replace/u);
+  }
+  for (const route of [
+    '/admin',
+    '/dashboard',
+    '/unknown',
+    '/stores/../private',
+  ])
+    await assert.rejects(service.getPageMeta(route), /Page not found/u);
 });
 
 test('link preview fetchers are recognised so they get no redirect', () => {

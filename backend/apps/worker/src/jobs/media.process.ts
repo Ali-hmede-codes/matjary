@@ -43,6 +43,18 @@ import path from 'node:path';
 export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
   private readonly logger = new Logger(MediaProcessor.name);
   private worker: Worker | null = null;
+  private stopping = false;
+  private shareCardTimer?: NodeJS.Timeout;
+  private shareCardBackfill?: Promise<void>;
+
+  private retryShareCards(): void {
+    if (this.stopping || this.shareCardBackfill) return;
+    this.shareCardBackfill = this.backfillShareCards()
+      .catch(() => this.logger.warn('Share card backfill failed'))
+      .finally(() => {
+        this.shareCardBackfill = undefined;
+      });
+  }
 
   constructor(
     @InjectRepository(MediaAsset)
@@ -72,9 +84,11 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
     this.worker.on('error', () => this.logger.warn('Media queue unavailable'));
     // Shops uploaded before the share-card feature get one after a deploy;
     // the backfill runs in the background so readiness is never delayed.
-    void this.backfillShareCards().catch(() =>
-      this.logger.warn('Share card backfill failed'),
-    );
+    this.retryShareCards();
+    // A transient failure or a logo attached after boot must recover without
+    // requiring another worker restart. Keep the sweep single-flight.
+    this.shareCardTimer = setInterval(() => this.retryShareCards(), 300_000);
+    this.shareCardTimer.unref();
   }
 
   isRunning(): boolean {
@@ -82,9 +96,12 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
   }
 
   async beforeApplicationShutdown(): Promise<void> {
+    this.stopping = true;
+    if (this.shareCardTimer) clearInterval(this.shareCardTimer);
     if (this.worker) {
       await this.worker.close();
     }
+    await this.shareCardBackfill;
   }
 
   async processJob(job: Job<MediaProcessingJob>): Promise<void> {
@@ -263,6 +280,9 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
         card.mimeType,
         signal,
       );
+      // The API's shell fingerprint watches media timestamps. READY was
+      // committed before this file existed, so signal its availability now.
+      await this.mediaAssets.update({ id: assetId }, { updatedAt: new Date() });
     } catch {
       // The API falls back to the logo variant when the card is missing.
       this.logger.warn(`Share card generation failed for asset ${assetId}`);
@@ -279,7 +299,12 @@ export class MediaProcessor implements OnModuleInit, BeforeApplicationShutdown {
         take: batch,
         skip,
       });
-      for (const store of stores) await this.backfillShareCard(store);
+      for (const store of stores) {
+        if (this.stopping) return;
+        await this.backfillShareCard(store).catch(() =>
+          this.logger.warn('Share card backfill item failed'),
+        );
+      }
       if (stores.length < batch) return;
     }
   }

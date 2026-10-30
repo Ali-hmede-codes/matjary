@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { applyPageSeo } from './page-seo.ts';
 import {
   brandingUrl,
   contrastColor,
@@ -14,6 +15,92 @@ import {
   readSavedIds,
   safeUrl,
 } from './website.ts';
+
+test('page SEO replaces stale shell tags and never restores an old title on navigation', () => {
+  const children = new Set<FakeElement>();
+  class FakeElement {
+    attributes: Record<string, string> = {};
+    textContent = '';
+    setAttribute(name: string, value: string) {
+      this.attributes[name] = value;
+    }
+    remove() {
+      children.delete(this);
+    }
+  }
+  const doc = {
+    title: 'Old built title',
+    head: {
+      querySelectorAll: () => [...children],
+      appendChild: (node: FakeElement) => children.add(node),
+    },
+    createElement: () => new FakeElement(),
+  };
+  const stale = new FakeElement();
+  stale.setAttribute('name', 'description');
+  stale.setAttribute('content', 'Old description');
+  children.add(stale);
+  const origin = 'https://shop.test';
+  const cleanup = applyPageSeo(
+    doc as unknown as Document,
+    {
+      title: 'Saved SEO title',
+      verificationMeta: [
+        '<meta name="google-site-verification" content="valid_token-123">',
+        '<script>alert(1)</script>',
+        '<meta name="refresh" content="0">',
+      ],
+      description: 'Saved SEO description',
+      canonical: '/stores/shop',
+      og: {
+        title: 'Saved social title',
+        description: 'Saved social description',
+        image: '/card.jpg?v=2',
+        url: `${origin}/stores/shop`,
+        type: 'website',
+      },
+      twitter: {
+        title: 'Saved tweet',
+        description: 'Tweet copy',
+        card: 'summary_large_image',
+        site: '@shop',
+        image: '/card.jpg?v=2',
+      },
+    },
+    origin,
+    '/stores/shop',
+  );
+  const tags = (attribute: string, name: string) =>
+    [...children]
+      .filter((node) => node.attributes[attribute] === name)
+      .map((node) => node.attributes.content);
+  assert.equal(doc.title, 'Saved SEO title');
+  assert.deepEqual(tags('name', 'description'), ['Saved SEO description']);
+  assert.deepEqual(tags('property', 'og:title'), ['Saved social title']);
+  assert.deepEqual(tags('property', 'og:image'), [`${origin}/card.jpg?v=2`]);
+  assert.deepEqual(tags('name', 'twitter:site'), ['@shop']);
+  assert.deepEqual(tags('name', 'google-site-verification'), [
+    'valid_token-123',
+  ]);
+  assert.deepEqual(tags('name', 'refresh'), []);
+  const nextCleanup = applyPageSeo(
+    doc as unknown as Document,
+    {
+      title: 'New route — New brand',
+      description: 'Current description',
+      robots: 'noindex, nofollow',
+    },
+    origin,
+    '/dashboard',
+  );
+  cleanup();
+  assert.equal(doc.title, 'New route — New brand');
+  assert.deepEqual(tags('name', 'description'), ['Current description']);
+  assert.deepEqual(tags('property', 'og:image'), []);
+  assert.deepEqual(tags('name', 'robots'), ['noindex, nofollow']);
+  nextCleanup();
+  assert.equal(doc.title, 'New route — New brand');
+});
 
 test('branding uses public settings and rejects malformed values', () => {
   const settings = normalizeSettings({
