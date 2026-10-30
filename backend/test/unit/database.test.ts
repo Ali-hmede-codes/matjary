@@ -10,6 +10,7 @@ import { AddStoreLocation1793318400000 } from '../../libs/database/src/migration
 import { FreeTrialSubscriptions1794004800000 } from '../../libs/database/src/migrations/1794004800000-FreeTrialSubscriptions';
 import { UnlimitedPlanStorage1794091200000 } from '../../libs/database/src/migrations/1794091200000-UnlimitedPlanStorage';
 import { MaxPostsOnly1794177600000 } from '../../libs/database/src/migrations/1794177600000-MaxPostsOnly';
+import { FreeTrialThreeDays1795646400000 } from '../../libs/database/src/migrations/1795646400000-FreeTrialThreeDays';
 import {
   User,
   Showcase,
@@ -142,11 +143,11 @@ test('free trial migration backfills bounded trials and is reversible', async ()
 
   await migration.up(runner);
   assert.equal(queries.length, 3);
-  assert.match(queries[0] ?? '', /INTERVAL 7 DAY/);
+  assert.match(queries[0] ?? '', /INTERVAL 3 DAY/);
   assert.match(queries[0] ?? '', /free-trial-rollout/);
   assert.match(queries[1] ?? '', /^INSERT INTO `user_subscriptions`/);
   assert.match(queries[1] ?? '', /NOT EXISTS/);
-  assert.match(queries[2] ?? '', /7-day free trial with basic features/);
+  assert.match(queries[2] ?? '', /3-day free trial with basic features/);
 
   queries.length = 0;
   await migration.down(runner);
@@ -157,6 +158,30 @@ test('free trial migration backfills bounded trials and is reversible', async ()
   );
   assert.match(queries[1] ?? '', /free-trial-rollout/);
   assert.match(queries[2] ?? '', /Free tier with basic features/);
+});
+
+test('three-day trial migration aligns the stored free-plan description', async () => {
+  const queries: string[] = [];
+  const runner = {
+    async query(sql: string) {
+      const statement = sql.trim().replace(/;$/, '').replace(/\s+/g, ' ');
+      assert.doesNotMatch(statement, /;\s*\S/, 'One SQL statement per query');
+      queries.push(statement);
+    },
+  } as unknown as QueryRunner;
+  const migration = new FreeTrialThreeDays1795646400000();
+
+  await migration.up(runner);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0] ?? '', /^UPDATE `subscription_plans`/);
+  assert.match(queries[0] ?? '', /3-day free trial with basic features/);
+  assert.match(queries[0] ?? '', /7-day free trial with basic features/);
+
+  queries.length = 0;
+  await migration.down(runner);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0] ?? '', /^UPDATE `subscription_plans`/);
+  assert.match(queries[0] ?? '', /7-day free trial with basic features/);
 });
 
 test('unlimited plan storage migration normalizes plans and restores seeded quotas', async () => {

@@ -77,7 +77,7 @@ test('a new account starts exactly one bounded free trial', async () => {
   assert.equal(saved[0].notes, 'Free trial');
   assert.equal(
     saved[0].expiresAt.getTime() - saved[0].startsAt.getTime(),
-    7 * DAY_MS,
+    3 * DAY_MS,
   );
 });
 
@@ -133,7 +133,7 @@ test('public plans expose the configured trial length only for the free plan', a
         id: 'plan-free',
         name: 'Free',
         slug: 'free',
-        description: '7-day free trial with basic features',
+        description: '3-day free trial with basic features',
         priceCents: '0',
         currency: 'USD',
         billingCycle: 'monthly',
@@ -167,6 +167,6 @@ test('public plans expose the configured trial length only for the free plan', a
     config,
   );
   const plans = await service.findPublic();
-  assert.equal(plans.find((plan) => plan.slug === 'free')?.trialDays, 7);
+  assert.equal(plans.find((plan) => plan.slug === 'free')?.trialDays, 3);
   assert.equal(plans.find((plan) => plan.slug === 'basic')?.trialDays, null);
 });

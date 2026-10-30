@@ -30,7 +30,7 @@ import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { MediaUpload } from '../shared/MediaUpload';
 import { SocialIcon, socialNetworks } from '../../components/SocialIcon';
-import { useOwner, type OwnerStore } from './OwnerPanel';
+import { TrialOffer, useOwner, type OwnerStore } from './OwnerPanel';
 import { StoreLifecycleControls } from './StoreManager';
 import {
   StoreBranchesEditor,
@@ -377,6 +377,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
           )
         }
       />
+      {!store && <TrialOffer />}
       {store && (
         <section className="panel-card store-lifecycle-panel">
           <div className="store-lifecycle-actions">

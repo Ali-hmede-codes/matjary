@@ -288,7 +288,7 @@ export function validateEnvironment(
       300,
       2592000,
     ),
-    FREE_TRIAL_DAYS: integer(env, 'FREE_TRIAL_DAYS', 7, 1, 90),
+    FREE_TRIAL_DAYS: integer(env, 'FREE_TRIAL_DAYS', 3, 1, 90),
     REDIS_HOST: text(env, 'REDIS_HOST', '127.0.0.1'),
     REDIS_PORT: integer(env, 'REDIS_PORT', 6379, 1, 65535),
     REDIS_PASSWORD: text(env, 'REDIS_PASSWORD'),

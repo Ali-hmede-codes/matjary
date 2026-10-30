@@ -530,7 +530,7 @@ test('subscription management preserves free fallback and historical assignments
   const trialMs =
     new Date(freeAssignment.expiresAt as Date).getTime() -
     new Date(freeAssignment.startsAt as Date).getTime();
-  assert.equal(trialMs, 7 * 24 * 60 * 60 * 1000);
+  assert.equal(trialMs, 3 * 24 * 60 * 60 * 1000);
   await assert.rejects(
     plans.assignSubscription(
       ownerId,

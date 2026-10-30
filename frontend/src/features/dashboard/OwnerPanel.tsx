@@ -473,6 +473,37 @@ function PlanBanner() {
     </section>
   );
 }
+// A new account meets its plan limits on the store-creation screens, so the
+// trial and the upgrade path are stated there. PlanBanner takes over in the
+// final days with a stronger warning, which keeps the two from stacking.
+export function TrialOffer() {
+  const { summary, store } = useOwner();
+  if (store?.teamRole === 'member') return null;
+  const state = summary.subscriptionState;
+  if (
+    state?.state !== 'trial' ||
+    state.daysRemaining == null ||
+    state.daysRemaining <= 2
+  )
+    return null;
+  const days = state.daysRemaining;
+  return (
+    <section className="panel-plan-banner trial-offer">
+      <div>
+        <strong>
+          Your free trial is active — {days} day{days === 1 ? '' : 's'} left.
+        </strong>
+        <span>
+          Build your store now. Want more shops, products, and posts? Upgrade
+          anytime — your published work stays online.
+        </span>
+      </div>
+      <Link className="panel-primary" to="/pricing">
+        Compare plans <ArrowUpRight size={16} />
+      </Link>
+    </section>
+  );
+}
 function NoStore() {
   return (
     <>
@@ -480,6 +511,7 @@ function NoStore() {
         title="Let's make it yours."
         description="Your store starts with a name. Everything else can come later."
       />
+      <TrialOffer />
       <Empty title="A home for your business">
         <p>A shop, a menu, or your next big idea. You're in control.</p>
         <Link className="panel-secondary" to="/dashboard/stores">

@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 // The free plan becomes a one-time trial. Existing accounts receive a fixed
-// seven-day window from rollout; environments without users only get the plan
+// three-day window from rollout; environments without users only get the plan
 // description update. MySQL DML here is intentionally small and inspectable
 // because migrations are not transactional.
 export class FreeTrialSubscriptions1794004800000 implements MigrationInterface {
@@ -12,7 +12,7 @@ export class FreeTrialSubscriptions1794004800000 implements MigrationInterface {
     await runner.query(`
       UPDATE \`user_subscriptions\` \`us\`
       JOIN \`subscription_plans\` \`p\` ON \`p\`.\`id\` = \`us\`.\`plan_id\`
-      SET \`us\`.\`expires_at\` = DATE_ADD(GREATEST(NOW(6), \`us\`.\`starts_at\`), INTERVAL 7 DAY),
+      SET \`us\`.\`expires_at\` = DATE_ADD(GREATEST(NOW(6), \`us\`.\`starts_at\`), INTERVAL 3 DAY),
           \`us\`.\`notes\` = CONCAT(COALESCE(\`us\`.\`notes\`, ''), ' [free-trial-rollout]')
       WHERE \`p\`.\`slug\` = 'free'
         AND \`us\`.\`status\` = 'active'
@@ -24,7 +24,7 @@ export class FreeTrialSubscriptions1794004800000 implements MigrationInterface {
       INSERT INTO \`user_subscriptions\`
         (\`id\`, \`user_id\`, \`plan_id\`, \`status\`, \`starts_at\`, \`expires_at\`, \`assigned_by\`, \`notes\`)
       SELECT UUID(), \`u\`.\`id\`, \`p\`.\`id\`, 'active',
-             NOW(6), DATE_ADD(NOW(6), INTERVAL 7 DAY), NULL, 'Free trial (rollout)'
+             NOW(6), DATE_ADD(NOW(6), INTERVAL 3 DAY), NULL, 'Free trial (rollout)'
       FROM \`users\` \`u\`
       JOIN \`subscription_plans\` \`p\` ON \`p\`.\`slug\` = 'free'
       WHERE NOT EXISTS (
@@ -38,7 +38,7 @@ export class FreeTrialSubscriptions1794004800000 implements MigrationInterface {
 
     await runner.query(`
       UPDATE \`subscription_plans\`
-      SET \`description\` = '7-day free trial with basic features'
+      SET \`description\` = '3-day free trial with basic features'
       WHERE \`slug\` = 'free'
         AND \`description\` = 'Free tier with basic features'
     `);
@@ -61,7 +61,7 @@ export class FreeTrialSubscriptions1794004800000 implements MigrationInterface {
       UPDATE \`subscription_plans\`
       SET \`description\` = 'Free tier with basic features'
       WHERE \`slug\` = 'free'
-        AND \`description\` = '7-day free trial with basic features'
+        AND \`description\` = '3-day free trial with basic features'
     `);
   }
 }
