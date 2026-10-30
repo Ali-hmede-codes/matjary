@@ -35,6 +35,7 @@ export const ARABIC_UI_LABELS: Record<string, string> = {
   'Terms & Conditions': 'الشروط والأحكام',
   'Privacy Policy': 'سياسة الخصوصية',
   'Get in touch': 'تواصل معنا',
+  WhatsApp: 'واتساب',
 
   // Owner and admin panel sections.
   Overview: 'نظرة عامة',

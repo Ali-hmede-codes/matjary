@@ -1,9 +1,10 @@
-// Contact details shown at the bottom of the Terms and Privacy pages.
-// Fill in the real email and phone number here when they are ready; until
-// then the contact block falls back to the website settings email and shows a
-// "coming soon" note for the phone number. No other file needs to change.
-export const LEGAL_CONTACT_EMAIL: string | null = null;
-export const LEGAL_CONTACT_PHONE: string | null = null;
+// Contact details shown at the bottom of the Terms and Privacy pages. They
+// come from the platform-wide support identity in contact.ts, so the pages
+// that invite visitors to reach the team always agree with each other.
+import { SUPPORT_EMAIL, SUPPORT_PHONE } from './contact.ts';
+
+export const LEGAL_CONTACT_EMAIL: string | null = SUPPORT_EMAIL;
+export const LEGAL_CONTACT_PHONE: string | null = SUPPORT_PHONE;
 
 // The date the legal copy below was last reviewed. Update both pages together
 // whenever their wording changes.

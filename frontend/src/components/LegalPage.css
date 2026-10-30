@@ -251,8 +251,8 @@
   text-underline-offset: 3px;
 }
 
-/* Contact block uses the site contact email from Website settings until a
-   dedicated legal address is filled in under lib/legal.ts. */
+/* Contact block: email, phone and WhatsApp links from lib/contact.ts, with
+   the administrator's site email used only if the legal address is cleared. */
 .legal-contact {
   scroll-margin-top: 96px;
   padding: 26px 28px;

@@ -17,6 +17,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { getJson, loginUrl } from '../lib/api';
+import { SUPPORT_EMAIL } from '../lib/contact';
 import {
   billingLabel,
   planBadge,
@@ -183,6 +184,9 @@ function PlanCard({
 
 export function PricingPage() {
   const { settings, theme, settingsQuery } = useWebsiteSettings();
+  // An administrator can point plan questions at a different inbox; otherwise
+  // the platform support address is used.
+  const contactEmail = settings.contactEmail || SUPPORT_EMAIL;
   const plansQuery = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: ({ signal }) =>
@@ -314,7 +318,7 @@ export function PricingPage() {
                       <PlanCard
                         key={plan.slug}
                         plan={plan}
-                        contactEmail={settings.contactEmail}
+                        contactEmail={contactEmail}
                         featured={plan.slug === featuredSlug}
                       />
                     ))}
@@ -385,18 +389,16 @@ export function PricingPage() {
             <div>
               <h2 id="pricing-help-title">Need a hand choosing?</h2>
               <p>
-                {settings.contactEmail
+                {contactEmail
                   ? 'Have questions about a plan? We’re here to help.'
                   : 'See what independent businesses are sharing on our platform.'}
               </p>
             </div>
             <a
               className="primary-button"
-              href={
-                settings.contactEmail ? `mailto:${settings.contactEmail}` : '/'
-              }
+              href={contactEmail ? `mailto:${contactEmail}` : '/'}
             >
-              {settings.contactEmail ? (
+              {contactEmail ? (
                 <>
                   <Mail size={17} aria-hidden="true" /> Get in touch
                 </>

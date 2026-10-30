@@ -3,11 +3,13 @@ import {
   ArrowLeft,
   ArrowRight,
   Mail,
+  MessageCircle,
   Phone,
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
+import { SUPPORT_WHATSAPP_URL } from '../lib/contact';
 import {
   brandDocument,
   LEGAL_CONTACT_EMAIL,
@@ -48,8 +50,8 @@ function ContactCard({
       <div className="legal-contact-head">
         <h2 id="legal-contact-title">Questions about this page?</h2>
         <p>
-          Write to us and we will get back to you. We usually reply within a few
-          business days.
+          Write to us or message us on WhatsApp and we will get back to you. We
+          usually reply within a few business days.
         </p>
       </div>
       <ul className="legal-contact-list">
@@ -81,6 +83,22 @@ function ContactCard({
                 The phone number will be published here soon.
               </span>
             )}
+          </span>
+        </li>
+        <li>
+          <span className="legal-contact-icon" aria-hidden="true">
+            <MessageCircle size={17} />
+          </span>
+          <span className="legal-contact-body">
+            <span className="legal-contact-label">WhatsApp</span>
+            <a
+              href={SUPPORT_WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Message us on WhatsApp
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
           </span>
         </li>
       </ul>

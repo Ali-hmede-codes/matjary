@@ -19,6 +19,7 @@ import {
   useUnsaved,
 } from '../shared/PanelUI';
 import { assetUrl } from '../../lib/api';
+import { SUPPORT_EMAIL } from '../../lib/contact';
 import {
   brandingUrl,
   contrastColor,
@@ -388,8 +389,9 @@ function SettingsForm({
               <span className="panel-field-error">{issues.contactEmail}</span>
             ) : (
               <small>
-                Optional. Used for "Get in touch" buttons and the pricing page;
-                no email is sent automatically.
+                Optional. Overrides the built-in support address (
+                {SUPPORT_EMAIL}) used by "Get in touch" buttons and the pricing
+                page; no email is sent automatically.
               </small>
             )}
           </label>

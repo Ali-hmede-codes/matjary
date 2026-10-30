@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatProductPrice } from '../../lib/storefront';
+import { SUPPORT_EMAIL } from '../../lib/contact';
 import { dateLabel, getJson, mutate, panelError } from '../shared/panel-api';
 import { Loading, Notice, PageTitle, Retry } from '../shared/PanelUI';
 import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
@@ -163,7 +164,9 @@ export function OwnerVerification() {
     badge.state === 'active' && !badge.expiresAt && !badge.included;
   const paymentPhone = data.payment.contactPhone;
   const telHref = paymentPhone?.replace(/[^+\d]/gu, '') ?? '';
-  const contactEmail = settings.contactEmail;
+  // The administrator's inbox takes priority; otherwise owners are pointed at
+  // the platform support address.
+  const contactEmail = settings.contactEmail || SUPPORT_EMAIL;
   const monthlyPrice = formatProductPrice(
     data.eligibility.priceCents,
     data.eligibility.currency,
