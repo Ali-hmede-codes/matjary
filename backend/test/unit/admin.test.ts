@@ -854,6 +854,29 @@ test('subscription management preserves free fallback and historical assignments
     adminId,
   );
   await plans.update(paid.id, { name: 'Premium' }, adminId);
+  // Zero is an entitlement, not a missing quota: the admin panel saves 0 to
+  // turn stories off or bundle no badges, so it must not fail validation.
+  const zeroed = await plans.create(
+    {
+      slug: 'zeroed',
+      name: 'Zeroed',
+      limits: { maxStories: 0, maxVerificationBadges: 0 },
+      priceCents: 100,
+    },
+    adminId,
+  );
+  await plans.update(
+    zeroed.id,
+    { limits: { maxStories: 0, maxVerificationBadges: 0 } },
+    adminId,
+  );
+  assert.equal(
+    (
+      f.rows(SubscriptionPlan).find((row) => row.id === zeroed.id)?.limits as
+        { maxStories?: number } | undefined
+    )?.maxStories,
+    0,
+  );
   await plans.delete(paid.id, adminId);
   assert.equal(
     f.rows(SubscriptionPlan).find((row) => row.id === paid.id)?.isActive,

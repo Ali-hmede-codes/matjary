@@ -582,7 +582,6 @@ export class SubscriptionPlansService {
       'maxTotalPosts',
       'maxShops',
       'maxProducts',
-      'maxStories',
       'maxCategories',
       'maxStorageBytes',
     ];
@@ -602,13 +601,17 @@ export class SubscriptionPlansService {
       }
     }
 
-    // Validate badge fields (can be 0 = no badges, or positive number)
-    const badgeFields: (keyof SubscriptionLimits)[] = [
+    // Stories and badges treat zero as an answer, not as a missing quota:
+    // 0 stories means the plan turns stories off (the free plan stores 0), and
+    // 0 badges means the plan bundles none. Rejecting zero here made the admin
+    // panel fail with a 400 whenever it saved a plan holding those values.
+    const zeroAllowedFields: (keyof SubscriptionLimits)[] = [
+      'maxStories',
       'maxVerificationBadges',
       'verificationBadgePriceCents',
     ];
 
-    for (const field of badgeFields) {
+    for (const field of zeroAllowedFields) {
       const value = limits[field];
       if (
         value !== undefined &&
