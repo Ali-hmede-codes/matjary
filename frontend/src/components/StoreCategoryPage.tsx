@@ -1,3 +1,4 @@
+import './storefront.css';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { LayoutGrid, Share2, ShoppingBag, Utensils } from 'lucide-react';
 import {

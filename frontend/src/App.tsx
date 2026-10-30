@@ -1,7 +1,12 @@
 import { DiscoveryRail } from './components/DiscoveryRail';
 import { FeedPosts } from './components/FeedPosts';
 import { FeedToolbar } from './components/FeedToolbar';
-import { LoadingBar, StatusBanner, Toast } from './components/Feedback';
+import {
+  LoadingBar,
+  RouteLoading,
+  StatusBanner,
+  Toast,
+} from './components/Feedback';
 import { PostDialog } from './components/PostDialog';
 import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
@@ -19,11 +24,20 @@ import { brandingUrl, websiteSeoTitle } from './lib/website';
 import { documentLanguage, requestTranslation } from './lib/language';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { LoginPage, ProtectedPanel } from './features/shared/PanelAuth';
-import { Loading } from './features/shared/PanelUI';
-import './features/shared/panels.css';
 const AdminPanel = lazy(() => import('./features/admin/AdminPanel'));
 const OwnerPanel = lazy(() => import('./features/dashboard/OwnerPanel'));
+// Sign-in and the panel guard are only needed by /login, /admin, and
+// /dashboard, so the feed does not ship their code to every visitor.
+const LoginPage = lazy(() =>
+  import('./features/shared/PanelAuth').then((module) => ({
+    default: module.LoginPage,
+  })),
+);
+const ProtectedPanel = lazy(() =>
+  import('./features/shared/PanelAuth').then((module) => ({
+    default: module.ProtectedPanel,
+  })),
+);
 // Shop and pricing screens are reached from the feed, so they stay out of the
 // initial bundle; the discovery page ships only what it renders.
 const StorePage = lazy(() =>
@@ -121,7 +135,7 @@ export default function App() {
     <BrowserRouter>
       <TranslateSync />
       <PanelPageSeo />
-      <Suspense fallback={<Loading />}>
+      <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route path="/" element={<DiscoveryPage />} />
           <Route path="/shops" element={<ShopsPage />} />

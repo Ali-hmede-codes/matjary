@@ -1,3 +1,4 @@
+import './panels.css';
 import {
   Component,
   useEffect,

@@ -1,3 +1,4 @@
+import './PricingPage.css';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useQuery } from '@tanstack/react-query';
 import {

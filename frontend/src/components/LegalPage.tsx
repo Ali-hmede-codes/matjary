@@ -1,3 +1,4 @@
+import './LegalPage.css';
 import { usePageSeo } from '../hooks/usePageSeo';
 import {
   ArrowLeft,

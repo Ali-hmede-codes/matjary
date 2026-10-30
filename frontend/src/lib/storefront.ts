@@ -284,6 +284,21 @@ export function storeMediaUrl(value: string | null | undefined) {
   return `/api/v1/uploads/${encodeURIComponent(value)}`;
 }
 
+// Every processed image exists once per format and width tier (480/1080/1600),
+// and its stored key ends with that tier. Small surfaces such as avatars use
+// this to ask for the 480px file instead of downloading the full-size logo.
+// Unrecognised keys (older rows, external URLs) are returned unchanged, and
+// callers keep the stored key as their fallback.
+const MEDIA_TIER_KEY = /-(480|1080|1600)\.(avif|webp|jpe?g)$/iu;
+
+export function sizedMediaKey(
+  value: string | null | undefined,
+  width: 480 | 1080 | 1600,
+): string | null {
+  if (!value) return null;
+  return value.replace(MEDIA_TIER_KEY, `-${width}.$2`);
+}
+
 const socialLabels = {
   instagram: 'Instagram',
   facebook: 'Facebook',

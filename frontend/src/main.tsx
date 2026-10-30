@@ -9,11 +9,7 @@ import '@fontsource-variable/cairo';
 import App from './App';
 import { getJson } from './lib/api';
 import { applyLanguage, storedLanguage } from './lib/language';
-import {
-  cacheSettings,
-  normalizeSettings,
-  readSettingsCache,
-} from './lib/website';
+import { cacheSettings, normalizeSettings } from './lib/website';
 import './styles.css';
 
 // Resolve the saved language before the first render: <html dir> has to be set
@@ -43,16 +39,18 @@ async function refreshBranding(): Promise<void> {
   }
 }
 
-const cached = readSettingsCache();
-void Promise.race([
-  refreshBranding(),
-  new Promise((resolve) => window.setTimeout(resolve, cached ? 1000 : 2000)),
-]).then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <QueryClientProvider client={client}>
-        <App />
-      </QueryClientProvider>
-    </StrictMode>,
-  );
-});
+// The static HTML only carries generic copy. Branding is fetched in the
+// background instead of before the first paint: waiting for it delayed the
+// render (and the feed request behind the render) by a full round trip, which
+// PageSpeed counts as LCP render delay. `useWebsiteSettings` seeds from the
+// localStorage snapshot, so a returning visitor already paints the right name,
+// and the API answer updates an open tab as soon as it arrives.
+void refreshBranding();
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={client}>
+      <App />
+    </QueryClientProvider>
+  </StrictMode>,
+);

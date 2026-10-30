@@ -1,3 +1,5 @@
+import './storefront.css';
+import './PostPage.css';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {

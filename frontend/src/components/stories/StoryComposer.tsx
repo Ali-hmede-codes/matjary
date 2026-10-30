@@ -1,3 +1,4 @@
+import './StoryComposer.css';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ImagePlus, LoaderCircle, Sparkles, X } from 'lucide-react';

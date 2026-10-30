@@ -32,6 +32,7 @@ import {
   productOptionSelection,
   productPriceLabel,
   slugDraft,
+  sizedMediaKey,
   storeCategoryPath,
   storeMenuPath,
   storePostPath,
@@ -522,6 +523,30 @@ test('shop images preserve opaque keys and reject unsafe URLs', () => {
     'https://user:password@example.test/a',
   ])
     assert.equal(storeMediaUrl(value), undefined);
+});
+
+test('avatars can ask a stored image key for a smaller width tier', () => {
+  const key =
+    'media/store/asset/01683dd4-b579-43a2-a388-f7baec751d3f/' +
+    'webp-1080.webp';
+  assert.equal(
+    sizedMediaKey(key, 480),
+    'media/store/asset/01683dd4-b579-43a2-a388-f7baec751d3f/webp-480.webp',
+  );
+  // The extension must follow the label, not the width alone.
+  assert.equal(
+    sizedMediaKey('media/store/asset/poster/jpeg-1600.jpg', 480),
+    'media/store/asset/poster/jpeg-480.jpg',
+  );
+  assert.equal(sizedMediaKey(key, 1080), key);
+  assert.equal(sizedMediaKey(null, 480), null);
+  // Unknown shapes stay untouched so the caller can fall back to the original.
+  for (const value of [
+    'legacy-logo.webp',
+    'media/store/asset/logo.webp',
+    'https://cdn.example.test/logo.webp',
+  ])
+    assert.equal(sizedMediaKey(value, 480), value);
 });
 
 test('profile social links show only saved, supported, safe destinations', () => {

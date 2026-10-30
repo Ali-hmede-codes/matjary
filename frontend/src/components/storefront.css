@@ -1,0 +1,9 @@
+/* Storefront styles are shared by the lazy shop and post routes only, so they
+   are imported from those route modules instead of the entry stylesheet: the
+   discovery feed never downloads them.
+   Import order is the cascade: the shell and banner base rules come first, then
+   the catalog, post-wall, and branch refinements that build on them. */
+@import './StorePage.css';
+@import './StorePostWall.css';
+@import './StoreMenu.css';
+@import './ShopBranches.css';

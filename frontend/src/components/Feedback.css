@@ -40,6 +40,30 @@
   border-radius: 3px;
   animation: loading-progress 1.2s ease-in-out infinite;
 }
+/* Lazy-route fallback; the panel stylesheet would otherwise have to load first. */
+.route-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 60vh;
+  padding: 60px 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.route-loading > span {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: loading-spin 1s linear infinite;
+}
+@keyframes loading-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
 .toast {
   position: fixed;
   display: flex;

@@ -184,7 +184,11 @@ export function AutoplayVideo({
         muted={muted}
         loop
         playsInline
-        preload={near && active ? 'auto' : 'none'}
+        // `near` attaches the source 300px early so scrolling in feels instant,
+        // but one clip is 3-4 MB. Until the card is actually on screen the
+        // browser may fetch only the metadata, so clips a visitor scrolls past
+        // never download their media bytes; playback starts the real transfer.
+        preload={visible ? 'auto' : 'metadata'}
         aria-label={title}
         onPlay={() => {
           setPaused(false);

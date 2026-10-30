@@ -154,17 +154,19 @@ export class MediaController {
     const header = request.headers.range;
     const range = header ? parseMediaRange(header, size) : undefined;
     // Public variant keys contain the asset UUID and never change bytes, so a
-    // positive response is safe to cache. Every request is still authorized
-    // above, and `MEDIA_PUBLIC_CACHE_SECONDS` bounds how long a browser or a
-    // shared proxy may reuse the bytes after content is unpublished.
+    // positive response is safe to cache for the configured lifetime and may be
+    // marked immutable: the browser skips even a revalidation request until the
+    // URL itself changes, which only happens for a newly uploaded asset. Every
+    // request is still authorized above, so unpublished content stops answering
+    // immediately even though copies already downloaded by a visitor persist.
     response.setHeader(
       'Cache-Control',
       access.public
         ? `public, max-age=${this.config.get(
             'MEDIA_PUBLIC_CACHE_SECONDS',
-            3600,
+            31536000,
             { infer: true },
-          )}`
+          )}, immutable`
         : 'private, no-store',
     );
     if (!access.public) response.setHeader('Vary', 'Cookie');

@@ -1,3 +1,4 @@
+import './storefront.css';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Share2 } from 'lucide-react';

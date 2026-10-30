@@ -321,15 +321,17 @@ export function validateEnvironment(
       1,
       90,
     ),
-    // Public variants are immutable URLs; a bounded max-age lets browsers and
-    // an optional shared cache absorb traffic while moderation stays bounded
-    // by this window.
+    // Public variants are immutable URLs: the key embeds the asset UUID and the
+    // encoder writes it once, so browsers may keep the bytes for a year without
+    // any staleness risk. Every request is still authorized, so moderation hides
+    // unpublished content immediately; only already-downloaded copies persist.
+    // Set 0 to revalidate every request instead.
     MEDIA_PUBLIC_CACHE_SECONDS: integer(
       env,
       'MEDIA_PUBLIC_CACHE_SECONDS',
-      3600,
+      31536000,
       0,
-      604800,
+      31536000,
     ),
     // Storage provider selection: 's3' (object storage) or 'local' (VPS disk).
     STORAGE_PROVIDER: storageProvider as AppEnvironment['STORAGE_PROVIDER'],

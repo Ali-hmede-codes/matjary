@@ -246,6 +246,18 @@ location = /index.html {
     try_files \$uri =404;
 }
 
+# Vite writes every script, stylesheet, and font into /assets/ with a content
+# hash in its name, so a rebuilt file always gets a new URL and can never be
+# confused with the previous one. Caching these for a year removes the repeated
+# download of the application bundle that every release otherwise causes.
+# index.html stays uncached above and is the only address that names the new
+# hashes, so a release is still picked up on the next page load.
+location ^~ /assets/ {
+    expires 1y;
+    access_log off;
+    try_files \$uri =404;
+}
+
 # Branding files keep their names between releases. Browsers must revalidate
 # them so a replaced logo, favicon, or manifest cannot keep showing the previous
 # icon; the built HTML also appends a content stamp to each URL. Keep this block

@@ -1,3 +1,4 @@
+import './storefront.css';
 import {
   useEffect,
   useLayoutEffect,

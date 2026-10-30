@@ -664,8 +664,8 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
     assert.equal(part.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(
       part.headers.get('cache-control'),
-      'public, max-age=3600',
-      'published variants are cacheable so repeat views skip the origin',
+      'public, max-age=31536000, immutable',
+      'published variants are immutable and cacheable so repeat views skip the origin',
     );
     assert.equal(await part.text(), '2345');
     // A revalidating browser gets a bodyless response instead of the bytes.

@@ -29,6 +29,18 @@ export function LoadingBar() {
   );
 }
 
+// Route fallback for lazily loaded screens (shops, pricing, panels). It lives
+// with the feed's own styles so the panel stylesheet can stay in the panel
+// chunks instead of blocking the first paint of the discovery page.
+export function RouteLoading() {
+  return (
+    <div className="route-loading" role="status">
+      <span aria-hidden="true" />
+      Getting everything ready…
+    </div>
+  );
+}
+
 export function Toast({
   message,
   icon,

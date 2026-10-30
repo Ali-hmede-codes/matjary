@@ -1,5 +1,9 @@
 /* CSS entry point: edit theme.css for shared design controls, or a component's
-   matching CSS file for its appearance. Keep imports here so cascade order is explicit. */
+   matching CSS file for its appearance. Keep imports here so cascade order is explicit.
+   Only what the discovery feed itself renders belongs in this file: the shop,
+   post, pricing, directory, and legal pages import their own styles from their
+   lazy route chunks (storefront.css covers the shop and post routes), so a
+   visitor reads a smaller render-blocking stylesheet. */
 @import './styles/theme.css';
 @import './styles/base.css';
 @import './styles/shared.css';
@@ -21,19 +25,10 @@
 @import './components/SiteFooter.css';
 @import './components/Feedback.css';
 @import './components/PostDialog.css';
-@import './components/PostPage.css';
-@import './components/StorePage.css';
-@import './components/StorePostWall.css';
-@import './components/StoreMenu.css';
-@import './components/ShopBranches.css';
-@import './components/PricingPage.css';
-@import './components/LegalPage.css';
-@import './components/ShopsPage.css';
 @import './components/stories/StoryAvatar.css';
 @import './components/stories/StoryRail.css';
 @import './components/stories/StoryViewer.css';
 @import './components/stories/StoreStorySheet.css';
-@import './components/stories/StoryComposer.css';
 @import './styles/animations.css';
 /* Last: right-to-left fixes and the Google Translate chrome reset. */
 @import './styles/translated.css';

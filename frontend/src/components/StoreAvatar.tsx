@@ -10,6 +10,7 @@ import { BadgeCheck, X } from 'lucide-react';
 import { assetUrl, type Media, type Store } from '../lib/api';
 import {
   isStoreVerified,
+  sizedMediaKey,
   storeMediaUrl,
   storePresentation,
 } from '../lib/storefront';
@@ -62,11 +63,19 @@ export function StoreAvatar({
   // Touch holds are the gesture's own; a mouse right-click still gets the menu.
   const touchPress = useRef(false);
   const logoSrc = assetUrl(storeMediaUrl(store?.logoKey));
+  // The saved logo key points at the widest processed tier (~1080px) while an
+  // avatar is drawn a few dozen pixels wide. Ask for the 480px sibling first,
+  // then fall back to the saved key, then to a post preview, then to initials:
+  // a missing sibling must never hide a logo that does exist.
   const thumbnail =
-    logoSrc ||
-    assetUrl(
-      preview?.kind === 'video' ? preview.posterUrl : preview?.primaryUrl,
-    );
+    [
+      assetUrl(storeMediaUrl(sizedMediaKey(store?.logoKey, 480))),
+      logoSrc,
+      assetUrl(
+        preview?.kind === 'video' ? preview.posterUrl : preview?.primaryUrl,
+      ),
+    ].find((value): value is string => Boolean(value) && value !== failedSrc) ??
+    undefined;
   const { theme } = storePresentation(store ?? { brandColor: null });
   // Initials are not a photo worth enlarging; only a real, loaded logo is.
   const canExpand = expandable && Boolean(logoSrc) && logoSrc !== failedSrc;
@@ -141,7 +150,7 @@ export function StoreAvatar({
             : undefined
         }
       >
-        {thumbnail && thumbnail !== failedSrc ? (
+        {thumbnail ? (
           <img
             src={thumbnail}
             alt=""
