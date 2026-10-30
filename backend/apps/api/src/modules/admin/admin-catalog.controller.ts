@@ -25,6 +25,7 @@ import {
   AdminErrorStateDto,
   AdminListDto,
   AdminReasonDto,
+  AdminUpdateStoreDto,
   AdminUserScopeDto,
   AdminUserUpdateDto,
   AdminUserRoleDto,
@@ -106,6 +107,17 @@ export class AdminCatalogController {
   @Post('stores')
   createStore(@Body() dto: AdminCreateStoreDto, @Actor() actor: AdminActor) {
     return this.catalog.createStore(dto, actor);
+  }
+
+  // Identity fields of an existing shop, including its public address. Lifecycle
+  // status, plans, verification, and moderation keep their dedicated operations.
+  @Patch('stores/:id')
+  updateStore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminUpdateStoreDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.catalog.updateStore(id, dto, actor);
   }
 
   @Post('users/:id/:action')

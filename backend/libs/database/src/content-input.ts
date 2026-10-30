@@ -1,6 +1,10 @@
 import { ConflictException } from '@nestjs/common';
 import { latinSlugBase } from './content-slug';
 
+// A shop address is rewritten from the administrator workspace; the stable code
+// lets the panel explain a collision without parsing prose.
+export const STORE_SLUG_TAKEN_CODE = 'STORE_SLUG_TAKEN';
+
 // Owners do not type addresses: new content derives a readable slug from its
 // name, and a numeric suffix resolves collisions (`mug`, `mug-2`, …) so links
 // stay meaningful instead of carrying an opaque identifier. Arabic names are

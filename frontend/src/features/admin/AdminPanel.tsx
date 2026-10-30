@@ -1008,6 +1008,7 @@ function Detail({
   });
   const data = query.data ?? item;
   const [changingRole, setChangingRole] = useState(false);
+  const [editingStore, setEditingStore] = useState(false);
   const [action, setAction] = useState<{
     path: string;
     title: string;
@@ -1198,6 +1199,11 @@ function Detail({
                     Open storefront
                   </Link>
                 )}
+                {!scoped && data.status !== 'trashed' && (
+                  <button onClick={() => setEditingStore(true)}>
+                    Edit shop details
+                  </button>
+                )}
                 {!scoped && (
                   <>
                     {isStoreVerified(data) &&
@@ -1353,6 +1359,13 @@ function Detail({
         />
       )}
       {changingRole && <ChangeRole user={data} adminId={id} close={close} />}
+      {editingStore && (
+        <EditStore
+          store={data}
+          adminId={id}
+          close={() => setEditingStore(false)}
+        />
+      )}
     </Modal>
   );
 }
@@ -2296,6 +2309,246 @@ function CreateStore({ id, close }: { id: string; close: () => void }) {
             </button>
             <button className="panel-primary" disabled={!ready}>
               {busy ? 'Creating…' : 'Create store'}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+// Owners cannot change their shop's public address, so an administrator
+// corrects it here together with the identity fields that shape the storefront.
+// Lifecycle status, plans, verification, and moderation keep their own
+// audited operations; this form only rewrites what visitors see.
+function EditStore({
+  store,
+  adminId,
+  close,
+}: {
+  store: PanelRecord;
+  adminId: string;
+  close: () => void;
+}) {
+  const initialName = store.name ?? '';
+  const initialSlug = store.slug ?? '';
+  const initialDescription = store.description ?? '';
+  const initialType =
+    store.storeType === 'restaurant_menu' ? 'restaurant_menu' : 'ecommerce';
+  const initialCategory = store.businessCategory ?? '';
+  const initialColor = store.brandColor || '#254e40';
+  const [name, setName] = useState(initialName);
+  const [slug, setSlug] = useState(initialSlug);
+  const [description, setDescription] = useState(initialDescription);
+  const [type, setType] = useState<'ecommerce' | 'restaurant_menu'>(
+    initialType,
+  );
+  const [category, setCategory] = useState(initialCategory);
+  const [color, setColor] = useState(initialColor);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState<{ name: string; slug: string }>();
+  const client = useQueryClient();
+  const catalog = useQuery({
+    queryKey: ['panel', adminId, 'store-categories'],
+    queryFn: ({ signal }) =>
+      getJson<ShopCategoryCatalog>('stores/categories', signal),
+  });
+  const slugValid = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug.trim());
+  const changed =
+    name.trim() !== initialName ||
+    slug.trim() !== initialSlug ||
+    description.trim() !== initialDescription ||
+    type !== initialType ||
+    category !== initialCategory ||
+    color !== initialColor;
+  const ready =
+    changed &&
+    Boolean(name.trim()) &&
+    Boolean(category) &&
+    slugValid &&
+    reason.trim().length >= 3 &&
+    !busy;
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!ready) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await mutate<{ name: string; slug: string }>(
+        `admin/stores/${store.id}`,
+        {
+          name: name.trim(),
+          slug: slug.trim(),
+          description: description.trim() || null,
+          brandColor: color,
+          storeType: type,
+          businessCategory: category,
+          reason: reason.trim(),
+        },
+        'PATCH',
+      );
+      await client.invalidateQueries({ queryKey: ['panel', adminId] });
+      setSaved({ name: result.name, slug: result.slug });
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const addressChanged = slug.trim() !== initialSlug;
+  return (
+    <Modal title="Edit shop details" onClose={close} busy={busy}>
+      {saved ? (
+        <>
+          <Notice>
+            <span className="notranslate">{saved.name}</span> is updated. Public
+            links now use the address <strong>{saved.slug}</strong>.
+            {addressChanged &&
+              ' Links to the previous address no longer open this shop.'}
+          </Notice>
+          <div className="panel-actions">
+            <Link
+              className="panel-secondary"
+              to={`/stores/${saved.slug}`}
+              target="_blank"
+            >
+              Open storefront <ArrowUpRight size={15} />
+            </Link>
+            <button className="panel-primary" onClick={close}>
+              Done
+            </button>
+          </div>
+        </>
+      ) : (
+        <form className="panel-form" onSubmit={(e) => void submit(e)}>
+          <p className="panel-muted">
+            Changes take effect on the public storefront immediately and are
+            recorded in the administrative activity log.
+          </p>
+          <label>
+            Store name
+            <input
+              required
+              maxLength={200}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="A name people will remember"
+            />
+          </label>
+          <label>
+            Web address
+            <input
+              required
+              maxLength={191}
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase())}
+              placeholder="my-shop"
+              pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            />
+            <small>
+              Lowercase letters, numbers, and dashes. The shop lives at /stores/
+              {slug.trim() || '…'}; old links stop working when this changes.
+            </small>
+          </label>
+          <fieldset>
+            <legend>Shop type</legend>
+            <div className="panel-plan-options">
+              <label
+                className={`panel-choice ${type === 'ecommerce' ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="edit-store-type"
+                  checked={type === 'ecommerce'}
+                  onChange={() => setType('ecommerce')}
+                />
+                <strong>Shop</strong>
+                <span>Products with prices and a cart.</span>
+              </label>
+              <label
+                className={`panel-choice ${type === 'restaurant_menu' ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="edit-store-type"
+                  checked={type === 'restaurant_menu'}
+                  onChange={() => setType('restaurant_menu')}
+                />
+                <strong>Restaurant / menu</strong>
+                <span>A menu-first storefront.</span>
+              </label>
+            </div>
+          </fieldset>
+          <label>
+            Business category
+            <select
+              required
+              value={category}
+              disabled={!catalog.data}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">
+                {catalog.data ? 'Choose a category…' : 'Loading categories…'}
+              </option>
+              {catalog.data?.groups.map((group) => (
+                <optgroup key={group.slug} label={group.label}>
+                  {catalog.data.categories
+                    .filter((item) => item.group === group.slug)
+                    .map((item) => (
+                      <option key={item.slug} value={item.slug}>
+                        {item.label}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+            {catalog.isError && (
+              <small>
+                Categories could not load. The current category is kept, and you
+                can retry by reopening this form.
+              </small>
+            )}
+          </label>
+          <label className="panel-color-picker">
+            Signature color
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+            />
+          </label>
+          <label>
+            Description
+            <textarea
+              rows={4}
+              maxLength={5000}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What should visitors know?"
+            />
+          </label>
+          <label>
+            Reason
+            <textarea
+              required
+              minLength={3}
+              maxLength={500}
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this shop changing?"
+            />
+            <small>Recorded in the administrative activity log.</small>
+          </label>
+          {error && <Notice error>{error}</Notice>}
+          <div className="panel-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              Go back
+            </button>
+            <button className="panel-primary" disabled={!ready}>
+              {busy ? 'Saving…' : 'Save shop'}
             </button>
           </div>
         </form>

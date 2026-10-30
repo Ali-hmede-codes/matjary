@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { In, type EntityManager } from 'typeorm';
@@ -29,7 +30,9 @@ import {
   effectiveLimits,
   assertQuota,
   assertContentAvailable,
+  isBusinessCategory,
   purgeStoreRecords,
+  STORE_SLUG_TAKEN_CODE,
   nextVerificationExpiry,
   verificationBadgeVisible,
   StoreVerificationRequest,
@@ -43,6 +46,7 @@ import { AdminAccessService } from './admin-access.service';
 import {
   AdminCreateStoreDto,
   AdminErrorStateDto,
+  AdminUpdateStoreDto,
   AdminUserScopeDto,
   AdminUserUpdateDto,
   AdminUserRoleDto,
@@ -57,6 +61,8 @@ const MAX_ASSIGNED_STORES = 200;
 
 @Injectable()
 export class AdminCatalogService {
+  private readonly logger = new Logger(AdminCatalogService.name);
+
   constructor(
     private readonly access: AdminAccessService,
     private readonly storage: StorageService,
@@ -320,6 +326,73 @@ export class AdminCatalogService {
     return this.stores.create(dto, dto.ownerId, {
       administrator: { actor, allowlist: this.access.allowlist },
     });
+  }
+
+  // Editing the public address is a platform-wide operation: a store-scoped
+  // administrator hides content, but the shop's identity stays with the website
+  // team. The unique index remains the final authority, so two administrators
+  // renaming shops at once still cannot share an address.
+  async updateStore(id: string, dto: AdminUpdateStoreDto, input: AdminActor) {
+    const actor = this.access.reason(input, dto.reason);
+    const saved = await this.access.transaction(actor, async (manager) => {
+      const store = await manager.findOne(Store, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!store) throw new NotFoundException('Store not found');
+      // A shop in Trash is waiting for restore or permanent deletion; editing its
+      // public address there would only create links that cannot open.
+      if (store.status === StoreStatus.TRASHED)
+        throw new ConflictException('Restore the store before editing it');
+      if (dto.slug !== undefined && dto.slug !== store.slug) {
+        const taken = await manager.findOne(Store, {
+          where: { slug: dto.slug },
+        });
+        if (taken && taken.id !== id)
+          throw new ConflictException({
+            code: STORE_SLUG_TAKEN_CODE,
+            message: 'A store with this slug already exists',
+          });
+        store.slug = dto.slug;
+      }
+      if (dto.name !== undefined) store.name = dto.name;
+      if (dto.description !== undefined) store.description = dto.description;
+      if (dto.brandColor !== undefined) store.brandColor = dto.brandColor;
+      if (dto.storeType !== undefined) store.storeType = dto.storeType;
+      if (dto.businessCategory !== undefined) {
+        if (!isBusinessCategory(dto.businessCategory))
+          throw new BadRequestException('Choose a valid business category');
+        store.businessCategory = dto.businessCategory;
+      }
+      await manager.save(store);
+      await appendAdminAudit(manager, actor, 'stores', id, 'store.update', [
+        'name',
+        'slug',
+        'description',
+        'brandColor',
+        'storeType',
+        'businessCategory',
+      ]);
+      return store;
+    });
+    // Public metadata follows the shop, not the caller: a renamed or re-addressed
+    // shop must refresh its tags and shared pages even though an administrator
+    // performed the edit. The share-shell pass remains the last line of defence.
+    try {
+      await this.seo.autoGenerateOwnedSeo('store', saved.id, saved.ownerId);
+      await this.seo.notifyIndexNowOnChange('store', saved);
+    } catch (error) {
+      this.logger.warn(
+        'Failed to refresh store SEO after an administrative edit',
+        error,
+      );
+    }
+    return {
+      id: saved.id,
+      name: saved.name,
+      slug: saved.slug,
+      status: saved.status,
+    };
   }
 
   async purgeStore(id: string, reason: string, input: AdminActor) {

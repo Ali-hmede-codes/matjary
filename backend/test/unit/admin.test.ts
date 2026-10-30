@@ -58,6 +58,7 @@ import {
   moderationWhere,
   visibilitySql,
 } from '../../libs/database/src/visibility-policy';
+import { STORE_SLUG_TAKEN_CODE } from '../../libs/database/src/content-input';
 import { AdminOperations1793572800000 } from '../../libs/database/src/migrations/1793572800000-AdminOperations';
 import { AddUserRoles1793745600000 } from '../../libs/database/src/migrations/1793745600000-AddUserRoles';
 import { publicUser } from '../../apps/api/src/modules/users/users.service';
@@ -331,7 +332,11 @@ function fixture() {
   const catalog = new AdminCatalogService(
     access,
     storage as never,
-    { autoGenerateAdminSeo: async () => {} } as never,
+    {
+      autoGenerateAdminSeo: async () => {},
+      autoGenerateOwnedSeo: async () => {},
+      notifyIndexNowOnChange: async () => {},
+    } as never,
     queue as never,
     stores as never,
   );
@@ -665,10 +670,9 @@ test('user roles migration is registered, defaults to user and has a rollback', 
   );
 });
 
-test('administrator catalog is read-only except audited oversight and store creation', async () => {
+test('administrator catalog stays read-only except audited oversight, shop creation, and shop identity edits', async () => {
   const f = fixture();
   for (const method of [
-    'updateStore',
     'createProduct',
     'updateProduct',
     'createPost',
@@ -678,11 +682,13 @@ test('administrator catalog is read-only except audited oversight and store crea
     assert.equal(method in f.catalog, false);
     assert.equal(method in AdminCatalogController.prototype, false);
   }
-  // A platform administrator can open a shop for an owner; nothing else about
-  // the catalog becomes owner-editable.
+  // A platform administrator can open a shop for an owner and correct its
+  // public identity; nothing else about the catalog becomes owner-editable.
   assert.equal(typeof f.catalog.createStore, 'function');
   assert.equal(typeof AdminCatalogController.prototype.createStore, 'function');
   await f.catalog.createStore({ name: 'Seeded shop', ownerId }, actor);
+  assert.equal(typeof f.catalog.updateStore, 'function');
+  assert.equal(typeof AdminCatalogController.prototype.updateStore, 'function');
   assert.equal(f.created().length, 1);
   assert.equal(f.created()[0]?.ownerId, ownerId);
   assert.deepEqual(
@@ -696,6 +702,75 @@ test('administrator catalog is read-only except audited oversight and store crea
   await f.catalog.badge(resourceId, false, 'Verification withdrawn', actor);
   assert.equal(f.rows(Store)[0]?.hasVerificationBadge, false);
   assert.equal(f.rows(AdminAuditLog).length, 2);
+});
+
+test('administrators edit a shop address and identity while slugs stay unique', async () => {
+  const f = fixture();
+  const otherId = '77777777-7777-4777-8777-777777777777';
+  f.add(Store, {
+    id: resourceId,
+    ownerId,
+    name: 'Cedar',
+    slug: 'cedar',
+    status: StoreStatus.ACTIVE,
+    description: null,
+    brandColor: null,
+    storeType: 'ecommerce',
+    businessCategory: 'other',
+  });
+  f.add(Store, {
+    id: otherId,
+    ownerId,
+    name: 'Olive',
+    slug: 'olive',
+    status: StoreStatus.ACTIVE,
+  });
+  // Another shop already holds the requested address.
+  await assert.rejects(
+    f.catalog.updateStore(
+      resourceId,
+      { slug: 'olive', reason: 'Correct the public address' },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      (error.getResponse() as { code?: string }).code === STORE_SLUG_TAKEN_CODE,
+  );
+  // Shop identity stays a platform-wide operation, like shop creation.
+  await assert.rejects(
+    f.catalog.updateStore(
+      resourceId,
+      { slug: 'cedar-2', reason: 'Correct the public address' },
+      { ...actor, id: ownerId },
+    ),
+    ForbiddenException,
+  );
+  const saved = await f.catalog.updateStore(
+    resourceId,
+    {
+      name: 'Cedar House',
+      slug: 'cedar-house',
+      businessCategory: 'other',
+      reason: 'Correct the public address',
+    },
+    actor,
+  );
+  assert.deepEqual(saved, {
+    id: resourceId,
+    name: 'Cedar House',
+    slug: 'cedar-house',
+    status: StoreStatus.ACTIVE,
+  });
+  assert.equal(
+    f.rows(Store).find((row) => row.id === resourceId)?.slug,
+    'cedar-house',
+  );
+  assert.equal(f.rows(Store).find((row) => row.id === otherId)?.slug, 'olive');
+  assert.equal(f.rows(AdminAuditLog).at(-1)?.action, 'store.update');
+  assert.equal(
+    f.rows(AdminAuditLog).at(-1)?.reason,
+    'Correct the public address',
+  );
 });
 
 test('permanent store purge requires Trash, removes child records, and is audited', async () => {

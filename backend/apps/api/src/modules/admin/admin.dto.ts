@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsHexColor,
   IsIn,
   IsInt,
   IsOptional,
@@ -16,10 +17,14 @@ import {
   Matches,
 } from 'class-validator';
 import { CreateStoreDto } from '../stores/dto/create-store.dto';
-import { UpdateStoreDto } from '../stores/dto/update-store.dto';
 import { CreateProductDto } from '../products/dto/create-product.dto';
 import { CreateShowcaseDto } from '../showcases/dto/create-showcase.dto';
-import { AdminScope, SystemErrorState, UserRole } from '@app/database';
+import {
+  AdminScope,
+  StoreType,
+  SystemErrorState,
+  UserRole,
+} from '@app/database';
 import { CreateBoostCampaignDto } from '../boost/dto/boost-coin.dto';
 
 export class AdminListDto {
@@ -113,7 +118,41 @@ export class AdminCreateStoreDto extends CreateStoreDto {
   ownerId!: string;
 }
 
-export class AdminUpdateStoreDto extends UpdateStoreDto {}
+// Identity fields only. Prices, plans, verification, lifecycle status, and
+// moderation each have their own audited operation, so an administrator editing
+// a shop's public address cannot accidentally change any of them.
+export class AdminUpdateStoreDto extends AdminReasonDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 191)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  slug?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 65535)
+  description?: string | null;
+
+  @IsOptional()
+  @IsHexColor()
+  brandColor?: string | null;
+
+  @IsOptional()
+  @IsEnum(StoreType)
+  storeType?: StoreType;
+
+  // Business taxonomy slug from the shared catalog (restaurant, school, ...).
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  @Matches(/^[a-z0-9_]+$/u)
+  businessCategory?: string;
+}
 
 export class AdminCreateProductDto extends CreateProductDto {
   @IsUUID()

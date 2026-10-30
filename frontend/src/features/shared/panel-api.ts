@@ -57,6 +57,7 @@ export interface PanelRecord {
   phone?: string | null;
   slug?: string;
   description?: string | null;
+  brandColor?: string | null;
   status?: string;
   storeId?: string;
   owner?: Person;
@@ -117,6 +118,8 @@ export function panelError(error: unknown): string {
       return 'Free-plan assignments are limited to the trial length. Assign a paid plan for longer access.';
     if (error.code === 'PRODUCT_SLUG_TAKEN')
       return 'That web address is already used by another product. Choose a different one.';
+    if (error.code === 'STORE_SLUG_TAKEN')
+      return 'That web address is already used by another shop. Choose a different one.';
     if (error.code === 'PRODUCT_OPTIONS_INVALID')
       return 'Check the options: every option needs a name and at least one value, and names must be unique.';
     if (error.code === 'PRODUCT_SALE_PRICE_INVALID')
