@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { DataSource, In, IsNull } from 'typeorm';
+import { DataSource, In, IsNull, MoreThan } from 'typeorm';
 import type { AppEnvironment } from '@app/config';
 import {
   Product,
@@ -37,6 +37,9 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
   // Recover changes the aggregate fingerprint cannot see without rebuilding
   // the entire catalog on every poll. Explicit refresh requests still run now.
   private static readonly RECONCILE_MS = 60 * 60_000;
+  // Stable-ID pages keep one pass bounded on a large catalogue instead of
+  // holding every shop, section, product, and post in memory at once.
+  private static readonly BATCH = 100;
   private readonly logger = new Logger(ShareShellService.name);
   private readonly templatePath: string;
   private readonly root: string;
@@ -142,7 +145,6 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
 
   private async runRefresh(template: string): Promise<number> {
     const manager = this.dataSource.manager;
-    const stores = await manager.find(Store, { where: publicWhere('store') });
     // Pages written in this pass; anything else under the root is obsolete
     // (a renamed slug, an unpublished post) and must stop answering.
     const keep = new Set<string>();
@@ -167,87 +169,134 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
         ),
       );
     }
-    for (const store of stores) {
-      pages += Number(
-        await this.writePage(
-          [store.slug],
-          await this.seo.generateStoreMetaTags(store),
-          template,
-          keep,
-        ),
-      );
-      const categories = await manager.find(StoreCategory, {
-        where: { storeId: store.id },
-        order: { sortOrder: 'ASC', name: 'ASC' },
-      });
-      for (const category of categories) {
-        pages += Number(
-          await this.writePage(
-            [store.slug, 'c', this.seo.categoryPathSlug(category.name)],
-            await this.seo.generateCategoryMetaTags(store, category),
-            template,
-            keep,
-          ),
-        );
-      }
-      // Products without an owner category live on the "More items" page.
-      const uncategorized = await manager.count(Product, {
+    for await (const stores of this.afterIdBatches((after) =>
+      manager.find(Store, {
         where: {
-          storeId: store.id,
-          categoryId: IsNull(),
-          status: In([...PUBLIC_PRODUCT_STATUSES]),
-          ...publicWhere('product'),
+          ...publicWhere('store'),
+          ...(after ? { id: MoreThan(after) } : {}),
         },
-      });
-      if (uncategorized > 0) {
+        order: { id: 'ASC' },
+        take: ShareShellService.BATCH,
+      }),
+    )) {
+      for (const store of stores) {
         pages += Number(
           await this.writePage(
-            [store.slug, 'c', 'more-items'],
-            await this.seo.generateUncategorizedShareMeta(store),
+            [store.slug],
+            await this.seo.generateStoreMetaTags(store),
             template,
             keep,
           ),
         );
-      }
-      const products = await manager.find(Product, {
-        where: {
-          storeId: store.id,
-          status: In([...PUBLIC_PRODUCT_STATUSES]),
-          ...publicWhere('product'),
-        },
-      });
-      for (const product of products) {
-        pages += Number(
-          await this.writePage(
-            [store.slug, 'p', product.slug],
-            await this.seo.generateProductMetaTags(product, store),
-            template,
-            keep,
-          ),
-        );
-      }
-      // Posts live under their shop, so one shared link previews from a file
-      // this directory already serves. Shop-less posts keep the API route.
-      const posts = await manager.find(Showcase, {
-        where: {
-          storeId: store.id,
-          status: ShowcaseStatus.PUBLISHED,
-          ...publicWhere('post'),
-        },
-      });
-      for (const post of posts) {
-        pages += Number(
-          await this.writePage(
-            [store.slug, 'post', post.slug],
-            await this.seo.generateShowcaseMetaTags(post, store),
-            template,
-            keep,
-          ),
-        );
+        for await (const categories of this.afterIdBatches((after) =>
+          manager.find(StoreCategory, {
+            where: {
+              storeId: store.id,
+              ...(after ? { id: MoreThan(after) } : {}),
+            },
+            order: { id: 'ASC' },
+            take: ShareShellService.BATCH,
+          }),
+        )) {
+          for (const category of categories) {
+            pages += Number(
+              await this.writePage(
+                [store.slug, 'c', this.seo.categoryPathSlug(category.name)],
+                await this.seo.generateCategoryMetaTags(store, category),
+                template,
+                keep,
+              ),
+            );
+          }
+        }
+        // Products without an owner category live on the "More items" page.
+        const uncategorized = await manager.count(Product, {
+          where: {
+            storeId: store.id,
+            categoryId: IsNull(),
+            status: In([...PUBLIC_PRODUCT_STATUSES]),
+            ...publicWhere('product'),
+          },
+        });
+        if (uncategorized > 0) {
+          pages += Number(
+            await this.writePage(
+              [store.slug, 'c', 'more-items'],
+              await this.seo.generateUncategorizedShareMeta(store),
+              template,
+              keep,
+            ),
+          );
+        }
+        for await (const products of this.afterIdBatches((after) =>
+          manager.find(Product, {
+            where: {
+              storeId: store.id,
+              status: In([...PUBLIC_PRODUCT_STATUSES]),
+              ...publicWhere('product'),
+              ...(after ? { id: MoreThan(after) } : {}),
+            },
+            order: { id: 'ASC' },
+            take: ShareShellService.BATCH,
+          }),
+        )) {
+          for (const product of products) {
+            pages += Number(
+              await this.writePage(
+                [store.slug, 'p', product.slug],
+                await this.seo.generateProductMetaTags(product, store),
+                template,
+                keep,
+              ),
+            );
+          }
+        }
+        // Posts live under their shop, so one shared link previews from a file
+        // this directory already serves. Shop-less posts keep the API route.
+        for await (const posts of this.afterIdBatches((after) =>
+          manager.find(Showcase, {
+            where: {
+              storeId: store.id,
+              status: ShowcaseStatus.PUBLISHED,
+              ...publicWhere('post'),
+              ...(after ? { id: MoreThan(after) } : {}),
+            },
+            order: { id: 'ASC' },
+            take: ShareShellService.BATCH,
+          }),
+        )) {
+          for (const post of posts) {
+            pages += Number(
+              await this.writePage(
+                [store.slug, 'post', post.slug],
+                await this.seo.generateShowcaseMetaTags(post, store),
+                template,
+                keep,
+              ),
+            );
+          }
+        }
       }
     }
     await this.prune(keep);
     return pages;
+  }
+
+  /**
+   * Keyset pages ordered by primary key. A short page ends the scan, and a
+   * row inserted or removed mid-pass is reconciled by the next full pass.
+   */
+  private async *afterIdBatches<T extends { id: string }>(
+    load: (after: string | undefined) => Promise<T[]>,
+  ): AsyncGenerator<T[]> {
+    let after: string | undefined;
+    for (;;) {
+      const rows = await load(after);
+      if (!rows.length) return;
+      yield rows;
+      if (rows.length < ShareShellService.BATCH) return;
+      after = rows[rows.length - 1]!.id;
+    }
   }
 
   private async writePage(
@@ -320,6 +369,9 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
     mtimeMs: number;
     size: number;
   }): Promise<string> {
+    // `showcases.updated_at` is a content timestamp: the engagement flusher
+    // pins it while writing view/like counters, so browsing activity alone
+    // never invalidates the whole preview catalogue.
     const rows: unknown = await this.dataSource.query(
       `SELECT
         (SELECT COUNT(*) FROM stores) AS stores,

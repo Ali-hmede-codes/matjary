@@ -8,7 +8,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, In } from 'typeorm';
 import {
   Store,
   StoreBranch,
@@ -30,6 +30,7 @@ import { CheckoutDto } from './dto/checkout.dto';
 import {
   CartResponseDto,
   CheckoutResponseDto,
+  emptyCartResponseDto,
   toCartResponseDto,
   formatCurrency,
   formatLbpCurrency,
@@ -82,9 +83,51 @@ export class CartsService {
   }
 
   /**
-   * Get or create a cart for a store.
-   * For authenticated users: uses userId
-   * For anonymous visitors: uses visitorId (stored in cookie)
+   * Looks up the active cart for this identity without creating one. Reads
+   * use this: answering "your cart is empty" must not write a row.
+   */
+  private async findCart(
+    storeId: string,
+    userId: string | undefined,
+    visitorId: string | undefined,
+  ): Promise<Cart | null> {
+    if (!userId) {
+      if (!visitorId) throw new ForbiddenException('Cart identity required');
+      return this.carts.findOne({
+        where: {
+          visitorId,
+          userId: IsNull(),
+          storeId,
+          status: CartStatus.ACTIVE,
+        },
+      });
+    }
+    // Authenticated and anonymous carts are separate; never infer a merge.
+    return this.carts.findOne({
+      where: { userId, storeId, status: CartStatus.ACTIVE },
+    });
+  }
+
+  private newCart(
+    storeId: string,
+    userId: string | undefined,
+    visitorId: string | undefined,
+  ): Cart {
+    return this.carts.create({
+      userId: userId ?? null,
+      visitorId: visitorId ?? null,
+      storeId,
+      currency: 'USD',
+      status: CartStatus.ACTIVE,
+      // Cart expires after 7 days of inactivity
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+  }
+
+  /**
+   * Get or create a cart for a store. Only real mutations call this; the
+   * anonymous HttpOnly cookie is issued by the guard, so its presence alone
+   * must not persist an empty cart.
    */
   async getOrCreateCart(
     storeId: string,
@@ -92,61 +135,20 @@ export class CartsService {
     visitorId: string | undefined,
   ): Promise<Cart> {
     try {
-      if (!userId && !visitorId)
-        throw new ForbiddenException('Cart identity required');
-      // Authenticated and anonymous carts are separate; never infer a merge.
-      if (userId) visitorId = undefined;
-      let cart: Cart | null = null;
-
-      if (userId) {
-        cart = await this.carts.findOne({
-          where: { userId, storeId, status: CartStatus.ACTIVE },
-        });
-      } else if (visitorId) {
-        cart = await this.carts.findOne({
-          where: {
-            visitorId,
-            userId: IsNull(),
-            storeId,
-            status: CartStatus.ACTIVE,
-          },
-        });
-      }
-
-      if (!cart) {
-        // Create new cart
-        cart = this.carts.create({
-          userId: userId ?? null,
-          visitorId: visitorId ?? null,
-          storeId,
-          currency: 'USD',
-          status: CartStatus.ACTIVE,
-          // Cart expires after 7 days of inactivity
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        });
-        cart = await this.carts.save(cart);
-      }
-
-      // Update expiry on access
+      const cart = await this.findCart(storeId, userId, visitorId);
+      // A new cart already carries its expiry; it must not be updated again
+      // in the same request.
+      if (!cart)
+        return await this.carts.save(this.newCart(storeId, userId, visitorId));
       if (cart.expiresAt && cart.expiresAt < new Date()) {
-        // Cart expired, create new one
+        // Cart expired, retire it and start a fresh active row.
         await this.carts.update(cart.id, { status: CartStatus.EXPIRED });
-        cart = this.carts.create({
-          userId: userId ?? null,
-          visitorId: visitorId ?? null,
-          storeId,
-          currency: 'USD',
-          status: CartStatus.ACTIVE,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        });
-        cart = await this.carts.save(cart);
-      } else {
-        // Extend expiry
-        await this.carts.update(cart.id, {
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        });
+        return await this.carts.save(this.newCart(storeId, userId, visitorId));
       }
-
+      // Extend expiry on access: a cart lives seven days after its last use.
+      await this.carts.update(cart.id, {
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
       return cart;
     } catch (error) {
       this.sanitize(error);
@@ -169,14 +171,23 @@ export class CartsService {
 
       await this.checkCartEnabled(store);
 
-      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
+      // Get store's WhatsApp number from social media links
+      const storeWhatsApp = store.socialMediaLinks?.whatsapp ?? null;
+      const cart = await this.findCart(store.id, userId, visitorId);
+      // Browsing a cart-enabled shop used to persist an empty cart and
+      // refresh its expiry for every visitor. Answer the compatible empty
+      // shape instead and let the first real mutation create the row. A cart
+      // past its expiry is answered the same way, without a write.
+      if (!cart || (cart.expiresAt && cart.expiresAt < new Date()))
+        return emptyCartResponseDto(store, store.slug, storeWhatsApp);
+      // Reading a live cart still extends it: seven days after the last use.
+      await this.carts.update(cart.id, {
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
       const items = await this.cartItems.find({
         where: { cartId: cart.id },
         order: { createdAt: 'ASC' },
       });
-
-      // Get store's WhatsApp number from social media links
-      const storeWhatsApp = store.socialMediaLinks?.whatsapp ?? null;
 
       return toCartResponseDto(
         cart,
@@ -315,10 +326,12 @@ export class CartsService {
 
       await this.checkCartEnabled(store);
 
-      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
+      const cart = await this.findCart(store.id, userId, visitorId);
 
-      const cartItem = await this.cartItems.findOneBy({ id: itemId });
-      if (!cartItem) {
+      const cartItem = cart
+        ? await this.cartItems.findOneBy({ id: itemId })
+        : null;
+      if (!cart || !cartItem) {
         throw new NotFoundException('Cart item not found');
       }
       if (cartItem.cartId !== cart.id) {
@@ -385,10 +398,12 @@ export class CartsService {
 
       await this.checkCartEnabled(store);
 
-      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
+      const cart = await this.findCart(store.id, userId, visitorId);
 
-      const cartItem = await this.cartItems.findOneBy({ id: itemId });
-      if (!cartItem) {
+      const cartItem = cart
+        ? await this.cartItems.findOneBy({ id: itemId })
+        : null;
+      if (!cart || !cartItem) {
         throw new NotFoundException('Cart item not found');
       }
       if (cartItem.cartId !== cart.id) {
@@ -425,7 +440,14 @@ export class CartsService {
 
       await this.checkCartEnabled(store);
 
-      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
+      const cart = await this.findCart(store.id, userId, visitorId);
+      // Clearing a cart that was never created is a no-op, not a write.
+      if (!cart)
+        return emptyCartResponseDto(
+          store,
+          store.slug,
+          store.socialMediaLinks?.whatsapp ?? null,
+        );
 
       await this.cartItems.delete({ cartId: cart.id });
 
@@ -456,12 +478,12 @@ export class CartsService {
       await this.checkCartEnabled(store);
       await this.checkWhatsAppCheckoutEnabled(store);
 
-      const cart = await this.getOrCreateCart(store.id, userId, visitorId);
-      const items = await this.cartItems.find({
-        where: { cartId: cart.id },
-      });
+      const cart = await this.findCart(store.id, userId, visitorId);
+      const items = cart
+        ? await this.cartItems.find({ where: { cartId: cart.id } })
+        : [];
 
-      if (items.length === 0) {
+      if (!cart || items.length === 0) {
         throw new BadRequestException('Cart is empty');
       }
 
@@ -475,11 +497,19 @@ export class CartsService {
           (quantitiesByProduct.get(item.productId) ?? 0) + item.quantity,
         );
       }
-      for (const item of items) {
-        const product = await this.products.findOneBy({
-          id: item.productId,
+      // One read for every distinct product, then validate each line: option
+      // combinations are already separate lines of the same product.
+      const visibleProducts = await this.products.find({
+        where: {
+          id: In([...quantitiesByProduct.keys()]),
           ...publicWhere('product'),
-        });
+        },
+      });
+      const productsById = new Map(
+        visibleProducts.map((product) => [product.id, product]),
+      );
+      for (const item of items) {
+        const product = productsById.get(item.productId);
         if (!product || product.storeId !== store.id) {
           throw new BadRequestException(
             `Product "${item.productName}" is no longer available`,

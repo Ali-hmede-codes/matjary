@@ -123,10 +123,14 @@ export class EngagementFlusher
         row.viewsCount += batch.views;
         row.lastBatchId = batch.id;
         await manager.save(row);
-        await manager.update(
-          Showcase,
-          { id: postId },
-          { likesCount: row.likesCount, viewsCount: row.viewsCount },
+        // The share-shell fingerprint watches content timestamps, so a
+        // counter-only write must not look like an edit. The statement pins
+        // `updated_at` to itself because MySQL would otherwise refresh an
+        // auto-updated column on any other column change, and every flushed
+        // view would rebuild the whole storefront preview catalogue.
+        await manager.query(
+          'UPDATE `showcases` SET `likes_count` = ?, `views_count` = ?, `updated_at` = `updated_at` WHERE `id` = ?',
+          [row.likesCount, row.viewsCount, postId],
         );
         await manager.insert(EngagementFlushReceipt, {
           batchId: batch.id,

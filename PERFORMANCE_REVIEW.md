@@ -25,6 +25,45 @@ Current code also generates public site shells under `.site` alongside storefron
 
 Historical verification: the earlier scheduling patch passed seven focused shell tests, backend typechecking, changed-TypeScript formatting, and whitespace checks. These results were not rerun for the current revision. Deployment status is not verified.
 
+## Applied in this pass
+
+Scoped patches for findings 1–3. Findings 4 and 5 and the durable dirty-work redesign remain open. Nothing was deployed, and no production measurement was taken.
+
+### Finding 1 — engagement no longer invalidates preview shells
+
+- [Engagement flushing](backend/apps/worker/src/jobs/engagement.flush.ts#L119-L139) now writes the denormalised `showcases.likes_count`/`views_count` with a raw statement that pins `updated_at` to itself. MySQL refreshes an auto-updated column on any other column change, so flushed views and likes used to look like content edits and rebuilt every share shell.
+- `showcases.updated_at` is therefore a content timestamp for the shell fingerprint; a comment in `share-shell.service.ts` records that invariant.
+- [Full generation](backend/apps/api/src/modules/seo/share-shell.service.ts#L146-L300) walks stores, sections, products, and posts in stable-ID keyset batches of 100 instead of loading each collection whole, so a pass is bounded in memory.
+- **Still open:** a content edit, publish, branding change, or SEO save still regenerates the entire catalogue, because no durable dirty-store/revision record exists yet (report step 2). That write path remains O(catalogue), and the hourly reconciliation plus full-pass `prune` are unchanged.
+- **Checks:** `test/unit/engagement.test.ts` asserts the counter statement pins `updated_at`; the existing shell scheduler and generation tests stay green.
+
+### Finding 2 — catalogue documents are batched, shared, and briefly cached
+
+- [Sitemap generation](backend/apps/api/src/modules/seo/seo.service.ts) reads SEO rows for all stores, products, and posts with one chunked `IN` query per collection, and resolves product images with two batched variant reads per 500 keys (matching variants, then siblings, same `choosePreviewImage` rules).
+- Automatic `llms.txt` resolves public products and posts with one chunked read each instead of a lookup per SEO row.
+- `sitemap.xml` and its three parts, `llms.txt`, `robots.txt`, and `ai.txt` share one in-flight build and a 60-second body cache. `ShareShellSignal.request()` bumps a content version, so any announced change retires cached documents in every service instance, including short-lived scoped copies.
+- Visibility, canonical, and `noindex` behaviour is unchanged; hidden rows stay excluded.
+- **Still open:** each document is still a full-catalogue build (bounded per query, not per document), the 60-second TTL is the maximum staleness for a write path that does not announce itself, and a `sitemapindex` with part URLs for very large catalogues was not added.
+- **Checks:** `test/unit/seo-share.test.ts` covers batched reads, `noindex` exclusion, one build for concurrent requests, and rebuild after a change signal.
+
+### Finding 3 — cart reads stop writing; checkout batches product reads
+
+- [Cart reads](backend/apps/api/src/modules/carts/carts.service.ts) use a new `findCart` and answer a compatible empty response when no active cart exists, so browsing a cart-enabled shop no longer creates a row. The guard already issues the anonymous cookie; the first real mutation creates the cart.
+- A newly created cart is no longer updated a second time for its expiry in the same request. An existing live cart still receives exactly one expiry write per read, preserving the seven-day-on-access policy, and an expired cart reads as empty instead of being recreated.
+- `updateItem`, `removeItem`, `clearCart`, and `checkout` read the cart instead of creating one; clearing a missing cart is a no-op.
+- Checkout loads every distinct product with one `IN` query, then validates each line against the result map. Per-product stock aggregation across option combinations and server-derived prices are unchanged.
+- **Behaviour notes:** the empty response carries `id: ''` and null timestamps. The storefront never reads either value, and add-to-cart still waits for the initial GET, now answered without a write.
+- **Checks:** new `test/unit/carts.test.ts`, registered in `package.json`, covers no-write reads, the single expiry update, no redundant creation update, batched checkout reads, shared stock, and empty checkout.
+
+### Verification run
+
+- `npm run typecheck` — pass.
+- `npm run format:check` — pass; running `npm run format` also normalised pre-existing indentation in `seo.service.ts`.
+- `npm test` — 352 tests pass, including the new cart file.
+- `npm run build` — API, worker, and migrations bundles build.
+
+No migration, schema, `.env`, or deployment change was made.
+
 ## Prioritized remaining work
 
 | Order | Current behavior | Resources at risk | Recommendation |
@@ -36,6 +75,8 @@ Historical verification: the earlier scheduling patch passed seven focused shell
 | 5 — scale-dependent | Engagement JSON contains every liker; views-only flushes read all likes | Redis memory/CPU/network, MySQL, worker time | Measure state size, then redesign compact reads and immutable deltas carefully |
 
 Implementation order can change if existing metrics show another workload dominating. Findings 1 and 2 are especially relevant because crawler/background traffic can compete with visitors opening an otherwise inexpensive product URL.
+
+**State after this pass:** findings 1, 2, and 3 have scoped patches (see above). Finding 1's durable dirty-store invalidation, finding 4, and finding 5 remain open and measurement-gated.
 
 ## 1. Activity can still trigger whole-catalog preview work
 
@@ -191,4 +232,4 @@ Success means fewer queries/writes/bytes for the same legitimate work and lower 
 
 ## Copyable instructions for the next AI
 
-> Read this report and current code; the scheduler mitigation is already implemented. Start with one approved finding, explain the evidence and proposed scope, and make a small patch with a few focused checks. Prioritize engagement-driven share-shell invalidation and catalog-sized SEO queries, then cart/feed work according to metrics. Preserve current public/private visibility, moderation, tenant and cart isolation, ranking semantics, and durable engagement receipts. Do not invent production measurements or claim this review proved a CPU bottleneck. Use registered migrations for schema/index changes and keep configuration validation/templates synchronized. Do not deploy, change production configuration/data, commit, push, or run stress tests without explicit approval. Update this report with what is actually fixed and what remains.
+> Read this report and current code; the scheduler mitigation and the scoped fixes for findings 1–3 are already implemented (see "Applied in this pass"). Continue with the low-cost measurement steps, then the durable dirty-store invalidation left open by finding 1, finding 4 (explore hydration), and finding 5 (engagement state). Keep each remaining patch small and evidence-based, explain the scope first, and add a few focused checks per patch. Preserve current public/private visibility, moderation, tenant and cart isolation, ranking semantics, and durable engagement receipts. Do not invent production measurements or claim this review proved a CPU bottleneck. Use registered migrations for schema/index changes and keep configuration validation/templates synchronized. Do not deploy, change production configuration/data, commit, push, or run stress tests without explicit approval. Update this report with what is actually fixed and what remains.

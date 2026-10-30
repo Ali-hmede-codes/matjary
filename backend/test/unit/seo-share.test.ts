@@ -15,6 +15,7 @@ import {
   shareShellSegments,
 } from '../../apps/api/src/modules/seo/share-shell';
 import { ShareShellService } from '../../apps/api/src/modules/seo/share-shell.service';
+import { ShareShellSignal } from '../../apps/api/src/modules/seo/share-shell.signal';
 import { choosePreviewImage } from '../../apps/api/src/modules/seo/preview-image';
 import {
   MediaAsset,
@@ -32,6 +33,7 @@ import {
   ProductSeo,
   ShowcaseSeo,
   SeoSettings,
+  RobotsDirective,
 } from '../../libs/database/src/seo.entities';
 import { Readable } from 'node:stream';
 
@@ -1190,4 +1192,274 @@ test('link preview fetchers are recognised so they get no redirect', () => {
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1',
   ])
     assert.equal(isShareCrawler(agent), false, String(agent));
+});
+
+function crawlerDocumentFixture() {
+  const settings = Object.assign(new SeoSettings(), {
+    siteName: 'Matjary',
+    defaultTitle: null,
+    defaultDescription: 'A platform for shops.',
+    sitemapEnabled: true,
+    sitemapChangefreq: 'weekly',
+    llmsTxtEnabled: true,
+    llmsTxtContent: null,
+  });
+  const branding = Object.assign(new WebsiteSettings(), {
+    siteName: 'Matjary',
+  });
+  const stores = [
+    Object.assign(new Store(), {
+      id: 'store-1',
+      slug: 'shop-one',
+      name: 'Shop one',
+      description: 'First shop',
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    }),
+    Object.assign(new Store(), {
+      id: 'store-2',
+      slug: 'shop-two',
+      name: 'Shop two',
+      description: 'Second shop',
+      updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+    }),
+  ];
+  const products = [
+    Object.assign(new Product(), {
+      id: 'product-1',
+      slug: 'item-one',
+      name: 'Item one',
+      description: 'First item',
+      status: 'active',
+      storeId: 'store-1',
+      store: stores[0],
+      imageKeys: ['media/one/jpeg-1080.jpg', 'media/two/jpeg-1080.jpg'],
+      updatedAt: new Date('2026-01-04T00:00:00.000Z'),
+    }),
+    Object.assign(new Product(), {
+      id: 'product-2',
+      slug: 'item-two',
+      name: 'Item two',
+      description: 'Second item',
+      status: 'active',
+      storeId: 'store-2',
+      store: stores[1],
+      imageKeys: [],
+      updatedAt: new Date('2026-01-05T00:00:00.000Z'),
+    }),
+  ];
+  const showcases = [
+    Object.assign(new Showcase(), {
+      id: 'post-1',
+      slug: 'spring-drop',
+      title: 'Spring drop',
+      description: 'Post body',
+      status: ShowcaseStatus.PUBLISHED,
+      store: stores[0],
+      updatedAt: new Date('2026-01-06T00:00:00.000Z'),
+    }),
+    Object.assign(new Showcase(), {
+      id: 'post-2',
+      slug: 'hidden-post',
+      title: 'Hidden post',
+      description: null,
+      status: ShowcaseStatus.PUBLISHED,
+      store: stores[1],
+      updatedAt: new Date('2026-01-07T00:00:00.000Z'),
+    }),
+  ];
+  const storeSeos = stores.map((store) =>
+    Object.assign(new StoreSeo(), {
+      storeId: store.id,
+      robots: RobotsDirective.INDEX_FOLLOW,
+    }),
+  );
+  const productSeos = [
+    Object.assign(new ProductSeo(), {
+      productId: 'product-1',
+      robots: RobotsDirective.INDEX_FOLLOW,
+    }),
+    Object.assign(new ProductSeo(), {
+      productId: 'product-2',
+      robots: RobotsDirective.NOINDEX_FOLLOW,
+    }),
+  ];
+  const showcaseSeos = [
+    Object.assign(new ShowcaseSeo(), {
+      showcaseId: 'post-1',
+      robots: RobotsDirective.INDEX_FOLLOW,
+    }),
+    Object.assign(new ShowcaseSeo(), {
+      showcaseId: 'post-2',
+      robots: RobotsDirective.NOINDEX_FOLLOW,
+    }),
+  ];
+  const variants = [
+    Object.assign(new MediaVariant(), {
+      storageKey: 'media/one/jpeg-1080.jpg',
+      assetId: 'asset-one',
+      mimeType: 'image/jpeg',
+      width: 1080,
+      sizeBytes: '120000',
+    }),
+    Object.assign(new MediaVariant(), {
+      storageKey: 'media/two/jpeg-1080.jpg',
+      assetId: 'asset-two',
+      mimeType: 'image/jpeg',
+      width: 1080,
+      sizeBytes: '90000',
+    }),
+  ];
+  const calls = {
+    stores: 0,
+    products: 0,
+    productsById: 0,
+    variants: 0,
+    postRows: 0,
+    storeSeo: 0,
+    productSeo: 0,
+    showcaseSeo: 0,
+  };
+  const manager = {
+    findOneBy: async (target: unknown) =>
+      target === WebsiteSettings ? branding : null,
+    find: async (target: unknown, options?: { where?: object }) => {
+      const where = (options?.where ?? {}) as Record<string, unknown>;
+      if (target === Store) {
+        calls.stores++;
+        return stores;
+      }
+      if (target === Product) {
+        if ('id' in where) calls.productsById++;
+        else calls.products++;
+        return products;
+      }
+      if (target === Showcase) return showcases;
+      if (target === MediaVariant) {
+        calls.variants++;
+        return variants;
+      }
+      return [];
+    },
+    count: async () => 0,
+    createQueryBuilder: () => {
+      calls.postRows++;
+      const chain = {
+        select: () => chain,
+        where: () => chain,
+        andWhere: () => chain,
+        getRawMany: async () =>
+          showcases.map((showcase) => ({
+            post_id: showcase.id,
+            post_slug: showcase.slug,
+            post_title: showcase.title,
+            post_description: showcase.description,
+          })),
+      };
+      return chain;
+    },
+  };
+  const storeSeoRepo = {
+    find: async () => {
+      calls.storeSeo++;
+      return storeSeos;
+    },
+    findOneBy: async () => null,
+    createQueryBuilder: () => {
+      const chain = {
+        leftJoinAndSelect: () => chain,
+        andWhere: () => chain,
+        getMany: async () =>
+          stores.map((store) =>
+            Object.assign(new StoreSeo(), {
+              store,
+              robots: RobotsDirective.INDEX_FOLLOW,
+            }),
+          ),
+      };
+      return chain;
+    },
+  };
+  const productSeoRepo = {
+    find: async () => {
+      calls.productSeo++;
+      return productSeos;
+    },
+    findOneBy: async () => null,
+  };
+  const showcaseSeoRepo = {
+    find: async () => {
+      calls.showcaseSeo++;
+      return showcaseSeos;
+    },
+    findOneBy: async () => null,
+  };
+  const signal = new ShareShellSignal();
+  const service = new SeoService(
+    storeSeoRepo as never,
+    productSeoRepo as never,
+    showcaseSeoRepo as never,
+    { find: async () => [], findOneBy: async () => null } as never,
+    { find: async () => [settings], findOneBy: async () => settings } as never,
+    new ConfigService({ APP_ORIGIN: 'https://matjary.test' }),
+    { manager } as never,
+    {} as never,
+    {
+      presignedGetUrl: async (key: string) =>
+        `https://matjary.test/api/v1/uploads/${encodeURIComponent(key)}`,
+    } as never,
+    signal,
+  );
+  return { service, signal, calls };
+}
+
+test('sitemap generation reads SEO rows and images in batches', async () => {
+  const { service, calls } = crawlerDocumentFixture();
+  const urls = await service.generateSitemapUrls();
+  // One SEO read per collection, not one per shop, product, or post.
+  assert.equal(calls.storeSeo, 1);
+  assert.equal(calls.productSeo, 1);
+  assert.equal(calls.showcaseSeo, 1);
+  assert.equal(calls.products, 1);
+  // Two image keys need only the matching variants and their siblings.
+  assert.equal(calls.variants, 2);
+
+  const productUrl = urls.find((url) => url.url.endsWith('/p/item-one'));
+  assert.ok(productUrl);
+  assert.equal(productUrl.images?.length, 2);
+  assert.match(productUrl.images![0]!.url, /uploads\/media%2Fone/u);
+  // A noindex product stays out of the document after batching.
+  assert.ok(!urls.some((url) => url.url.includes('/p/item-two')));
+  assert.ok(!urls.some((url) => url.url.includes('/post/hidden-post')));
+});
+
+test('llms.txt resolves products and posts with one read each', async () => {
+  const { service, calls } = crawlerDocumentFixture();
+  const txt = await service.generateLlmsTxt();
+  // Two product rows and two post rows must not become four lookups.
+  assert.equal(calls.productsById, 1);
+  assert.equal(calls.postRows, 1);
+  assert.match(txt, /Item one/u);
+  assert.doesNotMatch(txt, /Item two/u);
+  assert.match(txt, /\/post\/spring-drop/u);
+  assert.doesNotMatch(txt, /hidden-post/u);
+});
+
+test('identical crawler documents are built once and rebuilt after a change', async () => {
+  const { service, signal, calls } = crawlerDocumentFixture();
+  const first = await service.generateSitemapXml();
+  assert.equal(calls.stores, 1);
+  assert.equal(await service.generateSitemapXml(), first);
+  assert.equal(calls.stores, 1);
+  // Concurrent crawlers share the running build instead of stampeding MySQL.
+  const shared = await Promise.all([
+    service.generateSitemapXml(),
+    service.generateSitemapXml(),
+  ]);
+  assert.deepEqual(shared, [first, first]);
+  assert.equal(calls.stores, 1);
+
+  // An announced content change drops the cached body immediately.
+  signal.request();
+  assert.equal(await service.generateSitemapXml(), first);
+  assert.equal(calls.stores, 2);
 });

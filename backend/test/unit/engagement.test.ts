@@ -592,8 +592,15 @@ function workerFixture(redis: MemoryRedis) {
           delete: async (_target: unknown, where: { id: string }) => {
             next.likes = next.likes.filter((like) => like.id !== where.id);
           },
-          update: async (_target: unknown, _where: unknown, values: any) => {
-            assert.equal(values.viewsCount, next.row.viewsCount);
+          query: async (sql: string, parameters: unknown[]) => {
+            // Counter flushes must leave the post content timestamp alone so
+            // activity cannot invalidate the prerendered preview shells.
+            assert.match(sql, /`updated_at` = `updated_at`/u);
+            assert.deepEqual(parameters, [
+              next.row.likesCount,
+              next.row.viewsCount,
+              postId,
+            ]);
           },
           insert: async (_target: unknown, value: { batchId: string }) => {
             next.receipts.push(value.batchId);

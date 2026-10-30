@@ -12,13 +12,24 @@ import { Injectable } from '@nestjs/common';
 export class ShareShellSignal {
   private refresh?: () => Promise<number>;
   private timer?: NodeJS.Timeout;
+  private contentVersion = 0;
 
   register(refresh: () => Promise<number>): void {
     this.refresh = refresh;
   }
 
+  /**
+   * Bumped whenever a producer announces a content change. Derived caches
+   * (generated crawler documents) compare this instead of subscribing, so a
+   * short-lived scoped service cannot replace another instance's listener.
+   */
+  get version(): number {
+    return this.contentVersion;
+  }
+
   /** Ask for a refresh soon; later calls keep postponing the single run. */
   request(delayMs = 3_000): void {
+    this.contentVersion += 1;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = undefined;

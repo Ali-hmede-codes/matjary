@@ -147,6 +147,13 @@ export interface LlmsTxtEntry {
   priority?: 'high' | 'medium' | 'low';
 }
 
+/** The post fields an llms.txt row needs, read without hydrating entities. */
+interface PublicPostRow {
+  slug: string;
+  title: string;
+  description: string | null;
+}
+
 export interface IndexNowUrl {
   url: string;
   lastmod?: string;
@@ -163,6 +170,18 @@ export class SeoService {
   private readonly logger = new Logger(SeoService.name);
   private readonly baseUrl: string;
   private readonly defaultImageKey: string | null;
+  // Crawler documents are identical for every visitor, so repeated origin
+  // requests must not rebuild the whole catalogue each time. Concurrent
+  // builds are shared, and the TTL bounds how long a write path that does
+  // not announce itself can stay invisible.
+  private static readonly DOCUMENT_TTL_MS = 60_000;
+  // Catalog-sized reads stay bounded: one query per chunk, never one per row.
+  private static readonly READ_CHUNK = 500;
+  private readonly documents = new Map<
+    string,
+    { computedAt: number; version: number; body: string }
+  >();
+  private readonly building = new Map<string, Promise<string>>();
 
   constructor(
     @InjectRepository(StoreSeo)
@@ -188,6 +207,42 @@ export class SeoService {
       this.configService.get<string>('APP_ORIGIN') || 'http://localhost:3000';
     this.defaultImageKey =
       this.configService.get<string>('DEFAULT_OG_IMAGE_KEY') || null;
+  }
+
+  /**
+   * Runs one document build for every identical request: concurrent crawlers
+   * share the in-flight work and a finished body is reused for a short window.
+   * Any announced content change bumps the signal's version and retires every
+   * stored body; failures are never cached, so the next request tries again.
+   */
+  private async cachedDocument(
+    key: string,
+    build: () => Promise<string>,
+  ): Promise<string> {
+    const cached = this.documents.get(key);
+    if (
+      cached &&
+      cached.version === this.shells.version &&
+      Date.now() - cached.computedAt < SeoService.DOCUMENT_TTL_MS
+    )
+      return cached.body;
+    const shared = this.building.get(key);
+    if (shared) return shared;
+    const version = this.shells.version;
+    const pending = build()
+      .then((body) => {
+        this.documents.set(key, { computedAt: Date.now(), version, body });
+        return body;
+      })
+      .finally(() => this.building.delete(key));
+    this.building.set(key, pending);
+    return pending;
+  }
+
+  /** Public content or settings changed: crawler documents and shells drift. */
+  private contentChanged(): void {
+    this.documents.clear();
+    this.shells.request();
   }
 
   // ============================================
@@ -294,7 +349,7 @@ export class SeoService {
           },
         ),
       );
-      this.shells.request();
+      this.contentChanged();
       return saved;
     } catch (error) {
       this.logger.warn('Admin SEO generation failed');
@@ -371,7 +426,7 @@ export class SeoService {
         },
       ),
     );
-    this.shells.request();
+    this.contentChanged();
     return saved;
   }
 
@@ -473,7 +528,7 @@ export class SeoService {
         return scoped.autoGenerateProductSeo(product, store);
       return scoped.autoGenerateStoreSeo(store!);
     });
-    this.shells.request();
+    this.contentChanged();
     return saved;
   }
 
@@ -904,7 +959,7 @@ export class SeoService {
       },
     );
     // The home preview and every fallback image read these defaults.
-    this.shells.request();
+    this.contentChanged();
     return saved;
   }
 
@@ -933,7 +988,7 @@ export class SeoService {
     const saved = await this.ownerWrite('store', storeId, actorId, (manager) =>
       manager.save(seo),
     );
-    this.shells.request();
+    this.contentChanged();
     return saved;
   }
 
@@ -942,7 +997,7 @@ export class SeoService {
     await this.ownerWrite('store', storeId, actorId, (manager) =>
       manager.delete(StoreSeo, { storeId }),
     );
-    this.shells.request();
+    this.contentChanged();
   }
 
   // ============================================
@@ -978,7 +1033,7 @@ export class SeoService {
       actorId,
       (manager) => manager.save(seo),
     );
-    this.shells.request();
+    this.contentChanged();
     return saved;
   }
 
@@ -987,7 +1042,7 @@ export class SeoService {
     await this.ownerWrite('product', productId, actorId, (manager) =>
       manager.delete(ProductSeo, { productId }),
     );
-    this.shells.request();
+    this.contentChanged();
   }
 
   // ============================================
@@ -1025,7 +1080,7 @@ export class SeoService {
       actorId,
       (manager) => manager.save(seo),
     );
-    this.shells.request();
+    this.contentChanged();
     return saved;
   }
 
@@ -1034,7 +1089,7 @@ export class SeoService {
     await this.ownerWrite('showcase', showcaseId, actorId, (manager) =>
       manager.delete(ShowcaseSeo, { showcaseId }),
     );
-    this.shells.request();
+    this.contentChanged();
   }
 
   // ============================================
@@ -2114,6 +2169,10 @@ export class SeoService {
    * See: https://github.com/AnswerDotAI/llms-txt
    */
   async generateLlmsTxt(): Promise<string> {
+    return this.cachedDocument('llms.txt', () => this.buildLlmsTxt());
+  }
+
+  private async buildLlmsTxt(): Promise<string> {
     const settings = await this.getSettings();
     if (!settings.llmsTxtEnabled) {
       return '# llms.txt disabled\n';
@@ -2169,22 +2228,17 @@ export class SeoService {
       }
     }
 
-    // Products
+    // Products: one read for every visible product instead of a lookup per
+    // SEO row. The catalogue can be large, so the ids are chunked.
     const productSeos = await this.productSeoRepo.find();
+    const visibleProducts = await this.publicProducts(
+      productSeos
+        .filter((seo) => !seo.robots?.includes('noindex'))
+        .map((seo) => seo.productId),
+    );
     for (const seo of productSeos) {
-      if (
-        seo.robots === RobotsDirective.NOINDEX_NOFOLLOW ||
-        seo.robots === RobotsDirective.NOINDEX_FOLLOW
-      )
-        continue;
-      const product = await this.dataSource.manager.findOne(Product, {
-        where: {
-          id: seo.productId,
-          status: In([...PUBLIC_PRODUCT_STATUSES]),
-          ...publicWhere('product'),
-        },
-        relations: ['store'],
-      });
+      if (seo.robots?.includes('noindex')) continue;
+      const product = visibleProducts.get(seo.productId);
       if (product) {
         entries.push({
           title: product.name,
@@ -2197,25 +2251,20 @@ export class SeoService {
 
     // Showcases/Posts
     const showcaseSeos = await this.showcaseSeoRepo.find();
+    const visiblePosts = await this.publicPostRows(
+      showcaseSeos
+        .filter((seo) => !seo.robots?.includes('noindex'))
+        .map((seo) => seo.showcaseId),
+    );
     for (const seo of showcaseSeos) {
-      if (
-        seo.robots === RobotsDirective.NOINDEX_NOFOLLOW ||
-        seo.robots === RobotsDirective.NOINDEX_FOLLOW
-      )
-        continue;
-      const showcase = await this.showcaseSeoRepo.manager
-        .createQueryBuilder(Showcase, 's')
-        .select(['s.id', 's.slug', 's.title', 's.description', 's.status'])
-        .where('s.id = :id', { id: seo.showcaseId })
-        .andWhere('s.status = :status', { status: ShowcaseStatus.PUBLISHED })
-        .andWhere(publicVisibilitySql('post', 's'))
-        .getRawOne();
+      if (seo.robots?.includes('noindex')) continue;
+      const showcase = visiblePosts.get(seo.showcaseId);
       if (showcase) {
         entries.push({
-          title: showcase.s_title,
-          url: this.baseUrl + '/post/' + showcase.s_slug,
+          title: showcase.title,
+          url: this.baseUrl + '/post/' + showcase.slug,
           description:
-            showcase.s_description?.substring(0, 200) || showcase.s_title,
+            showcase.description?.substring(0, 200) || showcase.title,
           priority: 'low',
         });
       }
@@ -2251,6 +2300,10 @@ export class SeoService {
    * Controls which AI bots can crawl and use content for training.
    */
   async generateAiRobotsTxt(): Promise<string> {
+    return this.cachedDocument('ai.txt', () => this.buildAiRobotsTxt());
+  }
+
+  private async buildAiRobotsTxt(): Promise<string> {
     const settings = await this.getSettings();
 
     let robots = '# AI Robots.txt - Controls AI crawler access\n\n';
@@ -2461,10 +2514,17 @@ export class SeoService {
         priority: 1,
       });
     if (!kind || kind === 'store') {
-      for (const store of await manager.find(Store, {
+      const stores = await manager.find(Store, {
         where: publicWhere('store'),
-      })) {
-        const seo = await this.getStoreSeo(store.id);
+      });
+      // One SEO read for the whole collection instead of one per shop.
+      const seoByStore = await this.seoRows(
+        this.storeSeoRepo,
+        'storeId',
+        stores.map((store) => store.id),
+      );
+      for (const store of stores) {
+        const seo = seoByStore.get(store.id) ?? null;
         if (!indexable(seo)) continue;
         urls.push({
           url: seo?.canonicalUrl || `${this.baseUrl}/stores/${store.slug}`,
@@ -2475,37 +2535,64 @@ export class SeoService {
       }
     }
     if (!kind || kind === 'product') {
-      for (const product of await manager.find(Product, {
+      const products = await manager.find(Product, {
         where: {
           status: In([...PUBLIC_PRODUCT_STATUSES]),
           ...publicWhere('product'),
         },
         relations: ['store'],
-      })) {
-        const seo = await this.getProductSeo(product.id);
-        if (!indexable(seo)) continue;
-        const images: SitemapImage[] = [];
-        for (const key of product.imageKeys ?? []) {
-          const url = await this.buildImageUrl(key);
-          if (url) images.push({ url, title: product.name });
+      });
+      const seoByProduct = await this.seoRows(
+        this.productSeoRepo,
+        'productId',
+        products.map((product) => product.id),
+      );
+      // Product images are resolved in bounded chunks: two reads per chunk
+      // instead of a variant lookup (plus siblings) per saved image key.
+      for (
+        let index = 0;
+        index < products.length;
+        index += SeoService.READ_CHUNK
+      ) {
+        const chunk = products.slice(index, index + SeoService.READ_CHUNK);
+        const visible = chunk.filter((product) =>
+          indexable(seoByProduct.get(product.id) ?? null),
+        );
+        if (!visible.length) continue;
+        const previewUrls = await this.previewUrlsByKey(
+          visible.flatMap((product) => product.imageKeys ?? []),
+        );
+        for (const product of visible) {
+          const seo = seoByProduct.get(product.id) ?? null;
+          const images: SitemapImage[] = [];
+          for (const key of product.imageKeys ?? []) {
+            const url = previewUrls.get(key);
+            if (url) images.push({ url, title: product.name });
+          }
+          urls.push({
+            url:
+              seo?.canonicalUrl ||
+              `${this.baseUrl}/stores/${product.store.slug}/p/${product.slug}`,
+            lastmod: product.updatedAt.toISOString().split('T')[0],
+            changefreq: 'weekly',
+            priority: 0.6,
+            images,
+          });
         }
-        urls.push({
-          url:
-            seo?.canonicalUrl ||
-            `${this.baseUrl}/stores/${product.store.slug}/p/${product.slug}`,
-          lastmod: product.updatedAt.toISOString().split('T')[0],
-          changefreq: 'weekly',
-          priority: 0.6,
-          images,
-        });
       }
     }
     if (!kind || kind === 'showcase') {
-      for (const showcase of await manager.find(Showcase, {
+      const showcases = await manager.find(Showcase, {
         where: { status: ShowcaseStatus.PUBLISHED, ...publicWhere('post') },
         relations: ['store'],
-      })) {
-        const seo = await this.getShowcaseSeo(showcase.id);
+      });
+      const seoByPost = await this.seoRows(
+        this.showcaseSeoRepo,
+        'showcaseId',
+        showcases.map((showcase) => showcase.id),
+      );
+      for (const showcase of showcases) {
+        const seo = seoByPost.get(showcase.id) ?? null;
         if (!indexable(seo)) continue;
         urls.push({
           url:
@@ -2520,7 +2607,135 @@ export class SeoService {
     return urls;
   }
 
+  /**
+   * Reads the SEO rows for many entities in one query per chunk. Catalogue
+   * documents used to issue a lookup for every shop, product, and post.
+   */
+  private async seoRows<T extends { id: string }>(
+    repo: Repository<T>,
+    field: 'storeId' | 'productId' | 'showcaseId',
+    ids: string[],
+  ): Promise<Map<string, T>> {
+    const rows = new Map<string, T>();
+    for (let index = 0; index < ids.length; index += SeoService.READ_CHUNK) {
+      const found = await repo.find({
+        where: {
+          [field]: In(ids.slice(index, index + SeoService.READ_CHUNK)),
+        } as never,
+      });
+      for (const row of found) {
+        const owner = (row as unknown as Record<string, unknown>)[field];
+        if (typeof owner === 'string') rows.set(owner, row);
+      }
+    }
+    return rows;
+  }
+
+  /**
+   * Maps many saved image keys to public preview URLs with two reads per
+   * chunk: the matching variants, then the siblings used to pick a compact
+   * JPEG/PNG. Keys that are not public, READY images are omitted.
+   */
+  private async previewUrlsByKey(keys: string[]): Promise<Map<string, string>> {
+    const urls = new Map<string, string>();
+    const wanted = [...new Set(keys)];
+    for (let index = 0; index < wanted.length; index += SeoService.READ_CHUNK) {
+      const chunk = wanted.slice(index, index + SeoService.READ_CHUNK);
+      const matched = await this.dataSource.manager.find(MediaVariant, {
+        where: {
+          storageKey: In(chunk),
+          asset: {
+            ...publicWhere('media'),
+            status: MediaStatus.READY,
+          },
+        },
+      });
+      const images = matched.filter((variant) =>
+        variant.mimeType.startsWith('image/'),
+      );
+      if (!images.length) continue;
+      const siblings = await this.dataSource.manager.find(MediaVariant, {
+        where: {
+          assetId: In([...new Set(images.map((variant) => variant.assetId))]),
+        },
+        order: { width: 'DESC' },
+      });
+      const byAsset = new Map<string, MediaVariant[]>();
+      for (const variant of siblings) {
+        const list = byAsset.get(variant.assetId);
+        if (list) list.push(variant);
+        else byAsset.set(variant.assetId, [variant]);
+      }
+      for (const variant of images) {
+        const preview =
+          choosePreviewImage(byAsset.get(variant.assetId) ?? []) ?? variant;
+        urls.set(
+          variant.storageKey,
+          await this.storage.presignedGetUrl(preview.storageKey),
+        );
+      }
+    }
+    return urls;
+  }
+
+  /** Public products for a set of ids, one read per chunk. */
+  private async publicProducts(ids: string[]): Promise<Map<string, Product>> {
+    const products = new Map<string, Product>();
+    for (let index = 0; index < ids.length; index += SeoService.READ_CHUNK) {
+      const found = await this.dataSource.manager.find(Product, {
+        where: {
+          id: In(ids.slice(index, index + SeoService.READ_CHUNK)),
+          status: In([...PUBLIC_PRODUCT_STATUSES]),
+          ...publicWhere('product'),
+        },
+        relations: ['store'],
+      });
+      for (const product of found) products.set(product.id, product);
+    }
+    return products;
+  }
+
+  /**
+   * Publicly visible published posts for a set of ids, one read per chunk.
+   * Posts skip encoding media and drafts through the shared visibility SQL.
+   */
+  private async publicPostRows(
+    ids: string[],
+  ): Promise<Map<string, PublicPostRow>> {
+    const rows = new Map<string, PublicPostRow>();
+    for (let index = 0; index < ids.length; index += SeoService.READ_CHUNK) {
+      const chunk = ids.slice(index, index + SeoService.READ_CHUNK);
+      const found = await this.dataSource.manager
+        .createQueryBuilder(Showcase, 'post')
+        .select(['post.id', 'post.slug', 'post.title', 'post.description'])
+        .where('post.id IN (:...ids)', { ids: chunk })
+        .andWhere('post.status = :status', {
+          status: ShowcaseStatus.PUBLISHED,
+        })
+        .andWhere(publicVisibilitySql('post', 'post'))
+        .getRawMany<{
+          post_id: string;
+          post_slug: string;
+          post_title: string;
+          post_description: string | null;
+        }>();
+      for (const row of found)
+        rows.set(row.post_id, {
+          slug: row.post_slug,
+          title: row.post_title,
+          description: row.post_description,
+        });
+    }
+    return rows;
+  }
+
   async generateSitemapXml(kind?: SeoKind): Promise<string> {
+    return this.cachedDocument(`sitemap:${kind ?? 'all'}`, () =>
+      this.buildSitemapXml(kind),
+    );
+  }
+
+  private async buildSitemapXml(kind?: SeoKind): Promise<string> {
     const urls = await this.generateSitemapUrls(kind);
     const settings = await this.getSettings();
 
@@ -2604,6 +2819,10 @@ export class SeoService {
   // ============================================
 
   async generateRobotsTxt(): Promise<string> {
+    return this.cachedDocument('robots.txt', () => this.buildRobotsTxt());
+  }
+
+  private async buildRobotsTxt(): Promise<string> {
     const settings = await this.getSettings();
     const sitemapUrl = this.baseUrl + '/sitemap.xml';
     const llmsTxtUrl = this.baseUrl + '/llms.txt';

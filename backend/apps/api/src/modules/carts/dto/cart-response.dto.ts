@@ -2,6 +2,7 @@ import {
   Cart,
   CartItem,
   CartStatus,
+  Store,
   type SelectedProductOption,
 } from '@app/database';
 
@@ -21,6 +22,8 @@ export class CartItemResponseDto {
 }
 
 export class CartResponseDto {
+  // Empty string until the first mutation persists a row; clients never use
+  // this id, and lines keep their own ids.
   id!: string;
   storeId!: string;
   storeSlug!: string;
@@ -33,8 +36,8 @@ export class CartResponseDto {
   subtotalCents!: string;
   itemCount!: number;
   expiresAt!: Date | null;
-  createdAt!: Date;
-  updatedAt!: Date;
+  createdAt!: Date | null;
+  updatedAt!: Date | null;
 }
 
 export class CheckoutResponseDto {
@@ -70,6 +73,34 @@ export function toCartItemResponseDto(item: CartItem): CartItemResponseDto {
     lineTotalCents: lineTotal.toString(),
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+  };
+}
+
+/**
+ * What a visitor sees before the first real write. Reading a cart must not
+ * create a database row, so a shop with no cart yet answers with this empty
+ * shape; the first mutation persists the cart and its expiry.
+ */
+export function emptyCartResponseDto(
+  store: Store,
+  storeSlug: string,
+  storeWhatsApp: string | null,
+): CartResponseDto {
+  return {
+    id: '',
+    storeId: store.id,
+    storeSlug,
+    storeName: store.name,
+    storeWhatsApp,
+    currency: 'USD',
+    status: CartStatus.ACTIVE,
+    customerNotes: null,
+    items: [],
+    subtotalCents: '0',
+    itemCount: 0,
+    expiresAt: null,
+    createdAt: null,
+    updatedAt: null,
   };
 }
 
