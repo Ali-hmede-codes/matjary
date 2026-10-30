@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AdminActor } from '@app/database';
 import {
@@ -21,6 +28,41 @@ export class PublicWebsiteSettingsController {
   })
   get() {
     return this.settings.get();
+  }
+
+  @Get('manifest.webmanifest')
+  @Header('Content-Type', 'application/manifest+json')
+  @Header('Cache-Control', 'public, max-age=300')
+  @ApiOperation({
+    summary: 'Installable web app manifest using the live website branding',
+  })
+  async manifest() {
+    const settings = await this.settings.get();
+    // The static site.webmanifest keeps its build-time name; installing the
+    // site must use the administrator's current name and colors instead.
+    return {
+      name: settings.siteName,
+      short_name: settings.siteName,
+      ...(settings.description ? { description: settings.description } : {}),
+      icons: [
+        {
+          src: '/web-app-manifest-192x192.png',
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'maskable',
+        },
+        {
+          src: '/web-app-manifest-512x512.png',
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'maskable',
+        },
+      ],
+      theme_color: settings.primaryColor,
+      background_color: settings.backgroundColor,
+      display: 'standalone',
+      start_url: '/',
+    };
   }
 }
 

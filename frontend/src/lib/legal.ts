@@ -34,3 +34,33 @@ export function telHref(phone: string): string {
   // on mobile dialers.
   return `tel:${phone.replace(/(?!^\+)[^\d]/gu, '')}`;
 }
+
+/**
+ * The legal copy is written once with the original brand name. Render it with
+ * the administrator's current website name so the pages never contradict the
+ * header after a rename. Cookie names stay lower-case and are not affected.
+ */
+export function brandDocument(
+  doc: LegalDocument,
+  siteName: string,
+): LegalDocument {
+  const name = siteName.trim();
+  if (!name) return doc;
+  const replace = (value: string) => value.split('Matjary').join(name);
+  return {
+    ...doc,
+    eyebrow: replace(doc.eyebrow),
+    title: replace(doc.title),
+    description: replace(doc.description),
+    lede: replace(doc.lede),
+    sections: doc.sections.map((section) => ({
+      ...section,
+      heading: replace(section.heading),
+      blocks: section.blocks.map((block) =>
+        block.kind === 'text'
+          ? { kind: 'text', text: replace(block.text) }
+          : { kind: 'list', items: block.items.map(replace) },
+      ),
+    })),
+  };
+}

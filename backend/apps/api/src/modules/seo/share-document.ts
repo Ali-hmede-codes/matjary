@@ -57,7 +57,9 @@ export function renderShareHeadTags(meta: MetaTags): string {
     `<meta property="og:title" content="${escapeXml(meta.og.title)}">`,
     `<meta property="og:description" content="${escapeXml(meta.og.description)}">`,
     `<meta property="og:url" content="${escapeXml(meta.og.url)}">`,
-    `<meta property="og:site_name" content="${escapeXml(meta.og.siteName ?? 'Matjary')}">`,
+    meta.og.siteName
+      ? `<meta property="og:site_name" content="${escapeXml(meta.og.siteName)}">`
+      : '',
     meta.og.image
       ? `<meta property="og:image" content="${escapeXml(meta.og.image)}">`
       : '',

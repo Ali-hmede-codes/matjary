@@ -12,6 +12,7 @@ import {
 } from './panel-api';
 import { Loading, Modal, Notice, Retry, useUnsaved } from './PanelUI';
 import { MediaUpload } from './MediaUpload';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import {
   normalizeSlug,
   productCategoryLabel,
@@ -274,6 +275,7 @@ export function ContentEditor({
   done: (message: string) => void;
 }) {
   const client = useQueryClient();
+  const { settings } = useWebsiteSettings(false);
   const product = kind === 'products';
   const [record, setRecord] = useState(item);
   // The upload pipeline and the save action both read the current row; refs
@@ -1627,8 +1629,8 @@ export function ContentEditor({
               Search &amp; sharing <span>Optional</span>
             </summary>
             <p className="panel-muted">
-              Leave a field blank to use the text Matjary writes from this{' '}
-              {product ? 'item' : 'post'}.
+              Leave a field blank to use the text {settings.siteName} writes
+              from this {product ? 'item' : 'post'}.
             </p>
             <label>
               Page title

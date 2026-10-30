@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import {
+  brandDocument,
   LEGAL_CONTACT_EMAIL,
   LEGAL_CONTACT_PHONE,
   LEGAL_LAST_UPDATED,
@@ -88,13 +89,15 @@ function ContactCard({
 }
 
 export function LegalPage({
-  doc,
+  doc: source,
   icon: Icon,
 }: {
   doc: LegalDocument;
   icon: LucideIcon;
 }) {
   const { settings, theme } = useWebsiteSettings(false);
+  // The written copy keeps the original brand; display the live name instead.
+  const doc = brandDocument(source, settings.siteName);
   const email = LEGAL_CONTACT_EMAIL || settings.contactEmail;
   const phone = LEGAL_CONTACT_PHONE;
 

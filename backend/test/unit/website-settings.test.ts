@@ -201,6 +201,38 @@ test('branding edits release legacy inherited SEO copies but preserve custom ove
   assert.equal(state.seo.defaultOgImageUrl, '/custom.jpg');
 });
 
+test('a rename releases seeded and dashed inherited SEO titles and keeps the row name current', async () => {
+  const { service, state } = fixture();
+  Object.assign(state.row!, {
+    siteName: 'Old brand',
+    tagline: 'Old tagline',
+    description: 'Old copy',
+    logoUrl: '/old.png',
+    bannerUrl: '/old.jpg',
+  });
+  state.seo = Object.assign(new SeoSettings(), {
+    id: 'seo',
+    siteName: 'Old brand',
+    defaultTitle: 'Matjary - Your Showcase Platform',
+    defaultDescription: 'Old copy',
+    organizationName: 'Matjary - Your Showcase Platform',
+  });
+  await service.update(
+    { siteName: 'New brand', description: 'New copy' },
+    actor,
+  );
+  assert.equal(state.seo.defaultTitle, null);
+  assert.equal(state.seo.defaultDescription, null);
+  assert.equal(state.seo.organizationName, null);
+  assert.equal(state.seo.siteName, 'New brand');
+
+  // A title written with the plain-hyphen separator is also inherited.
+  state.seo.defaultTitle = 'New brand - Old tagline';
+  await service.update({ siteName: 'Old brand' }, actor);
+  assert.equal(state.seo.defaultTitle, null);
+  assert.equal(state.seo.siteName, 'Old brand');
+});
+
 const validate = (input: object) =>
   validateSync(plainToInstance(UpdateWebsiteSettingsDto, input), {
     whitelist: true,
@@ -605,6 +637,29 @@ test('website settings HTTP API uses real guards, validation, service, and audit
         assert.equal(response.status, 200);
         assert.equal(response.headers.get('cache-control'), 'no-store');
         assert.deepEqual(await response.json(), await f.service.get());
+      },
+    );
+    await t.test(
+      'the installable manifest follows the live branding',
+      async () => {
+        const response = await fetch(
+          base + publicPath + '/manifest.webmanifest',
+        );
+        assert.equal(response.status, 200);
+        assert.match(
+          response.headers.get('content-type') ?? '',
+          /application\/manifest\+json/u,
+        );
+        const manifest = (await response.json()) as {
+          name: string;
+          theme_color: string;
+          icons: { src: string }[];
+        };
+        assert.equal(manifest.name, 'Matjary');
+        assert.equal(manifest.theme_color, '#254e40');
+        assert.ok(
+          manifest.icons.some((icon) => icon.src.endsWith('512x512.png')),
+        );
       },
     );
     for (const [token, status] of [

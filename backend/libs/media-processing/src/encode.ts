@@ -197,6 +197,41 @@ const SHARE_CARD_WIDTH = 1200;
 const SHARE_CARD_HEIGHT = 630;
 const SHARE_CARD_BACKGROUND = '#254e40';
 
+/**
+ * Plate color behind the logo. A light logo needs a dark plate and a dark logo
+ * needs a light one; otherwise white-on-white artwork produced a card that
+ * looked empty in every preview client.
+ */
+async function sharePlateColor(
+  logo: Buffer,
+  options: { signal: AbortSignal; deadline: number },
+): Promise<string> {
+  const { data } = await sharp(logo)
+    .ensureAlpha()
+    .raw()
+    .timeout({ seconds: Math.max(1, Math.ceil(remaining(options) / 1000)) })
+    .toBuffer({ resolveWithObject: true });
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let weight = 0;
+  for (let index = 0; index + 3 < data.length; index += 4) {
+    const alpha = (data[index + 3] ?? 0) / 255;
+    if (alpha < 0.15) continue;
+    red += (data[index] ?? 0) * alpha;
+    green += (data[index + 1] ?? 0) * alpha;
+    blue += (data[index + 2] ?? 0) * alpha;
+    weight += alpha;
+  }
+  if (weight === 0) return '#ffffff';
+  const luminance =
+    (0.2126 * (red / weight) +
+      0.7152 * (green / weight) +
+      0.0722 * (blue / weight)) /
+    255;
+  return luminance > 0.62 ? '#17231e' : '#ffffff';
+}
+
 export async function encodeShareCard(
   input: string,
   directory: string,
@@ -213,6 +248,9 @@ export async function encodeShareCard(
   let logoWidth = 0;
   let logoHeight = 0;
   try {
+    // Keep the alpha channel: the logo is composited over a plate whose color
+    // is chosen below, so transparent artwork never sits on a matching white
+    // rectangle and render as an apparently empty card.
     const resized = await sharp(input, { failOn: 'warning' })
       .rotate()
       .resize({
@@ -221,8 +259,7 @@ export async function encodeShareCard(
         fit: 'inside',
         withoutEnlargement: true,
       })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: 90 })
+      .png()
       .timeout(timeout)
       .toBuffer({ resolveWithObject: true });
     logo = resized.data;
@@ -231,6 +268,13 @@ export async function encodeShareCard(
   } catch {
     remaining(options);
     throw new InvalidMediaError('Invalid image');
+  }
+  let plate = '#ffffff';
+  try {
+    plate = await sharePlateColor(logo, options);
+  } catch {
+    remaining(options);
+    // Contrast detection is best effort; white remains the safe default.
   }
   remaining(options);
   // Only validated hex colors reach this markup, so no font or script exists.
@@ -246,7 +290,7 @@ export async function encodeShareCard(
 <rect width="${SHARE_CARD_WIDTH}" height="${SHARE_CARD_HEIGHT}" fill="url(#shade)"/>
 <circle cx="1060" cy="80" r="240" fill="#ffffff" fill-opacity="0.07"/>
 <circle cx="120" cy="580" r="200" fill="#ffffff" fill-opacity="0.05"/>
-<rect x="330" y="95" width="540" height="440" rx="46" fill="#ffffff"/>
+<rect x="330" y="95" width="540" height="440" rx="46" fill="${plate}"/>
 </svg>`);
   try {
     const info = await sharp(frame)

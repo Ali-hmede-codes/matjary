@@ -167,16 +167,22 @@ async function waitForCombo(): Promise<HTMLSelectElement | null> {
 let lastDrive = 0;
 let driving = false;
 
-// A brand name is not translated copy, but the widget transliterates "Matjary"
-// into Arabic script. The spellings it has produced are rewritten after every
-// pass; a new one only needs an entry here.
-const BRAND_NAME = 'Matjary';
+// A brand name is not translated copy, but the widget transliterates it into
+// Arabic script. The spellings it has produced are rewritten after every pass;
+// a new one only needs an entry here. The live name comes from the website
+// settings so a renamed site is never restored to the build-time brand.
+let brandName = 'Matjary';
 const BRAND_TRANSLITERATIONS = ['ماتجاري'];
+
+export function setBrandName(value: string): void {
+  const trimmed = value.trim();
+  if (trimmed) brandName = trimmed;
+}
 
 function replaceBrandTransliterations(value: string): string {
   let next = value;
   for (const transliteration of BRAND_TRANSLITERATIONS)
-    next = next.split(transliteration).join(BRAND_NAME);
+    next = next.split(transliteration).join(brandName);
   return next;
 }
 

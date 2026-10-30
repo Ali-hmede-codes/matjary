@@ -1,155 +1,194 @@
-# Matjary Performance Review and AI Fix Handoff
+# Matjary Backend Performance Review and AI Fix Handoff
 
-## First patch implemented locally (not deployed)
+## Conclusion and scope
 
-The [refresh scheduler](backend/apps/api/src/modules/seo/share-shell.service.ts#L65-L141) now:
+Yes: targeted backend improvements are warranted, especially where work grows with the whole catalog or turns ordinary browsing into database writes. A backend rewrite is not justified by this review.
 
-- Uses one change-check timer at `SHARE_SHELL_REFRESH_SECONDS` (120 seconds by default). The separate 15-second watcher is removed.
-- Skips unchanged content, with a recovery pass when an hour has elapsed since the last successful full refresh. Boot, explicit SEO/branding requests, and the deployment refresh hook remain supported.
-- Checks template availability before database access; missing, empty, or unreadable templates leave the refresher database-idle until a later check.
-- Shares the entire in-flight check/generation, including slow fingerprint queries. A failed forced refresh remains retryable, and an explicit request during a pass leaves the next poll dirty.
-- Acknowledges only the fingerprint captured before a successful pass, so a newer fingerprint observed on the next poll is not silently swallowed. Atomic file replacement, full-pass stale-shell cleanup, and public-content filtering are unchanged.
+- Current-code review baseline: `a2b3c12`. Evidence links below refer to this revision; recheck them after subsequent edits.
+- Scope: home/feed, stores, categories/menu, product and post URLs, carts, SEO/crawlers, media delivery, engagement persistence, recurring worker jobs, and monitoring. Frontend callers were traced where they explain backend load.
+- This is a static code review, not a VPS profile. Production traffic, deployed configuration, installed indexes, database size, cache hit rates, and resource measurements remain unknown.
+- Only this report was changed during this review. No application changes, tests, builds, load generators, servers, migrations, or production operations were performed. Existing unrelated work was left untouched.
+- Priorities below describe investigation/implementation order, not measured incident severity. Do not promise CPU savings from code inspection alone.
 
-**Expected scheduling reduction at default settings:** on an unchanged, otherwise idle site, full passes fall from roughly 30/hour to roughly 1/hour, and periodic fingerprint checks from roughly 240/hour to roughly 30/hour. These are frequency changes, not measured VPS CPU savings; startup, explicit requests, changes, and pass duration affect actual counts.
+## Already improved: retain these changes
 
-**Trade-off and remaining work:** ordinary content changes without an explicit refresh signal are detected at the configured interval, not every 15 seconds. Aggregate database scans still exist at this lower frequency, and a detected change still regenerates the entire catalog. Durable per-entity dirty work and bounded catalog batching below remain follow-ups. No migration, new environment variable, frontend change, or production configuration change was made.
+The [share-shell scheduler](backend/apps/api/src/modules/seo/share-shell.service.ts#L65-L141) already:
 
-**Verification:** seven focused shell tests passed, including four new scheduling regressions and existing rendering/path/pruning coverage; backend typechecking, changed-TypeScript Prettier checks, and `git diff --check` passed. No full test suite, build, browser session, load test, or production operation was run.
+- Uses one configurable change-check interval, 120 seconds by default; the independent 15-second watcher is gone.
+- Skips unchanged fingerprints until hourly recovery, while retaining boot and explicit refresh requests.
+- Checks for a usable template before querying the database.
+- Shares in-flight polling and generation, preserves retry state, and acknowledges only a successfully processed pre-pass fingerprint.
 
-## Original review scope and confidence
+The original unconditional two-minute full regeneration and independent 15-second watcher described in the earlier `9bea2cf` review are historical findings, not current defects. On a truly unchanged, idle site, scheduling is substantially reduced. However, a watched timestamp can change without an owner edit; see finding 1.
 
-- Reviewed baseline revision: `9bea2cf`. The baseline findings and their evidence references below describe that revision, before the scheduler patch above; use current code for the implemented behavior.
-- Requested scope: home/feed, stores, categories, menu loading, posts, and product detail URLs.
-- The original review was read-only, not a production profile or an exhaustive clearance of every endpoint. Its strongest findings were background workloads that compete with all these pages.
-- No application code, deployment settings, or database data were changed during the original review. Implementation and verification are recorded separately above.
-- The actual deployed revision, configuration, data size, query plans, and VPS CPU/RAM/disk measurements were not available. The findings below are confirmed baseline code behavior; their contribution to the reported spikes still needs measurement.
+Current code also generates public site shells under `.site` alongside storefront shells. Product/post metadata rendering calls auto-generation with `persist=false`; do not assume rendering always writes SEO rows. Sources: [site pages](backend/apps/api/src/modules/seo/share-shell.service.ts#L150-L169), [product metadata](backend/apps/api/src/modules/seo/seo.service.ts#L1562-L1565), [post metadata](backend/apps/api/src/modules/seo/seo.service.ts#L1649-L1652).
 
-## Priorities
+Historical verification: the earlier scheduling patch passed seven focused shell tests, backend typechecking, changed-TypeScript formatting, and whitespace checks. These results were not rerun for the current revision. Deployment status is not verified.
 
-| Priority | Finding | Likely resources affected | Status |
+## Prioritized remaining work
+
+| Order | Current behavior | Resources at risk | Recommendation |
 | --- | --- | --- | --- |
-| 1 | Whole-site social-preview regeneration on an unconditional timer | MySQL queries, API allocations/CPU, filesystem reads and traversal | Confirmed code behavior |
-| 2 | Database-wide content fingerprint every 15 seconds | MySQL CPU and buffer-pool reads; disk reads on cache misses | Confirmed code behavior |
-| Next | Product/category request waterfalls, feed cache misses, media delivery | Depends on the measured request mix | Follow-up checks, not established causes of the VPS spikes |
+| 1 — high priority | Engagement timestamps can invalidate every share shell; broad fingerprint scans remain | MySQL, API CPU/memory, filesystem | Separate content invalidation from activity; regenerate bounded dirty work |
+| 2 — medium priority | Sitemap and automatic `llms.txt` generation load catalog-sized collections with per-record queries | MySQL round trips, API memory/CPU | Batch reads and share/cache generated artifacts with explicit freshness rules |
+| 3 — medium priority | Storefront cart GET creates/touches database rows; checkout rereads each line's product | MySQL writes, row growth, request latency | Avoid eager empty-cart persistence; batch distinct checkout products |
+| 4 — medium priority | Explore enriches a wide candidate pool before pagination; signed-in requests bypass the shared response cache | MySQL, Redis bytes, API hydration/ranking | Measure cold/warm paths; separate ranking from final response hydration |
+| 5 — scale-dependent | Engagement JSON contains every liker; views-only flushes read all likes | Redis memory/CPU/network, MySQL, worker time | Measure state size, then redesign compact reads and immutable deltas carefully |
 
-Start with priorities 1 and 2 together. Reducing frontend requests alone will not remove work that happens without visitors.
+Implementation order can change if existing metrics show another workload dominating. Findings 1 and 2 are especially relevant because crawler/background traffic can compete with visitors opening an otherwise inexpensive product URL.
 
-## 1. Unchanged content still triggers whole-site regeneration
+## 1. Activity can still trigger whole-catalog preview work
 
-### Evidence
+### Evidence and trigger
 
-- [ShareShellService scheduling](backend/apps/api/src/modules/seo/share-shell.service.ts#L64-L78) calls `fullPass()` on every configured interval, without checking whether content changed.
-- [The configuration template](backend/.env.example#L128-L133) sets `SHARE_SHELL_REFRESH_SECONDS=120`. The deployed value has not been verified.
-- [runRefresh](backend/apps/api/src/modules/seo/share-shell.service.ts#L124-L220) loads all public stores, then their categories, products, and posts, generating metadata page by page. Products and posts are loaded without batch limits within each store.
-- [Product metadata](backend/apps/api/src/modules/seo/seo.service.ts#L1447-L1531) resolves product SEO, settings, preview imagery, and structured data. [Structured-data images](backend/apps/api/src/modules/seo/seo.service.ts#L1772-L1781) also resolve individual image keys.
-- [writePage and prune](backend/apps/api/src/modules/seo/share-shell.service.ts#L224-L282) read existing HTML and walk generated directories. Skipping identical writes does not skip metadata generation, queries, rendering, or file reads.
+- [The fingerprint](backend/apps/api/src/modules/seo/share-shell.service.ts#L319-L343) contains four full counts and ten timestamp maxima, including `MAX(showcases.updated_at)`.
+- [Engagement flushing](backend/apps/worker/src/jobs/engagement.flush.ts#L119-L139) updates Showcase view/like counters. [The schema](backend/libs/database/src/migrations/1792368000000-InitialSchema.ts#L20-L32) automatically updates that row's timestamp.
+- A changed fingerprint triggers [full generation](backend/apps/api/src/modules/seo/share-shell.service.ts#L119-L145): all public stores and then their [categories, products, and posts](backend/apps/api/src/modules/seo/share-shell.service.ts#L179-L247), without per-store product/post batch limits.
+- [Identical-file checks and pruning](backend/apps/api/src/modules/seo/share-shell.service.ts#L253-L315) happen after metadata work. They avoid redundant writes, not preceding SQL, rendering, file reads, or traversal.
 
-### Why this matters
+With a usable template, flushed views/likes can therefore invalidate the catalog even without content edits. Polling costs remain proportional to table/index contents rather than the size of the single returned fingerprint row. Actual elapsed time and disk reads depend on data volume, indexes, and MySQL caching.
 
-At the default interval, approximately 30 scheduled full passes per hour can run even when nobody edits or visits the website. Actual completed passes depend on duration: the existing `pending` promise prevents overlapping refreshes within one API process.
+### Fix approach
 
-The work grows with the entire catalog, not the one shop or product a visitor opens. It runs inside the API service and competes for the same database and VPS resources as browsing requests. This is a plausible source of periodic latency and resource spikes, not proof that it is the only source.
+1. Define content invalidation separately from engagement counters. Check whether any preview/structured data needs fresh counters; if so, give that data an explicit bounded refresh cadence instead of invalidating every page for activity.
+2. Introduce durable dirty-entity or dirty-store work recorded in the same transaction as relevant content changes. A small revision record can replace the aggregate scan, but a global revision alone does not eliminate full-catalog generation.
+3. Inventory all dependencies: edits, visibility/moderation, owner suspension, slug/category renames, product availability/prices/images, SEO/branding, template changes, and worker media-ready changes. Do not remove polling before these paths and recovery are covered.
+4. Treat [ShareShellSignal](backend/apps/api/src/modules/seo/share-shell.signal.ts) as a wake-up hint, not durable storage. Coalesce duplicate work, safely claim it, and acknowledge only the processed revision.
+5. Generate affected pages and their dependents in bounded stable-ID batches. Read common settings once per batch/pass and batch SEO/media lookups. Do not use unbounded parallel generation.
+6. Keep infrequent full reconciliation, also batched. Track old paths for renamed/unpublished entities. Never run global `prune(keep)` with a partial keep-set; it would remove unrelated pages, including `.site` pages.
+7. Preserve atomic publication and leave work pending after errors or concurrent edits. Moving generation to the worker requires explicit template/share-directory mounts and ownership changes; the current share mount belongs to the API path.
 
-### Remediation
+Do not suppress all `updated_at` changes or remove the watcher as a shortcut: other consumers may rely on timestamps, and publication/branding changes must remain discoverable.
 
-1. Make frequent scheduled refreshes change-gated. Keep boot/deployment regeneration and a separately scheduled, infrequent reconciliation pass for missed changes.
-2. Address finding 2 at the same time: switching the timer to the current `tick()` alone still performs broad database scans.
-3. Preserve the existing single-flight behavior. Do not parallelize the entire catalog with an unbounded `Promise.all`.
-4. Batch reconciliation by stable IDs instead of hydrating every product/post in a store at once. Load common SEO/settings data once per pass or batch; batch media/variant lookups and reuse results during that batch.
-5. Retain atomic HTML publication, path containment, correct public-content checks, and cleanup of renamed/unpublished pages.
-6. For the durable solution, regenerate only the changed entity and dependent pages, as described below.
+**Small acceptance checks:** engagement-only activity follows the agreed preview policy; a concurrent content edit is processed later; a rename/unpublish removes its old path; partial work never prunes another shop or site page. Add/register a migration only if durable storage/index changes are needed.
 
-Increasing `SHARE_SHELL_REFRESH_SECONDS` is only a partial operational mitigation: it does not slow the separate 15-second watcher. Do not change production configuration without approval.
+## 2. Crawler documents perform catalog-sized request work
 
-## 2. The change watcher scans content tables every 15 seconds
+### Evidence and trigger
 
-### Evidence
+- [Sitemap generation](backend/apps/api/src/modules/seo/seo.service.ts#L2371-L2446) reads matching entity collections, fetches SEO per entity, and resolves product image keys individually.
+- [Automatic `llms.txt`](backend/apps/api/src/modules/seo/seo.service.ts#L2093-L2143) reads product/post SEO collections, then looks up each corresponding entity separately. Disabled/custom-content branches avoid that work.
+- [Sitemap endpoints](backend/apps/api/src/modules/seo/seo.controller.ts#L60-L113) and [the `llms.txt` endpoint](backend/apps/api/src/modules/seo/seo.controller.ts#L134-L148) generate the document before sending public cache headers.
 
-- [The watcher](backend/apps/api/src/modules/seo/share-shell.service.ts#L37-L39) has a fixed `15_000` millisecond period, independent of the full-refresh configuration.
-- [tick](backend/apps/api/src/modules/seo/share-shell.service.ts#L113-L122) queries the fingerprint before deciding whether another full pass is necessary.
-- [contentFingerprint](backend/apps/api/src/modules/seo/share-shell.service.ts#L285-L307) contains four `COUNT(*)` subqueries and ten `MAX(updated_at)` subqueries spanning content, media, SEO, and branding tables.
-- The template availability check happens in `runRefresh`, after the watcher's query. Its `finally` block also queries the fingerprint even when there is no template ([lines 124-129 and 217-220](backend/apps/api/src/modules/seo/share-shell.service.ts#L124-L220)).
+These are genuine per-record query patterns. Downstream caches can reduce origin requests, but response headers alone do not share generation inside the API. Repeated origin crawler requests can allocate entire catalogs and issue many queries. Deployed cache effectiveness and crawl frequency are unknown.
 
-### Why this matters
+### Fix approach
 
-A small result row does not mean a cheap query. Exact InnoDB counts require scanning qualifying index/table entries; unindexed maxima can also scan growing tables. The repository review found no supporting timestamp indexes for the major content/SEO aggregates, but deployed indexes and access paths need verification.
+1. Batch entity/SEO reads with joins or bounded `IN` queries; batch image/variant resolution. Select only required columns.
+2. Use bounded sitemap parts and an index when necessary; avoid holding every entity, URL object, and final XML string for an unlimited catalog in one request.
+3. Share concurrent identical generation. Use a bounded cache or revision-keyed generated artifact for repeated reads, with defined invalidation and maximum staleness.
+4. Cache keys must distinguish document kind, origin, relevant settings, and content revision. Preserve canonical handling, `noindex`, public visibility, and disabled/custom-content behavior.
+5. Do not create another frequent unconditional full-generation job. Reuse the content invalidation design from finding 1 where appropriate.
 
-When no refresh is running, the watcher can schedule about 240 checks per hour per API process. It still queries the database when optional preview generation is unavailable. Disk impact depends on what is already in MySQL's buffer pool.
+**Small acceptance checks:** a multi-entity fixture uses batched queries rather than one lookup per record; concurrent identical requests share work; hidden/noindex content stays excluded; disabled/custom documents are correct after settings changes.
 
-The refresh single-flight guard does not itself guard a slow fingerprint query while that query is awaiting completion.
+## 3. Browsing cart-enabled stores creates database writes
 
-### Remediation
+### Evidence and trigger
 
-1. Check whether preview generation is usable before any database poll. If its template/mount is absent, remain idle and use a low-frequency filesystem-only availability retry.
-2. Replace catalog-wide aggregates with a small durable revision/dirty-work record updated by relevant committed mutations.
-3. Guard the entire poll/refresh lifecycle against overlapping scheduled work, not just HTML generation.
-4. Acknowledge only the revision actually processed. A change committed during a pass must remain pending for another pass.
-5. Do not treat adding timestamp indexes as a complete solution: it would not remove the full counts or unconditional full regeneration.
+- [The storefront cart hook](frontend/src/hooks/useShopCart.ts#L47-L71) requests a cart after a store loads, not only when the drawer opens, and refetches on mount.
+- [getCart](backend/apps/api/src/modules/carts/carts.service.ts#L156-L187) checks the public store and cart entitlement, then calls `getOrCreateCart`.
+- [getOrCreateCart](backend/apps/api/src/modules/carts/carts.service.ts#L89-L148) persists absent carts and updates expiry on access. A newly created cart also reaches the expiry-update branch.
+- [Checkout validation](backend/apps/api/src/modules/carts/carts.service.ts#L468-L502) reads one product for every cart line, even when option combinations refer to the same product.
 
-## Durable preview refresh design
+Successful cart reads on cart-enabled stores cause writes even for visitors who never buy. This is confirmed write amplification; its production importance depends on navigation and repeat requests. Disabled-cart requests still incur entitlement checks but do not reach successful cart creation.
 
-This is a proposed follow-up implementation, not a change made by this review.
+### Fix approach
 
-- Use durable MySQL dirty-work/outbox state for affected public page/store IDs, recorded in the same transaction as the content mutation. Redis/BullMQ may deliver work, but a lost in-memory signal must not lose the pending change.
-- [ShareShellSignal](backend/apps/api/src/modules/seo/share-shell.signal.ts#L11-L34) currently debounces a callback; it is a wake-up mechanism, not a durable queue. Reuse it only as a prompt to inspect durable work. Inventory its call sites before changing scheduling; do not assume all mutations already signal it.
-- Coalesce work by entity/store and process bounded batches with one refresher. Claim/acknowledge jobs safely if multiple API instances are used.
-- Include publication/archive changes, slug/category renames, product stock/price/image changes, store branding/design/verification changes where reflected in metadata, SEO settings, website branding, and worker media-ready transitions.
-- Track old generated paths for renames/unpublishing. A partial pass must not call the current global `prune(keep)` with a partial keep-set; that would remove unrelated shops' pages.
-- A template or global branding change legitimately affects many pages: enqueue a bounded reconciliation, rather than doing it inline in an owner request.
-- Keep a low-frequency full reconciliation as recovery, with a complete generation manifest before global pruning. Do not prune after an incomplete/failed pass.
-- If a new table/index is needed, add and register a TypeORM migration. Do not use schema synchronization or run rollback tests against application data.
-- If intervals/batch sizes become configurable, keep `.env.example`, configuration validation, and configuration reads synchronized.
-- Do not move generation to the worker without explicitly arranging template/share-directory access and deployment ownership. The current share-directory mount belongs to the API deployment path.
+1. Separate reading an existing cart and establishing its HttpOnly identity from creating a persistent empty cart. Consider returning a compatible empty-cart DTO and creating the database row on the first real mutation.
+2. Update controller/DTO/frontend assumptions together: currently add-to-cart waits for the initial GET and anonymous cookie. Do not defer everything until drawer open and accidentally disable the first add or hide an existing cart badge.
+3. Remove redundant expiry updates immediately after creation. Throttling existing-cart expiry touches requires an explicit inactivity-expiry policy; do not silently alter the current seven-day-on-access behavior.
+4. Batch checkout product reads by distinct IDs, then validate each line against the result map. Keep per-product quantity aggregation across option combinations.
+5. Preserve anonymous/authenticated isolation, subscription gates, store membership, server-derived money values, and current stock/availability checks. Never cache carts publicly or merge identities automatically.
 
-## Requested browsing paths: observations and next actions
+**Small acceptance checks:** new-visitor first add works; existing-cart badges still load; repeated empty reads do not create rows; option lines share stock limits; authenticated and anonymous carts remain separate.
 
-The safeguards below are not a guarantee that the endpoints are inexpensive at production scale.
+## 4. Explore enriches more candidates than it returns
 
-### Home/feed and category filtering
+### Evidence and trigger
 
-**Observed:** [getExploreFeed](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L475-L506) shares cached/in-flight work for resolved visitors. Other viewer types do not take that cache branch. [Feed enrichment](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L1004-L1058) batches media, variants, counters, and store reads.
+- [Explore cache and pagination](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L475-L566) share anonymous visitor work; signed-in requests bypass the shared response-cache branch. Cursor values create distinct cache keys.
+- [Mixed explore](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L654-L720) chooses up to `min(max(limit * 8, 60), 300)` posts, fully enriches them, ranks/diversifies them, and only then paginates.
+- A 12-item request can enrich up to 96 candidates. The cursor does not narrow this mixed-feed SQL candidate selection.
+- [Enrichment is already batched](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L1004-L1082). Do not label it a per-card SQL N+1 or replace it with individual lookups.
 
-**Next:** Compare one cold and one repeated request using the same filter/cursor, and distinguish anonymous from signed-in traffic. Inspect ranking query plans only if those requests are expensive after background work is reduced. Do not replace existing batched enrichment with per-card lookups or share personalized likes/cart data between visitors. This pass does not clear every directory/business-category endpoint or all homepage request fanout.
+Cold anonymous keys, different cursors/filters, and signed-in backend requests can repeat substantial hydration/ranking work. This is bounded per request, but still larger than the returned page.
 
-### Store and menu
+### Fix approach
 
-**Observed:** [StorePage menu query](frontend/src/components/StorePage.tsx#L431-L473) requests up to 60 products per page, applies a category filter on the server, and is enabled only for the active catalog tab. It does not fetch the entire catalog in a single unbounded request. [The backend list](backend/apps/api/src/modules/products/products.service.ts#L80-L96) uses `findAndCount`, ordered pagination, and a category relation.
+1. Compare one anonymous cold/warm request and one signed-in request before choosing a change. Separate SQL time, Redis payload size, hydration, and ranking CPU.
+2. If hydration dominates, fetch compact ranking inputs first and hydrate response media/details only for selected items, preserving every scoring input and store diversification rule.
+3. Alternatively, reuse a bounded, short-lived ranked candidate snapshot across cursor pages. Keep filters, coordinates, viewer-specific ranking, invalidation, and cursor consistency explicit.
+4. Never blindly share personalized responses. The computing visitor currently supplies category affinity even when a page is later shared; a new shared layer must explicitly separate viewer-neutral candidates from viewer-specific ordering and like flags.
+5. Verify the affinity query's index access: [filtering uses voter identity](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L282-L305), while [the original registered indexes](backend/libs/database/src/migrations/1792627200000-AddPostEngagement.ts#L25-L36) lead with `post_id`. Inspect current installed indexes and plain `EXPLAIN` before adding a voter-leading composite index through a migration. A production full scan has not been established.
 
-**Next:** Measure response bytes, database time, image transfers, and requests when switching tabs/sections. Sixty products plus images may be excessive for an initial viewport, but a page-size reduction should follow measurement. If deep offsets/counts are expensive, inspect the actual filtered ordering query before considering composite indexes or cursor pagination; preserve accurate navigation/count behavior.
+Do not simply paginate SQL before ranking: that can change the feed's selection, ordering, and diversity.
 
-### Category URLs
+**Small acceptance checks:** duplicate anonymous work remains shared; two viewers do not inherit each other's like flags/affinity; filters and cursor pages remain consistent; public visibility still applies.
 
-**Observed:** [StoreCategoryPage](frontend/src/components/StoreCategoryPage.tsx#L49-L108) loads store details, then categories, then a category-filtered product page of 24 items. Categories have a five-minute client stale time.
+## 5. Engagement batching has growing state and flush costs
 
-**Next:** The dependent requests can increase visible loading latency; they are not themselves proof of high server CPU. Inspect one cold navigation and a back-navigation. Reuse shared shop/category data where safe. If category resolution dominates, consider a server-resolved category slug endpoint that returns the necessary category context without making the browser download products just to discover a category.
+### Evidence and trigger
 
-### Product slug URLs
+- [Redis state and scripts](backend/libs/queue/src/engagement-buffer.ts#L19-L56) store a post's full liker map in JSON, potentially alongside another snapshot in an immutable staged batch. Mutations decode/encode that state.
+- [Feed reads](backend/libs/queue/src/engagement-buffer.ts#L71-L87) use `MGET`, but still transfer and parse whole states. Fewer round trips do not mean bounded payloads.
+- [Worker flushing](backend/apps/worker/src/jobs/engagement.flush.ts#L75-L139) fetches dirty IDs with `SMEMBERS`, processes them sequentially, and reads all durable likes for each staged post, including views-only batches.
 
-**Observed:** [StoreProductPage](frontend/src/components/StoreProductPage.tsx#L59-L114) requests store details, then enables the product and category queries, and initializes the shop cart hook. Website settings are another shared dependency. Actual network requests depend on existing query cache state and hook behavior. [Product lookup](backend/apps/api/src/modules/products/products.service.ts#L135-L168) is a direct slug predicate with a category relation, not application-side iteration over the catalog. Its actual database access path still needs an index/plan check if slow.
+Cost grows with likes per post and dirty backlog, affecting Redis memory/command time, network bytes, API parsing, and worker/MySQL work. This is a conditional scale risk, not evidence that Redis is currently overloaded.
 
-**Next:** Separate product JSON time from store/category/cart latency and image download time. A store-to-product request waterfall can make loading feel slow even if each query is cheap. If measurements justify it, resolve public store/product context in one bounded endpoint or safely enable independent lookups earlier. Preserve shop ownership matching, publication/moderation rules, and owner-only draft access. Keep cart data private; defer cart loading only if the existing cart-badge/checkout experience remains correct.
+### Fix approach
 
-Do not assume the SEO generator runs inside every normal SPA product request. Static preview generation and live product JSON are separate paths that can compete for shared resources.
+1. Measure sampled state sizes, dirty backlog, and flush duration first. Do not dump liker identities into logs/reports.
+2. If justified, separate compact counters and per-viewer membership reads from the full immutable persistence representation. Feed rendering should not need every liker's ID.
+3. Distinguish view deltas from membership changes so views-only batches do not load/reconcile the entire PostLike collection.
+4. Process dirty work in bounded batches with safe claims and retries; simple removal from the dirty set before successful persistence is not safe.
+5. Treat this as a staged protocol change with old-state compatibility. Preserve receipt-based idempotency, lock ordering, concurrent writes, and post-commit acknowledgment.
 
-### Posts, images, and videos
+**Small acceptance checks:** retry after commit never double-counts; a like/unlike or view arriving during a flush survives acknowledgment; view deduplication remains correct; pending state never expires.
 
-**Observed:** [AutoplayVideo](frontend/src/components/AutoplayVideo.tsx#L119-L151) pauses inappropriate playback and releases far-away/inactive sources. [The media route](backend/apps/api/src/modules/showcases/media.controller.ts#L148-L206) authorizes access, supports ranges, and streams with disconnect cleanup. It supplies public cache headers for public variants and private/no-store for nonpublic media.
+Do not add TTLs to pending engagement or rely on eviction to solve memory pressure. That would trade performance for activity loss.
 
-**Next:** Capture how many videos buffer concurrently during a normal scroll, bytes transferred per post, and whether repeated image/video requests hit a cache. Inspect the installed Nginx configuration, not only repository snippets, especially range-request cache bypass and cookie handling. Measure direct post-URL loading separately from the feed. Browser decode/render cost is not VPS CPU; uncached origin streams and their authorization queries are server costs.
+## Other recurring and delivery costs to measure
 
-Do not add an unrestricted static media alias or cache private responses. Any public-media caching change must retain the existing bounded visibility/revocation behavior. Keep Sharp/FFmpeg in the worker, and correlate worker encoding activity separately from API/MySQL activity.
+| Area | Code-backed observation | Recommended boundary |
+| --- | --- | --- |
+| Share-card backfill | [Worker backfill](backend/apps/worker/src/jobs/media.process.ts#L292-L329) walks logo-bearing stores in batches of 50 at startup and every five minutes; existing cards get a storage stat, not re-encoding | Measure traversal and overlap with encoding. Use durable missing-card work plus bounded recovery if material |
+| Monitoring | [Metrics collection](backend/apps/api/src/modules/monitoring/monitoring.service.ts#L111-L128) performs media/outbox aggregates, with caching, single-flight, and limits | Attribute it in idle measurements; do not disable readiness/observability as a shortcut |
+| Media requests | [Origin route](backend/apps/api/src/modules/showcases/media.controller.ts#L141-L206) authorizes and stats before ETag/HEAD handling | A 304 avoids transfer bytes, not those origin checks. Measure cache hit/miss and range traffic |
+| Nginx media caching | [Generated snippet](setup-vps.sh#L204-L217) bypasses ranges and permits stale-on-error/updating responses | Inspect installed configuration. Do not assume `max-age` alone is a strict revocation deadline when stale serving is enabled |
+| Resource limits | [VPS setup](setup-vps.sh#L156-L179) supplies settings different from generic Compose defaults | Verify running configuration; do not raise worker concurrency or DB pool sizes blindly on a constrained VPS |
 
-## Lightweight verification plan
+Media streaming and decoding are different costs: browser rendering/decoding does not consume VPS CPU, while uncached origin streams, authorization queries, and worker encoding do. Keep Sharp/FFmpeg worker-only. Never expose the media volume through an unrestricted static alias or cache private responses to reduce load.
 
-Respect the owner's request to avoid extensive tests. No stress test or full-suite run is needed just to confirm this report.
+## Coverage and safeguards already present
 
-1. **Use existing metrics:** Compare a three-minute idle window with one ordinary home -> store -> category -> product -> post session. Record API, MySQL, and worker CPU separately, memory, disk I/O, request durations, and transferred bytes. Observe pass timing; do not repeatedly refresh pages to manufacture load.
-2. **Use one query plan if needed:** Inspect plain `EXPLAIN` for the existing fingerprint and relevant installed indexes. Avoid `EXPLAIN ANALYZE` on a busy production server because it executes the query. Do not enable noisy global SQL logging by default.
-3. **After a scheduling fix:** Add a small focused regression in the existing `backend/test/unit/seo-share.test.ts`: unchanged ticks do not regenerate the catalog; unavailable templates do not trigger content-table scans; a change arriving during a pass is not lost. Existing public/private and stale-shell behavior must remain intact.
-4. **After implementation:** Run the focused test selection and appropriate typecheck/format checks once. Expand verification only if schema, authorization, or deployment behavior changes. Never run destructive integration tests against the real database.
+Static review is not a guarantee of production capacity.
 
-Acceptance signals: idle browsing-independent queries fall; unchanged content stops causing frequent full metadata/file passes; edited previews still update within the agreed freshness window; unpublished/renamed URLs do not retain old shells; request latency/bytes do not regress.
+| Requested path/workload | Result and follow-up |
+| --- | --- |
+| Home/feed | Anonymous cache/single-flight and batched enrichment exist; candidate hydration and engagement state are the main follow-ups above |
+| Stores/directory | Public-list caching and grouped counts exist; directory is capped at 1,000; store detail makes separate counts. Inspect filtered query plans only if measurements justify it |
+| Categories/menu | Category totals are grouped server-side; menus are filtered/paginated. Frontend page sizes are 60 for menus and 24 for categories, backend maximum 100. Large response/image transfers and deep offsets are measurement targets, not proven scans |
+| Product slug | Direct slug predicate with a registered unique slug index; DTO mapping has no per-product SQL. Store, category, cart, branding, and image requests can account for apparent page cost. Lookup is product-slug-global; preserve the storefront's store-membership check and owner/public separation |
+| Store feed and post URL | Store feed paginates in SQL before enrichment; direct post detail enriches one post. Favorites normalize at most 12 stores |
+| Ads/stories | Ads are capped at 10 with per-target enrichment. Stories cap candidates at 400 and batch enrichment, but can hydrate more than final selected groups |
+| Carts/checkout | Automatic GET behavior and per-line checkout reads traced; see finding 3 |
+| SEO/crawlers | Current scheduler mitigation retained; remaining catalog-wide work and live document generation identified |
+| Worker/monitoring | Engagement, media/card backfill, bounded recovery, story cleanup, metrics, and admin overview paths reviewed. No automatic overview polling was established |
 
-## Instructions for the next AI
+Avoid generic fixes that break publication/moderation, owner suspension, tenant boundaries, cart/session isolation, subscription gates, integer-safe prices, or existing cache personalization. Public-media caching changes need an explicit visibility/revocation policy.
 
-> Read the implemented-patch status above and current code first; do not redo the scheduling mitigation or mistake it for a complete performance fix. Next, use a lightweight production observation if access is authorized, then address remaining aggregate scans/full-catalog work with durable targeted refreshes and bounded batches. Do not broadly rewrite feed/store/product code based only on suspected bottlenecks. Preserve SEO/share functionality, stale-shell cleanup, public/private media access, shop boundaries, and cart isolation. Use a few targeted checks, not a load test or repeated full-suite runs. Explain what changed, what was measured versus inferred, and any remaining bottleneck. Do not deploy, change production configuration, migrate production data, commit, or push without explicit approval.
+## Low-cost measurement and implementation order
+
+1. With production access approved, use existing metrics for a short idle window and one normal home -> store -> category -> product -> post session. Separate API, MySQL, Redis, worker CPU/memory, disk I/O, and transferred bytes. Correlate engagement flushes and preview refreshes; do not manufacture traffic.
+2. Inspect a few slow request traces or existing slow-query records. Use plain `EXPLAIN` and actual installed indexes for relevant queries; avoid `EXPLAIN ANALYZE` on a busy production database because it executes the statement. Do not enable broad query/body/token logging.
+3. Implement durable content invalidation and bounded preview work first if it correlates with load. Keep the current scheduler until the replacement covers all dependencies and recovery.
+4. Batch crawler-document generation and share identical work. This is a separate, measurable improvement even before a broader queue redesign.
+5. Address cart reads and feed hydration according to the measured request mix. Checkout's distinct-product batching can be a small isolated patch; engagement-state redesign has a much larger correctness surface.
+6. Keep validation small: use the relevant existing unit file and a few query-count/behavior checks per patch, then appropriate typecheck/format verification. No repeated full suites, benchmarks, or load tests by default. Migration/durability changes may need additional narrowly scoped checks; never rollback-test real application data.
+
+Success means fewer queries/writes/bytes for the same legitimate work and lower observed contention without lost edits, stale unpublished pages, incorrect carts, changed ranking semantics, or lost engagement. A lower timer frequency alone is not proof of a resolved VPS problem.
+
+## Copyable instructions for the next AI
+
+> Read this report and current code; the scheduler mitigation is already implemented. Start with one approved finding, explain the evidence and proposed scope, and make a small patch with a few focused checks. Prioritize engagement-driven share-shell invalidation and catalog-sized SEO queries, then cart/feed work according to metrics. Preserve current public/private visibility, moderation, tenant and cart isolation, ranking semantics, and durable engagement receipts. Do not invent production measurements or claim this review proved a CPU bottleneck. Use registered migrations for schema/index changes and keep configuration validation/templates synchronized. Do not deploy, change production configuration/data, commit, push, or run stress tests without explicit approval. Update this report with what is actually fixed and what remains.

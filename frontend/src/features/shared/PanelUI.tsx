@@ -10,9 +10,11 @@ import { Link, NavLink } from 'react-router-dom';
 import { ArrowUpRight, Check, LogOut, Menu, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { mutate, panelError, type Session } from './panel-api';
+import { assetUrl } from '../../lib/api';
 import { brandingUrl } from '../../lib/website';
 import { LanguageToggle } from '../../components/LanguageToggle';
 import { useUiLabel } from '../../hooks/useUiLabel';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 
 export function PanelShell({
   session,
@@ -31,6 +33,10 @@ export function PanelShell({
   const client = useQueryClient();
   // Section labels are curated so the widget does not turn "Home" into "بيت".
   const uiText = useUiLabel();
+  // The workspace wears the administrator's branding, not the build-time name.
+  const { settings } = useWebsiteSettings(false);
+  const brandLogo =
+    brandingUrl(assetUrl(settings.logoUrl)) || brandingUrl('/logo.png');
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
@@ -92,7 +98,7 @@ export function PanelShell({
       </a>
       <header className="panel-mobile-bar">
         <Link to="/" className="panel-brand notranslate">
-          <img src={brandingUrl('/logo.png')} alt="" /> Matjary
+          <img src={brandLogo} alt="" /> {settings.siteName}
         </Link>
         <button
           aria-label={open ? 'Close navigation' : 'Open navigation'}
@@ -111,7 +117,7 @@ export function PanelShell({
       )}
       <aside className={`panel-sidebar ${open ? 'is-open' : ''}`}>
         <Link to="/" className="panel-brand notranslate">
-          <img src={brandingUrl('/logo.png')} alt="" /> Matjary
+          <img src={brandLogo} alt="" /> {settings.siteName}
           <span>{admin ? 'ADMIN' : 'STUDIO'}</span>
         </Link>
         <p className="panel-nav-label">
@@ -135,7 +141,7 @@ export function PanelShell({
         </nav>
         <div className="panel-sidebar-bottom">
           <Link to="/">
-            Explore Matjary <ArrowUpRight size={15} />
+            Explore {settings.siteName} <ArrowUpRight size={15} />
           </Link>
           {session.isAdmin && (
             <Link to={admin ? '/dashboard' : '/admin'}>

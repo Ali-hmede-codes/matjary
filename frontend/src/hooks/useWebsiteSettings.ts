@@ -1,18 +1,34 @@
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { assetUrl, getJson } from '../lib/api';
 import {
   brandingUrl,
+  cacheSettings,
   contrastColor,
   defaults,
   normalizeSettings,
+  readSettingsCache,
 } from '../lib/website';
+import { setBrandName } from '../lib/language';
 
 export function useWebsiteSettings(applyMetadata = true, enabled = true) {
+  // Read the snapshot once per mount; storage parsing must not run per render.
+  const [cached] = useState(readSettingsCache);
   const settingsQuery = useQuery({
     queryKey: ['website-settings'],
-    queryFn: async ({ signal }) =>
-      normalizeSettings(await getJson<unknown>('settings/website', signal)),
+    queryFn: async ({ signal }) => {
+      const settings = normalizeSettings(
+        await getJson<unknown>('settings/website', signal),
+      );
+      // Only a real API answer refreshes the pre-paint snapshot; re-saving
+      // `initialData` would make a stale name look freshly confirmed.
+      cacheSettings(settings);
+      return settings;
+    },
+    // Paint the last known branding immediately instead of the build-time
+    // defaults, then revalidate as soon as that snapshot is stale.
+    initialData: cached?.values,
+    initialDataUpdatedAt: cached?.savedAt,
     staleTime: 30_000,
     // Branding changes are rare; a five-minute refresh keeps every open tab in
     // sync without a per-minute request from every visitor.
@@ -20,6 +36,11 @@ export function useWebsiteSettings(applyMetadata = true, enabled = true) {
     enabled,
   });
   const settings = settingsQuery.data ?? defaults;
+  useEffect(() => {
+    // The translation widget must keep the administrator's name, not the
+    // build-time one, when it restores transliterated brand text.
+    setBrandName(settings.siteName);
+  }, [settings.siteName]);
   useEffect(() => {
     if (!applyMetadata) return;
     // Page SEO owns titles/descriptions; a branding refetch must not replace

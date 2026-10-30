@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { formatProductPrice } from '../../lib/storefront';
 import { dateLabel, getJson, mutate, panelError } from '../shared/panel-api';
 import { Loading, Notice, PageTitle, Retry } from '../shared/PanelUI';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { useOwner } from './OwnerPanel';
 
 type RequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
@@ -83,6 +84,8 @@ const dayText = (days: number | null) =>
 
 export function OwnerVerification() {
   const { store, session } = useOwner();
+  const { settings } = useWebsiteSettings(false);
+  const brand = settings.siteName;
   const client = useQueryClient();
   const query = useQuery({
     queryKey: ['panel', session.user.id, 'verification', store?.id],
@@ -119,7 +122,7 @@ export function OwnerVerification() {
       });
       await client.invalidateQueries({ queryKey: ['panel', session.user.id] });
       setNotice(
-        'Your request is with the Matjary team. An administrator will review it and call you on the number you provided.',
+        `Your request is with the ${brand} team. An administrator will review it and call you on the number you provided.`,
       );
     } catch (reason) {
       setError(panelError(reason));
@@ -159,7 +162,7 @@ export function OwnerVerification() {
       <PageTitle
         eyebrow={store.name}
         title="Verification"
-        description="The blue tick tells shoppers this business is real and reachable. Verification is reviewed by the Matjary team and renewed month by month."
+        description={`The blue tick tells shoppers this business is real and reachable. Verification is reviewed by the ${brand} team and renewed month by month.`}
         action={
           <>
             {!lifetime && !data.eligibility.included && price > 0 && (
@@ -239,7 +242,7 @@ export function OwnerVerification() {
           </h2>
           <p>
             {lifetime
-              ? 'The Matjary team granted this badge with no end date. It stays on until an administrator removes it.'
+              ? `The ${brand} team granted this badge with no end date. It stays on until an administrator removes it.`
               : data.eligibility.included
                 ? `Verification is included in your ${data.plan.name ?? 'current'} plan. The badge runs as long as your subscription and ends with it.`
                 : price > 0
@@ -364,7 +367,7 @@ export function OwnerVerification() {
               : 'Verification details'}
           </h2>
           <p className="panel-muted">
-            The Matjary team sees this information only to review your shop. It
+            The {brand} team sees this information only to review your shop. It
             is never shown to shoppers.
           </p>
           <form className="panel-form" onSubmit={(e) => void submit(e)}>

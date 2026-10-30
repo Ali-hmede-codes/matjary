@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Copy, Mail, Trash2, UserPlus, Users } from 'lucide-react';
 import { dateLabel, getJson, mutate, panelError } from '../shared/panel-api';
 import { Empty, Loading, Notice, PageTitle, Retry } from '../shared/PanelUI';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { useOwner } from './OwnerPanel';
 
 interface TeamMember {
@@ -40,12 +41,16 @@ interface InviteDraft {
   gmailUrl: string;
 }
 
-function inviteMessage(storeName: string, email: string): string {
+function inviteMessage(
+  storeName: string,
+  email: string,
+  siteName: string,
+): string {
   const origin = window.location.origin;
   return [
     `Hi!`,
     ``,
-    `You're invited to help with ${storeName} on Matjary.`,
+    `You're invited to help with ${storeName} on ${siteName}.`,
     ``,
     `Sign in at ${origin}/login using the Google account for ${email}. The invitation will be waiting in your studio.`,
     ``,
@@ -53,14 +58,20 @@ function inviteMessage(storeName: string, email: string): string {
   ].join('\n');
 }
 
-function gmailComposeUrl(email: string, storeName: string): string {
-  const subject = `Help with ${storeName} on Matjary`;
-  const body = inviteMessage(storeName, email);
+function gmailComposeUrl(
+  email: string,
+  storeName: string,
+  siteName: string,
+): string {
+  const subject = `Help with ${storeName} on ${siteName}`;
+  const body = inviteMessage(storeName, email, siteName);
   return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export function TeamPanel() {
   const { store, session } = useOwner();
+  const { settings } = useWebsiteSettings(false);
+  const siteName = settings.siteName;
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState('');
@@ -125,8 +136,8 @@ export function TeamPanel() {
         const target = result.invitation.email;
         setDraft({
           email: target,
-          message: inviteMessage(store!.name, target),
-          gmailUrl: gmailComposeUrl(target, store!.name),
+          message: inviteMessage(store!.name, target, siteName),
+          gmailUrl: gmailComposeUrl(target, store!.name, siteName),
         });
         setNotice(
           `Invitation ready for ${target}. Send it to their Gmail address.`,
@@ -189,8 +200,8 @@ export function TeamPanel() {
   function draftFor(invitation: TeamInvitation): InviteDraft {
     return {
       email: invitation.email,
-      message: inviteMessage(store!.name, invitation.email),
-      gmailUrl: gmailComposeUrl(invitation.email, store!.name),
+      message: inviteMessage(store!.name, invitation.email, siteName),
+      gmailUrl: gmailComposeUrl(invitation.email, store!.name, siteName),
     };
   }
 
@@ -240,7 +251,7 @@ export function TeamPanel() {
           </button>
         </form>
         <p className="panel-muted">
-          If they already have a Matjary account, access starts right away.
+          If they already have a {siteName} account, access starts right away.
           Otherwise the invitation waits for them after they sign in with that
           Google account.
         </p>

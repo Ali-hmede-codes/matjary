@@ -766,12 +766,12 @@ function SettingsForm({
           <Field
             label="Twitter / X handle"
             error={issues.twitterSite}
-            hint="Added to shared links, for example @matjary."
+            hint="Added to shared links, for example @yourbrand."
           >
             <input
               value={draft.twitterSite}
               maxLength={100}
-              placeholder="@matjary"
+              placeholder="@yourbrand"
               disabled={busy}
               aria-invalid={Boolean(issues.twitterSite)}
               onChange={(event) => edit('twitterSite', event.target.value)}

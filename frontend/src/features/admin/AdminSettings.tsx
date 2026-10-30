@@ -398,7 +398,7 @@ function SettingsForm({
             <input
               value={draft.footerText}
               maxLength={textLimits.footerText}
-              placeholder={`© ${new Date().getFullYear()} Matjary. Made for discovery.`}
+              placeholder={`© ${new Date().getFullYear()} ${initial.siteName}. Made for discovery.`}
               disabled={busy}
               aria-invalid={Boolean(issues.footerText)}
               onChange={(event) => edit('footerText', event.target.value)}
@@ -503,7 +503,7 @@ function SettingsForm({
             </div>
             <small className="settings-preview-footer" style={{ color: text }}>
               {draft.footerText.trim() ||
-                `© ${new Date().getFullYear()} ${draft.siteName.trim() || 'Matjary'}. Made for discovery.`}
+                `© ${new Date().getFullYear()} ${draft.siteName.trim() || initial.siteName}. Made for discovery.`}
             </small>
           </div>
           <a

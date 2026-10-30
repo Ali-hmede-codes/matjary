@@ -7,7 +7,13 @@ import '@fontsource-variable/dm-sans';
 // Cairo files are only downloaded when Arabic text actually appears.
 import '@fontsource-variable/cairo';
 import App from './App';
+import { getJson } from './lib/api';
 import { applyLanguage, storedLanguage } from './lib/language';
+import {
+  cacheSettings,
+  normalizeSettings,
+  readSettingsCache,
+} from './lib/website';
 import './styles.css';
 
 // Resolve the saved language before the first render: <html dir> has to be set
@@ -21,10 +27,32 @@ const client = new QueryClient({
   },
 });
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={client}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// The static HTML only carries generic copy. Load the live branding before the
+// first React paint so a renamed site never flashes the build-time name. A
+// cached snapshot is only a fallback for a slow network; the API always wins
+// when it answers in time and updates the open tab when it answers later.
+async function refreshBranding(): Promise<void> {
+  try {
+    const settings = normalizeSettings(
+      await getJson<unknown>('settings/website'),
+    );
+    cacheSettings(settings);
+    client.setQueryData(['website-settings'], settings);
+  } catch {
+    // The settings hook retries and falls back to the cached/default values.
+  }
+}
+
+const cached = readSettingsCache();
+void Promise.race([
+  refreshBranding(),
+  new Promise((resolve) => window.setTimeout(resolve, cached ? 1000 : 2000)),
+]).then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <QueryClientProvider client={client}>
+        <App />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+});

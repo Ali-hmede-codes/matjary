@@ -262,8 +262,8 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
                 {settings.lbpExchangeRate
                   ? `${new Intl.NumberFormat('en-US').format(
                       settings.lbpExchangeRate,
-                    )} LBP = $1. Matjary sets this rate.`
-                  : 'You can turn this on once Matjary sets the LBP exchange rate.'}
+                    )} LBP = $1. ${settings.siteName} sets this rate.`
+                  : `You can turn this on once ${settings.siteName} sets the LBP exchange rate.`}
               </small>
             </label>
           </section>

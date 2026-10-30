@@ -830,6 +830,42 @@ test('share cards compose a branded 1200x630 JPEG from a shop logo', async () =>
   }
 });
 
+test('share cards keep a light logo visible on a contrasting plate', async () => {
+  const directory = await tempDirectory();
+  try {
+    const input = path.join(directory, 'white-logo.png');
+    await sharp({
+      create: {
+        width: 200,
+        height: 200,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      },
+    })
+      .png()
+      .toFile(input);
+    const card = await encodeShareCard(input, directory, {
+      background: '#994a2c',
+      signal: AbortSignal.timeout(30000),
+      deadline: Date.now() + 30000,
+    });
+    const { data, info } = await sharp(card.file)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    // Inside the rounded plate but outside the centered logo: white-on-white
+    // artwork used to leave this area white, so the card looked empty.
+    const offset = (130 * info.width + 360) * (info.channels ?? 3);
+    const [red = 0, green = 0, blue = 0] = [
+      data[offset] ?? 0,
+      data[offset + 1] ?? 0,
+      data[offset + 2] ?? 0,
+    ];
+    assert.ok(red + green + blue < 200, `${red},${green},${blue}`);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('missing share cards retry after failures without overlapping sweeps or restarting', async (t) => {
   const processor = new MediaProcessor(
     {} as never,

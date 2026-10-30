@@ -115,6 +115,69 @@ export function normalizeSettings(input: unknown): WebsiteSettings {
   return result;
 }
 
+export const SETTINGS_CACHE_KEY = 'matjary:website-settings';
+// Branding changes are rare, but a tab opened after a rename must not keep an
+// ancient name forever when the API is unreachable.
+const SETTINGS_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60_000;
+
+export interface SettingsCacheEntry {
+  values: WebsiteSettings;
+  savedAt: number;
+}
+
+// The static build cannot know the administrator's current name, so the last
+// successfully loaded values are kept locally and applied before the first
+// paint. The API remains the single source of truth on every load.
+export function readSettingsCache(
+  storage: Pick<Storage, 'getItem'> | undefined = browserStorage(),
+  now = Date.now(),
+): SettingsCacheEntry | undefined {
+  if (!storage) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(
+      storage.getItem(SETTINGS_CACHE_KEY) ?? 'null',
+    );
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    const values = Reflect.get(parsed, 'values');
+    const savedAt = Reflect.get(parsed, 'savedAt');
+    if (
+      !values ||
+      typeof values !== 'object' ||
+      typeof savedAt !== 'number' ||
+      !Number.isFinite(savedAt) ||
+      savedAt > now + 60_000 ||
+      now - savedAt > SETTINGS_CACHE_MAX_AGE_MS
+    )
+      return undefined;
+    return { values: normalizeSettings(values), savedAt };
+  } catch {
+    return undefined;
+  }
+}
+
+export function cacheSettings(
+  settings: WebsiteSettings,
+  storage: Pick<Storage, 'setItem'> | undefined = browserStorage(),
+  now = Date.now(),
+): void {
+  try {
+    storage?.setItem(
+      SETTINGS_CACHE_KEY,
+      JSON.stringify({ values: settings, savedAt: now }),
+    );
+  } catch {
+    /* Private mode or a full quota: the API still supplies every load. */
+  }
+}
+
+function browserStorage(): Storage | undefined {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 export function contrastColor(hex: string): string {
   const channels = [1, 3, 5].map((start) => {
     const channel = parseInt(hex.slice(start, start + 2), 16) / 255;

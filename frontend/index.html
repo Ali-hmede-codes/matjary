@@ -4,34 +4,79 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#254e40" />
+    <!-- These are neutral placeholders: the website name lives in the
+         administrator settings and is applied by the script below (cached
+         branding) before the first paint, then revalidated from the API. -->
     <meta
       name="description"
-      content="Discover independent stores, beautiful finds, and everyday inspiration on Matjary."
+      content="Discover independent stores, beautiful finds, and everyday inspiration."
     />
-    <!-- Defaults for clients that read the first response without running the
-         app. The API replaces these for the home link and the prerendered
-         storefront shells; the SPA replaces them while browsing. -->
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Matjary" />
-    <meta property="og:title" content="Matjary — Discover something good" />
-    <meta
-      property="og:description"
-      content="Discover independent stores, beautiful finds, and everyday inspiration on Matjary."
-    />
-    <meta property="og:image" content="/banner.jpg" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Matjary — Discover something good" />
-    <meta
-      name="twitter:description"
-      content="Discover independent stores, beautiful finds, and everyday inspiration on Matjary."
-    />
-    <meta name="twitter:image" content="/banner.jpg" />
     <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link id="site-favicon" rel="icon" sizes="any" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
-    <title>Matjary — Discover something good</title>
+    <link rel="manifest" href="/api/v1/settings/website/manifest.webmanifest" />
+    <title>Discover shops and posts</title>
+    <script>
+      // Avoid a flash of the build-time name: apply the last branding the API
+      // returned. Prerendered share shells already carry page-specific tags,
+      // so they are left untouched.
+      (function () {
+        try {
+          if (document.querySelector('meta[name="matjary-shell"]')) return;
+          var entry = JSON.parse(
+            localStorage.getItem('matjary:website-settings') || 'null',
+          );
+          var s = entry && entry.values;
+          if (!s || typeof s.siteName !== 'string' || !s.siteName) return;
+          var tagline = typeof s.tagline === 'string' ? s.tagline : '';
+          var title = tagline ? s.siteName + ' — ' + tagline : s.siteName;
+          var description =
+            typeof s.description === 'string' ? s.description : '';
+          document.title = title;
+          function meta(attribute, key, value) {
+            if (!value) return;
+            var selector = 'meta[' + attribute + '="' + key + '"]';
+            var element = document.head.querySelector(selector);
+            if (!element) {
+              element = document.createElement('meta');
+              element.setAttribute(attribute, key);
+              document.head.appendChild(element);
+            }
+            element.setAttribute('content', value);
+          }
+          function absolute(value) {
+            if (typeof value !== 'string' || !value) return '';
+            try {
+              return new URL(value, window.location.origin).href;
+            } catch (error) {
+              return '';
+            }
+          }
+          var image = absolute(s.bannerUrl) || absolute(s.logoUrl);
+          meta('name', 'description', description);
+          meta('property', 'og:type', 'website');
+          meta('property', 'og:title', title);
+          meta('property', 'og:description', description);
+          meta('property', 'og:site_name', s.siteName);
+          meta('property', 'og:image', image);
+          meta('name', 'twitter:card', 'summary_large_image');
+          meta('name', 'twitter:title', title);
+          meta('name', 'twitter:description', description);
+          meta('name', 'twitter:image', image);
+          if (typeof s.primaryColor === 'string') {
+            var theme = document.querySelector('meta[name="theme-color"]');
+            if (theme) theme.setAttribute('content', s.primaryColor);
+          }
+          if (typeof s.faviconUrl === 'string' && s.faviconUrl) {
+            var favicon = document.getElementById('site-favicon');
+            if (favicon) favicon.setAttribute('href', s.faviconUrl);
+          }
+        } catch (error) {
+          /* Blocked storage or malformed cache: neutral defaults stay. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

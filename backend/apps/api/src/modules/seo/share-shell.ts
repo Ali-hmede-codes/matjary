@@ -35,5 +35,11 @@ export function shareShellSegments(...segments: string[]): string[] | null {
 export function renderShareShell(template: string, meta: MetaTags): string {
   const cleaned = template.replace(PREVIEW_TAGS, '');
   if (!/<\/head>/iu.test(cleaned)) return cleaned;
-  return cleaned.replace(/<\/head>/iu, `${renderShareHeadTags(meta)}\n</head>`);
+  // The marker must precede the template's own scripts: an inline boot script
+  // that runs while the head is parsed cannot see tags injected later.
+  const marked = cleaned.replace(
+    /<head\b[^>]*>/iu,
+    (head) => `${head}\n<meta name="matjary-shell" content="1">`,
+  );
+  return marked.replace(/<\/head>/iu, `${renderShareHeadTags(meta)}\n</head>`);
 }

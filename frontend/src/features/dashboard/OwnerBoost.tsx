@@ -34,6 +34,7 @@ import type {
   BoostPublicSettings,
   BoostTransaction,
 } from '../../lib/api';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 
 interface PostOption {
@@ -68,6 +69,7 @@ const coins = (value: string | number) => {
 
 export function OwnerBoost() {
   const { session, stores, store, summary } = useOwner();
+  const { settings: branding } = useWebsiteSettings(false);
   const [notice, setNotice] = useState('');
   const [composer, setComposer] = useState<'store' | 'showcase' | undefined>();
   const client = useQueryClient();
@@ -182,8 +184,8 @@ export function OwnerBoost() {
         <div className="panel-note">
           <Coins size={20} />
           <p>
-            Your wallet is empty. Ask a Matjary administrator to grant boost
-            coins, then come back to launch a campaign.
+            Your wallet is empty. Ask a {branding.siteName} administrator to
+            grant boost coins, then come back to launch a campaign.
           </p>
         </div>
       )}

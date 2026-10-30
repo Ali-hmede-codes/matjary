@@ -34,6 +34,7 @@ import {
   IndexNowDto,
 } from './seo.dto';
 import { isShareCrawler, renderShareDocument } from './share-document';
+import { LEGACY_SEO_DESCRIPTION, LEGACY_SEO_TITLE } from './seo-legacy';
 import { choosePreviewImage } from './preview-image';
 
 type SeoKind = 'store' | 'product' | 'showcase';
@@ -674,7 +675,9 @@ export class SeoService {
       (first ? await this.buildProductImageUrl(first) : undefined) ??
       (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
-      (await this.defaultSharingImage(settings));
+      (await this.latestStoreImageUrl(store.id)) ??
+      (await this.defaultSharingImage(settings)) ??
+      this.fallbackSharingImage();
     return {
       title: this.truncate(title, 60),
       description: this.truncate(description, 160),
@@ -771,7 +774,20 @@ export class SeoService {
 
   async getAdminSettings(actorId: string): Promise<SeoSettings> {
     await this.requireAdmin(actorId);
-    return { ...(await this.getSettings(false)), indexNowKey: null };
+    const [stored, resolved] = await Promise.all([
+      this.getSettings(false),
+      this.getSettings(true),
+    ]);
+    // The admin form edits overrides. Show an inherited title or description
+    // as empty (its placeholder follows the live branding) so a copy frozen by
+    // an earlier rename is not presented as the administrator's own copy.
+    return {
+      ...stored,
+      siteName: resolved.siteName,
+      defaultTitle: resolved.defaultTitle,
+      defaultDescription: resolved.defaultDescription,
+      indexNowKey: null,
+    };
   }
 
   private async getSettings(resolveBranding = true): Promise<SeoSettings> {
@@ -787,18 +803,46 @@ export class SeoService {
     const branding = await this.dataSource.manager.findOneBy(WebsiteSettings, {
       id: 1,
     });
+    const siteName = branding?.siteName?.trim() || settings.siteName;
+    const brandingTitle = [siteName, branding?.tagline?.trim()]
+      .filter(Boolean)
+      .join(' — ');
+    const storedName = settings.siteName?.trim() || '';
+    // A title that merely repeats the branding is not an override: earlier
+    // forms persisted those copies, which froze the previous website name.
+    // The stored SEO name still holds the brand the copy was written under;
+    // only while it differs from the live name is a `Name — …` title treated
+    // as inherited, so a deliberately branded custom title is preserved after
+    // the row has been aligned with the current branding.
+    const inheritedPrefixes =
+      storedName && storedName !== siteName
+        ? [`${storedName} — `, `${storedName} - `]
+        : [];
+    const inheritedTitles = new Set(
+      [
+        LEGACY_SEO_TITLE,
+        siteName,
+        brandingTitle,
+        brandingTitle.replace(' — ', ' - '),
+        storedName,
+      ].filter(Boolean),
+    );
     // Website settings own the brand identity. SEO fields are optional
     // overrides, not a second frozen copy of the website name and images.
     return {
       ...settings,
-      siteName: branding?.siteName?.trim() || settings.siteName,
+      siteName,
       defaultTitle:
-        settings.defaultTitle === 'Matjary - Your Showcase Platform'
+        inheritedTitles.has(settings.defaultTitle ?? '') ||
+        inheritedPrefixes.some((prefix) =>
+          (settings.defaultTitle ?? '').startsWith(prefix),
+        )
           ? null
           : settings.defaultTitle,
       defaultDescription:
-        settings.defaultDescription ===
-        'Discover amazing stores, products, and posts on Matjary'
+        settings.defaultDescription === LEGACY_SEO_DESCRIPTION ||
+        (branding?.description &&
+          settings.defaultDescription === branding.description)
           ? null
           : settings.defaultDescription,
       defaultOgImageUrl:
@@ -807,8 +851,12 @@ export class SeoService {
           ? branding?.bannerUrl || branding?.logoUrl
           : null) ||
         null,
+      // The organization name was prefilled from the brand by earlier forms;
+      // a copy of the stored SEO name is inherited, not a custom override.
       organizationName:
-        settings.organizationName || branding?.siteName || settings.siteName,
+        !settings.organizationName || settings.organizationName === storedName
+          ? siteName
+          : settings.organizationName,
       organizationLogoUrl:
         settings.organizationLogoUrl ||
         (!settings.organizationLogoKey ? branding?.logoUrl : null) ||
@@ -1176,7 +1224,9 @@ export class SeoService {
     // Resolve automatic images at render time. Persisting the logo here made
     // it look like an explicit override and hid the generated share card.
     if (!seo.ogImageKey) autoFields.push('ogImageKey');
-    if (!seo.ogSiteName) {
+    // The website name is not editable per shop. A stored value that differs
+    // from the live branding is a leftover from before a rename.
+    if (!seo.ogSiteName || seo.ogSiteName !== settings.siteName) {
       seo.ogSiteName = settings.siteName;
       autoFields.push('ogSiteName');
     }
@@ -1455,7 +1505,8 @@ export class SeoService {
     const brandingImage = branding?.bannerUrl || branding?.logoUrl;
     const ogImage =
       (await this.defaultSharingImage(settings)) ||
-      (brandingImage ? this.absoluteImageUrl(brandingImage) : undefined);
+      (brandingImage ? this.absoluteImageUrl(brandingImage) : undefined) ||
+      this.fallbackSharingImage();
     return {
       title: this.truncate(title, 60),
       description: this.truncate(description, 160),
@@ -1490,8 +1541,9 @@ export class SeoService {
     // the menu line only joins it when the owner did not mention a menu.
     const menu = this.isMenuStore(store);
     const menuLine = menu ? await this.menuPreviewLine(store) : '';
+    // Never fall back to a build-time brand: the website settings own the name.
     const title =
-      seo.metaTitle || store.name || settings.defaultTitle || 'Matjary';
+      seo.metaTitle || store.name || settings.defaultTitle || settings.siteName;
     const description =
       seo.metaDescription ||
       store.description ||
@@ -1511,7 +1563,11 @@ export class SeoService {
       (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
-      (await this.defaultSharingImage(settings));
+      // A legacy or stale logo key may no longer resolve; the shop's newest
+      // ready image still gives the shared link something to show.
+      (await this.latestStoreImageUrl(store.id)) ??
+      (await this.defaultSharingImage(settings)) ??
+      this.fallbackSharingImage();
     const ogTitle = seo.ogTitle || store.name;
     const ogDescription = seo.ogDescription || store.description || description;
     const previewOgTitle = menu ? this.withMenuTitle(ogTitle) : ogTitle;
@@ -1536,7 +1592,9 @@ export class SeoService {
         description: this.truncate(previewOgDescription, 160),
         image: ogImage,
         type: seo.ogType || 'website',
-        siteName: seo.ogSiteName || settings.siteName,
+        // Branding is the single source of the displayed website name; a row
+        // stored before a rename must not keep advertising the old one.
+        siteName: settings.siteName,
         url: canonical,
         locale: 'en_US',
       },
@@ -1589,7 +1647,9 @@ export class SeoService {
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
-      (await this.defaultSharingImage(settings));
+      (await this.latestStoreImageUrl(store.id)) ??
+      (await this.defaultSharingImage(settings)) ??
+      this.fallbackSharingImage();
     const ogTitle = seo.ogTitle || product.name;
     const ogDescription =
       seo.ogDescription || product.description || description;
@@ -1676,7 +1736,9 @@ export class SeoService {
       (store
         ? await this.buildStoreImageUrl(store, store.logoKey)
         : undefined) ??
-      (await this.defaultSharingImage(settings));
+      (store ? await this.latestStoreImageUrl(store.id) : undefined) ??
+      (await this.defaultSharingImage(settings)) ??
+      this.fallbackSharingImage();
     const ogTitle = seo.ogTitle || showcase.title;
     const ogDescription =
       seo.ogDescription || showcase.description || description;
@@ -2674,12 +2736,16 @@ export class SeoService {
   private async buildStoreShareImageUrl(
     store: Store,
   ): Promise<string | undefined> {
-    const assetId = mediaAssetIdFromKey(store.logoKey);
+    const assetId = await this.storeLogoAssetId(store);
     if (!assetId) return undefined;
     try {
-      await this.storage.statObject(storeShareCardKey(store.id, assetId));
-      // The asset id busts client and social caches after a logo replacement.
-      return `${this.baseUrl}/api/v1/seo/og/${encodeURIComponent(store.slug)}.jpg?v=${assetId}`;
+      const { size } = await this.storage.statObject(
+        storeShareCardKey(store.id, assetId),
+      );
+      // The asset id busts caches after a logo replacement; the size also
+      // changes when a missing card is generated after an early share, so a
+      // preview client that cached "no image" fetches the new one.
+      return `${this.baseUrl}/api/v1/seo/og/${encodeURIComponent(store.slug)}.jpg?v=${assetId}-${size}`;
     } catch {
       return undefined;
     }
@@ -2688,20 +2754,77 @@ export class SeoService {
   /** Public stream of the card referenced by a store's share metadata. */
   async openShareCard(
     storeSlug: string,
+    versionAssetId?: string,
   ): Promise<{ stream: Readable; size: number } | undefined> {
     const store = await this.dataSource.manager.findOneBy(Store, {
       slug: storeSlug,
       ...publicWhere('store'),
     });
-    const assetId = mediaAssetIdFromKey(store?.logoKey);
-    if (!store || !assetId) return undefined;
-    const key = storeShareCardKey(store.id, assetId);
-    try {
-      const { size } = await this.storage.statObject(key);
-      return { stream: await this.storage.openReadStream(key), size };
-    } catch {
-      return undefined;
+    if (!store) return undefined;
+    // A shell generated before a logo replacement still points at the older
+    // card; serving it keeps an in-flight share preview from going blank.
+    // Only keys under this store's own card directory are ever opened.
+    const candidates = [
+      versionAssetId,
+      await this.storeLogoAssetId(store),
+    ].filter((value): value is string => Boolean(value));
+    for (const assetId of new Set(candidates)) {
+      const key = storeShareCardKey(store.id, assetId);
+      try {
+        const { size } = await this.storage.statObject(key);
+        return { stream: await this.storage.openReadStream(key), size };
+      } catch {
+        // Try the next candidate.
+      }
     }
+    return undefined;
+  }
+
+  /**
+   * The logo asset whose generated card represents the shop. Older rows may
+   * store a key that no longer encodes an asset id, so the shop's newest ready
+   * logo is used as a fallback instead of dropping the preview image.
+   */
+  private async storeLogoAssetId(store: Store): Promise<string | null> {
+    const fromKey = mediaAssetIdFromKey(store.logoKey);
+    if (fromKey) return fromKey;
+    const asset = await this.dataSource.manager
+      .findOne(MediaAsset, {
+        where: {
+          storeId: store.id,
+          purpose: 'store_logo',
+          status: MediaStatus.READY,
+          ...publicWhere('media'),
+        },
+        order: { createdAt: 'DESC' },
+      })
+      .catch(() => null);
+    return asset?.id ?? null;
+  }
+
+  /** Newest ready shop image, used when a saved logo/banner key is stale. */
+  private async latestStoreImageUrl(
+    storeId: string,
+  ): Promise<string | undefined> {
+    const asset = await this.dataSource.manager
+      .findOne(MediaAsset, {
+        where: {
+          storeId,
+          purpose: In(['store_logo', 'store_banner']),
+          status: MediaStatus.READY,
+          ...publicWhere('media'),
+        },
+        order: { createdAt: 'DESC' },
+      })
+      .catch(() => null);
+    if (!asset) return undefined;
+    const variants = await this.dataSource.manager.find(MediaVariant, {
+      where: { assetId: asset.id },
+      order: { width: 'DESC' },
+      take: 12,
+    });
+    const image = choosePreviewImage(variants);
+    return image ? this.storage.presignedGetUrl(image.storageKey) : undefined;
   }
 
   /**
@@ -2727,6 +2850,15 @@ export class SeoService {
     return settings.defaultOgImageUrl
       ? this.absoluteImageUrl(settings.defaultOgImageUrl)
       : this.buildImageUrl(settings.defaultOgImageKey || this.defaultImageKey);
+  }
+
+  /**
+   * Last-resort preview image shipped with the published frontend. A shared
+   * shop must never advertise an empty `og:image`, because most clients then
+   * render a text-only card with no picture at all.
+   */
+  private fallbackSharingImage(): string {
+    return this.absoluteImageUrl('/banner.jpg');
   }
 
   private async organizationLogo(

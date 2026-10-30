@@ -224,10 +224,20 @@ export class SeoController {
   })
   async getShareCard(
     @Param('file') file: string,
+    @Query('v') version: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
     const slug = /^([a-z0-9]+(?:-[a-z0-9]+)*)\.jpg$/u.exec(file)?.[1];
-    const card = slug ? await this.seoService.openShareCard(slug) : undefined;
+    // The shell may still reference the card of the logo it rendered, while
+    // the shop already carries a newer logo. Serve that asset when it is one
+    // of the shop's own cards; the key is always built from the shop id.
+    const versionAssetId =
+      /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-\d+)?$/iu.exec(
+        version ?? '',
+      )?.[1];
+    const card = slug
+      ? await this.seoService.openShareCard(slug, versionAssetId)
+      : undefined;
     if (!card) throw new NotFoundException('Image not found');
     res.set('Content-Type', 'image/jpeg');
     res.set('Cache-Control', 'public, max-age=86400');

@@ -17,6 +17,7 @@ import { AdminAccessService } from './admin-access.service';
 import { UpdateWebsiteSettingsDto } from './website-settings.dto';
 import { ShareShellSignal } from '../seo/share-shell.signal';
 import { SeoSettings } from '../seo/seo.entities';
+import { LEGACY_SEO_DESCRIPTION, LEGACY_SEO_TITLE } from '../seo/seo-legacy';
 import type { EntityManager } from 'typeorm';
 
 @Injectable()
@@ -81,11 +82,26 @@ export class WebsiteSettingsService {
         (key) => dto[key] !== undefined && dto[key] !== settings[key],
       );
       if (changed.length) {
-        await this.releaseInheritedSeo(manager, settings, changed);
-        // Lock before merging partial changes so concurrent editors keep unrelated fields.
+        // Snapshot the fields the SEO release compares before merging, so a
+        // rename never leaves an inherited copy of the previous brand behind.
+        const previous = {
+          siteName: settings.siteName,
+          tagline: settings.tagline,
+          description: settings.description,
+          logoUrl: settings.logoUrl,
+          bannerUrl: settings.bannerUrl,
+        };
+        // Merge under the row lock so concurrent editors keep unrelated
+        // fields, then release inherited SEO copies before committing.
         Object.assign(
           settings,
           Object.fromEntries(changed.map((key) => [key, dto[key]])),
+        );
+        await this.releaseInheritedSeo(
+          manager,
+          previous,
+          settings.siteName,
+          changed,
         );
         await manager.save(WebsiteSettings, settings);
         await appendAdminAudit(
@@ -106,7 +122,11 @@ export class WebsiteSettingsService {
 
   private async releaseInheritedSeo(
     manager: EntityManager,
-    previous: WebsiteSettings,
+    previous: Pick<
+      WebsiteSettings,
+      'siteName' | 'tagline' | 'description' | 'logoUrl' | 'bannerUrl'
+    >,
+    siteName: string,
     changed: readonly string[],
   ): Promise<void> {
     const identityChanged = changed.some((key) =>
@@ -122,25 +142,46 @@ export class WebsiteSettingsService {
       order: { createdAt: 'ASC' },
       lock: { mode: 'pessimistic_write' },
     });
-    if (!seo) return;
+    // Keep the stored row aligned even when no SEO override has to change.
+    if (!seo) {
+      return;
+    }
     const patch: Partial<SeoSettings> = {};
     // Older admin forms persisted their inherited placeholders. Release only
     // exact copies of the previous branding; distinct custom SEO stays intact.
+    // The dashed variants cover the seed copy and titles written by earlier
+    // releases with a plain hyphen instead of an em dash.
+    const inheritedTitles = new Set(
+      [
+        LEGACY_SEO_TITLE,
+        previous.siteName,
+        [previous.siteName, previous.tagline].filter(Boolean).join(' — '),
+        [previous.siteName, previous.tagline].filter(Boolean).join(' - '),
+      ].filter(Boolean),
+    );
+    const inheritedPrefixes = [
+      `${previous.siteName} — `,
+      `${previous.siteName} - `,
+    ];
     if (
       identityChanged &&
-      seo.defaultTitle ===
-        [previous.siteName, previous.tagline].filter(Boolean).join(' — ')
+      (inheritedTitles.has(seo.defaultTitle ?? '') ||
+        inheritedPrefixes.some((prefix) =>
+          (seo.defaultTitle ?? '').startsWith(prefix),
+        ))
     )
       patch.defaultTitle = null;
     if (
       changed.includes('siteName') &&
-      seo.organizationName === previous.siteName
+      (seo.organizationName === previous.siteName ||
+        seo.organizationName === LEGACY_SEO_TITLE)
     )
       patch.organizationName = null;
     if (
       descriptionChanged &&
-      previous.description &&
-      seo.defaultDescription === previous.description
+      (seo.defaultDescription === LEGACY_SEO_DESCRIPTION ||
+        (previous.description &&
+          seo.defaultDescription === previous.description))
     )
       patch.defaultDescription = null;
     if (
@@ -155,6 +196,10 @@ export class WebsiteSettingsService {
       seo.organizationLogoUrl === previous.logoUrl
     )
       patch.organizationLogoUrl = null;
+    // Structured data and stored SEO copies follow the live website name, so
+    // nothing keeps reading the previous brand after a rename.
+    if (changed.includes('siteName') && seo.siteName !== siteName)
+      patch.siteName = siteName;
     if (Object.keys(patch).length)
       await manager.update(SeoSettings, { id: seo.id }, patch);
   }

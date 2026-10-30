@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { applyPageSeo } from './page-seo.ts';
 import {
   brandingUrl,
+  cacheSettings,
   contrastColor,
   defaults,
   enableMouseScrolling,
@@ -13,7 +14,9 @@ import {
   parseViewResponse,
   isLocalFrontendRequest,
   readSavedIds,
+  readSettingsCache,
   safeUrl,
+  SETTINGS_CACHE_KEY,
 } from './website.ts';
 
 test('page SEO replaces stale shell tags and never restores an old title on navigation', () => {
@@ -214,6 +217,46 @@ test('branding files get a build stamp while media keys stay immutable', () => {
   assert.equal(brandingUrl('/logo.png', ''), '/logo.png');
   assert.equal(brandingUrl(null, 'abc123'), undefined);
   assert.equal(brandingUrl('javascript:alert(1)', 'abc123'), undefined);
+});
+
+test('cached branding paints the live name and rejects stale or broken entries', () => {
+  const store = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  };
+  const now = Date.UTC(2026, 9, 30);
+  cacheSettings({ ...defaults, siteName: 'Fresh name' }, storage, now);
+  assert.ok(store.has(SETTINGS_CACHE_KEY));
+  assert.equal(readSettingsCache(storage, now)?.values.siteName, 'Fresh name');
+  // Older than the allowed window: the build-time defaults are safer than a
+  // name from months ago.
+  assert.equal(
+    readSettingsCache(storage, now + 31 * 24 * 60 * 60_000),
+    undefined,
+  );
+  // A clock that moved backwards must not trust a future timestamp either.
+  assert.equal(readSettingsCache(storage, now - 120_000), undefined);
+  store.set(SETTINGS_CACHE_KEY, '{broken');
+  assert.equal(readSettingsCache(storage, now), undefined);
+  store.set(SETTINGS_CACHE_KEY, JSON.stringify({ values: null, savedAt: now }));
+  assert.equal(readSettingsCache(storage, now), undefined);
+  assert.equal(
+    readSettingsCache({
+      getItem: () => {
+        throw new Error('blocked');
+      },
+    }),
+    undefined,
+  );
+  // A blocked write never throws into the app.
+  cacheSettings(defaults, {
+    setItem: () => {
+      throw new Error('quota');
+    },
+  });
 });
 
 test('saved IDs tolerate blocked storage and malformed or oversized data', () => {

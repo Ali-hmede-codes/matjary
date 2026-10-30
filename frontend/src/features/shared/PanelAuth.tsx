@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Store } from 'lucide-react';
-import { ApiError } from '../../lib/api';
+import { ApiError, assetUrl } from '../../lib/api';
 import { brandingUrl } from '../../lib/website';
+import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { getJson, mutate, panelError, type Session } from './panel-api';
 import { Empty, Loading, Notice, PanelBoundary, Retry } from './PanelUI';
 
@@ -115,6 +116,10 @@ export function LoginPage() {
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // The sign-in screen belongs to the platform, so it shows the live name.
+  const { settings } = useWebsiteSettings(false);
+  const brandLogo =
+    brandingUrl(assetUrl(settings.logoUrl)) || brandingUrl('/logo.png');
   useEffect(() => {
     if (
       session.isPending ||
@@ -193,7 +198,7 @@ export function LoginPage() {
     <div className="panel-app panel-login">
       <section className="panel-login-story">
         <Link to="/" className="panel-brand notranslate">
-          <img src={brandingUrl('/logo.png')} alt="" /> Matjary
+          <img src={brandLogo} alt="" /> {settings.siteName}
         </Link>
         <div>
           <p className="panel-eyebrow">YOUR NEXT CHAPTER</p>
@@ -218,7 +223,9 @@ export function LoginPage() {
         <small>Made for independent businesses.</small>
       </section>
       <main className="panel-login-card">
-        <p className="panel-eyebrow">WELCOME TO MATJARY</p>
+        <p className="panel-eyebrow">
+          WELCOME TO {settings.siteName.toUpperCase()}
+        </p>
         <h2>
           A fresh start,
           <br />
