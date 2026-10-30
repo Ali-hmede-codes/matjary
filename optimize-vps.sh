@@ -33,8 +33,9 @@ What apply changes:
      swappiness on hosts with enough memory.
   2. /etc/nginx/nginx.conf (a marked block, other settings untouched)
      worker_processes auto, 16384 worker connections, 65535 file descriptors,
-     open-file cache for static assets, gzip level 5, and a shared media cache
-     zone so published photos/videos leave the API process.
+     open-file cache, gzip level 5, and a shared media cache zone. Directives
+     CloudPanel already defines are left unchanged, because Nginx rejects a
+     duplicate in the same context.
   3. A performance CPU governor where the VM exposes one, persisted through a
      small systemd oneshot unit.
 
@@ -198,13 +199,21 @@ NGINX
 # Rewrite nginx.conf in place-preserving form: only the main-context limits,
 # the events block, and one marked http block change. Running it twice on its
 # own output produces byte-identical text, so repeated tuning is safe.
+# Nginx rejects a directive that is already set in the same context, so the
+# http block keeps only settings the current configuration does not define.
+# Extra arguments are additional http-level config files to scan.
 render_nginx_conf() {
   local source=$1 target=$2 http_file=$3 connections=$4 rlimit=$5
-  python3 - "$source" "$target" "$http_file" "$connections" "$rlimit" "${MARK_BEGIN%% (*}" <<'PY'
+  shift 5
+  python3 - "$source" "$target" "$http_file" "$connections" "$rlimit" \
+    "${MARK_BEGIN%% (*}" "$@" <<'PY'
 import re
 import sys
 
-source, target, http_file, connections, rlimit, mark_begin = sys.argv[1:7]
+args = sys.argv[1:]
+source, target, http_file, connections, rlimit, mark_begin = args[:6]
+extra = args[6:]
+
 text = open(source, encoding='utf-8').read()
 original = text
 
@@ -244,15 +253,44 @@ else:
     anchor = re.search(r'(?m)^[ \t]*http[ \t]*\{', text)
     text = text[:anchor.start()] + events + '\n\n' + text[anchor.start():]
 
-body = open(http_file, encoding='utf-8').read().strip().splitlines()
-block = [mark_begin, *body, '# END matjary-tuning']
-indented = '\n'.join('    ' + row if row else '' for row in block)
-existing = re.compile(
+# Drop our own previous block first: it must never count as a definition.
+managed = re.compile(
     r'(?ms)^[ \t]*# BEGIN matjary-tuning[^\n]*\n.*?^[ \t]*# END matjary-tuning\n?'
 )
-if existing.search(text):
-    text = existing.sub(indented + '\n', text, count=1)
-else:
+text = managed.sub('', text)
+
+def directive_name(line):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        return ''
+    return stripped.split(None, 1)[0].rstrip(';{')
+
+chunks = [text]
+for path in extra:
+    try:
+        chunks.append(open(path, encoding='utf-8').read())
+    except OSError:
+        pass
+
+defined = set()
+for chunk in chunks:
+    for line in chunk.splitlines():
+        name = directive_name(line)
+        if name:
+            defined.add(name)
+
+rows = []
+for row in open(http_file, encoding='utf-8').read().strip().splitlines():
+    if not row.strip() or row.lstrip().startswith('#'):
+        rows.append(row)
+        continue
+    if directive_name(row) in defined:
+        continue
+    rows.append(row)
+
+if any(row.strip() and not row.lstrip().startswith('#') for row in rows):
+    block = [mark_begin, *rows, '# END matjary-tuning']
+    indented = '\n'.join('    ' + row if row else '' for row in block)
     anchor = re.search(r'(?m)^[ \t]*http[ \t]*\{[^\n]*\n', text)
     text = text[:anchor.end()] + indented + '\n' + text[anchor.end():]
 
@@ -366,7 +404,11 @@ show_plan() {
   if (( NGINX_PRESENT )); then
     printf '  Nginx    worker_processes auto, %s connections, %s file descriptors\n' \
       "$WORKER_CONNECTIONS" "$WORKER_RLIMIT"
-    printf '           open-file cache, gzip 5, media cache zone (%s)\n' "$MEDIA_CACHE_SIZE"
+    if (( MEDIA_CACHE_ZONE == 0 )); then
+      printf '           open-file cache, gzip 5, media cache zone (%s)\n' "$MEDIA_CACHE_SIZE"
+    else
+      printf '           open-file cache, gzip 5, existing media cache zone kept\n'
+    fi
   fi
   if command -v systemctl >/dev/null 2>&1 && governor_available; then
     printf '  CPU      performance governor, persisted with matjary-cpu-governor.service\n'
@@ -423,19 +465,27 @@ apply_sysctl() {
   apply_qdisc_live
 }
 
-# fq only applies to newly created qdiscs, so replace the live root qdisc.
-# Multi-queue (mq) and noqueue devices are left alone on purpose.
+# fq only applies to newly created qdiscs, so update the live interface too.
+# A multiqueue VirtIO NIC keeps its mq root and gets fq on each child queue.
 apply_qdisc_live() {
   (( EUID == 0 )) || return 0
   [[ "$QDISC" == fq ]] || return 0
   command -v tc >/dev/null 2>&1 || return 0
-  local iface current
+  local iface current parent
   iface=$(ip route get 1.1.1.1 2>/dev/null |
     awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }' || true)
   [[ -n "$iface" ]] || return 0
   current=$(tc qdisc show dev "$iface" 2>/dev/null | awk 'NR == 1 { print $2 }' || true)
   case "$current" in
-    fq|mq|noqueue) return 0 ;;
+    fq|noqueue) return 0 ;;
+    mq)
+      while IFS= read -r parent; do
+        [[ -n "$parent" ]] || continue
+        tc qdisc replace dev "$iface" parent "$parent" fq >/dev/null 2>&1 || true
+      done < <(tc qdisc show dev "$iface" 2>/dev/null |
+        awk '{ for (i = 1; i < NF; i++) if ($i == "parent") { print $(i + 1) } }' || true)
+      return 0
+      ;;
   esac
   tc qdisc replace dev "$iface" root fq >/dev/null 2>&1 || true
 }
@@ -449,8 +499,14 @@ apply_nginx() {
     chown "$WORKER_USER":"$WORKER_GROUP" "$CACHE_DIR" 2>/dev/null || true
   fi
   render_http_tuning > "$TMP_DIR/http.conf"
+  # conf.d files are included in the http context by CloudPanel's nginx.conf,
+  # so their directives must be honoured when pruning duplicates.
+  local -a extra=()
+  shopt -s nullglob
+  extra=(/etc/nginx/conf.d/*.conf)
+  shopt -u nullglob
   if ! render_nginx_conf "$NGINX_CONF" "$TMP_DIR/nginx.conf.new" \
-    "$TMP_DIR/http.conf" "$WORKER_CONNECTIONS" "$WORKER_RLIMIT" >/dev/null; then
+    "$TMP_DIR/http.conf" "$WORKER_CONNECTIONS" "$WORKER_RLIMIT" "${extra[@]}" >/dev/null; then
     rollback
     die 'nginx.conf could not be rewritten; nothing was kept.'
   fi
@@ -459,7 +515,7 @@ apply_nginx() {
   if ! nginx -t > "$TMP_DIR/nginx-test.log" 2>&1; then
     cat "$TMP_DIR/nginx-test.log" >&2
     rollback
-    die 'nginx -t rejected the tuned configuration; the previous files were restored.'
+    die 'nginx -t rejected the tuned configuration; the previous Nginx files were restored. Kernel values set this run stay live until the next reboot.'
   fi
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx; then
     systemctl reload nginx || {
@@ -556,6 +612,13 @@ verify() {
   check_sysctl net.ipv4.tcp_rmem '4096 131072 16777216' || bad=1
   if (( MEM_GIB >= 6 )); then
     check_sysctl vm.swappiness 10 || bad=1
+  fi
+  local iface live
+  iface=$(ip route get 1.1.1.1 2>/dev/null |
+    awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }' || true)
+  if [[ -n "$iface" ]] && command -v tc >/dev/null 2>&1; then
+    live=$(tc qdisc show dev "$iface" 2>/dev/null | awk 'NR == 1 { print $2 }' || true)
+    [[ -n "$live" ]] && printf '    %-30s %s\n' "live qdisc ($iface)" "$live"
   fi
   if (( NGINX_PRESENT )); then
     printf '  Nginx\n'
@@ -677,7 +740,12 @@ revert() {
 
 speed_test() {
   command -v curl >/dev/null 2>&1 || die 'curl is required for --speed-test.'
-  local iface='' link='' result speed elapsed
+  local iface='' link='' result speed elapsed url host worked=''
+  local -a probes=(
+    'https://speed.cloudflare.com/__down?bytes=104857600'
+    'https://speed.hetzner.de/100MB.bin'
+    'https://cachefly.cachefly.net/100mb.test'
+  )
   printf '\nNetwork probe\n'
   if command -v ip >/dev/null 2>&1; then
     iface=$(ip route get 1.1.1.1 2>/dev/null |
@@ -686,24 +754,41 @@ speed_test() {
   printf '  Interface   %s\n' "${iface:-unknown}"
   if [[ -n "$iface" ]] && command -v ethtool >/dev/null 2>&1; then
     link=$(ethtool "$iface" 2>/dev/null | awk -F': ' '/Speed:/ { print $2; exit }')
-    [[ -n "$link" ]] && printf '  Link speed  %s\n' "$link"
+    if [[ -n "$link" && "$link" != *Unknown* ]]; then
+      printf '  Link speed  %s\n' "$link"
+    else
+      printf '  Link speed  unknown (virtual NIC; check the provider plan)\n'
+    fi
   fi
   printf '  TCP         %s / %s\n' \
     "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || printf '?')" \
     "$(sysctl -n net.core.default_qdisc 2>/dev/null || printf '?')"
   printf '  Probing download (100 MB)...\n'
-  result=$(curl -fsSL --max-time 120 -o /dev/null -w '%{speed_download} %{time_total}' \
-    'https://speed.cloudflare.com/__down?bytes=104857600') ||
-    die 'Download probe failed; check outbound HTTPS access.'
-  speed=${result%% *}
-  elapsed=${result##* }
-  awk -v s="$speed" -v t="$elapsed" \
-    'BEGIN { printf "  Download    %.1f MB/s (%.0f Mbit/s) in %.1f s\n", s / 1048576, s * 8 / 1000000, t }'
+  for url in "${probes[@]}"; do
+    if result=$(curl -fsSL --max-time 120 \
+      -A 'Mozilla/5.0 (X11; Linux x86_64) matjary-speedtest/1.0' \
+      -o /dev/null -w '%{speed_download} %{time_total}' "$url"); then
+      worked=$url
+      break
+    fi
+  done
+  if [[ -z "$worked" ]]; then
+    printf '  Download    probe unavailable (outbound HTTPS blocked?)\n'
+  else
+    speed=${result%% *}
+    elapsed=${result##* }
+    host=${worked#*://}
+    host=${host%%/*}
+    awk -v s="$speed" -v t="$elapsed" -v h="$host" \
+      'BEGIN { printf "  Download    %.1f MB/s (%.0f Mbit/s) in %.1f s from %s\n", s / 1048576, s * 8 / 1000000, t, h }'
+  fi
   local payload
   payload=$(mktemp "$TMP_ROOT/matjary-upload.XXXXXX")
   if dd if=/dev/zero of="$payload" bs=1M count=20 status=none 2>/dev/null; then
     printf '  Probing upload (20 MB)...\n'
-    if result=$(curl -fsS --max-time 120 -o /dev/null -w '%{speed_upload} %{time_total}' \
+    if result=$(curl -fsS --max-time 120 \
+      -A 'Mozilla/5.0 (X11; Linux x86_64) matjary-speedtest/1.0' \
+      -o /dev/null -w '%{speed_upload} %{time_total}' \
       --data-binary "@$payload" 'https://speed.cloudflare.com/__up'); then
       speed=${result%% *}
       elapsed=${result##* }
@@ -746,6 +831,10 @@ events {
 
 http {
 	sendfile on;
+	tcp_nopush on;
+	tcp_nodelay on;
+	keepalive_timeout 65;
+	gzip on;
 	include /etc/nginx/conf.d/*.conf;
 	include /etc/nginx/sites-enabled/*;
 }
@@ -764,6 +853,12 @@ EOF
     die 'Media cache zone missing.'
   [[ $(grep -c 'BEGIN matjary-tuning' "$TMP_DIR/out1.conf" || true) == 1 ]] ||
     die 'Marked block must appear exactly once.'
+  # The fixture already sets these at the http level; none may be repeated.
+  local directive
+  for directive in sendfile tcp_nopush tcp_nodelay keepalive_timeout gzip; do
+    [[ $(grep -c "^[[:space:]]*$directive[[:space:]]" "$TMP_DIR/out1.conf" || true) == 1 ]] ||
+      die "Directive $directive was duplicated."
+  done
 
   render_nginx_conf "$TMP_DIR/out1.conf" "$TMP_DIR/out2.conf" "$TMP_DIR/http.conf" \
     "$WORKER_CONNECTIONS" "$WORKER_RLIMIT" >/dev/null
@@ -781,6 +876,17 @@ EOF
     die 'Re-tuning did not restore worker_rlimit_nofile.'
   [[ $(grep -c 'BEGIN matjary-tuning' "$TMP_DIR/out4.conf" || true) == 1 ]] ||
     die 'Re-tuning duplicated the marked block.'
+
+  # A configuration that already defines every directive must get no block.
+  {
+    printf 'user www-data;\nevents { worker_connections 64; }\nhttp {\n'
+    grep -v '^#' "$TMP_DIR/http.conf" | sed 's/^/    /'
+    printf '}\n'
+  } > "$TMP_DIR/allset.conf"
+  render_nginx_conf "$TMP_DIR/allset.conf" "$TMP_DIR/allset.out" \
+    "$TMP_DIR/http.conf" "$WORKER_CONNECTIONS" "$WORKER_RLIMIT" >/dev/null
+  [[ $(grep -c 'BEGIN matjary-tuning' "$TMP_DIR/allset.out" || true) == 0 ]] ||
+    die 'A fully configured server must not receive an empty tuning block.'
 
   printf 'user www-data;\nevents { worker_connections 64; }\n' > "$TMP_DIR/nohttp.conf"
   if render_nginx_conf "$TMP_DIR/nohttp.conf" "$TMP_DIR/nohttp.out" \
