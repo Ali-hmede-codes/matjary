@@ -1,3 +1,4 @@
+import { applyDecorators } from '@nestjs/common';
 import { PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -18,9 +19,43 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateBy,
   ValidateIf,
 } from 'class-validator';
 import { AiRobotsDirective, RobotsDirective } from './seo.entities';
+
+// A public image reference: an HTTPS URL or a root-relative file on this site.
+// The server never fetches these addresses; they are printed into meta tags.
+function SeoImageUrl(): PropertyDecorator {
+  return applyDecorators(
+    ValidateIf((_object, value) => value !== undefined && value !== null),
+    IsString(),
+    MaxLength(512),
+    ValidateBy({
+      name: 'seoImageUrl',
+      validator: {
+        validate(value: unknown) {
+          if (typeof value !== 'string' || /[\s\\]/u.test(value)) return false;
+          if (!/^https:\/\//.test(value) && !/^\/(?!\/)/.test(value))
+            return false;
+          try {
+            const url = new URL(value, 'https://website.invalid');
+            return (
+              url.protocol === 'https:' &&
+              !url.username &&
+              !url.password &&
+              !url.hash
+            );
+          } catch {
+            return false;
+          }
+        },
+        defaultMessage: () =>
+          '$property must be an HTTPS URL or root-relative path without credentials or fragments',
+      },
+    }),
+  );
+}
 
 // Entity identity, relationships, generated fields, and arbitrary JSON are never
 // writable metadata. URL and image-key authorization is also checked in service.
@@ -88,6 +123,7 @@ export class SeoSettingsDto {
   @IsOptional() @IsString() @MaxLength(120) defaultTitle?: string | null;
   @IsOptional() @IsString() @MaxLength(320) defaultDescription?: string | null;
   @IsOptional() @IsString() @MaxLength(512) defaultOgImageKey?: string | null;
+  @IsOptional() @SeoImageUrl() defaultOgImageUrl?: string | null;
   @IsOptional() @IsString() @MaxLength(100) twitterSite?: string | null;
   @IsOptional()
   @Matches(/^[a-zA-Z0-9_-]+$/)
@@ -117,6 +153,7 @@ export class SeoSettingsDto {
   @MaxLength(500)
   organizationUrl?: string | null;
   @IsOptional() @IsString() @MaxLength(512) organizationLogoKey?: string | null;
+  @IsOptional() @SeoImageUrl() organizationLogoUrl?: string | null;
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)

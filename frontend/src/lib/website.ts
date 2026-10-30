@@ -48,6 +48,25 @@ export function safeUrl(value: string | null | undefined): string | undefined {
   }
 }
 
+// Mirrors the API rule for branding images so a mistyped address is reported
+// next to its field instead of as a generic rejection after a round trip.
+export function imageAddressError(value: string | null | undefined): string {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return '';
+  if (/[\s\\]/u.test(trimmed)) return 'Use one address with no spaces.';
+  if (!/^https:\/\//u.test(trimmed) && !/^\/(?!\/)/u.test(trimmed))
+    return 'Start with https:// or / for a file on this website.';
+  try {
+    const url = new URL(trimmed, 'https://website.invalid');
+    if (url.username || url.password)
+      return 'Remove the username and password from the address.';
+    if (url.hash) return 'Remove the #part from the address.';
+  } catch {
+    return 'That address is not a valid link.';
+  }
+  return '';
+}
+
 // Static branding files keep their public names between releases, so a browser
 // would keep serving a previously cached logo or favicon. Vite hashes those
 // files at build time, and every reference appends the same stamp.

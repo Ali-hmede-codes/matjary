@@ -5,6 +5,7 @@ import {
   contrastColor,
   defaults,
   enableMouseScrolling,
+  imageAddressError,
   mediaUrl,
   normalizeSettings,
   parseLikeResponse,
@@ -34,6 +35,27 @@ test('branding uses public settings and rejects malformed values', () => {
   assert.equal(settings.footerText, 'Welcome');
   assert.equal('password' in settings, false);
   assert.deepEqual(normalizeSettings(null), defaults);
+});
+
+test('branding image addresses accept public files and reject unsafe ones', () => {
+  for (const value of [
+    '',
+    '/logo.png',
+    '/assets/logo.svg?v=2',
+    'https://cdn.example.test/logo.webp',
+  ])
+    assert.equal(imageAddressError(value), '', value);
+  for (const value of [
+    'javascript:alert(1)',
+    'http://cdn.test/a.png',
+    '//evil.test/a.png',
+    '/\\evil.test/a.png',
+    'https://user:password@cdn.test/a.png',
+    '/a b.png',
+    '/a.png#fragment',
+    'assets/logo.png',
+  ])
+    assert.notEqual(imageAddressError(value), '', value);
 });
 
 test('the LBP rate is only trusted as a whole in-range number', () => {

@@ -45,6 +45,7 @@ import {
 import { BILLING_LABELS, PlanEditor, planSummary } from './PlanEditor';
 import { AdminBoost } from './AdminBoost';
 import { AdminSettings } from './AdminSettings';
+import { AdminSeo } from './AdminSeo';
 
 type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
 export default function AdminPanel({ session }: { session: Session }) {
@@ -99,6 +100,7 @@ export default function AdminPanel({ session }: { session: Session }) {
           path="settings"
           element={<AdminSettings id={session.user.id} />}
         />
+        <Route path="seo" element={<AdminSeo id={session.user.id} />} />
         <Route
           path="verification"
           element={<AdminVerification id={session.user.id} />}

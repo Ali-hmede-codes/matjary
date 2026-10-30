@@ -1,0 +1,145 @@
+/* Administrator website SEO: search appearance, sharing images and crawlers. */
+
+.seo-settings-link {
+  margin-top: 18px;
+}
+.seo-settings-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+/* Image address plus the live preview of what a share will show. */
+.seo-image-field {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+.seo-image-preview {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  padding: 10px;
+  border: 1px dashed #ced8ce;
+  border-radius: 10px;
+  background: #f8faf5;
+  overflow: hidden;
+}
+.seo-image-preview img {
+  max-width: 100%;
+  max-height: 92px;
+  object-fit: contain;
+}
+.seo-image-preview.is-small {
+  min-height: 72px;
+}
+.seo-image-preview.is-small img {
+  max-height: 54px;
+}
+.seo-image-preview > span {
+  font-size: 11px;
+  color: var(--panel-muted);
+}
+.seo-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.seo-image-actions .panel-secondary {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 11px;
+}
+
+/* Google-style result block. */
+.seo-search-preview {
+  display: grid;
+  gap: 3px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.seo-search-site {
+  color: #3c4043;
+  font-size: 12px;
+}
+.seo-search-url {
+  color: #5f6368;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.seo-search-preview strong {
+  color: #1a0dab;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.seo-search-preview p {
+  margin: 0;
+  color: #4d5156;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Social card preview: 1.91:1 media, then title and description. */
+.seo-social-preview {
+  margin-top: 16px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.seo-social-preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.91;
+  object-fit: cover;
+  background: #f2f5ef;
+}
+.seo-social-empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1.91;
+  background: #f2f5ef;
+  color: var(--panel-muted);
+  font-size: 11px;
+}
+.seo-social-body {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+}
+.seo-social-body small {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.seo-social-body strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.seo-social-body p {
+  margin: 0;
+  color: var(--panel-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Rarely changed schema and IndexNow settings stay collapsed. */
+.panel-optional.seo-advanced {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.seo-advanced > summary {
+  padding-inline: 4px;
+}
+.seo-advanced > .panel-card {
+  margin-top: 12px;
+}

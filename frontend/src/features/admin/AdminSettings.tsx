@@ -1,6 +1,7 @@
 import './AdminSettings.css';
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   ArrowUpRight,
   Image as ImageIcon,
@@ -21,6 +22,7 @@ import { assetUrl } from '../../lib/api';
 import {
   brandingUrl,
   contrastColor,
+  imageAddressError,
   type WebsiteSettings,
 } from '../../lib/website';
 
@@ -76,23 +78,6 @@ const fromSettings = (settings: WebsiteSettings): Draft => ({
 
 // Mirrors the API image rule so an invalid address is reported next to the
 // field instead of as a generic 400 after a round trip.
-function imageIssue(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (/[\s\\]/u.test(trimmed)) return 'Use one address with no spaces.';
-  if (!/^https:\/\//u.test(trimmed) && !/^\/(?!\/)/u.test(trimmed))
-    return 'Start with https:// or / for a file on this website.';
-  try {
-    const url = new URL(trimmed, 'https://website.invalid');
-    if (url.username || url.password)
-      return 'Remove the username and password from the address.';
-    if (url.hash) return 'Remove the #part from the address.';
-  } catch {
-    return 'That address is not a valid link.';
-  }
-  return '';
-}
-
 function textIssue(value: string, max: number): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -175,7 +160,7 @@ function SettingsForm({
       if (issue) found[key] = issue;
     }
     for (const key of imageKeys) {
-      const issue = imageIssue(draft[key]);
+      const issue = imageAddressError(draft[key]);
       if (issue) found[key] = issue;
     }
     for (const key of colorKeys) {
@@ -245,7 +230,7 @@ function SettingsForm({
     }
   }
 
-  const logo = imageIssue(draft.logoUrl)
+  const logo = imageAddressError(draft.logoUrl)
     ? undefined
     : brandingUrl(assetUrl(draft.logoUrl.trim()));
   // Half-typed hex values must not reach the inline preview styles.
@@ -528,6 +513,9 @@ function SettingsForm({
           >
             Open the website <ArrowUpRight size={16} />
           </a>
+          <Link className="panel-secondary" to="/admin/seo">
+            Search and sharing (SEO) <ArrowUpRight size={16} />
+          </Link>
         </section>
         <p className="panel-muted settings-tip">
           The favicon, colors, and preview images refresh in every open visitor
@@ -586,7 +574,7 @@ function ImageField({
   banner?: boolean;
   onChange: (value: string) => void;
 }) {
-  const preview = imageIssue(value)
+  const preview = imageAddressError(value)
     ? undefined
     : brandingUrl(assetUrl(value.trim()));
   return (

@@ -50,6 +50,7 @@ export function PanelShell({
         ['/subscriptions/plans', 'Plans'],
         ['/verification', 'Verification'],
         ['/settings', 'Website settings'],
+        ['/seo', 'Website SEO'],
       ]
     : member
       ? [

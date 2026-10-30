@@ -631,7 +631,7 @@ export class SeoService {
       (first ? await this.buildProductImageUrl(first) : undefined) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
-      (await this.buildImageUrl(settings.defaultOgImageKey));
+      (await this.defaultSharingImage(settings));
     return {
       title: this.truncate(title, 60),
       description: this.truncate(description, 160),
@@ -1312,7 +1312,7 @@ export class SeoService {
       (seo.ogImageKey ? await this.buildImageUrl(seo.ogImageKey) : undefined) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
-      (await this.buildImageUrl(settings.defaultOgImageKey));
+      (await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || store.name;
     const ogDescription = seo.ogDescription || store.description || description;
     const previewOgTitle = menu ? this.withMenuTitle(ogTitle) : ogTitle;
@@ -1394,7 +1394,7 @@ export class SeoService {
       (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
-      (await this.buildImageUrl(settings.defaultOgImageKey));
+      (await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || product.name;
     const ogDescription =
       seo.ogDescription || product.description || description;
@@ -1473,15 +1473,16 @@ export class SeoService {
       seo.ogImageKey && (await this.showcaseOwnsImage(showcase, seo.ogImageKey))
         ? seo.ogImageKey
         : undefined;
+    const storeImageKey = store?.bannerKey ?? store?.logoKey;
     const ogImage =
       (preferredImageKey
         ? await this.buildImageUrl(preferredImageKey)
         : undefined) ??
       (await this.buildShowcaseImageUrl(showcase)) ??
       (store ? await this.buildStoreShareImageUrl(store) : undefined) ??
-      (await this.buildImageUrl(
-        store?.bannerKey ?? store?.logoKey ?? settings.defaultOgImageKey,
-      ));
+      (storeImageKey
+        ? await this.buildImageUrl(storeImageKey)
+        : await this.defaultSharingImage(settings));
     const ogTitle = seo.ogTitle || showcase.title;
     const ogDescription =
       seo.ogDescription || showcase.description || description;
@@ -1574,9 +1575,7 @@ export class SeoService {
         '@type': 'Organization',
         name: settings.organizationName,
         url: settings.organizationUrl || this.baseUrl,
-        logo: settings.organizationLogoKey
-          ? await this.buildImageUrl(settings.organizationLogoKey)
-          : undefined,
+        logo: await this.organizationLogo(settings),
         sameAs: settings.organizationSameAs || [],
       });
     }
@@ -2512,6 +2511,33 @@ export class SeoService {
     });
     const image = choosePreviewImage(siblings) ?? variant;
     return this.storage.presignedGetUrl(image.storageKey);
+  }
+
+  // Administrators point sharing images at a public address (the website logo
+  // lives outside shop media), while older rows keep a variant storage key.
+  // The URL wins so a changed logo does not require a new upload per share.
+  private async defaultSharingImage(
+    settings: SeoSettings,
+  ): Promise<string | undefined> {
+    return settings.defaultOgImageUrl
+      ? this.absoluteImageUrl(settings.defaultOgImageUrl)
+      : this.buildImageUrl(settings.defaultOgImageKey);
+  }
+
+  private async organizationLogo(
+    settings: SeoSettings,
+  ): Promise<string | undefined> {
+    return settings.organizationLogoUrl
+      ? this.absoluteImageUrl(settings.organizationLogoUrl)
+      : this.buildImageUrl(settings.organizationLogoKey);
+  }
+
+  // Meta tags and structured data need absolute image addresses; a logo path
+  // such as /logo.png is resolved against the public origin.
+  private absoluteImageUrl(value: string): string {
+    return /^https:\/\//u.test(value)
+      ? value
+      : `${this.baseUrl.replace(/\/+$/u, '')}${value}`;
   }
 
   private async buildImageUrl(

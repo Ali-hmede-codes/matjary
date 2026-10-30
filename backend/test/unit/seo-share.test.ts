@@ -324,6 +324,7 @@ test('menu shops read as a menu in share metadata', async () => {
     defaultTitle: null,
     defaultDescription: 'Discover independent stores.',
     defaultOgImageKey: null,
+    defaultOgImageUrl: 'https://cdn.test/share.jpg',
     twitterSite: null,
   };
   const seoRow: Record<string, unknown> = {
@@ -369,6 +370,13 @@ test('menu shops read as a menu in share metadata', async () => {
   const menu = await service.generateStoreMetaTags(store);
   assert.equal(menu.title, 'Alabdalla — Menu');
   assert.equal(menu.og.title, 'Alabdalla — Menu');
+  // The administrator's URL is used when the shop has no image of its own.
+  assert.equal(menu.og.image, 'https://cdn.test/share.jpg');
+  assert.equal(menu.twitter.image, 'https://cdn.test/share.jpg');
+  // A same-origin logo path becomes an absolute preview address.
+  settings.defaultOgImageUrl = '/logo.png';
+  const relative = await service.generateStoreMetaTags(store);
+  assert.equal(relative.og.image, 'https://matjary.test/logo.png');
   assert.match(
     menu.description,
     /^Browse the menu — 12 items with prices and photos\. Home-style Syrian food\.$/u,

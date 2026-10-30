@@ -606,6 +606,16 @@ export class SeoSettings {
   })
   defaultOgImageKey!: string | null;
 
+  // Public address (same-origin path or HTTPS URL) used when no uploaded
+  // variant key is set. Lets administrators reuse the website logo.
+  @Column({
+    name: 'default_og_image_url',
+    type: 'varchar',
+    length: 512,
+    nullable: true,
+  })
+  defaultOgImageUrl!: string | null;
+
   @Column({
     name: 'twitter_site',
     type: 'varchar',
@@ -688,6 +698,15 @@ export class SeoSettings {
     nullable: true,
   })
   organizationLogoKey!: string | null;
+
+  // Public address of the organization logo; preferred over the storage key.
+  @Column({
+    name: 'organization_logo_url',
+    type: 'varchar',
+    length: 512,
+    nullable: true,
+  })
+  organizationLogoUrl!: string | null;
 
   @Column({ name: 'organization_same_as', type: 'json', nullable: true })
   organizationSameAs!: string[] | null;

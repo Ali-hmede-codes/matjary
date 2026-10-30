@@ -34,6 +34,7 @@ import { SeoController } from '../../apps/api/src/modules/seo/seo.controller';
 import { SeoService } from '../../apps/api/src/modules/seo/seo.service';
 import {
   StoreSeoDto,
+  SeoSettingsDto,
   CreateRedirectDto,
 } from '../../apps/api/src/modules/seo/seo.dto';
 import {
@@ -704,6 +705,62 @@ test('SEO service independently enforces ownership, publication and field allowl
     ],
   );
   assert.equal((await service.getAdminSettings('admin')).id, 'settings');
+});
+
+test('global SEO image addresses stay public, absolute, and credential-free', async () => {
+  const field = (value: unknown) =>
+    plainToInstance(SeoSettingsDto, {
+      defaultOgImageUrl: value,
+      organizationLogoUrl: value,
+    });
+  for (const value of [
+    'https://cdn.test/share.jpg',
+    '/logo.png',
+    '/api/v1/uploads/variants%2Flogo.webp',
+  ]) {
+    assert.equal(
+      (
+        await validate(field(value), {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        })
+      ).length,
+      0,
+      String(value),
+    );
+  }
+  for (const value of [
+    '',
+    'javascript:alert(1)',
+    'http://cdn.test/a.png',
+    '//evil.test/a.png',
+    '/\\evil.test/a.png',
+    'https://user:password@cdn.test/a.png',
+    '/a b.png',
+    '/a.png#fragment',
+    'assets/logo.png',
+    12,
+  ]) {
+    assert.ok(
+      (
+        await validate(field(value), {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        })
+      ).length,
+      JSON.stringify(value),
+    );
+  }
+  // Null clears an optional image.
+  assert.equal(
+    (
+      await validate(field(null), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      })
+    ).length,
+    0,
+  );
 });
 
 test('SEO DTOs reject arbitrary JSON, IDs, unsafe redirects and overlong indexed paths', async () => {
