@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { In, type EntityTarget, type ObjectLiteral } from 'typeorm';
 import {
   AdminAuditLog,
+  AdminScope,
+  AdminStoreAssignment,
   BoostCampaign,
   BoostCampaignStatus,
   BoostCoin,
@@ -30,6 +33,9 @@ import {
 import { AdminAccessService } from './admin-access.service';
 import { AdminListDto } from './admin.dto';
 
+// The only records a store-scoped administrator can read.
+const SCOPED_RESOURCES = new Set(['stores', 'products', 'posts']);
+
 interface Resource {
   target: EntityTarget<ObjectLiteral>;
   fields: string[];
@@ -45,7 +51,9 @@ const fields = (text: string) => text.split(' ');
 export const ADMIN_RESOURCES: Record<string, Resource> = {
   users: {
     target: User,
-    fields: fields('id email displayName role suspendedAt createdAt updatedAt'),
+    fields: fields(
+      'id email displayName role adminScope suspendedAt createdAt updatedAt',
+    ),
     search: ['email', 'displayName'],
     archive: 'suspendedAt',
   },
@@ -180,6 +188,10 @@ export class AdminQueriesService {
         ? UserRole.ADMIN
         : UserRole.USER,
       roleManagedByEnvironment: isAdminEmail(item.email, this.access.allowlist),
+      adminScope:
+        item.adminScope === AdminScope.STORES
+          ? AdminScope.STORES
+          : AdminScope.ALL,
     };
   }
 
@@ -190,8 +202,15 @@ export class AdminQueriesService {
   }
 
   async list(name: string, dto: AdminListDto, actor: AdminActor) {
-    await this.access.check(actor);
     const resource = this.resource(name);
+    const { scope } = await this.access.panel(actor);
+    if (!scope.all && !SCOPED_RESOURCES.has(name))
+      throw new ForbiddenException('Platform administrator access required');
+    const limit = Math.min(Math.max(dto.limit, 1), 100);
+    const offset = Math.min(Math.max(dto.offset, 0), 100000);
+    // A scoped administrator with no shops left reads nothing instead of all.
+    if (!scope.all && !scope.storeIds.length)
+      return { items: [], total: 0, limit, offset };
     const query = this.access.database
       .getRepository(resource.target)
       .createQueryBuilder('item')
@@ -259,8 +278,13 @@ export class AdminQueriesService {
       query.andWhere(
         `item.${resource.archive} IS ${dto.archive === 'archived' ? 'NOT ' : ''}NULL`,
       );
-    const limit = Math.min(Math.max(dto.limit, 1), 100);
-    const offset = Math.min(Math.max(dto.offset, 0), 100000);
+    if (!scope.all) {
+      // Stores are filtered by their own id; their content by the owning shop.
+      const column = name === 'stores' ? 'id' : 'storeId';
+      query.andWhere(`item.${column} IN (:...adminStoreIds)`, {
+        adminStoreIds: scope.storeIds,
+      });
+    }
     const [items, total] = await query
       .orderBy(
         `item.${resource.date ?? 'createdAt'}`,
@@ -282,8 +306,10 @@ export class AdminQueriesService {
   }
 
   async detail(name: string, id: string, actor: AdminActor) {
-    await this.access.check(actor);
     const resource = this.resource(name);
+    const { scope } = await this.access.panel(actor);
+    if (!scope.all && !SCOPED_RESOURCES.has(name))
+      throw new ForbiddenException('Platform administrator access required');
     const item = await this.access.database
       .getRepository(resource.target)
       .createQueryBuilder('item')
@@ -291,6 +317,28 @@ export class AdminQueriesService {
       .where(`item.${resource.key ?? 'id'} = :id`, { id })
       .getOne();
     if (!item) throw new NotFoundException('Record not found');
+    if (!scope.all) {
+      const storeId = name === 'stores' ? item.id : item.storeId;
+      this.access.assertStoreInScope(scope, storeId as string | null);
+    }
+    if (name === 'users') {
+      // The admin workspace shows and edits a store-scoped administrator's shop
+      // list from the same record, so it travels with the detail response.
+      const assignments = await this.access.database.manager.find(
+        AdminStoreAssignment,
+        { where: { userId: id }, select: { storeId: true } },
+      );
+      const storeIds = assignments.map((assignment) => assignment.storeId);
+      const assignedStores = storeIds.length
+        ? await this.access.database.manager.find(Store, {
+            where: { id: In(storeIds) },
+            select: { id: true, name: true, slug: true },
+            order: { name: 'ASC' },
+          })
+        : [];
+      item.adminStoreIds = storeIds;
+      item.adminStores = assignedStores;
+    }
     if (name === 'carts') {
       item.items = await this.access.database.getRepository(CartItem).find({
         where: { cartId: id },
@@ -452,8 +500,39 @@ export class AdminQueriesService {
   }
 
   async overview(actor: AdminActor) {
-    await this.access.check(actor);
+    const { scope } = await this.access.panel(actor);
     const manager = this.access.database.manager;
+    if (!scope.all) {
+      // A store-scoped administrator sees only their shops and their content;
+      // platform-wide counters stay hidden because they are not theirs to see.
+      if (!scope.storeIds.length)
+        return {
+          users: 0,
+          stores: 0,
+          products: 0,
+          posts: 0,
+          media: 0,
+          errors: 0,
+          wallets: 0,
+          activeCampaigns: 0,
+        };
+      const [stores, products, posts, media] = await Promise.all([
+        manager.count(Store, { where: { id: In(scope.storeIds) } }),
+        manager.count(Product, { where: { storeId: In(scope.storeIds) } }),
+        manager.count(Showcase, { where: { storeId: In(scope.storeIds) } }),
+        manager.count(MediaAsset, { where: { storeId: In(scope.storeIds) } }),
+      ]);
+      return {
+        users: 0,
+        stores,
+        products,
+        posts,
+        media,
+        errors: 0,
+        wallets: 0,
+        activeCampaigns: 0,
+      };
+    }
     const [
       users,
       stores,

@@ -55,6 +55,8 @@ import {
   VerificationRequestStatus,
   VERIFICATION_GRACE_DAYS,
   VERIFICATION_PERIOD_DAYS,
+  requireAdmin,
+  type AdminActor,
 } from '@app/database';
 import { StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
@@ -332,13 +334,20 @@ export class StoresService {
     }
   }
 
+  // `administrator` marks a store opened from the admin workspace: the acting
+  // platform administrator bypasses every plan quota, the store is created for
+  // the chosen owner, and the creation is written to the admin audit log inside
+  // the same transaction.
   async create(
     dto: CreateStoreDto,
     ownerId: string,
+    options: { administrator?: { actor: AdminActor; allowlist: string } } = {},
   ): Promise<StoreResponseDto> {
+    const administrator = options.administrator;
     try {
       // Trial-expired owners keep read-only access to published stores.
-      await assertSubscriptionActive(this.stores.manager, ownerId);
+      if (!administrator)
+        await assertSubscriptionActive(this.stores.manager, ownerId);
       const slug = await chooseContentSlug(dto.name, dto.slug, (value) =>
         this.stores.findOneBy({ slug: value }),
       );
@@ -409,18 +418,45 @@ export class StoresService {
           lock: { mode: 'pessimistic_write' },
         });
         if (!owner || owner.suspendedAt)
-          throw new NotFoundException('Store not found');
-        await assertSubscriptionActive(manager, ownerId);
-        const limits = await effectiveLimits(manager, ownerId);
-        // Trashed shops keep their rows but release a shop slot.
-        const count = await manager.count(Store, {
-          where: { ownerId, status: Not(StoreStatus.TRASHED) },
-        });
-        assertQuota(count, limits.maxShops, 'Store');
+          throw new NotFoundException(
+            administrator ? 'Owner not found' : 'Store not found',
+          );
+        if (administrator) {
+          // Re-check the acting administrator inside the writing transaction so
+          // a revoked role cannot create shops through a stale session.
+          await requireAdmin(
+            manager,
+            administrator.actor,
+            administrator.allowlist,
+          );
+        } else {
+          // A website administrator owns shops without a plan limit; everyone
+          // else stays bounded by their subscription's shop allowance.
+          const unlimitedOwner = this.admin.isGlobalAdmin(owner);
+          if (!unlimitedOwner) {
+            await assertSubscriptionActive(manager, ownerId);
+            const limits = await effectiveLimits(manager, ownerId);
+            // Trashed shops keep their rows but release a shop slot.
+            const count = await manager.count(Store, {
+              where: { ownerId, status: Not(StoreStatus.TRASHED) },
+            });
+            assertQuota(count, limits.maxShops, 'Store');
+          }
+        }
         const created = await manager.save(store);
         if (dto.branches?.length) {
           await this.replaceBranches(manager, created, dto.branches);
           await manager.save(created);
+        }
+        if (administrator) {
+          await appendAdminAudit(
+            manager,
+            administrator.actor,
+            'stores',
+            created.id,
+            'store.create',
+            ['name', 'slug', 'ownerId'],
+          );
         }
         return manager.findOneOrFail(Store, {
           where: { id: created.id },
@@ -1480,7 +1516,7 @@ export class StoresService {
           where: { id: storeId },
           lock: { mode: 'pessimistic_write' },
         });
-        if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
+        if (!actor || actor.suspendedAt || !this.admin.isGlobalAdmin(actor))
           throw new ForbiddenException('Administrator access required');
         // Granting is idempotent while the tick is already visible; giving
         // another month has its own explicit action in the verification queue.
@@ -1527,7 +1563,7 @@ export class StoresService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const actor = await this.stores.manager.findOneBy(User, { id: actorId });
-      if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
+      if (!actor || actor.suspendedAt || !this.admin.isGlobalAdmin(actor))
         throw new ForbiddenException('Administrator access required');
       const existing = await this.stores.findOneBy({
         id: storeId,
@@ -1547,7 +1583,7 @@ export class StoresService {
         if (
           !currentActor ||
           currentActor.suspendedAt ||
-          !this.admin.isAdmin(currentActor)
+          !this.admin.isGlobalAdmin(currentActor)
         )
           throw new ForbiddenException('Administrator access required');
         store.hasVerificationBadge = false;

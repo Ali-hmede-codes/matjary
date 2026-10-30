@@ -5,8 +5,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { EntityManager } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import {
+  AdminScope,
+  AdminStoreAssignment,
   User,
   UserRole,
   Store,
@@ -39,12 +41,19 @@ import { StorageService } from '@app/storage';
 import { QueueService } from '@app/queue';
 import { AdminAccessService } from './admin-access.service';
 import {
+  AdminCreateStoreDto,
   AdminErrorStateDto,
+  AdminUserScopeDto,
   AdminUserUpdateDto,
   AdminUserRoleDto,
 } from './admin.dto';
 import { SeoService } from '../seo/seo.service';
+import { StoresService } from '../stores/stores.service';
 import { deleteStoredObjects } from '../media-cleanup';
+
+// A store-scoped administrator never assumes another scope by omission, so the
+// assignment list is bounded and validated before it is written.
+const MAX_ASSIGNED_STORES = 200;
 
 @Injectable()
 export class AdminCatalogService {
@@ -53,6 +62,7 @@ export class AdminCatalogService {
     private readonly storage: StorageService,
     private readonly seo: SeoService,
     private readonly queue: QueueService,
+    private readonly stores: StoresService,
   ) {}
 
   async updateUser(id: string, dto: AdminUserUpdateDto, actor: AdminActor) {
@@ -69,6 +79,51 @@ export class AdminCatalogService {
       ]);
       return { id };
     });
+  }
+
+  // The shops a store-scoped administrator may oversee, validated in the same
+  // transaction that writes them. A trashed shop cannot be assigned because its
+  // admin records are already unreachable.
+  private async resolveAdminScope(
+    manager: EntityManager,
+    scope: AdminScope | undefined,
+    storeIds: string[] | undefined,
+  ): Promise<{ scope: AdminScope; storeIds: string[] }> {
+    if ((scope ?? AdminScope.ALL) === AdminScope.ALL)
+      return { scope: AdminScope.ALL, storeIds: [] };
+    const ids = [...new Set(storeIds ?? [])].filter(Boolean);
+    if (!ids.length)
+      throw new BadRequestException(
+        'Choose at least one store for a store-scoped administrator',
+      );
+    if (ids.length > MAX_ASSIGNED_STORES)
+      throw new BadRequestException(
+        `A store-scoped administrator can oversee at most ${MAX_ASSIGNED_STORES} stores`,
+      );
+    const stores = await manager.find(Store, {
+      where: { id: In(ids) },
+      select: { id: true, status: true },
+    });
+    if (stores.length !== ids.length)
+      throw new BadRequestException('One or more stores were not found');
+    if (stores.some((store) => store.status === StoreStatus.TRASHED))
+      throw new BadRequestException(
+        'A store in Trash cannot be assigned to an administrator',
+      );
+    return { scope: AdminScope.STORES, storeIds: ids };
+  }
+
+  private async replaceAdminStores(
+    manager: EntityManager,
+    userId: string,
+    storeIds: string[],
+  ): Promise<void> {
+    await manager.delete(AdminStoreAssignment, { userId });
+    if (!storeIds.length) return;
+    await manager.insert(
+      AdminStoreAssignment,
+      storeIds.map((storeId) => ({ userId, storeId })),
+    );
   }
 
   async updateUserRole(id: string, dto: AdminUserRoleDto, input: AdminActor) {
@@ -103,15 +158,58 @@ export class AdminCatalogService {
       if (user.role === dto.role) return { id, role: user.role };
       if (user.sessionVersion >= 4294967295)
         throw new ConflictException('Session version limit reached');
+      // Granting admin access chooses the reach at the same time: the whole
+      // platform (the historic behavior) or the shops picked in the request.
+      const scope =
+        dto.role === UserRole.ADMIN
+          ? await this.resolveAdminScope(manager, dto.scope, dto.storeIds)
+          : { scope: AdminScope.ALL, storeIds: [] };
       await manager.query(
-        'UPDATE `users` SET `role` = ?, session_version = session_version + 1, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',
-        [dto.role, id],
+        'UPDATE `users` SET `role` = ?, `admin_scope` = ?, session_version = session_version + 1, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',
+        [dto.role, scope.scope, id],
       );
+      await this.replaceAdminStores(manager, id, scope.storeIds);
       await appendAdminAudit(manager, actor, 'users', id, 'role.update', [
         'role',
+        'adminScope',
         'sessionVersion',
       ]);
-      return { id, role: dto.role };
+      return { id, role: dto.role, scope: scope.scope };
+    });
+  }
+
+  async updateUserScope(id: string, dto: AdminUserScopeDto, input: AdminActor) {
+    const actor = this.access.reason(input, dto.reason);
+    return this.access.transaction(actor, async (manager) => {
+      const user = await manager.findOne(User, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('User not found');
+      if (isAdminEmail(user.email, this.access.allowlist))
+        throw new ConflictException(
+          'Configured administrator access cannot be changed',
+        );
+      if (id === actor.id)
+        throw new ConflictException('You cannot change your own access');
+      if (user.role !== UserRole.ADMIN)
+        throw new ConflictException(
+          'Grant administrator access before assigning stores',
+        );
+      const scope = await this.resolveAdminScope(
+        manager,
+        dto.scope,
+        dto.storeIds,
+      );
+      await manager.query(
+        'UPDATE `users` SET `admin_scope` = ?, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',
+        [scope.scope, id],
+      );
+      await this.replaceAdminStores(manager, id, scope.storeIds);
+      await appendAdminAudit(manager, actor, 'users', id, 'scope.update', [
+        'adminScope',
+      ]);
+      return { id, ...scope };
     });
   }
 
@@ -157,39 +255,70 @@ export class AdminCatalogService {
     input: AdminActor,
   ) {
     const actor = this.access.reason(input, reason);
-    return this.access.transaction(actor, async (manager) => {
-      const target = {
-        stores: Store,
-        products: Product,
-        posts: Showcase,
-        media: MediaAsset,
-      }[resource];
-      const item = await manager
-        .getRepository(target)
-        .findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
-      if (!item) throw new NotFoundException('Content not found');
-      item.adminArchivedAt = archived ? new Date() : null;
-      // The moderation column is excluded from ORM saves, including stale owner
-      // and worker entities. Only this audited, locked operation writes it.
-      const table = {
-        stores: 'stores',
-        products: 'products',
-        posts: 'showcases',
-        media: 'media_assets',
-      }[resource];
-      await manager.query(
-        `UPDATE \`${table}\` SET admin_archived_at = ?, updated_at = UTC_TIMESTAMP(6) WHERE id = ?`,
-        [item.adminArchivedAt, id],
-      );
-      await appendAdminAudit(
-        manager,
-        actor,
-        resource,
-        id,
-        archived ? 'archive' : 'restore',
-        ['adminArchivedAt'],
-      );
-      return { id, adminArchivedAt: item.adminArchivedAt };
+    // Hiding content is the one moderation action a store-scoped administrator
+    // performs, and only inside the shops assigned to them.
+    return this.access.transaction(
+      actor,
+      async (manager) => {
+        const { scope } = await this.access.panel(actor, manager);
+        // Load the locked row through its concrete repository, so the result is
+        // a typed entity union rather than an untyped record.
+        const lock = { mode: 'pessimistic_write' as const };
+        const load = {
+          stores: () =>
+            manager.getRepository(Store).findOne({ where: { id }, lock }),
+          products: () =>
+            manager.getRepository(Product).findOne({ where: { id }, lock }),
+          posts: () =>
+            manager.getRepository(Showcase).findOne({ where: { id }, lock }),
+          media: () =>
+            manager.getRepository(MediaAsset).findOne({ where: { id }, lock }),
+        };
+        const item = await load[resource]();
+        if (!item) throw new NotFoundException('Content not found');
+        if (!scope.all) {
+          if (resource === 'media')
+            throw new ForbiddenException(
+              'Platform administrator access required',
+            );
+          // A shop row owns the id itself; its content carries the shop id.
+          const storeId = 'storeId' in item ? item.storeId : item.id;
+          this.access.assertStoreInScope(scope, storeId);
+        }
+        item.adminArchivedAt = archived ? new Date() : null;
+        // The moderation column is excluded from ORM saves, including stale owner
+        // and worker entities. Only this audited, locked operation writes it.
+        const table = {
+          stores: 'stores',
+          products: 'products',
+          posts: 'showcases',
+          media: 'media_assets',
+        }[resource];
+        await manager.query(
+          `UPDATE \`${table}\` SET admin_archived_at = ?, updated_at = UTC_TIMESTAMP(6) WHERE id = ?`,
+          [item.adminArchivedAt, id],
+        );
+        await appendAdminAudit(
+          manager,
+          actor,
+          resource,
+          id,
+          archived ? 'archive' : 'restore',
+          ['adminArchivedAt'],
+        );
+        return { id, adminArchivedAt: item.adminArchivedAt };
+      },
+      'any',
+    );
+  }
+
+  // Only a platform administrator opens shops on someone else's behalf. Plan
+  // quotas do not apply, so a website administrator can seed as many shops as
+  // the platform needs; the acting administrator and the owner are audited.
+  async createStore(dto: AdminCreateStoreDto, actor: AdminActor) {
+    await this.access.check(actor);
+    return this.stores.create(dto, dto.ownerId, {
+      administrator: { actor, allowlist: this.access.allowlist },
     });
   }
 

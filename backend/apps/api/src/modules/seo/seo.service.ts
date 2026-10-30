@@ -215,7 +215,8 @@ export class SeoService {
     const actor = await manager.findOneBy(User, {
       id: actorId,
     });
-    if (!actor || actor.suspendedAt || !this.admin.isAdmin(actor))
+    // Website SEO is platform-wide; a store-scoped administrator never edits it.
+    if (!actor || actor.suspendedAt || !this.admin.isGlobalAdmin(actor))
       throw new ForbiddenException('Admin access required');
   }
 

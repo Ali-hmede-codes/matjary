@@ -1,5 +1,7 @@
 import { Type, Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
@@ -17,7 +19,7 @@ import { CreateStoreDto } from '../stores/dto/create-store.dto';
 import { UpdateStoreDto } from '../stores/dto/update-store.dto';
 import { CreateProductDto } from '../products/dto/create-product.dto';
 import { CreateShowcaseDto } from '../showcases/dto/create-showcase.dto';
-import { SystemErrorState, UserRole } from '@app/database';
+import { AdminScope, SystemErrorState, UserRole } from '@app/database';
 import { CreateBoostCampaignDto } from '../boost/dto/boost-coin.dto';
 
 export class AdminListDto {
@@ -73,6 +75,31 @@ export class AdminReasonDto {
 export class AdminUserRoleDto extends AdminReasonDto {
   @IsEnum(UserRole)
   role!: UserRole;
+
+  // Granting admin access can be limited to chosen shops. Omitting the scope
+  // keeps the historic full-platform grant.
+  @IsOptional()
+  @IsEnum(AdminScope)
+  scope?: AdminScope;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsUUID('all', { each: true })
+  storeIds?: string[];
+}
+
+// Changing only which shops an existing administrator oversees, without
+// touching the role itself.
+export class AdminUserScopeDto extends AdminReasonDto {
+  @IsEnum(AdminScope)
+  scope!: AdminScope;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsUUID('all', { each: true })
+  storeIds?: string[];
 }
 
 export class AdminUserUpdateDto {

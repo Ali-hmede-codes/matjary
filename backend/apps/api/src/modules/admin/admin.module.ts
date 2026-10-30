@@ -7,6 +7,7 @@ import { SeoModule } from '../seo/seo.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { BoostModule } from '../boost/boost.module';
 import { ShowcasesModule } from '../showcases/showcases.module';
+import { StoresModule } from '../stores/stores.module';
 import { VerificationModule } from '../verification/verification.module';
 import { AdminVerificationController } from '../verification/admin-verification.controller';
 import { AdminAccessService } from './admin-access.service';
@@ -29,6 +30,7 @@ import {
     SubscriptionsModule,
     BoostModule,
     ShowcasesModule,
+    StoresModule,
     StorageModule,
     QueueModule,
     VerificationModule,

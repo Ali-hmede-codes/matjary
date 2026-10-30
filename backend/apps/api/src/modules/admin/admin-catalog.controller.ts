@@ -21,9 +21,11 @@ import { AdminCatalogService } from './admin-catalog.service';
 import { AdminQueriesService } from './admin-queries.service';
 import {
   AdminBadgeDto,
+  AdminCreateStoreDto,
   AdminErrorStateDto,
   AdminListDto,
   AdminReasonDto,
+  AdminUserScopeDto,
   AdminUserUpdateDto,
   AdminUserRoleDto,
 } from './admin.dto';
@@ -87,6 +89,23 @@ export class AdminCatalogController {
     @Actor() actor: AdminActor,
   ) {
     return this.catalog.updateUserRole(id, dto, actor);
+  }
+
+  // Which shops an existing administrator oversees, without changing the role.
+  @Patch('users/:id/scope')
+  updateUserScope(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminUserScopeDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.catalog.updateUserScope(id, dto, actor);
+  }
+
+  // Platform administrators can open a shop for any owner, without consuming
+  // the owner's plan shop allowance.
+  @Post('stores')
+  createStore(@Body() dto: AdminCreateStoreDto, @Actor() actor: AdminActor) {
+    return this.catalog.createStore(dto, actor);
   }
 
   @Post('users/:id/:action')

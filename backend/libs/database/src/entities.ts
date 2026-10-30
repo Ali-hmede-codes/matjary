@@ -46,6 +46,15 @@ export enum UserRole {
   ADMIN = 'admin',
 }
 
+// An administrator either oversees the whole platform or only the shops an
+// owner-level administrator assigned in `admin_store_assignments`. Row-level
+// assignments never widen access on their own: the scope column must say
+// `stores`, so deleting every assignment can never silently grant global access.
+export enum AdminScope {
+  ALL = 'all',
+  STORES = 'stores',
+}
+
 export enum ShowcaseStatus {
   DRAFT = 'draft',
   PUBLISHED = 'published',
@@ -205,6 +214,17 @@ export class User extends BaseEntity {
     update: false,
   })
   role: UserRole = UserRole.USER;
+
+  // Scope changes use the same audited admin operation as role changes, so a
+  // stale profile save can never widen or narrow an administrator's reach.
+  @Column({
+    name: 'admin_scope',
+    type: 'enum',
+    enum: AdminScope,
+    default: AdminScope.ALL,
+    update: false,
+  })
+  adminScope: AdminScope = AdminScope.ALL;
 
   @Column({
     name: 'suspended_at',
@@ -1951,6 +1971,35 @@ export class StoreMember extends BaseEntity {
   role: StoreMemberRole = StoreMemberRole.EDITOR;
 }
 
+// The shops a store-scoped administrator may oversee in the admin workspace.
+// Global administrators hold no rows here; their scope column says `all`.
+@Entity({ name: 'admin_store_assignments', engine: 'InnoDB' })
+@Index('uq_admin_store_assignments_user_store', ['userId', 'storeId'], {
+  unique: true,
+})
+@Index('idx_admin_store_assignments_store', ['storeId'])
+export class AdminStoreAssignment extends BaseEntity {
+  @Column({ name: 'user_id', type: 'varchar', length: 36 })
+  userId!: string;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'user_id',
+    foreignKeyConstraintName: 'fk_admin_store_assignments_user',
+  })
+  user!: Relation<User>;
+
+  @Column({ name: 'store_id', type: 'varchar', length: 36 })
+  storeId!: string;
+
+  @ManyToOne(() => Store, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'store_id',
+    foreignKeyConstraintName: 'fk_admin_store_assignments_store',
+  })
+  store!: Relation<Store>;
+}
+
 // Only pending invitations are stored: accepting, declining, or cancelling
 // removes the row, so the same Gmail address can be invited again later.
 @Entity({ name: 'store_invitations', engine: 'InnoDB' })
@@ -2092,6 +2141,7 @@ export const databaseEntities = [
   StoreBranch,
   StoreMember,
   StoreInvitation,
+  AdminStoreAssignment,
   StoreVerificationRequest,
   StoreCategory,
   Product,

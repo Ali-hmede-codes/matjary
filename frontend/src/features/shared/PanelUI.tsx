@@ -45,19 +45,28 @@ export function PanelShell({
     return () => window.removeEventListener('keydown', escape);
   }, []);
   const base = admin ? '/admin' : '/dashboard';
+  // A store-scoped administrator keeps the panel but loses every platform-wide
+  // section (users, plans, boost, verification, branding, SEO).
+  const scopedAdmin = admin && session.user.adminScope === 'stores';
   const nav: Array<[string, string]> = admin
-    ? [
-        ['', 'Overview'],
-        ['/users', 'Users'],
-        ['/stores', 'Stores'],
-        ['/content', 'Content'],
-        ['/boost', 'Boost'],
-        ['/subscriptions', 'Subscriptions'],
-        ['/subscriptions/plans', 'Plans'],
-        ['/verification', 'Verification'],
-        ['/settings', 'Website settings'],
-        ['/seo', 'Website SEO'],
-      ]
+    ? scopedAdmin
+      ? [
+          ['', 'Overview'],
+          ['/stores', 'Stores'],
+          ['/content', 'Content'],
+        ]
+      : [
+          ['', 'Overview'],
+          ['/users', 'Users'],
+          ['/stores', 'Stores'],
+          ['/content', 'Content'],
+          ['/boost', 'Boost'],
+          ['/subscriptions', 'Subscriptions'],
+          ['/subscriptions/plans', 'Plans'],
+          ['/verification', 'Verification'],
+          ['/settings', 'Website settings'],
+          ['/seo', 'Website SEO'],
+        ]
     : member
       ? [
           ['', 'Home'],

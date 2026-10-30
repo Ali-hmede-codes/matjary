@@ -12,7 +12,10 @@ import type { AppEnvironment } from '@app/config';
 import type { PublicUser } from '../../users/users.service';
 import { AuthService } from '../auth.service';
 import { AuthCookies } from '../auth.cookies';
-import { isAdminUser } from '../../../../../../libs/database/src/admin-policy';
+import {
+  isAdminUser,
+  isGlobalAdminUser,
+} from '../../../../../../libs/database/src/admin-policy';
 
 export type AuthenticatedRequest = Request & { user: PublicUser };
 
@@ -23,6 +26,15 @@ export class AdminGuard implements CanActivate {
 
   isAdmin(user: PublicUser | undefined): boolean {
     return isAdminUser(
+      user,
+      this.config.get('ADMIN_EMAILS', { infer: true }) ?? '',
+    );
+  }
+
+  // Store-scoped administrators reach the workspace but not platform-wide
+  // operations such as plans, website settings, or verification decisions.
+  isGlobalAdmin(user: PublicUser | undefined): boolean {
+    return isGlobalAdminUser(
       user,
       this.config.get('ADMIN_EMAILS', { infer: true }) ?? '',
     );

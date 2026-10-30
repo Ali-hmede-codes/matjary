@@ -108,6 +108,12 @@ export async function purgeStoreRecords(
   await manager.query('DELETE FROM store_invitations WHERE store_id = ?', [
     storeId,
   ]);
+  // Administrator assignments point at the shop with ON DELETE RESTRICT; a
+  // trashed shop keeps no reachable admin records anyway.
+  await manager.query(
+    'DELETE FROM admin_store_assignments WHERE store_id = ?',
+    [storeId],
+  );
   await manager.query('DELETE FROM store_branches WHERE store_id = ?', [
     storeId,
   ]);

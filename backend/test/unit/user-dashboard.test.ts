@@ -17,6 +17,7 @@ import {
 } from '@app/database';
 import { StoresService } from '../../apps/api/src/modules/stores/stores.service';
 import { StoreLifecycle1793918400000 } from '../../libs/database/src/migrations/1793918400000-StoreLifecycle';
+import { ArabicSlugRepair1795819200000 } from '../../libs/database/src/migrations/1795819200000-ArabicSlugRepair';
 import {
   ForbiddenException,
   NotFoundException,
@@ -427,17 +428,35 @@ test('lifecycle migration defaults existing stores online and refuses unsafe rol
   assert.match(statements.at(-1)!, /DROP COLUMN status/);
 });
 
-test('generated addresses are readable, non-Latin safe and retry collisions', async () => {
+test('generated addresses transliterate Arabic and retry collisions', async () => {
   let attempts = 0;
   const slug = await chooseContentSlug(
-    'متجري',
+    'حلويات الداعوق',
     undefined,
     async () => ++attempts < 2,
   );
-  // A shop name without Latin letters still gets a stable readable prefix and
-  // a numeric suffix instead of an opaque identifier.
-  assert.equal(slug, 'shop-2');
+  // Arabic names become latin addresses instead of collapsing into the generic
+  // "shop" fallback that every Arabic-named merchant would share.
+  assert.equal(slug, 'hlwyat-aldaawq-2');
   assert.equal(attempts, 2);
+  assert.equal(
+    await chooseContentSlug('مطعم ٢٠٢٤', undefined, async () => false),
+    'mtam-2024',
+  );
+  assert.equal(
+    await chooseContentSlug('Al Daaouk حلويات', undefined, async () => false),
+    'al-daaouk-hlwyat',
+  );
+  // Harakat and tatweel are decorative and must not split the word.
+  assert.equal(
+    await chooseContentSlug('حَـــلْوِيَات', undefined, async () => false),
+    'hlwyat',
+  );
+  // Names without latin or Arabic letters keep the generic fallback.
+  assert.equal(
+    await chooseContentSlug('東京', undefined, async () => false),
+    'shop',
+  );
   const seen: string[] = [];
   assert.equal(
     await chooseContentSlug('Handmade Mug', undefined, async (value) => {
@@ -451,6 +470,40 @@ test('generated addresses are readable, non-Latin safe and retry collisions', as
     await chooseContentSlug('New name', 'existing-address', async () => true),
     'existing-address',
   );
+});
+
+test('slug repair migration renames only legacy generic Arabic addresses', async () => {
+  const rows = {
+    stores: [
+      { id: 'store-1', label: 'حلويات الداعوق', slug: 'shop' },
+      { id: 'store-2', label: 'حلويات الداعوق', slug: 'shop-2' },
+      { id: 'store-3', label: 'هلا', slug: 'hala' },
+      { id: 'store-4', label: 'Coffee', slug: 'coffee' },
+    ],
+    products: [{ id: 'product-1', label: 'كعكة', slug: 'shop' }],
+    showcases: [{ id: 'post-1', label: 'عرض', slug: 'shop-3' }],
+  };
+  const updates: { table: string; slug: unknown; id: unknown }[] = [];
+  const runner = {
+    query: async (sql: string, params?: unknown[]) => {
+      if (params) {
+        const table = /UPDATE `(\w+)`/.exec(sql)?.[1] ?? '';
+        updates.push({ table, slug: params[0], id: params[1] });
+        return [];
+      }
+      const table = /FROM `(\w+)`/.exec(sql)?.[1] ?? '';
+      return rows[table as keyof typeof rows] ?? [];
+    },
+  } as unknown as QueryRunner;
+
+  await new ArabicSlugRepair1795819200000().up(runner);
+
+  assert.deepEqual(updates, [
+    { table: 'stores', slug: 'hlwyat-aldaawq', id: 'store-1' },
+    { table: 'stores', slug: 'hlwyat-aldaawq-2', id: 'store-2' },
+    { table: 'products', slug: 'kaka', id: 'product-1' },
+    { table: 'showcases', slug: 'ard', id: 'post-1' },
+  ]);
 });
 
 test('dashboard summary and lists scope every query to the owner and exclude moderated content', async () => {

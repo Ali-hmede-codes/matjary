@@ -13,7 +13,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { OAuth2Client } from 'google-auth-library';
 import { QueryFailedError, type Repository } from 'typeorm';
 import type { RedisService } from '../../libs/queue/src/redis.service';
-import { User, UserRole } from '../../libs/database/src/entities';
+import { AdminScope, User, UserRole } from '../../libs/database/src/entities';
 import {
   validateEnvironment,
   type AppEnvironment,
@@ -53,6 +53,7 @@ const user = {
   email: profile.email,
   displayName: profile.name,
   role: UserRole.USER,
+  adminScope: AdminScope.ALL,
   createdAt: new Date('2026-01-01'),
 };
 

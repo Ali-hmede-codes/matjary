@@ -1,6 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom';
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -17,6 +24,7 @@ import {
   Package,
   Images,
 } from 'lucide-react';
+import type { ShopCategoryCatalog } from '../../lib/api';
 import {
   getJson,
   mutate,
@@ -49,10 +57,23 @@ import { AdminSeo } from './AdminSeo';
 
 type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
 export default function AdminPanel({ session }: { session: Session }) {
+  const scoped = session.user.adminScope === 'stores';
+  const { pathname } = useLocation();
+  // Direct links to platform-wide sections are closed for a store-scoped
+  // administrator even though the workspace itself stays available.
+  const reachable =
+    pathname === '/admin' ||
+    pathname === '/admin/' ||
+    pathname.startsWith('/admin/stores') ||
+    pathname.startsWith('/admin/content');
+  if (scoped && !reachable) return <Navigate to="/admin" replace />;
   return (
     <PanelShell session={session} admin>
       <Routes>
-        <Route index element={<Overview id={session.user.id} />} />
+        <Route
+          index
+          element={<Overview id={session.user.id} scoped={scoped} />}
+        />
         <Route
           path="users"
           element={
@@ -62,7 +83,12 @@ export default function AdminPanel({ session }: { session: Session }) {
         <Route
           path="stores"
           element={
-            <AdminList key="stores" resource="stores" id={session.user.id} />
+            <AdminList
+              key="stores"
+              resource="stores"
+              id={session.user.id}
+              scoped={scoped}
+            />
           }
         />
         <Route
@@ -72,13 +98,19 @@ export default function AdminPanel({ session }: { session: Session }) {
               key="products"
               resource="products"
               id={session.user.id}
+              scoped={scoped}
             />
           }
         />
         <Route
           path="content/posts"
           element={
-            <AdminList key="posts" resource="posts" id={session.user.id} />
+            <AdminList
+              key="posts"
+              resource="posts"
+              id={session.user.id}
+              scoped={scoped}
+            />
           }
         />
         <Route
@@ -110,7 +142,7 @@ export default function AdminPanel({ session }: { session: Session }) {
     </PanelShell>
   );
 }
-function Overview({ id }: { id: string }) {
+function Overview({ id, scoped }: { id: string; scoped: boolean }) {
   const query = useQuery({
     queryKey: ['panel', id, 'overview'],
     queryFn: ({ signal }) =>
@@ -128,13 +160,21 @@ function Overview({ id }: { id: string }) {
       href: 'boost',
       icon: Coins,
     },
-  ];
+  ].filter((card) =>
+    scoped ? ['stores', 'products', 'posts'].includes(card.key) : true,
+  );
   return (
     <>
       <PageTitle
         eyebrow="ADMINISTRATION"
-        title="A clear view of your platform."
-        description="Support your store owners. Keep the community moving."
+        title={
+          scoped ? 'Your assigned shops.' : 'A clear view of your platform.'
+        }
+        description={
+          scoped
+            ? 'Review the shops an administrator trusted you with. Platform-wide tools stay with the website team.'
+            : 'Support your store owners. Keep the community moving.'
+        }
       />
       {query.isPending ? (
         <Loading />
@@ -159,47 +199,61 @@ function Overview({ id }: { id: string }) {
           ))}
         </div>
       )}
-      <div className="panel-two-columns">
-        <section className="panel-card panel-feature">
-          <CreditCard size={28} />
-          <h2>The right plan, for every owner.</h2>
+      {!scoped && (
+        <div className="panel-two-columns">
+          <section className="panel-card panel-feature">
+            <CreditCard size={28} />
+            <h2>The right plan, for every owner.</h2>
+            <p>
+              Create plans, adjust limits, and assign subscriptions with expiry
+              dates in one place.
+            </p>
+            <Link className="panel-primary" to="/admin/subscriptions">
+              Manage subscriptions <ArrowUpRight size={16} />
+            </Link>
+          </section>
+          <section className="panel-card panel-feature">
+            <BadgeCheck size={28} />
+            <h2>Help trusted stores stand out.</h2>
+            <p>Review a store and manage its verification badge.</p>
+            <Link className="panel-secondary" to="/admin/verification">
+              Review verification <ArrowUpRight size={16} />
+            </Link>
+          </section>
+        </div>
+      )}
+      {!scoped && (
+        <section className="panel-note">
+          <Palette size={20} />
           <p>
-            Create plans, adjust limits, and assign subscriptions with expiry
-            dates in one place.
+            <strong>Name, description, logo and colors.</strong>
+            <br />
+            Update the branding every visitor sees, the contact email, and the
+            LBP exchange rate.
           </p>
-          <Link className="panel-primary" to="/admin/subscriptions">
-            Manage subscriptions <ArrowUpRight size={16} />
+          <Link className="panel-secondary" to="/admin/settings">
+            Website settings <ArrowUpRight size={16} />
           </Link>
         </section>
-        <section className="panel-card panel-feature">
-          <BadgeCheck size={28} />
-          <h2>Help trusted stores stand out.</h2>
-          <p>Review a store and manage its verification badge.</p>
-          <Link className="panel-secondary" to="/admin/verification">
-            Review verification <ArrowUpRight size={16} />
-          </Link>
-        </section>
-      </div>
-      <section className="panel-note">
-        <Palette size={20} />
-        <p>
-          <strong>Name, description, logo and colors.</strong>
-          <br />
-          Update the branding every visitor sees, the contact email, and the LBP
-          exchange rate.
-        </p>
-        <Link className="panel-secondary" to="/admin/settings">
-          Website settings <ArrowUpRight size={16} />
-        </Link>
-      </section>
+      )}
       <div className="panel-note">
         <ShieldCheck size={20} />
-        <p>
-          <strong>Owners create. You support.</strong>
-          <br />
-          Stores, products, and uploads are managed by their owners. This
-          workspace is for oversight, subscriptions, and verification.
-        </p>
+        {scoped ? (
+          <p>
+            <strong>Only your assigned shops.</strong>
+            <br />
+            You can hide or restore content inside these shops. The website team
+            keeps plans, verification, branding, and shop creation.
+          </p>
+        ) : (
+          <p>
+            <strong>Owners create. You support.</strong>
+            <br />
+            Stores, products, and uploads are managed by their owners. This
+            workspace is for oversight, subscriptions, verification, and opening
+            shops on an owner's behalf.
+          </p>
+        )}
       </div>
     </>
   );
@@ -336,7 +390,15 @@ function AdminPlans({ id }: { id: string }) {
     </>
   );
 }
-function AdminList({ resource, id }: { resource: Resource; id: string }) {
+function AdminList({
+  resource,
+  id,
+  scoped = false,
+}: {
+  resource: Resource;
+  id: string;
+  scoped?: boolean;
+}) {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
@@ -344,6 +406,7 @@ function AdminList({ resource, id }: { resource: Resource; id: string }) {
   const [status, setStatus] = useState('all');
   const [selected, setSelected] = useState<PanelRecord>();
   const [assign, setAssign] = useState<PanelRecord | null | undefined>();
+  const [creating, setCreating] = useState(false);
   const params = new URLSearchParams({
     limit: '20',
     offset: String(offset),
@@ -368,14 +431,22 @@ function AdminList({ resource, id }: { resource: Resource; id: string }) {
         description={
           resource === 'subscriptions'
             ? 'Assign a plan to a user. They take care of their store.'
-            : 'Find, review, and support the people behind the platform.'
+            : resource === 'stores' && scoped
+              ? 'The shops assigned to you. Open a shop to review its content.'
+              : resource === 'stores'
+                ? 'Find a shop, open it, or create one for an owner without leaving the admin workspace.'
+                : 'Find, review, and support the people behind the platform.'
         }
         action={
-          resource === 'subscriptions' && (
+          resource === 'subscriptions' ? (
             <button className="panel-primary" onClick={() => setAssign(null)}>
               Assign subscription
             </button>
-          )
+          ) : resource === 'stores' && !scoped ? (
+            <button className="panel-primary" onClick={() => setCreating(true)}>
+              <Plus size={16} /> Create store
+            </button>
+          ) : undefined
         }
       />
       {(resource === 'products' || resource === 'posts') && (
@@ -509,7 +580,9 @@ function AdminList({ resource, id }: { resource: Resource; id: string }) {
                                 : 'Not verified'
                             : resource === 'users'
                               ? item.role === 'admin'
-                                ? 'Administrator'
+                                ? item.adminScope === 'stores'
+                                  ? 'Store admin'
+                                  : 'Administrator'
                                 : 'User'
                               : item.status || 'Active'}
                     </span>
@@ -559,6 +632,7 @@ function AdminList({ resource, id }: { resource: Resource; id: string }) {
           resource={resource}
           item={selected}
           id={id}
+          scoped={scoped}
           close={() => setSelected(undefined)}
           assign={(user) => {
             setSelected(undefined);
@@ -573,6 +647,7 @@ function AdminList({ resource, id }: { resource: Resource; id: string }) {
           close={() => setAssign(undefined)}
         />
       )}
+      {creating && <CreateStore id={id} close={() => setCreating(false)} />}
     </>
   );
 }
@@ -908,12 +983,14 @@ function Detail({
   resource,
   item,
   id,
+  scoped = false,
   close,
   assign,
 }: {
   resource: Resource;
   item: PanelRecord;
   id: string;
+  scoped?: boolean;
   close: () => void;
   assign: (user: PanelRecord) => void;
 }) {
@@ -986,6 +1063,21 @@ function Detail({
                   {data.role === 'admin' ? 'Administrator' : 'User'}
                   {data.roleManagedByEnvironment && (
                     <small>Managed by server configuration</small>
+                  )}
+                </dd>
+              </div>
+            )}
+            {resource === 'users' && data.role === 'admin' && (
+              <div>
+                <dt>Store access</dt>
+                <dd>
+                  {data.adminScope === 'stores'
+                    ? data.adminStores?.length
+                      ? data.adminStores.map((shop) => shop.name).join(', ')
+                      : 'No shops assigned'
+                    : 'All stores'}
+                  {data.adminScope === 'stores' && (
+                    <small>Limited to the assigned shops</small>
                   )}
                 </dd>
               </div>
@@ -1079,7 +1171,7 @@ function Detail({
               data.roleManagedByEnvironment !== true &&
               data.id !== id && (
                 <button onClick={() => setChangingRole(true)}>
-                  Change role
+                  Change role &amp; store access
                 </button>
               )}
             {resource === 'stores' && (
@@ -1089,88 +1181,95 @@ function Detail({
                     Open storefront
                   </Link>
                 )}
-                {isStoreVerified(data) && data.verificationBadgeExpiresAt && (
-                  <button
-                    onClick={() =>
-                      setAction({
-                        path: `admin/verification/stores/${data.id}/extend`,
-                        title: `Give ${recordName(data)} another month`,
-                        description:
-                          'The new month starts where the current one ends. Any pending renewal from this shop is approved too.',
-                        reasons: [
-                          'Monthly renewal paid',
-                          'Payment received by transfer',
-                          'Administrator adjustment',
-                        ],
-                      })
-                    }
-                  >
-                    +1 month
-                  </button>
-                )}
-                {!(
-                  isStoreVerified(data) && !data.verificationBadgeExpiresAt
-                ) && (
-                  <button
-                    onClick={() =>
-                      setAction({
-                        path: `admin/verification/stores/${data.id}/unlimited`,
-                        title: `Give ${recordName(data)} unlimited verification`,
-                        description:
-                          'The blue tick stays with no end date until an administrator revokes it. It is not tied to the plan or subscription.',
-                        reasons: [
-                          'Lifetime partner shop',
-                          'Special arrangement',
-                          'Administrator adjustment',
-                        ],
-                      })
-                    }
-                  >
-                    {isStoreVerified(data) ? 'Make unlimited' : 'Grant forever'}
-                  </button>
-                )}
-                <button
-                  className="panel-primary"
-                  onClick={() =>
-                    setAction({
-                      path: `admin/stores/${data.id}/badge`,
-                      title: isStoreVerified(data)
-                        ? 'Revoke verification badge'
-                        : 'Grant verification badge',
-                      body: { enabled: !isStoreVerified(data) },
-                      reasons: isStoreVerified(data)
-                        ? [
-                            'Verification no longer valid',
-                            'Owner requested removal',
-                          ]
-                        : [
-                            'Store identity reviewed',
-                            'Business ownership confirmed',
-                          ],
-                    })
-                  }
-                >
-                  {isStoreVerified(data) ? 'Revoke badge' : 'Grant badge'}
-                </button>
-                {data.status === 'trashed' && (
-                  <button
-                    className="store-trash-action"
-                    onClick={() =>
-                      setAction({
-                        path: `admin/stores/${data.id}/purge`,
-                        title: `Permanently delete ${recordName(data)}`,
-                        description:
-                          'This removes the store, its products, posts, and uploaded media permanently. This cannot be undone.',
-                        reasons: [
-                          'Owner requested permanent deletion',
-                          'Store abandoned',
-                          'Content policy removal',
-                        ],
-                      })
-                    }
-                  >
-                    Delete permanently
-                  </button>
+                {!scoped && (
+                  <>
+                    {isStoreVerified(data) &&
+                      data.verificationBadgeExpiresAt && (
+                        <button
+                          onClick={() =>
+                            setAction({
+                              path: `admin/verification/stores/${data.id}/extend`,
+                              title: `Give ${recordName(data)} another month`,
+                              description:
+                                'The new month starts where the current one ends. Any pending renewal from this shop is approved too.',
+                              reasons: [
+                                'Monthly renewal paid',
+                                'Payment received by transfer',
+                                'Administrator adjustment',
+                              ],
+                            })
+                          }
+                        >
+                          +1 month
+                        </button>
+                      )}
+                    {!(
+                      isStoreVerified(data) && !data.verificationBadgeExpiresAt
+                    ) && (
+                      <button
+                        onClick={() =>
+                          setAction({
+                            path: `admin/verification/stores/${data.id}/unlimited`,
+                            title: `Give ${recordName(data)} unlimited verification`,
+                            description:
+                              'The blue tick stays with no end date until an administrator revokes it. It is not tied to the plan or subscription.',
+                            reasons: [
+                              'Lifetime partner shop',
+                              'Special arrangement',
+                              'Administrator adjustment',
+                            ],
+                          })
+                        }
+                      >
+                        {isStoreVerified(data)
+                          ? 'Make unlimited'
+                          : 'Grant forever'}
+                      </button>
+                    )}
+                    <button
+                      className="panel-primary"
+                      onClick={() =>
+                        setAction({
+                          path: `admin/stores/${data.id}/badge`,
+                          title: isStoreVerified(data)
+                            ? 'Revoke verification badge'
+                            : 'Grant verification badge',
+                          body: { enabled: !isStoreVerified(data) },
+                          reasons: isStoreVerified(data)
+                            ? [
+                                'Verification no longer valid',
+                                'Owner requested removal',
+                              ]
+                            : [
+                                'Store identity reviewed',
+                                'Business ownership confirmed',
+                              ],
+                        })
+                      }
+                    >
+                      {isStoreVerified(data) ? 'Revoke badge' : 'Grant badge'}
+                    </button>
+                    {data.status === 'trashed' && (
+                      <button
+                        className="store-trash-action"
+                        onClick={() =>
+                          setAction({
+                            path: `admin/stores/${data.id}/purge`,
+                            title: `Permanently delete ${recordName(data)}`,
+                            description:
+                              'This removes the store, its products, posts, and uploaded media permanently. This cannot be undone.',
+                            reasons: [
+                              'Owner requested permanent deletion',
+                              'Store abandoned',
+                              'Content policy removal',
+                            ],
+                          })
+                        }
+                      >
+                        Delete permanently
+                      </button>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -1319,24 +1418,54 @@ function ChangeRole({
   close: () => void;
 }) {
   const current = user.role === 'admin' ? 'admin' : 'user';
+  const currentScope = user.adminScope === 'stores' ? 'stores' : 'all';
+  const currentStores = user.adminStoreIds ?? [];
   const [role, setRole] = useState<'user' | 'admin'>(current);
+  const [scope, setScope] = useState<'all' | 'stores'>(currentScope);
+  const [storeIds, setStoreIds] = useState<string[]>(currentStores);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const client = useQueryClient();
   const label = user.displayName || user.email || 'this account';
+  const scopeChanged =
+    role === 'admin' &&
+    (scope !== currentScope ||
+      [...storeIds].sort().join(',') !== [...currentStores].sort().join(','));
+  const changed = role !== current || scopeChanged;
+  const missingShops =
+    role === 'admin' && scope === 'stores' && storeIds.length === 0;
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (busy || role === current || reason.trim().length < 3) return;
+    if (busy || !changed || missingShops || reason.trim().length < 3) return;
     setBusy(true);
     setError('');
     try {
-      await mutate(
-        `admin/users/${user.id}/role`,
-        { role, reason: reason.trim() },
-        'PATCH',
-      );
+      // An existing administrator only changes the shop reach; the role
+      // endpoint is reserved for actual promotions and demotions.
+      if (current === 'admin' && role === 'admin') {
+        await mutate(
+          `admin/users/${user.id}/scope`,
+          {
+            scope,
+            ...(scope === 'stores' ? { storeIds } : {}),
+            reason: reason.trim(),
+          },
+          'PATCH',
+        );
+      } else {
+        await mutate(
+          `admin/users/${user.id}/role`,
+          {
+            role,
+            reason: reason.trim(),
+            ...(role === 'admin' ? { scope } : {}),
+            ...(role === 'admin' && scope === 'stores' ? { storeIds } : {}),
+          },
+          'PATCH',
+        );
+      }
       await client.invalidateQueries({ queryKey: ['panel', adminId] });
       setSaved(true);
     } catch (e) {
@@ -1346,13 +1475,19 @@ function ChangeRole({
     }
   }
   return (
-    <Modal title="Change user role" onClose={close} busy={busy}>
+    <Modal title="Change role and store access" onClose={close} busy={busy}>
       {saved ? (
         <>
           <Notice>
-            {label} is now{' '}
-            {role === 'admin' ? 'an administrator' : 'a regular user'}. They
-            were signed out and must sign in again.
+            {current === 'admin' && role === 'admin' ? (
+              <>Store access for {label} is updated.</>
+            ) : (
+              <>
+                {label} is now{' '}
+                {role === 'admin' ? 'an administrator' : 'a regular user'}. They
+                were signed out and must sign in again.
+              </>
+            )}
           </Notice>
           <div className="panel-actions">
             <button className="panel-primary" onClick={close}>
@@ -1396,15 +1531,65 @@ function ChangeRole({
                   onChange={() => setRole('admin')}
                 />
                 <strong>Administrator</strong>
-                <span>
-                  Full platform oversight, plans, and user management.
-                </span>
+                <span>Admin workspace access. Choose their reach below.</span>
               </label>
             </div>
           </fieldset>
+          {role === 'admin' && (
+            <fieldset>
+              <legend>Store access</legend>
+              <div className="panel-plan-options">
+                <label
+                  className={`panel-choice ${scope === 'all' ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="all"
+                    checked={scope === 'all'}
+                    onChange={() => setScope('all')}
+                  />
+                  <strong>All stores</strong>
+                  <span>
+                    Full platform oversight: users, plans, subscriptions,
+                    verification, boost, branding, and SEO.
+                  </span>
+                </label>
+                <label
+                  className={`panel-choice ${scope === 'stores' ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="stores"
+                    checked={scope === 'stores'}
+                    onChange={() => setScope('stores')}
+                  />
+                  <strong>Only selected stores</strong>
+                  <span>
+                    They see only these shops and their content. Plans,
+                    verification, branding, and shop creation stay with you.
+                  </span>
+                </label>
+              </div>
+              {scope === 'stores' && (
+                <StorePicker
+                  adminId={adminId}
+                  value={storeIds}
+                  onChange={setStoreIds}
+                />
+              )}
+              {missingShops && (
+                <p className="panel-muted">
+                  Choose at least one store, or switch back to all stores.
+                </p>
+              )}
+            </fieldset>
+          )}
           <p className="panel-muted">
-            Changing the role signs {label} out of every session; they regain
-            access after signing in again.
+            {current === 'admin' && role === 'admin'
+              ? 'New shop access applies the next time they load the admin workspace.'
+              : `Changing the role signs ${label} out of every session; they regain access after signing in again.`}
           </p>
           <label>
             Reason
@@ -1415,7 +1600,7 @@ function ChangeRole({
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Why is this role changing?"
+              placeholder="Why is this access changing?"
             />
             <small>Recorded in the administrative activity log.</small>
           </label>
@@ -1426,14 +1611,120 @@ function ChangeRole({
             </button>
             <button
               className="panel-primary"
-              disabled={busy || role === current || reason.trim().length < 3}
+              disabled={
+                busy || !changed || missingShops || reason.trim().length < 3
+              }
             >
-              {busy ? 'Saving…' : 'Update role'}
+              {busy ? 'Saving…' : 'Save access'}
             </button>
           </div>
         </form>
       )}
     </Modal>
+  );
+}
+
+// Searchable multi-select of shops for a store-scoped administrator. The
+// server still enforces the same boundary; this picker only shapes the request.
+function StorePicker({
+  adminId,
+  value,
+  onChange,
+}: {
+  adminId: string;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [input, setInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const query = useQuery({
+    queryKey: ['panel', adminId, 'admin-store-picker', search, offset],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>(
+        `admin/data/stores?limit=10&offset=${offset}&archive=all${
+          search ? `&search=${encodeURIComponent(search)}` : ''
+        }`,
+        signal,
+      ),
+  });
+  const toggle = (storeId: string) =>
+    onChange(
+      value.includes(storeId)
+        ? value.filter((item) => item !== storeId)
+        : [...value, storeId],
+    );
+  return (
+    <div className="panel-muted">
+      <p>
+        {value.length
+          ? `${value.length} ${value.length === 1 ? 'store' : 'stores'} selected`
+          : 'No stores selected yet'}
+      </p>
+      <div className="panel-toolbar">
+        <label className="panel-search">
+          <Search size={18} />
+          <input
+            aria-label="Find a store"
+            placeholder="Search shops by name"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              setSearch(input);
+              setOffset(0);
+            }}
+            maxLength={100}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setSearch(input);
+            setOffset(0);
+          }}
+        >
+          Search
+        </button>
+      </div>
+      {query.isPending ? (
+        <Loading />
+      ) : query.isError ? (
+        <Retry error={query.error} retry={() => void query.refetch()} />
+      ) : (
+        <>
+          <div className="panel-plan-options">
+            {query.data.items
+              .filter((store) => store.status !== 'trashed')
+              .map((store) => (
+                <label
+                  className={`panel-choice ${value.includes(store.id) ? 'selected' : ''}`}
+                  key={store.id}
+                >
+                  <input
+                    type="checkbox"
+                    checked={value.includes(store.id)}
+                    onChange={() => toggle(store.id)}
+                  />
+                  <strong className="notranslate">
+                    {store.name || 'Shop'}
+                  </strong>
+                  <span>{store.slug}</span>
+                </label>
+              ))}
+          </div>
+          {!query.data.items.some((store) => store.status !== 'trashed') && (
+            <p>No matching stores.</p>
+          )}
+          <Pagination
+            total={query.data.total}
+            offset={offset}
+            onChange={setOffset}
+          />
+        </>
+      )}
+    </div>
   );
 }
 function AssignSubscription({
@@ -1667,6 +1958,274 @@ function AssignSubscription({
           >
             {busy ? 'Assigning…' : 'Confirm subscription'}
           </button>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+// A platform administrator can open a shop for any account. The shop counts
+// toward nobody's plan, so the owner can start from an empty shop even after
+// their own quota is full.
+function CreateStore({ id, close }: { id: string; close: () => void }) {
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [type, setType] = useState<'ecommerce' | 'restaurant_menu'>(
+    'ecommerce',
+  );
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
+  const [owner, setOwner] = useState<PanelRecord | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState<{ name: string; slug: string }>();
+  const client = useQueryClient();
+  const catalog = useQuery({
+    queryKey: ['panel', id, 'store-categories'],
+    queryFn: ({ signal }) =>
+      getJson<ShopCategoryCatalog>('stores/categories', signal),
+  });
+  const users = useQuery({
+    queryKey: ['panel', id, 'owner-picker', search, offset],
+    queryFn: ({ signal }) =>
+      getJson<Page<PanelRecord>>(
+        `admin/data/users?limit=10&offset=${offset}&search=${encodeURIComponent(search)}&archive=active`,
+        signal,
+      ),
+    enabled: picking,
+  });
+  const slugValid = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug.trim());
+  const ready =
+    name.trim().length > 0 &&
+    Boolean(category) &&
+    (!slug.trim() || slugValid) &&
+    !busy;
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!ready) return;
+    setBusy(true);
+    setError('');
+    try {
+      const created = await mutate<{ name: string; slug: string }>(
+        'admin/stores',
+        {
+          ownerId: owner?.id ?? id,
+          name: name.trim(),
+          ...(slug.trim() ? { slug: slug.trim() } : {}),
+          storeType: type,
+          businessCategory: category,
+          description: description.trim() || null,
+        },
+      );
+      await client.invalidateQueries({ queryKey: ['panel', id] });
+      setSaved(created);
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Create a store" onClose={close} busy={busy}>
+      {saved ? (
+        <>
+          <Notice>
+            <span className="notranslate">{saved.name}</span> is open.
+          </Notice>
+          <div className="panel-actions">
+            <Link
+              className="panel-secondary"
+              to={`/stores/${saved.slug}`}
+              target="_blank"
+            >
+              Open storefront <ArrowUpRight size={15} />
+            </Link>
+            <button className="panel-primary" onClick={close}>
+              Done
+            </button>
+          </div>
+        </>
+      ) : (
+        <form className="panel-form" onSubmit={(e) => void submit(e)}>
+          <p className="panel-muted">
+            The shop is created for the owner you choose and does not use any of
+            their plan's shop allowance.
+          </p>
+          <div className="panel-note">
+            <Users size={20} />
+            <div>
+              <strong>{owner?.displayName || 'You (the administrator)'}</strong>
+              <small>{owner?.email || 'Owner of the new shop'}</small>
+            </div>
+            <button type="button" onClick={() => setPicking((open) => !open)}>
+              {owner ? 'Change owner' : 'Choose another owner'}
+            </button>
+          </div>
+          {picking && (
+            <>
+              <div className="panel-toolbar">
+                <label className="panel-search">
+                  <Search size={18} />
+                  <input
+                    aria-label="Find an owner"
+                    placeholder="Search name or email"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      setSearch(searchInput);
+                      setOffset(0);
+                    }}
+                    maxLength={100}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch(searchInput);
+                    setOffset(0);
+                  }}
+                >
+                  Search
+                </button>
+              </div>
+              {users.isPending ? (
+                <Loading />
+              ) : users.isError ? (
+                <Retry error={users.error} retry={() => void users.refetch()} />
+              ) : (
+                <>
+                  {users.data.items.map((account) => (
+                    <button
+                      className="panel-picker-row"
+                      type="button"
+                      key={account.id}
+                      onClick={() => {
+                        setOwner(account);
+                        setPicking(false);
+                      }}
+                    >
+                      <strong>{account.displayName}</strong>
+                      <small>{account.email}</small>
+                    </button>
+                  ))}
+                  {!users.data.items.length && <p>No matching users.</p>}
+                  <Pagination
+                    total={users.data.total}
+                    offset={offset}
+                    onChange={setOffset}
+                  />
+                </>
+              )}
+            </>
+          )}
+          <label>
+            Store name
+            <input
+              required
+              maxLength={200}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="A name people will remember"
+            />
+          </label>
+          <label>
+            Web address (optional)
+            <input
+              maxLength={191}
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase())}
+              placeholder="my-new-shop"
+              pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            />
+            <small>
+              Leave it empty to build one from the store name. Use lowercase
+              letters, numbers, and dashes.
+            </small>
+          </label>
+          <fieldset>
+            <legend>Shop type</legend>
+            <div className="panel-plan-options">
+              <label
+                className={`panel-choice ${type === 'ecommerce' ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="store-type"
+                  checked={type === 'ecommerce'}
+                  onChange={() => setType('ecommerce')}
+                />
+                <strong>Shop</strong>
+                <span>Products with prices and a cart.</span>
+              </label>
+              <label
+                className={`panel-choice ${type === 'restaurant_menu' ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="store-type"
+                  checked={type === 'restaurant_menu'}
+                  onChange={() => setType('restaurant_menu')}
+                />
+                <strong>Restaurant / menu</strong>
+                <span>A menu-first storefront.</span>
+              </label>
+            </div>
+          </fieldset>
+          <label>
+            Business category
+            <select
+              required
+              value={category}
+              disabled={!catalog.data}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">
+                {catalog.data ? 'Choose a category…' : 'Loading categories…'}
+              </option>
+              {catalog.data?.groups.map((group) => (
+                <optgroup key={group.slug} label={group.label}>
+                  {catalog.data.categories
+                    .filter((item) => item.group === group.slug)
+                    .map((item) => (
+                      <option key={item.slug} value={item.slug}>
+                        {item.label}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+            {catalog.isError && (
+              <small>
+                Categories could not load. Retry in a moment or set one from the
+                owner's store editor.
+              </small>
+            )}
+          </label>
+          <label>
+            Description (optional)
+            <textarea
+              rows={3}
+              maxLength={5000}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What should visitors know?"
+            />
+          </label>
+          {error && <Notice error>{error}</Notice>}
+          <div className="panel-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              Go back
+            </button>
+            <button className="panel-primary" disabled={!ready}>
+              {busy ? 'Creating…' : 'Create store'}
+            </button>
+          </div>
         </form>
       )}
     </Modal>

@@ -12,6 +12,7 @@ export * from './visibility-policy';
 export * from './business-categories';
 export * from './website-settings.entity';
 export * from './content-input';
+export * from './content-slug';
 export * from './product-options';
 export * from './product-sale';
 export * from './media-target';

@@ -2,7 +2,13 @@ import { ApiError, getJson, toApiError } from '../../lib/api';
 
 export { getJson };
 export interface Session {
-  user: { id: string; email: string; displayName: string };
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    // Store-scoped administrators only reach the shops assigned to them.
+    adminScope?: 'all' | 'stores';
+  };
   isAdmin: boolean;
 }
 export interface Page<T> {
@@ -74,6 +80,11 @@ export interface PanelRecord {
   limits?: PlanLimits;
   role?: 'admin' | 'user';
   roleManagedByEnvironment?: boolean;
+  adminScope?: 'all' | 'stores';
+  adminStoreIds?: string[];
+  adminStores?: { id: string; name: string; slug: string }[];
+  storeType?: string;
+  businessCategory?: string;
   media?: { id: string; kind: string; status: string; key: string | null }[];
 }
 

@@ -22,6 +22,8 @@ import { StoreVerificationRequests1795387200000 } from './migrations/17953872000
 import { PlanIncludedVerificationBadges1795473600000 } from './migrations/1795473600000-PlanIncludedVerificationBadges';
 import { SeoImageUrls1795560000000 } from './migrations/1795560000000-SeoImageUrls';
 import { FreeTrialThreeDays1795646400000 } from './migrations/1795646400000-FreeTrialThreeDays';
+import { AdminStoreScopes1795732800000 } from './migrations/1795732800000-AdminStoreScopes';
+import { ArabicSlugRepair1795819200000 } from './migrations/1795819200000-ArabicSlugRepair';
 import { OwnerMediaTargets1793832000000 } from './migrations/1793832000000-OwnerMediaTargets';
 import { AddUserRoles1793745600000 } from './migrations/1793745600000-AddUserRoles';
 import { WebsiteSettings1793659200000 } from './migrations/1793659200000-WebsiteSettings';
@@ -104,6 +106,8 @@ export function createDatabaseOptions(
       PlanIncludedVerificationBadges1795473600000,
       SeoImageUrls1795560000000,
       FreeTrialThreeDays1795646400000,
+      AdminStoreScopes1795732800000,
+      ArabicSlugRepair1795819200000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

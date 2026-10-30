@@ -15,7 +15,7 @@ import {
 import { NestFactory, APP_FILTER } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, type QueryRunner } from 'typeorm';
+import { DataSource, FindOperator, type QueryRunner } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
@@ -26,6 +26,8 @@ import { createDatabaseOptions } from '../../libs/database/src/database.options'
 import {
   User,
   UserRole,
+  AdminScope,
+  AdminStoreAssignment,
   Store,
   Product,
   Showcase,
@@ -85,6 +87,7 @@ import {
   AuthRateLimitGuard,
 } from '../../apps/api/src/modules/auth/guards/auth.guards';
 import { MediaService } from '../../apps/api/src/modules/showcases/media.service';
+import { StoresService } from '../../apps/api/src/modules/stores/stores.service';
 import { setupApp } from '../../apps/api/src/setup-app';
 import { MonitoringExceptionFilter } from '../../apps/api/src/modules/monitoring/monitoring.filter';
 import {
@@ -132,11 +135,19 @@ function fixture() {
     );
   const statements: { sql: string; parameters: unknown[] }[] = [];
   const name = (target: unknown) => (target as { name: string }).name;
+  const matches = (row: Row, where: Row) =>
+    Object.entries(where).every(([key, value]) => {
+      if (value instanceof FindOperator) {
+        const expected = value.value as unknown;
+        return value.type === 'in' && Array.isArray(expected)
+          ? expected.includes(row[key])
+          : true;
+      }
+      return row[key] === value;
+    });
   const managerFor = (data: Map<string, Row[]>) => {
     const find = async (target: unknown, where: Row) =>
-      (data.get(name(target)) ?? []).find((row) =>
-        Object.entries(where).every(([key, value]) => row[key] === value),
-      ) ?? null;
+      (data.get(name(target)) ?? []).find((row) => matches(row, where)) ?? null;
     const manager = {
       query: async (sql: string, parameters: unknown[] = []) => {
         statements.push({ sql, parameters });
@@ -147,10 +158,17 @@ function fixture() {
           return [{ storageKey: 'media/store/asset/webp-480.webp' }];
         if (sql.startsWith('UPDATE `users` SET `role`')) {
           assert.match(sql, /session_version = session_version \+ 1/);
-          const row = await find(User, { id: parameters[1] });
+          const row = await find(User, { id: parameters[2] });
           assert.ok(row);
           row.role = parameters[0];
+          row.adminScope = parameters[1];
           row.sessionVersion = Number(row.sessionVersion) + 1;
+          return;
+        }
+        if (sql.startsWith('UPDATE `users` SET `admin_scope`')) {
+          const row = await find(User, { id: parameters[1] });
+          assert.ok(row);
+          row.adminScope = parameters[0];
           return;
         }
         assert.match(
@@ -159,44 +177,87 @@ function fixture() {
         );
         assert.equal(parameters.length, 2);
       },
-      find: async (target: unknown) => data.get(name(target)) ?? [],
+      find: async (target: unknown, options?: { where?: Row }) => {
+        const rows = data.get(name(target)) ?? [];
+        return options?.where
+          ? rows.filter((row) => matches(row, options.where!))
+          : rows;
+      },
       findOneBy: find,
       findOneOrFail: async (target: unknown, options: { where: Row }) => {
         const row = await find(target, options.where);
         if (!row) throw new NotFoundException();
         return row;
       },
-      count: async (target: unknown) => (data.get(name(target)) ?? []).length,
+      count: async (target: unknown, options?: { where?: Row }) => {
+        const rows = data.get(name(target)) ?? [];
+        return options?.where
+          ? rows.filter((row) => matches(row, options.where!)).length
+          : rows.length;
+      },
+      delete: async (target: unknown, where: Row) => {
+        const rows = data.get(name(target)) ?? [];
+        data.set(
+          name(target),
+          rows.filter((row) => !matches(row, where)),
+        );
+      },
       update: async (target: unknown, where: Row, values: Row) => {
         for (const row of data.get(name(target)) ?? [])
-          if (Object.entries(where).every(([key, value]) => row[key] === value))
-            Object.assign(row, values);
+          if (matches(row, where)) Object.assign(row, values);
       },
       findOne: (target: unknown, options: { where: Row }) =>
         find(target, options.where),
       getRepository: (target: unknown) => {
         let selectedId: string | undefined;
+        let scopedIds: string[] | undefined;
+        const rows = () => data.get(name(target)) ?? [];
+        const filtered = () => {
+          let list = rows();
+          if (selectedId) list = list.filter((row) => row.id === selectedId);
+          if (scopedIds)
+            list = list.filter(
+              (row) =>
+                scopedIds!.includes(row.id as string) ||
+                scopedIds!.includes(row.storeId as string),
+            );
+          return list;
+        };
         const query = {
-          where: (_sql: string, parameters?: { visibilityId?: string }) => {
-            selectedId = parameters?.visibilityId;
+          select: () => query,
+          where: (
+            _sql: string,
+            parameters?: { visibilityId?: string; id?: string },
+          ) => {
+            selectedId = parameters?.id ?? parameters?.visibilityId;
             return query;
           },
-          andWhere: () => query,
+          andWhere: (
+            _sql: string,
+            parameters?: { adminStoreIds?: string[] },
+          ) => {
+            if (parameters?.adminStoreIds) scopedIds = parameters.adminStoreIds;
+            return query;
+          },
+          orderBy: () => query,
+          addOrderBy: () => query,
           setLock: () => query,
+          take: () => query,
+          skip: () => query,
           // Plan-bundled badges are the only stores the subscription syncs.
           getMany: async () =>
-            (data.get(name(target)) ?? []).filter(
+            rows().filter(
               (row) =>
                 row.hasVerificationBadge === true &&
                 row.verificationIncludedInPlan === true,
             ),
+          getManyAndCount: async () => [filtered(), filtered().length],
+          getOne: async () => filtered()[0] ?? null,
           getExists: async () => {
-            const row = (data.get(name(target)) ?? []).find(
-              (item) => item.id === selectedId,
-            );
+            const row = rows().find((item) => item.id === selectedId);
             return Boolean(row && !row.adminArchivedAt);
           },
-          getCount: async () => (data.get(name(target)) ?? []).length,
+          getCount: async () => filtered().length,
         };
         return {
           findOne: (options: { where: Row }) => find(target, options.where),
@@ -217,11 +278,12 @@ function fixture() {
         data.set(table, list);
         return row;
       },
-      insert: async (target: unknown, row: Row) => {
+      insert: async (target: unknown, input: Row | Row[]) => {
         if (target === AdminAuditLog && auditFailure)
           throw new Error('secret-driver-credentials');
         const list = data.get(name(target)) ?? [];
-        list.push({ id: randomUUID(), ...row });
+        for (const row of Array.isArray(input) ? input : [input])
+          list.push({ id: randomUUID(), ...row });
         data.set(name(target), list);
       },
     };
@@ -231,6 +293,7 @@ function fixture() {
     get manager() {
       return managerFor(rows);
     },
+    getRepository: (target: unknown) => managerFor(rows).getRepository(target),
     transaction: async (work: (manager: unknown) => Promise<unknown>) => {
       const copy = clone(rows);
       const result = await work(managerFor(copy));
@@ -258,11 +321,19 @@ function fixture() {
       }),
     }),
   };
+  const created: { dto: Row; ownerId: string; options: Row }[] = [];
+  const stores = {
+    create: async (dto: Row, ownerId: string, options: Row) => {
+      created.push({ dto, ownerId, options });
+      return { id: randomUUID(), name: dto.name, slug: 'created-shop' };
+    },
+  };
   const catalog = new AdminCatalogService(
     access,
     storage as never,
     { autoGenerateAdminSeo: async () => {} } as never,
     queue as never,
+    stores as never,
   );
   const add = (target: new () => object, values: Row) => {
     const list = rows.get(target.name) ?? [];
@@ -285,6 +356,9 @@ function fixture() {
   return {
     catalog,
     access,
+    queries: new AdminQueriesService(access),
+    stores,
+    created: () => created,
     add,
     rows: (target: { name: string }) => rows.get(target.name) ?? [],
     statements: () => statements,
@@ -362,6 +436,214 @@ test('user role changes roll back when their audit cannot be written', async () 
   assert.equal(user.sessionVersion, 0);
 });
 
+test('administrator store scope is granted, narrowed and cleared with the role', async () => {
+  const f = fixture();
+  const storeA = randomUUID();
+  const storeB = randomUUID();
+  f.add(Store, { id: storeA, ownerId, status: StoreStatus.ACTIVE });
+  f.add(Store, { id: storeB, ownerId, status: StoreStatus.ACTIVE });
+
+  // Granting admin access chooses the shops in the same audited operation.
+  const granted = await f.catalog.updateUserRole(
+    ownerId,
+    {
+      role: UserRole.ADMIN,
+      scope: AdminScope.STORES,
+      storeIds: [storeA, storeB],
+      reason: 'Shop helper',
+    },
+    actor,
+  );
+  assert.deepEqual(granted, {
+    id: ownerId,
+    role: UserRole.ADMIN,
+    scope: AdminScope.STORES,
+  });
+  assert.equal(
+    f.rows(User).find((row) => row.id === ownerId)?.adminScope,
+    AdminScope.STORES,
+  );
+  assert.deepEqual(
+    f
+      .rows(AdminStoreAssignment)
+      .map((row) => row.storeId)
+      .sort(),
+    [storeA, storeB].sort(),
+  );
+
+  const narrowed = await f.catalog.updateUserScope(
+    ownerId,
+    { scope: AdminScope.STORES, storeIds: [storeB], reason: 'One shop' },
+    actor,
+  );
+  assert.deepEqual(narrowed, {
+    id: ownerId,
+    scope: AdminScope.STORES,
+    storeIds: [storeB],
+  });
+  assert.deepEqual(
+    f.rows(AdminStoreAssignment).map((row) => row.storeId),
+    [storeB],
+  );
+
+  // A store scope without shops is refused, never interpreted as global access.
+  await assert.rejects(
+    f.catalog.updateUserScope(
+      ownerId,
+      { scope: AdminScope.STORES, storeIds: [], reason: 'No shops' },
+      actor,
+    ),
+    BadRequestException,
+  );
+  // A trashed shop cannot be assigned to an administrator.
+  f.add(Store, {
+    id: randomUUID(),
+    ownerId,
+    status: StoreStatus.TRASHED,
+  });
+  const trashedId = f
+    .rows(Store)
+    .find((row) => row.status === StoreStatus.TRASHED)!.id as string;
+  await assert.rejects(
+    f.catalog.updateUserScope(
+      ownerId,
+      { scope: AdminScope.STORES, storeIds: [trashedId], reason: 'Trash' },
+      actor,
+    ),
+    BadRequestException,
+  );
+
+  // Revoking the role removes every assignment and resets the scope.
+  await f.catalog.updateUserRole(
+    ownerId,
+    { role: UserRole.USER, reason: 'Done' },
+    actor,
+  );
+  assert.equal(f.rows(AdminStoreAssignment).length, 0);
+  assert.equal(
+    f.rows(User).find((row) => row.id === ownerId)?.adminScope,
+    AdminScope.ALL,
+  );
+});
+
+test('store-scoped administrators reach only their assigned shops', async () => {
+  const f = fixture();
+  const scopedId = randomUUID();
+  const storeA = randomUUID();
+  const storeB = randomUUID();
+  const scopedActor = { id: scopedId, requestId: randomUUID() };
+  f.add(User, {
+    id: scopedId,
+    email: 'scoped@example.test',
+    role: UserRole.ADMIN,
+    adminScope: AdminScope.STORES,
+    sessionVersion: 0,
+    suspendedAt: null,
+  });
+  f.add(Store, {
+    id: storeA,
+    ownerId,
+    name: 'Mine',
+    slug: 'mine',
+    status: StoreStatus.ACTIVE,
+  });
+  f.add(Store, {
+    id: storeB,
+    ownerId,
+    name: 'Other',
+    slug: 'other',
+    status: StoreStatus.ACTIVE,
+  });
+  f.add(AdminStoreAssignment, { userId: scopedId, storeId: storeA });
+
+  const ownShop = (await f.queries.detail(
+    'stores',
+    storeA,
+    scopedActor,
+  )) as unknown as Row;
+  assert.equal(ownShop.id, storeA);
+  // Any shop outside the assignment answers exactly like a missing one.
+  await assert.rejects(
+    f.queries.detail('stores', storeB, scopedActor),
+    NotFoundException,
+  );
+  // Platform-wide records stay closed to a store-scoped administrator.
+  await assert.rejects(
+    f.queries.list('users', new AdminListDto(), scopedActor),
+    ForbiddenException,
+  );
+  // The overview counts only the assigned shops and hides platform totals.
+  const counts = await f.queries.overview(scopedActor);
+  assert.equal(counts.users, 0);
+  assert.equal(counts.stores, 1);
+  // Hiding content follows the same shop boundary.
+  await f.catalog.archive('stores', storeA, true, 'Review', scopedActor);
+  assert.ok(
+    f.rows(Store).find((row) => row.id === storeA)?.adminArchivedAt instanceof
+      Date,
+  );
+  await assert.rejects(
+    f.catalog.archive('stores', storeB, true, 'Review', scopedActor),
+    NotFoundException,
+  );
+  const mediaId = randomUUID();
+  f.add(MediaAsset, { id: mediaId, storeId: storeA, adminArchivedAt: null });
+  await assert.rejects(
+    f.catalog.archive('media', mediaId, true, 'Review', scopedActor),
+    ForbiddenException,
+  );
+  // Verification decisions and shop creation remain platform-only.
+  await assert.rejects(
+    f.catalog.badge(storeA, true, 'Review', scopedActor),
+    ForbiddenException,
+  );
+  await assert.rejects(
+    f.catalog.createStore({ name: 'Seeded shop', ownerId }, scopedActor),
+    ForbiddenException,
+  );
+});
+
+test('platform administrators create shops without plan quotas', async () => {
+  const f = fixture();
+  const repository = {
+    manager: f.access.database,
+    findOneBy: async () => null,
+    create: (values: Row) => Object.assign(new Store(), values),
+  };
+  const seo = { autoGenerateOwnedSeo: async () => {} };
+  const service = new StoresService(
+    repository as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    seo as never,
+    new AdminGuard(config),
+    {} as never,
+  );
+  const allowlist = config.get('ADMIN_EMAILS', { infer: true });
+  // Without an administrator, the owner has no subscription and is refused.
+  await assert.rejects(
+    service.create({ name: 'Owner shop' } as never, ownerId),
+    ForbiddenException,
+  );
+  const created = await service.create(
+    { name: 'Seeded shop' } as never,
+    ownerId,
+    { administrator: { actor, allowlist } },
+  );
+  assert.equal(created.name, 'Seeded shop');
+  assert.equal(created.ownerId, ownerId);
+  assert.equal(f.rows(Store).length, 1);
+  assert.equal(f.rows(AdminAuditLog).at(-1)?.action, 'store.create');
+  // A non-administrator cannot use the administrator path.
+  await assert.rejects(
+    service.create({ name: 'Sneaky shop' } as never, ownerId, {
+      administrator: { actor: { ...actor, id: ownerId }, allowlist },
+    }),
+    ForbiddenException,
+  );
+});
+
 test('user roles migration is registered, defaults to user and has a rollback', async () => {
   const migration = new AddUserRoles1793745600000();
   const statements: string[] = [];
@@ -383,10 +665,9 @@ test('user roles migration is registered, defaults to user and has a rollback', 
   );
 });
 
-test('administrator catalog is read-only except audited oversight actions', async () => {
+test('administrator catalog is read-only except audited oversight and store creation', async () => {
   const f = fixture();
   for (const method of [
-    'createStore',
     'updateStore',
     'createProduct',
     'updateProduct',
@@ -397,6 +678,18 @@ test('administrator catalog is read-only except audited oversight actions', asyn
     assert.equal(method in f.catalog, false);
     assert.equal(method in AdminCatalogController.prototype, false);
   }
+  // A platform administrator can open a shop for an owner; nothing else about
+  // the catalog becomes owner-editable.
+  assert.equal(typeof f.catalog.createStore, 'function');
+  assert.equal(typeof AdminCatalogController.prototype.createStore, 'function');
+  await f.catalog.createStore({ name: 'Seeded shop', ownerId }, actor);
+  assert.equal(f.created().length, 1);
+  assert.equal(f.created()[0]?.ownerId, ownerId);
+  assert.deepEqual(
+    (f.created()[0]?.options as { administrator: { actor: { id: string } } })
+      .administrator.actor.id,
+    adminId,
+  );
   f.add(Store, { id: resourceId, ownerId, hasVerificationBadge: false });
   await f.catalog.badge(resourceId, true, 'Identity reviewed', actor);
   assert.equal(f.rows(Store)[0]?.hasVerificationBadge, true);
@@ -1136,7 +1429,7 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
           .status,
         404,
       );
-    for (const resource of ['stores', 'products', 'posts']) {
+    for (const resource of ['products', 'posts']) {
       const denied = await fetch(base + '/api/v1/admin/' + resource, {
         method: 'POST',
         headers: {
@@ -1148,6 +1441,21 @@ test('HTTP admin pages and mutations enforce Google sessions, roles, origin and 
       });
       assert.equal(denied.status, 404);
     }
+    // Store creation exists for administrators but still validates its body.
+    assert.equal(
+      (
+        await fetch(base + '/api/v1/admin/stores', {
+          method: 'POST',
+          headers: {
+            Cookie: 'matjary_session=admin',
+            Origin: 'http://localhost:3000',
+            'Content-Type': 'application/json',
+          },
+          body: '{}',
+        })
+      ).status,
+      400,
+    );
     assert.equal(
       (await patch({ displayName: 'Changed' }, 'owner')).status,
       403,

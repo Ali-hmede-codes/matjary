@@ -7,7 +7,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
 // The database barrel also loads application configuration, including Redis.
-import { User, UserRole } from '../../../../../libs/database/src/entities';
+import {
+  AdminScope,
+  User,
+  UserRole,
+} from '../../../../../libs/database/src/entities';
 
 export interface GoogleProfile {
   subject: string;
@@ -21,6 +25,9 @@ export function publicUser(user: User) {
     email: user.email,
     displayName: user.displayName,
     role: user.role ?? UserRole.USER,
+    // The panel trims its navigation for a store-scoped administrator; the
+    // server still re-reads the database on every privileged request.
+    adminScope: user.adminScope ?? AdminScope.ALL,
     createdAt: user.createdAt,
   };
 }
