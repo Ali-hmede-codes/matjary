@@ -10,6 +10,7 @@ import { isLocalFrontendRequest } from './src/lib/website';
 // gives every change a new URL, which is the only reliable way to evict a
 // favicon or logo a browser has already cached under the previous URL.
 const BRANDING_FILES = [
+  'banner.jpg',
   'apple-touch-icon.png',
   'favicon-96x96.png',
   'favicon.ico',

@@ -17,7 +17,26 @@ import {
   readSettingsCache,
   safeUrl,
   SETTINGS_CACHE_KEY,
+  websiteSeoTitle,
 } from './website.ts';
+
+test('website titles keep the name with default and custom tagline copy', () => {
+  assert.equal(websiteSeoTitle('Sooq', 'Fresh finds'), 'Sooq — Fresh finds');
+  assert.equal(websiteSeoTitle('Sooq', null), 'Sooq');
+  assert.equal(
+    websiteSeoTitle('Sooq', 'Fresh finds', 'Handpicked goods'),
+    'Sooq — Handpicked goods',
+  );
+  assert.equal(
+    websiteSeoTitle('Sooq', 'Fresh finds', 'SOOQ - Handpicked goods'),
+    'SOOQ - Handpicked goods',
+  );
+  assert.equal(websiteSeoTitle('Art', null, 'Your cart'), 'Art — Your cart');
+  assert.equal(
+    websiteSeoTitle('متجري', 'أفضل المنتجات'),
+    'متجري — أفضل المنتجات',
+  );
+});
 
 test('page SEO replaces stale shell tags and never restores an old title on navigation', () => {
   const children = new Set<FakeElement>();

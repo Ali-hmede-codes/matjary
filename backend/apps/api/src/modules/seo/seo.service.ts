@@ -854,7 +854,7 @@ export class SeoService {
       defaultOgImageUrl:
         settings.defaultOgImageUrl ||
         (!settings.defaultOgImageKey
-          ? branding?.bannerUrl || branding?.logoUrl
+          ? branding?.bannerUrl || '/banner.jpg'
           : null) ||
         null,
       // The organization name was prefilled from the brand by earlier forms;
@@ -1504,9 +1504,7 @@ export class SeoService {
     // A stored copy of only the tagline (possible with older forms) is not a
     // complete title: the website name belongs in front of it.
     const customTitle = settings.defaultTitle?.trim() ?? '';
-    const title =
-      (customTitle && customTitle !== tagline ? customTitle : '') ||
-      (tagline ? `${siteName} — ${tagline}` : siteName);
+    const title = this.withNameTitle(customTitle || tagline, siteName);
     const description =
       settings.defaultDescription?.trim() ||
       branding?.description?.trim() ||
@@ -1551,8 +1549,7 @@ export class SeoService {
     const menu = this.isMenuStore(store);
     const menuLine = menu ? await this.menuPreviewLine(store) : '';
     // Never fall back to a build-time brand: the website settings own the name.
-    const title =
-      seo.metaTitle || store.name || settings.defaultTitle || settings.siteName;
+    const title = this.withNameTitle(seo.metaTitle || '', store.name);
     const description =
       seo.metaDescription ||
       store.description ||
@@ -1573,21 +1570,21 @@ export class SeoService {
       seo.ogImageKey && !(await this.isLegacyStoreLogo(store, seo.ogImageKey))
         ? seo.ogImageKey
         : undefined;
-    // Explicit overrides win. Otherwise use the automatic 1200x630 card;
-    // banners and raw logos are fallbacks while the worker builds it.
+    // Explicit overrides win, then the current shop banner. A generated logo
+    // card must not hide a banner the owner selected for the shop.
     const ogImage =
       (preferredImageKey
         ? await this.buildImageUrl(preferredImageKey)
         : undefined) ??
-      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.bannerKey)) ??
+      (await this.buildStoreShareImageUrl(store)) ??
       (await this.buildStoreImageUrl(store, store.logoKey)) ??
       // A legacy or stale logo key may no longer resolve; the shop's newest
       // ready image still gives the shared link something to show.
       (await this.latestStoreImageUrl(store.id)) ??
       (await this.defaultSharingImage(settings)) ??
       this.fallbackSharingImage();
-    const ogTitle = seo.ogTitle || store.name;
+    const ogTitle = this.withNameTitle(seo.ogTitle || '', store.name);
     const ogDescription = seo.ogDescription || store.description || description;
     const previewOgTitle = menu ? this.withMenuTitle(ogTitle) : ogTitle;
     const previewOgDescription = menu
@@ -2973,6 +2970,24 @@ export class SeoService {
     });
     if (!variant || !variant.mimeType.startsWith('image/')) return undefined;
     return this.buildPreviewVariantUrl(variant);
+  }
+
+  // Keep the shop/website identity even when saved SEO copy is only a tagline.
+  // Match whole words so a name like "Art" is not mistaken for "cart".
+  private withNameTitle(title: string, name: string): string {
+    const identity = name.trim();
+    const copy = title.trim();
+    if (!copy) return identity;
+    const words = (value: string) =>
+      value
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter(Boolean)
+        .join(' ');
+    const normalizedName = words(identity);
+    return normalizedName && ` ${words(copy)} `.includes(` ${normalizedName} `)
+      ? copy
+      : `${identity} — ${copy}`;
   }
 
   private truncate(str: string, maxLen: number): string {

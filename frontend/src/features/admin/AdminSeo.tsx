@@ -24,6 +24,7 @@ import { assetUrl } from '../../lib/api';
 import {
   brandingUrl,
   imageAddressError,
+  websiteSeoTitle,
   type WebsiteSettings,
 } from '../../lib/website';
 
@@ -543,22 +544,14 @@ function SettingsForm({
     ? undefined
     : brandingUrl(assetUrl(draft.organizationLogoUrl.trim()));
   const fallbackImage =
-    brandingUrl(assetUrl(branding.bannerUrl)) ||
-    brandingUrl(assetUrl(branding.logoUrl));
-  // Mirror the public resolver: every shared link falls back to the shipped
-  // banner, and a title saved as only the tagline still shows the site name.
-  const socialImage = logo || fallbackImage || brandingUrl('/banner.jpg');
-  const composedTitle = [
+    brandingUrl(assetUrl(branding.bannerUrl)) || brandingUrl('/banner.jpg');
+  // Empty sharing overrides inherit the banner, including its field preview.
+  const socialImage = logo || fallbackImage;
+  const homeTitle = websiteSeoTitle(
     draft.siteName.trim() || 'Website',
-    draft.tagline.trim(),
-  ]
-    .filter(Boolean)
-    .join(' — ');
-  const storedTitle = draft.defaultTitle.trim();
-  const homeTitle =
-    storedTitle && storedTitle !== draft.tagline.trim()
-      ? storedTitle
-      : composedTitle;
+    draft.tagline,
+    draft.defaultTitle,
+  );
   const homeDescription =
     draft.defaultDescription.trim() ||
     draft.siteDescription.trim() ||
@@ -698,8 +691,8 @@ function SettingsForm({
                 />
               </Field>
               <div className="seo-image-preview">
-                {logo ? (
-                  <img src={logo} alt="" />
+                {socialImage ? (
+                  <img src={socialImage} alt="Website sharing preview" />
                 ) : (
                   <span>No image selected</span>
                 )}

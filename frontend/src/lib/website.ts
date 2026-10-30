@@ -31,6 +31,28 @@ export const defaults: WebsiteSettings = {
   lbpExchangeRate: 0,
 };
 
+// Mirror the API title policy: custom copy may replace the tagline, but it
+// must not remove the website identity from search and social previews.
+export function websiteSeoTitle(
+  siteName: string,
+  tagline?: string | null,
+  customTitle?: string | null,
+): string {
+  const name = siteName.trim();
+  const title = customTitle?.trim() || tagline?.trim() || '';
+  if (!title) return name;
+  const words = (value: string) =>
+    value
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(Boolean)
+      .join(' ');
+  const normalizedName = words(name);
+  return normalizedName && ` ${words(title)} `.includes(` ${normalizedName} `)
+    ? title
+    : `${name} — ${title}`;
+}
+
 export function safeUrl(value: string | null | undefined): string | undefined {
   if (!value || /[\s\\]/u.test(value)) return undefined;
   if (/^\/(?!\/)/u.test(value)) return value;

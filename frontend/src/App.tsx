@@ -15,7 +15,7 @@ import { StoryViewer } from './components/stories/StoryViewer';
 import { usePageSeo } from './hooks/usePageSeo';
 import { useWebsiteSettings } from './hooks/useWebsiteSettings';
 import { assetUrl } from './lib/api';
-import { brandingUrl } from './lib/website';
+import { brandingUrl, websiteSeoTitle } from './lib/website';
 
 import { documentLanguage, requestTranslation } from './lib/language';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -237,14 +237,12 @@ function DiscoveryPage() {
   // The home page is the most-shared address. Crawlers that execute scripts
   // and browser share sheets read these tags, which follow live branding.
   usePageSeo({
-    title: `${settings.siteName} — ${settings.tagline || 'Discover something good'}`,
+    title: websiteSeoTitle(settings.siteName, settings.tagline),
     description:
       settings.description ||
       'Discover independent stores, beautiful finds, and everyday inspiration.',
     image:
-      brandingUrl(assetUrl(settings.bannerUrl)) ||
-      brandingUrl(assetUrl(settings.logoUrl)) ||
-      brandingUrl('/banner.jpg'),
+      brandingUrl(assetUrl(settings.bannerUrl)) || brandingUrl('/banner.jpg'),
     canonical: '/',
     siteName: settings.siteName,
   });
