@@ -1,7 +1,9 @@
 import './storefront.css';
 import {
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -86,6 +88,12 @@ import { absoluteMediaUrl } from './StoreDetail';
 // Catalog sections preview a fixed number of items; "View all" expands the
 // rest in place so the shop page stays scannable instead of becoming a wall.
 const CATALOG_SECTION_PREVIEW = 10;
+
+// The catalogue is fetched once without a category filter: section chips then
+// narrow the items already on the device, so switching a chip costs no request
+// and no loading skeleton. A shop bigger than one page keeps the paging
+// buttons, and a chosen section pulls the pages it is missing by itself.
+const MENU_PAGE_SIZE = 60;
 
 // A long shop name must stay whole beside its category and opening pill, so the
 // heading steps down to this floor; anything longer still wraps instead of
@@ -414,8 +422,10 @@ export function StorePage({ slug }: { slug: string | null }) {
       ? [...shopPosts, selectedPost]
       : shopPosts;
   // The menu loads its items inline so every section is browsable without a
-  // detour. One request covers a typical menu; long catalogues append another
-  // page on request, and a section chip filters server-side.
+  // detour. One unfiltered request covers a typical catalogue and feeds every
+  // chip: choosing a section narrows the items already on the device instead
+  // of refetching the shop, so the switch is instant. Long catalogues append
+  // another page on request.
   const groups = categoryIndexGroups(
     categoriesQuery.data?.items ?? [],
     categoriesQuery.data?.uncategorized ?? 0,
@@ -429,14 +439,15 @@ export function StorePage({ slug }: { slug: string | null }) {
       ? undefined
       : groups.find((group) => group.key === menuFilterKey);
   const menuQuery = useInfiniteQuery({
-    queryKey: ['storefront-menu', slug, menuFilterKey],
+    // The section filter is deliberately not part of the key: every chip reads
+    // the same cached pages, so no filter change waits on the network.
+    queryKey: ['storefront-menu', slug],
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) => {
       const params = new URLSearchParams({
-        limit: '60',
+        limit: String(MENU_PAGE_SIZE),
         offset: String(pageParam),
       });
-      if (menuFilterKey !== 'all') params.set('categoryId', menuFilterKey);
       return getJson<ProductList>(
         `stores/${encodeURIComponent(slug!)}/products?${params}`,
         signal,
@@ -450,30 +461,71 @@ export function StorePage({ slug }: { slug: string | null }) {
       Boolean(store) && productsSectionEnabled && activeTab === 'catalog',
   });
   const catalogTotal = groups.reduce((sum, group) => sum + group.count, 0);
-  const searchTerm = search.trim().toLowerCase();
-  const menuItems = menuQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const menuItems = useMemo(
+    () => menuQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [menuQuery.data],
+  );
+  const menuTotal = Number(menuQuery.data?.pages[0]?.total ?? 0);
   // Categories with an owner row arrive as ids; older products without one
   // stay reachable through the "More items" group.
   const menuKeyOf = (item: Product) => item.categoryId ?? 'uncategorized';
-  const matchingItems = searchTerm
-    ? menuItems.filter((item) =>
-        `${item.name} ${item.description ?? ''}`
-          .toLowerCase()
-          .includes(searchTerm),
-      )
-    : menuItems;
-  const menuSections = groups
-    .map((group, position) => ({
-      group,
-      // A saved design controls the section rhythm (and per-section overrides);
-      // shops without one keep the familiar rotating layouts.
-      layout: presentation.design
-        ? resolveCategoryLayout(presentation.design, position, group.key)
-        : catalogLayout(position),
-      items: matchingItems.filter((item) => menuKeyOf(item) === group.key),
-    }))
+  const sectionItems = useMemo(
+    () =>
+      menuFilterKey === 'all'
+        ? menuItems
+        : menuItems.filter((item) => menuKeyOf(item) === menuFilterKey),
+    [menuItems, menuFilterKey],
+  );
+  // Typing stays responsive on a long catalogue: the field updates at once and
+  // the filtered list catches up on the next render.
+  const deferredSearch = useDeferredValue(search);
+  const searchTerm = deferredSearch.trim().toLowerCase();
+  const matchingItems = useMemo(() => {
+    if (!searchTerm) return sectionItems;
+    return sectionItems.filter((item) =>
+      `${item.name} ${item.description ?? ''}`
+        .toLowerCase()
+        .includes(searchTerm),
+    );
+  }, [sectionItems, searchTerm]);
+  // A section whose items start beyond the first page would look empty, so the
+  // chosen chip keeps loading the next pages until the section is complete; an
+  // "All items" view and a search never pull pages by themselves.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = menuQuery;
+  const activeGroupCount = activeGroup?.count ?? 0;
+  useEffect(() => {
+    if (menuFilterKey === 'all' || !hasNextPage || isFetchingNextPage) return;
+    if (sectionItems.length >= activeGroupCount) return;
+    void fetchNextPage();
+  }, [
+    menuFilterKey,
+    activeGroupCount,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    sectionItems.length,
+  ]);
+  const sectionLoading =
+    !searchTerm &&
+    menuFilterKey !== 'all' &&
+    hasNextPage &&
+    sectionItems.length < activeGroupCount;
+  // A saved design controls the section rhythm (and per-section overrides);
+  // shops without one keep the familiar rotating layouts. A chosen section
+  // keeps its own slot in that rhythm instead of posing as the first one.
+  const catalogGroups = activeGroup ? [activeGroup] : groups;
+  const menuSections = catalogGroups
+    .map((group) => {
+      const position = groups.indexOf(group);
+      return {
+        group,
+        layout: presentation.design
+          ? resolveCategoryLayout(presentation.design, position, group.key)
+          : catalogLayout(position),
+        items: matchingItems.filter((item) => menuKeyOf(item) === group.key),
+      };
+    })
     .filter((section) => section.items.length > 0);
-  const menuTotal = Number(menuQuery.data?.pages[0]?.total ?? 0);
   const branches = storeBranches(store);
   const mainBranch = primaryBranch(branches);
   const branchOpenStates = branches
@@ -997,7 +1049,11 @@ export function StorePage({ slug }: { slug: string | null }) {
                           `${matchingItems.length} ${matchingItems.length === 1 ? 'match' : 'matches'}`
                         ) : activeGroup ? (
                           <>
-                            {activeGroup.count}{' '}
+                            {/* While pages are still arriving, the count says
+                                how much of the section is on screen. */}
+                            {sectionItems.length < activeGroup.count
+                              ? `${sectionItems.length} of ${activeGroup.count}`
+                              : activeGroup.count}{' '}
                             {activeGroup.count === 1 ? 'item' : 'items'} in{' '}
                             <span className="notranslate">
                               {activeGroup.name}
@@ -1104,8 +1160,9 @@ export function StorePage({ slug }: { slug: string | null }) {
                   ) : menuSections.length ? (
                     <div className="shop-menu-sections">
                       {menuSections.map(({ group, layout, items }) => {
-                        // While searching, the visible count is the honest one.
-                        const count = searchTerm ? items.length : group.count;
+                        // The visible count is always the honest one: a search
+                        // or a partly loaded catalogue never overstates it.
+                        const count = items.length;
                         const expanded = expandedSections.includes(group.key);
                         const visible = expanded
                           ? items
@@ -1174,7 +1231,17 @@ export function StorePage({ slug }: { slug: string | null }) {
                       })}
                     </div>
                   ) : !menuQuery.isError ? (
-                    categoriesQuery.isSuccess && (
+                    categoriesQuery.isSuccess &&
+                    (sectionLoading ? (
+                      <div className="shop-inline-state" role="status">
+                        <LoaderCircle
+                          className="spin"
+                          size={22}
+                          aria-hidden="true"
+                        />
+                        <p>Gathering this section…</p>
+                      </div>
+                    ) : (
                       <div className="shop-inline-state">
                         <h3>
                           {searchTerm
@@ -1226,7 +1293,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                           )
                         )}
                       </div>
-                    )
+                    ))
                   ) : null}
                   {menuQuery.hasNextPage && (
                     <div className="shop-pagination">
