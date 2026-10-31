@@ -41,6 +41,9 @@ import {
   ShowcaseStatus,
   ProductStatus,
   StoreStatus,
+  StoreMember,
+  StoreInvitation,
+  StoreStory,
   BoostCoin,
   BoostTransaction,
   BoostCampaign,
@@ -204,8 +207,13 @@ function fixture() {
         );
       },
       update: async (target: unknown, where: Row, values: Row) => {
+        let affected = 0;
         for (const row of data.get(name(target)) ?? [])
-          if (matches(row, where)) Object.assign(row, values);
+          if (matches(row, where)) {
+            Object.assign(row, values);
+            affected++;
+          }
+        return { affected };
       },
       findOne: (target: unknown, options: { where: Row }) =>
         find(target, options.where),
@@ -647,6 +655,124 @@ test('platform administrators create shops without plan quotas', async () => {
     }),
     ForbiddenException,
   );
+});
+
+test('store ownership moves with its content only to an account whose plan has room', async () => {
+  const f = fixture();
+  const targetId = randomUUID();
+  const scopedId = randomUUID();
+  const otherStoreId = randomUUID();
+  f.add(User, {
+    id: targetId,
+    email: 'target@example.test',
+    displayName: 'Target',
+    sessionVersion: 0,
+    suspendedAt: null,
+  });
+  f.add(User, {
+    id: scopedId,
+    email: 'scoped@example.test',
+    role: UserRole.ADMIN,
+    adminScope: AdminScope.STORES,
+    sessionVersion: 0,
+    suspendedAt: null,
+  });
+  f.add(Store, {
+    id: resourceId,
+    ownerId,
+    name: 'Cedar',
+    slug: 'cedar',
+    status: StoreStatus.ACTIVE,
+    hasVerificationBadge: true,
+    verificationIncludedInPlan: true,
+    verificationBadgeExpiresAt: new Date(Date.now() + 86_400_000),
+  });
+  f.add(Showcase, { id: randomUUID(), storeId: resourceId, ownerId });
+  f.add(StoreStory, { id: randomUUID(), storeId: resourceId, ownerId });
+  f.add(StoreMember, { storeId: resourceId, userId: scopedId });
+  f.add(StoreInvitation, {
+    storeId: resourceId,
+    email: 'helper@example.test',
+  });
+
+  // No live subscription: the handover is refused before anything moves.
+  await assert.rejects(
+    f.catalog.transferStore(
+      resourceId,
+      { ownerId: targetId, reason: 'Real owner' },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      (error.getResponse() as { code?: string }).code === 'OWNER_PLAN_INACTIVE',
+  );
+  assert.equal(f.rows(Store)[0]?.ownerId, ownerId);
+
+  f.add(UserSubscription, {
+    userId: targetId,
+    status: SubscriptionStatus.ACTIVE,
+    startsAt: new Date(0),
+    expiresAt: new Date(Date.now() + 30 * 86_400_000),
+    plan: { slug: 'starter', name: 'Starter', limits: { maxShops: 1 } },
+  });
+  const moved = await f.catalog.transferStore(
+    resourceId,
+    { ownerId: targetId, reason: 'Real owner' },
+    actor,
+  );
+  assert.equal(moved.ownerId, targetId);
+  assert.equal(moved.previousOwnerId, ownerId);
+  assert.equal(moved.posts, 1);
+  assert.equal(moved.stories, 1);
+  assert.equal(f.rows(Store)[0]?.ownerId, targetId);
+  assert.equal(f.rows(Showcase)[0]?.ownerId, targetId);
+  assert.equal(f.rows(StoreStory)[0]?.ownerId, targetId);
+  // The previous owner's team and invitations end with the handover.
+  assert.equal(f.rows(StoreMember).length, 0);
+  assert.equal(f.rows(StoreInvitation).length, 0);
+  // The badge keeps its paid month as an add-on, not a plan bundle.
+  assert.equal(f.rows(Store)[0]?.hasVerificationBadge, true);
+  assert.equal(f.rows(Store)[0]?.verificationIncludedInPlan, false);
+  assert.equal(f.rows(AdminAuditLog).at(-1)?.action, 'store.transfer');
+
+  // The receiving plan is now full, so a second shop is refused.
+  f.add(Store, {
+    id: otherStoreId,
+    ownerId,
+    name: 'Olive',
+    slug: 'olive',
+    status: StoreStatus.ACTIVE,
+  });
+  await assert.rejects(
+    f.catalog.transferStore(
+      otherStoreId,
+      { ownerId: targetId, reason: 'Another shop' },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      (error.getResponse() as { code?: string }).code === 'OWNER_PLAN_FULL',
+  );
+  // Ownership stays a platform-wide operation.
+  await assert.rejects(
+    f.catalog.transferStore(
+      otherStoreId,
+      { ownerId: targetId, reason: 'Sneaky handover' },
+      { ...actor, id: scopedId },
+    ),
+    ForbiddenException,
+  );
+
+  // The picker shows the plan and the remaining slots for each candidate.
+  const options = await f.queries.ownerOptions({ limit: 10, offset: 0 }, actor);
+  const target = options.items.find((item) => item.id === targetId);
+  assert.equal(target?.planName, 'Starter');
+  assert.equal(target?.shopsUsed, 1);
+  assert.equal(target?.remainingShops, 0);
+  assert.equal(target?.eligible, false);
+  const administrator = options.items.find((item) => item.id === adminId);
+  assert.equal(administrator?.administrator, true);
+  assert.equal(administrator?.eligible, true);
 });
 
 test('user roles migration is registered, defaults to user and has a rollback', async () => {

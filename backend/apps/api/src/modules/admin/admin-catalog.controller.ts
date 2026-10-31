@@ -24,7 +24,9 @@ import {
   AdminCreateStoreDto,
   AdminErrorStateDto,
   AdminListDto,
+  AdminOwnerOptionsDto,
   AdminReasonDto,
+  AdminTransferStoreDto,
   AdminUpdateStoreDto,
   AdminUserScopeDto,
   AdminUserUpdateDto,
@@ -107,6 +109,24 @@ export class AdminCatalogController {
   @Post('stores')
   createStore(@Body() dto: AdminCreateStoreDto, @Actor() actor: AdminActor) {
     return this.catalog.createStore(dto, actor);
+  }
+
+  // Candidate owners for a handover, with the plan each one holds and the shop
+  // slots it still has left.
+  @Get('store-owners')
+  storeOwners(@Query() dto: AdminOwnerOptionsDto, @Actor() actor: AdminActor) {
+    return this.queries.ownerOptions(dto, actor);
+  }
+
+  // Hands a shop, its posts, and its menu to another account. Only a platform
+  // administrator may do it, and the receiving plan must have room.
+  @Post('stores/:id/transfer')
+  transferStore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminTransferStoreDto,
+    @Actor() actor: AdminActor,
+  ) {
+    return this.catalog.transferStore(id, dto, actor);
   }
 
   // Identity fields of an existing shop, including its public address. Lifecycle

@@ -118,6 +118,34 @@ export class AdminCreateStoreDto extends CreateStoreDto {
   ownerId!: string;
 }
 
+// Handing an existing shop to another account. The shop, its posts, and its
+// menu move together; the target's plan must still have a free shop slot.
+export class AdminTransferStoreDto extends AdminReasonDto {
+  @IsUUID()
+  ownerId!: string;
+}
+
+// Owner picker for the transfer form: a bounded user search whose rows carry
+// the plan and the remaining shop slots, so the administrator chooses knowingly.
+export class AdminOwnerOptionsDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit = 10;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  offset = 0;
+}
+
 // Identity fields only. Prices, plans, verification, lifecycle status, and
 // moderation each have their own audited operation, so an administrator editing
 // a shop's public address cannot accidentally change any of them.

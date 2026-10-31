@@ -78,6 +78,22 @@ export interface SubscriptionState {
   daysRemaining: number | null;
 }
 
+// One row is effective only while it runs and its plan is loaded. The free plan
+// is the trial plan; an unbounded free row is stale state and must not grant
+// permanent access. Shared so batched reads (admin owner pickers) never drift
+// from the single-user lookup.
+export function isEffectiveSubscription(
+  subscription: UserSubscription,
+  now = new Date(),
+): boolean {
+  return Boolean(
+    subscription.startsAt <= now &&
+    (!subscription.expiresAt || subscription.expiresAt > now) &&
+    subscription.plan &&
+    (subscription.plan.slug !== 'free' || subscription.expiresAt != null),
+  );
+}
+
 export async function effectiveSubscription(
   manager: EntityManager,
   userId: string,
@@ -89,14 +105,8 @@ export async function effectiveSubscription(
     order: { startsAt: 'DESC' },
   });
   return (
-    subscriptions.find(
-      (subscription) =>
-        subscription.startsAt <= now &&
-        (!subscription.expiresAt || subscription.expiresAt > now) &&
-        subscription.plan &&
-        // The free plan is the trial plan; an unbounded free row is stale state
-        // and must not grant permanent access.
-        (subscription.plan.slug !== 'free' || subscription.expiresAt != null),
+    subscriptions.find((subscription) =>
+      isEffectiveSubscription(subscription, now),
     ) ?? null
   );
 }
@@ -130,12 +140,12 @@ export async function subscriptionState(
   };
 }
 
-export async function effectiveLimits(
-  manager: EntityManager,
-  userId: string,
-  now = new Date(),
-): Promise<SubscriptionLimits> {
-  const subscription = await effectiveSubscription(manager, userId, now);
+// Limits of an already loaded subscription. Callers that inspect several owners
+// at once (the admin owner picker) resolve them in one batch instead of paying a
+// query per row, while the rules stay identical to `effectiveLimits`.
+export function limitsFromSubscription(
+  subscription: UserSubscription | null,
+): SubscriptionLimits {
   if (!subscription || !subscription.plan) return EXPIRED_LIMITS;
   // Omitted settings use safe defaults; explicit null remains unlimited.
   return {
@@ -145,6 +155,16 @@ export async function effectiveLimits(
     maxStorageBytes: null,
     maxPostsPerMonth: null,
   };
+}
+
+export async function effectiveLimits(
+  manager: EntityManager,
+  userId: string,
+  now = new Date(),
+): Promise<SubscriptionLimits> {
+  return limitsFromSubscription(
+    await effectiveSubscription(manager, userId, now),
+  );
 }
 
 export async function assertSubscriptionActive(

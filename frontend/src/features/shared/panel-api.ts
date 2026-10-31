@@ -23,6 +23,19 @@ export interface Person {
   email: string;
   phone?: string | null;
 }
+// A candidate for receiving a shop. The admin owner picker shows the live plan
+// and the shop slots it still has left, so the choice follows the subscription.
+export interface StoreOwnerOption extends Person {
+  planName: string | null;
+  planSlug: string | null;
+  planState: 'trial' | 'paid' | 'expired';
+  expiresAt: string | null;
+  shopsUsed: number;
+  maxShops: number | null;
+  remainingShops: number | null;
+  administrator: boolean;
+  eligible: boolean;
+}
 // Mirrors SubscriptionLimits in @app/database; null means unlimited.
 export interface PlanLimits {
   maxVideoDurationSeconds?: number | null;
@@ -146,6 +159,10 @@ export function panelError(error: unknown): string {
       return 'Enter a valid Lebanese phone number, for example 03 123 456.';
     if (error.code === 'SUBSCRIPTION_PHONE_INVALID')
       return 'Enter a phone number with its country code, or choose the right country first.';
+    if (error.code === 'OWNER_PLAN_INACTIVE')
+      return 'The chosen account has no active plan. Assign a subscription before giving it a shop.';
+    if (error.code === 'OWNER_PLAN_FULL')
+      return 'The chosen account has no free shop slot in its plan. Assign a bigger plan or move one of its shops first.';
     if (error.code === 'VERIFICATION_NOT_AVAILABLE')
       return 'Verification is not available on your current plan. Choose another plan or contact an administrator.';
     if (error.code === 'VERIFICATION_NOT_GRANTED')

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { In, type EntityTarget, type ObjectLiteral } from 'typeorm';
+import { In, Not, type EntityTarget, type ObjectLiteral } from 'typeorm';
 import {
   AdminAuditLog,
   AdminScope,
@@ -20,18 +20,23 @@ import {
   Product,
   Showcase,
   Store,
+  StoreStatus,
   SubscriptionPlan,
+  SubscriptionStatus,
   SystemErrorRecord,
   User,
   UserRole,
+  UserSubscription,
   isAdminUser,
   isAdminEmail,
-  UserSubscription,
+  isGlobalAdminUser,
+  isEffectiveSubscription,
+  limitsFromSubscription,
   SeoRedirect,
   type AdminActor,
 } from '@app/database';
 import { AdminAccessService } from './admin-access.service';
-import { AdminListDto } from './admin.dto';
+import { AdminListDto, AdminOwnerOptionsDto } from './admin.dto';
 
 // The only records a store-scoped administrator can read.
 const SCOPED_RESOURCES = new Set(['stores', 'products', 'posts']);
@@ -498,6 +503,101 @@ export class AdminQueriesService {
               : undefined,
       };
     });
+  }
+
+  // Owner picker for handing a shop over. Each row carries the candidate's live
+  // plan and how many shop slots it has left, so the administrator sees the
+  // subscription answer before choosing instead of meeting a refusal later.
+  // Reads the plan and the store counts once for the whole page, not per row.
+  async ownerOptions(dto: AdminOwnerOptionsDto, actor: AdminActor) {
+    await this.access.check(actor);
+    const manager = this.access.database.manager;
+    const limit = Math.min(Math.max(dto.limit ?? 10, 1), 50);
+    const offset = Math.min(Math.max(dto.offset ?? 0, 0), 100000);
+    const query = manager
+      .getRepository(User)
+      .createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.displayName',
+        'user.email',
+        'user.phone',
+        'user.role',
+        'user.adminScope',
+        'user.suspendedAt',
+      ])
+      // Suspended accounts cannot receive a shop, so they never appear.
+      .where('user.suspendedAt IS NULL');
+    if (dto.search) {
+      const search = `%${dto.search.replace(/[\\%_]/g, '\\$&')}%`;
+      query.andWhere(
+        '(user.displayName LIKE :search OR user.email LIKE :search OR user.phone LIKE :search)',
+        { search },
+      );
+    }
+    const [users, total] = await query
+      .orderBy('user.displayName', 'ASC')
+      .addOrderBy('user.id', 'ASC')
+      .take(limit)
+      .skip(offset)
+      .getManyAndCount();
+    if (!users.length) return { items: [], total, limit, offset };
+    const ids = users.map((user) => user.id);
+    const [subscriptions, stores] = await Promise.all([
+      manager.find(UserSubscription, {
+        where: { userId: In(ids), status: SubscriptionStatus.ACTIVE },
+        relations: ['plan'],
+        order: { startsAt: 'DESC' },
+      }),
+      manager.find(Store, {
+        where: { ownerId: In(ids), status: Not(StoreStatus.TRASHED) },
+        select: { ownerId: true },
+      }),
+    ]);
+    // The newest effective row wins, matching `effectiveSubscription`.
+    const current = new Map<string, UserSubscription>();
+    for (const subscription of subscriptions)
+      if (
+        !current.has(subscription.userId) &&
+        isEffectiveSubscription(subscription)
+      )
+        current.set(subscription.userId, subscription);
+    const used = new Map<string, number>();
+    for (const store of stores)
+      used.set(store.ownerId, (used.get(store.ownerId) ?? 0) + 1);
+    const items = users.map((user) => {
+      const subscription = current.get(user.id) ?? null;
+      const maxShops = limitsFromSubscription(subscription).maxShops;
+      const shopsUsed = used.get(user.id) ?? 0;
+      const remainingShops =
+        maxShops == null ? null : Math.max(0, maxShops - shopsUsed);
+      // A platform administrator never needs a slot; everyone else needs a live
+      // subscription with room left.
+      const administrator = isGlobalAdminUser(user, this.access.allowlist);
+      return {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+        phone: user.phone,
+        planName: subscription?.plan?.name ?? null,
+        planSlug: subscription?.plan?.slug ?? null,
+        planState: subscription
+          ? subscription.plan?.slug === 'free'
+            ? 'trial'
+            : 'paid'
+          : 'expired',
+        expiresAt: subscription?.expiresAt ?? null,
+        shopsUsed,
+        maxShops,
+        remainingShops,
+        administrator,
+        eligible:
+          administrator ||
+          (subscription != null &&
+            (remainingShops == null || remainingShops > 0)),
+      };
+    });
+    return { items, total, limit, offset };
   }
 
   async overview(actor: AdminActor) {

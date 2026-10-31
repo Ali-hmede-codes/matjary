@@ -9,6 +9,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import {
+  ArrowRightLeft,
   ArrowUpRight,
   BadgeCheck,
   Clock3,
@@ -36,6 +37,7 @@ import {
   type Page,
   type PanelRecord,
   type Session,
+  type StoreOwnerOption,
 } from '../shared/panel-api';
 import {
   Empty,
@@ -1157,6 +1159,7 @@ function Detail({
   const data = query.data ?? item;
   const [changingRole, setChangingRole] = useState(false);
   const [editingStore, setEditingStore] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [action, setAction] = useState<{
     path: string;
     title: string;
@@ -1365,6 +1368,11 @@ function Detail({
                     Edit shop details
                   </button>
                 )}
+                {!scoped && data.status !== 'trashed' && (
+                  <button onClick={() => setTransferring(true)}>
+                    <ArrowRightLeft size={15} /> Give ownership
+                  </button>
+                )}
                 {!scoped && (
                   <>
                     {isStoreVerified(data) &&
@@ -1525,6 +1533,14 @@ function Detail({
           store={data}
           adminId={id}
           close={() => setEditingStore(false)}
+        />
+      )}
+      {transferring && (
+        <TransferStore
+          store={data}
+          adminId={id}
+          close={() => setTransferring(false)}
+          done={close}
         />
       )}
     </Modal>
@@ -2710,6 +2726,195 @@ function EditStore({
             </button>
             <button className="panel-primary" disabled={!ready}>
               {busy ? 'Saving…' : 'Save shop'}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+// Handing a shop to the account that should own it. The shop, its posts, its
+// menu items, and its media move together, and the receiving account must hold
+// a live plan with a free shop slot; the picker shows that answer per person.
+function TransferStore({
+  store,
+  adminId,
+  close,
+  done,
+}: {
+  store: PanelRecord;
+  adminId: string;
+  close: () => void;
+  done: () => void;
+}) {
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [owner, setOwner] = useState<StoreOwnerOption | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState<StoreOwnerOption>();
+  const client = useQueryClient();
+  const owners = useQuery({
+    queryKey: ['panel', adminId, 'store-owners', search, offset],
+    queryFn: ({ signal }) =>
+      getJson<Page<StoreOwnerOption>>(
+        `admin/store-owners?limit=10&offset=${offset}&search=${encodeURIComponent(search)}`,
+        signal,
+      ),
+    enabled: !saved,
+  });
+  const ready = Boolean(owner?.eligible) && reason.trim().length >= 3 && !busy;
+  const planLabel = (option: StoreOwnerOption) => {
+    if (option.administrator) return 'Administrator · unlimited shops';
+    if (!option.planName) return 'No active plan · cannot receive a shop';
+    const slots =
+      option.maxShops == null
+        ? 'unlimited shops'
+        : `${option.shopsUsed} of ${option.maxShops} shops used`;
+    const suffix = option.eligible ? slots : `${slots} · no free slot`;
+    return `${option.planName} · ${suffix}`;
+  };
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!owner || !ready) return;
+    setBusy(true);
+    setError('');
+    try {
+      await mutate(`admin/stores/${store.id}/transfer`, {
+        ownerId: owner.id,
+        reason: reason.trim(),
+      });
+      await client.invalidateQueries({ queryKey: ['panel', adminId] });
+      setSaved(owner);
+    } catch (e) {
+      setError(panelError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title="Give ownership" onClose={close} busy={busy}>
+      {saved ? (
+        <>
+          <Notice>
+            <span className="notranslate">{store.name}</span> now belongs to{' '}
+            <span className="notranslate">{saved.displayName}</span>. Its posts,
+            menu items, and media moved with it.
+          </Notice>
+          <div className="panel-actions">
+            <button className="panel-primary" onClick={done}>
+              Done
+            </button>
+          </div>
+        </>
+      ) : !owner ? (
+        <>
+          <p className="panel-muted">
+            Choose the account that should own this shop. A shop can only be
+            given to an account with an active plan and a free shop slot; their
+            content allowance is not bypassed.
+          </p>
+          <form
+            className="panel-toolbar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearch(searchInput.trim());
+              setOffset(0);
+            }}
+          >
+            <label className="panel-search">
+              <Search size={18} />
+              <input
+                aria-label="Find the new owner"
+                placeholder="Search name or email"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                maxLength={100}
+              />
+            </label>
+            <button type="submit">Search</button>
+          </form>
+          {owners.isPending ? (
+            <Loading />
+          ) : owners.isError ? (
+            <Retry error={owners.error} retry={() => void owners.refetch()} />
+          ) : (
+            <>
+              {owners.data.items.map((option) => {
+                const current = option.id === store.ownerId;
+                return (
+                  <button
+                    className="panel-picker-row"
+                    type="button"
+                    key={option.id}
+                    disabled={current || !option.eligible}
+                    onClick={() => setOwner(option)}
+                  >
+                    <strong>
+                      {option.displayName}
+                      {current && ' · current owner'}
+                    </strong>
+                    <small>{option.email}</small>
+                    <small>{planLabel(option)}</small>
+                  </button>
+                );
+              })}
+              {!owners.data.items.length && <p>No matching accounts.</p>}
+              <Pagination
+                total={owners.data.total}
+                offset={offset}
+                onChange={setOffset}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <form className="panel-form" onSubmit={(e) => void submit(e)}>
+          <div className="panel-note">
+            <Users size={20} />
+            <div>
+              <strong>
+                <span className="notranslate">{owner.displayName}</span>
+              </strong>
+              <small>{owner.email}</small>
+              <small>{planLabel(owner)}</small>
+              {owner.planState === 'trial' && owner.expiresAt && (
+                <small>Trial ends {dateLabel(owner.expiresAt)}</small>
+              )}
+            </div>
+            <button type="button" onClick={() => setOwner(null)}>
+              Change
+            </button>
+          </div>
+          <p className="panel-muted">
+            <span className="notranslate">{store.name}</span> and everything
+            inside it move to this account. The previous owner and their team
+            lose access when you confirm. A plan-bundled badge keeps its paid
+            month but is renewed on the new owner&apos;s plan.
+          </p>
+          <label>
+            Reason
+            <textarea
+              required
+              minLength={3}
+              maxLength={500}
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is ownership changing?"
+            />
+            <small>Recorded in the administrative activity log.</small>
+          </label>
+          {error && <Notice error>{error}</Notice>}
+          <div className="panel-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              Go back
+            </button>
+            <button className="panel-primary" disabled={!ready}>
+              {busy ? 'Moving the shop…' : 'Give ownership'}
             </button>
           </div>
         </form>

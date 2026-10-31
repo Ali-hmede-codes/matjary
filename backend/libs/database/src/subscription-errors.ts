@@ -11,6 +11,10 @@ export const SECTION_DISABLED_CODE = 'SECTION_DISABLED';
 export const SECTION_NO_ROOM_CODE = 'SECTION_NO_ROOM';
 // A shop must keep at least one of its two content sections on.
 export const SECTION_LAST_ENABLED_CODE = 'SECTION_LAST_ENABLED';
+// An administrator can hand a shop over only to an account that can hold it:
+// no live subscription, or a plan whose shop slots are all taken, is refused.
+export const OWNER_PLAN_INACTIVE_CODE = 'OWNER_PLAN_INACTIVE';
+export const OWNER_PLAN_FULL_CODE = 'OWNER_PLAN_FULL';
 
 export const SAFE_SUBSCRIPTION_CODES: ReadonlySet<string> = new Set([
   TRIAL_EXPIRED_CODE,
@@ -21,4 +25,7 @@ export const SAFE_SUBSCRIPTION_CODES: ReadonlySet<string> = new Set([
   // Story slot and shop-state conflicts drive the composer copy.
   STORY_LIMIT_CODE,
   STORY_OFFLINE_CODE,
+  // Ownership transfer refusals drive the admin owner-picker copy.
+  OWNER_PLAN_INACTIVE_CODE,
+  OWNER_PLAN_FULL_CODE,
 ]);

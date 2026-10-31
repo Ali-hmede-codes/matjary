@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { In, type EntityManager } from 'typeorm';
+import { In, Not, type EntityManager } from 'typeorm';
 import {
   AdminScope,
   AdminStoreAssignment,
@@ -20,6 +20,9 @@ import {
   MediaStatus,
   ShowcaseStatus,
   StoreStatus,
+  StoreMember,
+  StoreInvitation,
+  StoreStory,
   Cart,
   CartStatus,
   SystemErrorRecord,
@@ -27,12 +30,15 @@ import {
   appendAdminAudit,
   isAdminEmail,
   isAdminUser,
-  effectiveLimits,
-  assertQuota,
+  isGlobalAdminUser,
+  effectiveSubscription,
+  limitsFromSubscription,
   assertContentAvailable,
   isBusinessCategory,
   purgeStoreRecords,
   STORE_SLUG_TAKEN_CODE,
+  OWNER_PLAN_FULL_CODE,
+  OWNER_PLAN_INACTIVE_CODE,
   nextVerificationExpiry,
   verificationBadgeVisible,
   StoreVerificationRequest,
@@ -46,6 +52,7 @@ import { AdminAccessService } from './admin-access.service';
 import {
   AdminCreateStoreDto,
   AdminErrorStateDto,
+  AdminTransferStoreDto,
   AdminUpdateStoreDto,
   AdminUserScopeDto,
   AdminUserUpdateDto,
@@ -326,6 +333,134 @@ export class AdminCatalogService {
     return this.stores.create(dto, dto.ownerId, {
       administrator: { actor, allowlist: this.access.allowlist },
     });
+  }
+
+  // Handing an existing shop to the account that should own it. A platform
+  // administrator may open shops without touching plan quotas, but the account
+  // receiving one must be able to hold it: no live subscription, or a plan whose
+  // shop slots are all used, is refused. Everything that belongs to the shop
+  // moves in the same transaction so it never becomes half-owned.
+  async transferStore(
+    id: string,
+    dto: AdminTransferStoreDto,
+    input: AdminActor,
+  ) {
+    const actor = this.access.reason(input, dto.reason);
+    const saved = await this.access.transaction(actor, async (manager) => {
+      const store = await manager.findOne(Store, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!store) throw new NotFoundException('Store not found');
+      // A shop in Trash is waiting for restore or permanent deletion; moving it
+      // there would only hand over something its new owner cannot open.
+      if (store.status === StoreStatus.TRASHED)
+        throw new ConflictException(
+          'Restore the store before changing its owner',
+        );
+      if (store.ownerId === dto.ownerId)
+        throw new ConflictException(
+          'This store already belongs to that account',
+        );
+      const owner = await manager.findOne(User, {
+        where: { id: dto.ownerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!owner || owner.suspendedAt)
+        throw new NotFoundException('Active user not found');
+      // A global administrator already holds unlimited reach; everyone else
+      // receives the shop only inside the allowance their plan paid for.
+      if (!isGlobalAdminUser(owner, this.access.allowlist)) {
+        const subscription = await effectiveSubscription(manager, owner.id);
+        if (!subscription)
+          throw new ConflictException({
+            code: OWNER_PLAN_INACTIVE_CODE,
+            message: 'The chosen owner has no active subscription',
+          });
+        const limits = limitsFromSubscription(subscription);
+        // Trashed shops keep their rows but release a shop slot.
+        const used = await manager.count(Store, {
+          where: { ownerId: owner.id, status: Not(StoreStatus.TRASHED) },
+        });
+        if (limits.maxShops != null && used >= limits.maxShops)
+          throw new ConflictException({
+            code: OWNER_PLAN_FULL_CODE,
+            message: 'The chosen owner has no free shop slot',
+          });
+      }
+      const previousOwnerId = store.ownerId;
+      const releasedBundledBadge = store.verificationIncludedInPlan;
+      store.ownerId = owner.id;
+      // The badge's paid month stays with the shop, but the new owner's plan did
+      // not pay for it: it becomes an add-on and never occupies one of their
+      // bundled slots. Future renewals follow the new owner's plan.
+      if (releasedBundledBadge) store.verificationIncludedInPlan = false;
+      await manager.save(store);
+      // Shop posts and stories are authored for the shop owner, so they follow
+      // the shop; their media and products reference the shop itself already.
+      const posts = await manager.update(
+        Showcase,
+        { storeId: id },
+        { ownerId: owner.id },
+      );
+      const stories = await manager.update(
+        StoreStory,
+        { storeId: id },
+        { ownerId: owner.id },
+      );
+      // The previous owner's team and pending invitations end with the handover.
+      await manager.delete(StoreMember, { storeId: id });
+      await manager.delete(StoreInvitation, { storeId: id });
+      // A pending verification application was made by the previous owner and
+      // cannot be reviewed for the new one; close it like other ownership walks.
+      const now = new Date();
+      const pending = await manager.find(StoreVerificationRequest, {
+        where: { storeId: id, status: VerificationRequestStatus.PENDING },
+      });
+      for (const request of pending) {
+        request.status = VerificationRequestStatus.REJECTED;
+        request.reviewedBy = actor.id;
+        request.reviewedAt = now;
+        request.reviewNote = 'Ownership transferred';
+      }
+      if (pending.length) await manager.save(pending);
+      await appendAdminAudit(
+        manager,
+        actor,
+        'stores',
+        id,
+        'store.transfer',
+        releasedBundledBadge
+          ? ['ownerId', 'verificationIncludedInPlan']
+          : ['ownerId'],
+      );
+      return {
+        store,
+        previousOwnerId,
+        posts: posts.affected ?? 0,
+        stories: stories.affected ?? 0,
+      };
+    });
+    // Public metadata follows the shop, not the caller: the storefront now
+    // belongs to a different account, so its tags and shared pages refresh.
+    try {
+      await this.seo.autoGenerateAdminSeo('store', saved.store.id, actor);
+      await this.seo.notifyIndexNowOnChange('store', saved.store);
+    } catch (error) {
+      this.logger.warn(
+        'Failed to refresh store SEO after an ownership transfer',
+        error,
+      );
+    }
+    return {
+      id: saved.store.id,
+      name: saved.store.name,
+      slug: saved.store.slug,
+      previousOwnerId: saved.previousOwnerId,
+      ownerId: saved.store.ownerId,
+      posts: saved.posts,
+      stories: saved.stories,
+    };
   }
 
   // Editing the public address is a platform-wide operation: a store-scoped
