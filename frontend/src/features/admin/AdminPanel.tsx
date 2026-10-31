@@ -59,6 +59,7 @@ import { PHONE_COUNTRIES, dialCodeFor, phoneDraft } from '../../lib/phone';
 import { AdminBoost } from './AdminBoost';
 import { AdminSettings } from './AdminSettings';
 import { AdminSeo } from './AdminSeo';
+import { AdminNotifications, RenewalQueue } from './AdminRenewals';
 
 type Resource = 'users' | 'stores' | 'products' | 'posts' | 'subscriptions';
 export default function AdminPanel({ session }: { session: Session }) {
@@ -133,6 +134,10 @@ export default function AdminPanel({ session }: { session: Session }) {
           element={<AdminPlans id={session.user.id} />}
         />
         <Route path="boost" element={<AdminBoost id={session.user.id} />} />
+        <Route
+          path="notifications"
+          element={<AdminNotifications id={session.user.id} />}
+        />
         <Route
           path="settings"
           element={<AdminSettings id={session.user.id} />}
@@ -463,6 +468,9 @@ function AdminList({
         </nav>
       )}
       {resource === 'subscriptions' && <SubscriptionTabs />}
+      {resource === 'subscriptions' && (
+        <RenewalQueue id={id} kind="subscription" />
+      )}
       <section className="panel-card panel-list-card">
         <form
           className="panel-toolbar"
@@ -776,6 +784,7 @@ function AdminVerification({ id }: { id: string }) {
           <small>Give another month with one click</small>
         </div>
       </div>
+      <RenewalQueue id={id} kind="verification" />
       <section className="panel-card panel-list-card">
         <h2>Requests waiting for review</h2>
         {requests.isPending ? (

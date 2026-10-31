@@ -24,3 +24,4 @@ export * from './showcase-purge';
 export * from './story-policy';
 export * from './story-purge';
 export * from './verification-policy';
+export * from './renewal-policy';

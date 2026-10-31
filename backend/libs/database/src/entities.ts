@@ -399,6 +399,10 @@ export enum StoreStatus {
 @Index('idx_stores_city', ['city'])
 @Index('idx_stores_country', ['country'])
 @Index('idx_stores_verification_badge', ['hasVerificationBadge'])
+@Index('idx_stores_verification_expiry', [
+  'hasVerificationBadge',
+  'verificationBadgeExpiresAt',
+])
 @Index('idx_stores_business_category', ['businessCategory'])
 export class Store extends BaseEntity {
   // Only the locked lifecycle operation writes these; stale form saves cannot republish.
@@ -668,6 +672,18 @@ export class Store extends BaseEntity {
   })
   verificationBadgeExpiresAt!: Date | null; // Optional: badge expiration
 
+  // The owner told the team they will not renew this badge. It never shortens
+  // the paid month or grace window; it only records intent for the renewal
+  // queue and clears on the next approval, extension, unlimited grant, or a
+  // fresh owner request.
+  @Column({
+    name: 'renewal_declined_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  renewalDeclinedAt!: Date | null;
+
   @OneToMany(() => Showcase, (showcase) => showcase.store)
   posts!: Relation<Showcase[]>;
 
@@ -847,6 +863,17 @@ export class UserSubscription extends BaseEntity {
     nullable: true,
   })
   expiresAt!: Date | null;
+
+  // The owner's answer to a renewal reminder. Declining never ends the paid
+  // period; it only removes the row from the administrator's action queue and
+  // clears when the subscription is extended.
+  @Column({
+    name: 'renewal_declined_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  renewalDeclinedAt!: Date | null;
 
   // For manual admin assignment
   @Column({ name: 'assigned_by', type: 'varchar', length: 36, nullable: true })
@@ -2139,6 +2166,67 @@ export class StoreVerificationRequest extends BaseEntity {
   reviewNote!: string | null;
 }
 
+// The two events the platform reminds owners about. A paid plan and an add-on
+// badge renew separately; a plan-bundled badge is covered by the plan notice.
+export enum RenewalKind {
+  SUBSCRIPTION = 'subscription',
+  VERIFICATION = 'verification',
+}
+
+// One stored reminder per target and due instant. The unique dedupe key makes
+// the midnight sweep idempotent, so a restart, a catch-up read, or a second API
+// instance can never create a duplicate notice.
+@Entity({ name: 'renewal_notices', engine: 'InnoDB' })
+@Index('uq_renewal_notices_dedupe', ['dedupeKey'], { unique: true })
+@Index('idx_renewal_notices_user', ['userId', 'seenAt', 'createdAt'])
+@Index('idx_renewal_notices_subscription', ['subscriptionId'])
+@Index('idx_renewal_notices_store', ['storeId'])
+@Index('idx_renewal_notices_due', ['dueAt'])
+export class RenewalNotice extends BaseEntity {
+  // Who sees the reminder. Badge notices go to the shop owner, never a member.
+  @Column({ name: 'user_id', type: 'varchar', length: 36 })
+  userId!: string;
+
+  @Column({ type: 'enum', enum: RenewalKind })
+  kind!: RenewalKind;
+
+  // Exactly one target column is set for each kind. Deliberately no foreign
+  // keys: notices are disposable, and a permanent shop purge must not be
+  // blocked by an old reminder row.
+  @Column({
+    name: 'subscription_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
+  subscriptionId!: string | null;
+
+  @Column({ name: 'store_id', type: 'varchar', length: 36, nullable: true })
+  storeId!: string | null;
+
+  // The target's expiry when the reminder was created. A renewal changes the
+  // target's expiry, which makes this notice stale and hides it everywhere.
+  @Column({ name: 'due_at', type: 'datetime', precision: 6 })
+  dueAt!: Date;
+
+  @Column({
+    name: 'seen_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  seenAt!: Date | null;
+
+  // `${kind}:${targetId}:${dueAt.getTime()}`; unique at the database level.
+  @Column({
+    name: 'dedupe_key',
+    type: 'varchar',
+    length: 191,
+    collation: 'utf8mb4_bin',
+  })
+  dedupeKey!: string;
+}
+
 export const databaseEntities = [
   WebsiteSettings,
   AdminAuditLog,
@@ -2163,6 +2251,7 @@ export const databaseEntities = [
   PostLike,
   SubscriptionPlan,
   UserSubscription,
+  RenewalNotice,
   BoostCoin,
   BoostTransaction,
   BoostCampaign,

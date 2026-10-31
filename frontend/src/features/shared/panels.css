@@ -260,6 +260,25 @@
   color: #7b877e;
   margin-top: 16px;
 }
+.panel-nav-link-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.panel-nav-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #d9e6d5;
+  color: #254e40;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
 .panel-sidebar nav {
   display: grid;
   gap: 7px;
@@ -2609,4 +2628,204 @@
 }
 .panel-story-grid button:hover {
   background: #b3261e;
+}
+
+/* Renewal reminders: a quiet dashboard banner, the owner's full tab, and the
+   administrator's live queue share these cards. */
+.panel-renewal-banner {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.panel-renewal-banner > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  background: #fbf8ef;
+  padding: 16px 18px;
+}
+.panel-renewal-banner > header strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #5b4a2b;
+}
+.panel-renewal-banner > header span {
+  display: block;
+  margin-top: 4px;
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+.panel-renewal-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  background: #fff;
+}
+.panel-renewal-card.is-unread {
+  border-color: #c9dcc1;
+  background: #f7fbf3;
+}
+.panel-renewal-card.is-declined {
+  opacity: 0.75;
+}
+.panel-renewal-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: #eef3e9;
+  color: #36523c;
+}
+.panel-renewal-info {
+  flex: 1;
+  min-width: 210px;
+}
+.panel-renewal-info h3 {
+  margin: 2px 0 4px;
+  font-size: 16px;
+}
+.panel-renewal-info p {
+  margin: 0 0 4px;
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+.panel-renewal-info small {
+  display: block;
+  color: var(--panel-muted);
+  font-size: 11px;
+}
+.panel-renewal-kind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7b877e;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.panel-renewal-dot {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #254e40;
+  color: #fff;
+  font-size: 8px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.panel-renewal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-renewal-actions > a,
+.panel-renewal-actions > button {
+  font-size: 12px;
+}
+.panel-renewal-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.panel-renewal-list {
+  display: grid;
+  gap: 12px;
+}
+.panel-renewal-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.panel-renewal-list-head h2 {
+  margin: 0;
+}
+.panel-renewal-queue {
+  margin-bottom: 22px;
+}
+.panel-renewal-queue-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.panel-renewal-queue-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.panel-renewal-queue-head p {
+  margin: 6px 0 0;
+  max-width: 74ch;
+}
+.panel-renewal-queue-counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-renewal-group {
+  margin-top: 20px;
+}
+.panel-renewal-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #36523c;
+}
+.panel-renewal-group > p {
+  margin: 0 0 4px;
+}
+.panel-renewal-row {
+  flex-wrap: wrap;
+}
+.panel-renewal-row.is-declined {
+  opacity: 0.72;
+}
+.panel-renewal-tags {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.panel-renewal-tags .panel-pill {
+  text-transform: none;
+}
+.panel-app .panel-pill.renewal-unseen {
+  background: #fbf1d9;
+  color: #7e5a1d;
+}
+@media (max-width: 620px) {
+  .panel-renewal-tags {
+    align-items: flex-start;
+  }
+  .panel-renewal-actions {
+    width: 100%;
+  }
+  .panel-renewal-actions > a,
+  .panel-renewal-actions > button {
+    flex: 1;
+  }
+  .panel-renewal-banner > header .panel-secondary {
+    width: 100%;
+  }
 }

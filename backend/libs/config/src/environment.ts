@@ -17,6 +17,9 @@ export interface AppEnvironment extends DatabaseEnvironment {
   APP_ORIGIN: string;
   GOOGLE_CLIENT_ID: string;
   AUTH_SESSION_TTL_SECONDS: number;
+  // Renewal reminders are generated at 00:00 in this zone. The 48-hour window
+  // then covers "expires today or tomorrow" exactly, independent of server TZ.
+  NOTIFICATION_TIME_ZONE: string;
   // The free plan is a one-time trial; expired owners become read-only.
   FREE_TRIAL_DAYS: number;
   REDIS_HOST: string;
@@ -256,6 +259,18 @@ export function validateEnvironment(
       'ADMIN_EMAILS must be a comma-separated list of email addresses',
     );
   }
+  // Intl validates the zone with the same data the scheduler uses, so a typo
+  // crashes at boot instead of silently sweeping at the wrong hour.
+  const notificationTimeZone = String(
+    env.NOTIFICATION_TIME_ZONE ?? 'Asia/Beirut',
+  ).trim();
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: notificationTimeZone });
+  } catch {
+    throw new Error(
+      'NOTIFICATION_TIME_ZONE must be a valid IANA time zone such as Asia/Beirut',
+    );
+  }
   const prometheusUrl = String(env.PROMETHEUS_URL ?? '');
   if (prometheusUrl) {
     try {
@@ -288,6 +303,7 @@ export function validateEnvironment(
       300,
       2592000,
     ),
+    NOTIFICATION_TIME_ZONE: notificationTimeZone,
     FREE_TRIAL_DAYS: integer(env, 'FREE_TRIAL_DAYS', 3, 1, 90),
     REDIS_HOST: text(env, 'REDIS_HOST', '127.0.0.1'),
     REDIS_PORT: integer(env, 'REDIS_PORT', 6379, 1, 65535),

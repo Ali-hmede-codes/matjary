@@ -31,6 +31,26 @@ test('auth defaults use the API origin and a seven-day absolute session', () => 
   assert.equal(env.GOOGLE_CLIENT_ID, '');
 });
 
+test('renewal reminders default to Beirut and reject unknown time zones', () => {
+  const env = validateEnvironment({ ...required });
+  assert.equal(env.NOTIFICATION_TIME_ZONE, 'Asia/Beirut');
+  assert.equal(
+    validateEnvironment({
+      ...required,
+      NOTIFICATION_TIME_ZONE: 'Asia/Riyadh',
+    }).NOTIFICATION_TIME_ZONE,
+    'Asia/Riyadh',
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...required,
+        NOTIFICATION_TIME_ZONE: 'Mars/Phobos',
+      }),
+    /NOTIFICATION_TIME_ZONE/,
+  );
+});
+
 test('auth configuration rejects unsafe origins, invalid IDs and session lifetimes', () => {
   for (const APP_ORIGIN of [
     'invalid',

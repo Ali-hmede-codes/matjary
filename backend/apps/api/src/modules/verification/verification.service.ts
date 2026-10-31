@@ -223,6 +223,12 @@ export class VerificationService {
         request.priceCents = String(pricing.priceCents);
         request.status = VerificationRequestStatus.PENDING;
         const saved = await manager.save(request);
+        // A fresh application is the owner saying they want the badge after
+        // all, so an earlier "do not renew" answer no longer applies.
+        if (store.renewalDeclinedAt) {
+          store.renewalDeclinedAt = null;
+          await manager.save(store);
+        }
         return this.requestView(saved);
       });
     } catch (error) {
@@ -492,6 +498,7 @@ export class VerificationService {
         store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = audited.id;
         store.verificationBadgeExpiresAt = expiresAt;
+        store.renewalDeclinedAt = null;
         request.status = VerificationRequestStatus.APPROVED;
         request.reviewedBy = audited.id;
         request.reviewedAt = now;
@@ -618,6 +625,7 @@ export class VerificationService {
         store.verificationBadgeGrantedAt = now;
         store.verificationBadgeGrantedBy = audited.id;
         store.verificationBadgeExpiresAt = expiresAt;
+        store.renewalDeclinedAt = null;
         await manager.save(store);
         await this.settlePendingRequests(
           manager,
@@ -703,6 +711,7 @@ export class VerificationService {
         store.verificationBadgeGrantedBy = audited.id;
         store.verificationBadgeExpiresAt = null;
         store.verificationIncludedInPlan = false;
+        store.renewalDeclinedAt = null;
         await manager.save(store);
         // The shop is verified for good, so any waiting application is settled
         // with an open-ended period instead of a paid month.

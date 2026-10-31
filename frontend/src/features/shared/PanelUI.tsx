@@ -9,8 +9,8 @@ import {
 } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { ArrowUpRight, Check, LogOut, Menu, X } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { mutate, panelError, type Session } from './panel-api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getJson, mutate, panelError, type Session } from './panel-api';
 import { assetUrl } from '../../lib/api';
 import { brandingUrl } from '../../lib/website';
 import { LanguageToggle } from '../../components/LanguageToggle';
@@ -58,6 +58,7 @@ export function PanelShell({
         ]
       : [
           ['', 'Overview'],
+          ['/notifications', 'Notifications'],
           ['/users', 'Users'],
           ['/stores', 'Stores'],
           ['/content', 'Content'],
@@ -77,6 +78,7 @@ export function PanelShell({
         ]
       : [
           ['', 'Home'],
+          ['/notifications', 'Notifications'],
           ['/stores', 'My stores'],
           ['/store', 'Store editor'],
           ['/design', 'Shop design'],
@@ -144,7 +146,12 @@ export function PanelShell({
               }
               onClick={() => setOpen(false)}
             >
-              <span className="notranslate">{uiText(label)}</span>
+              <span className="panel-nav-link-label">
+                <span className="notranslate">{uiText(label)}</span>
+                {path === '/notifications' && (
+                  <NotificationCount admin={admin} userId={session.user.id} />
+                )}
+              </span>
               <ArrowUpRight size={16} />
             </NavLink>
           ))}
@@ -179,6 +186,37 @@ export function PanelShell({
         {children}
       </main>
     </div>
+  );
+}
+// The count is deliberately tiny and self-contained: the admin totals the live
+// renewal queue, while an owner sees only unread reminders. A failed count
+// hides the pill instead of breaking the navigation.
+function NotificationCount({
+  admin,
+  userId,
+}: {
+  admin?: boolean;
+  userId: string;
+}) {
+  const query = useQuery({
+    queryKey: [
+      'panel',
+      userId,
+      admin ? 'admin-renewal-count' : 'notification-count',
+    ],
+    queryFn: ({ signal }) =>
+      getJson<{ total?: number; unread?: number }>(
+        admin ? 'admin/renewals/summary' : 'notifications/summary',
+        signal,
+      ),
+    staleTime: 60_000,
+  });
+  const count = admin ? query.data?.total : query.data?.unread;
+  if (!count) return null;
+  return (
+    <span className="panel-nav-count" aria-label={`${count} notifications`}>
+      {count > 99 ? '99+' : count}
+    </span>
   );
 }
 export function PageTitle({

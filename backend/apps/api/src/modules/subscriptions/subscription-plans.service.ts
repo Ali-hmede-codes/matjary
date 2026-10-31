@@ -26,9 +26,9 @@ import {
   actorContext,
   appendAdminAudit,
   requireAdmin,
-  Store,
   StoreSubscriptionTier,
-  VERIFICATION_GRACE_DAYS,
+  syncIncludedBadgesForOwner,
+  nextSubscriptionRenewalExpiry,
 } from '@app/database';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
@@ -84,54 +84,6 @@ export class SubscriptionPlansService {
       );
       return result;
     });
-  }
-
-  /**
-   * Plan-bundled verification badges are paid by the subscription, so they
-   * follow the plan: a new subscription moves their end date, and a plan
-   * without badge slots ends them (the usual grace window still applies).
-   * Only badges still inside the renewal window are touched, so a lapsed badge
-   * is never revived without a fresh administrator review.
-   */
-  private async syncIncludedBadges(
-    manager: EntityManager,
-    userId: string,
-    next: { included: boolean; expiresAt: Date | null },
-    now: Date,
-  ): Promise<number> {
-    const graceBorder = new Date(
-      now.getTime() - VERIFICATION_GRACE_DAYS * 86_400_000,
-    );
-    const stores = await manager
-      .getRepository(Store)
-      .createQueryBuilder('store')
-      .where('store.ownerId = :userId', { userId })
-      .andWhere('store.hasVerificationBadge = true')
-      .andWhere('store.verificationIncludedInPlan = true')
-      .andWhere(
-        '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
-        { graceBorder },
-      )
-      .setLock('pessimistic_write')
-      .getMany();
-    for (const store of stores) {
-      if (!next.included) store.verificationIncludedInPlan = false;
-      if (next.included && next.expiresAt === null) {
-        // The plan itself never ends, so the bundled badge does not either.
-        store.verificationBadgeExpiresAt = null;
-      } else if (next.expiresAt && next.expiresAt.getTime() > now.getTime()) {
-        store.verificationBadgeExpiresAt = next.expiresAt;
-      } else if (
-        !store.verificationBadgeExpiresAt ||
-        store.verificationBadgeExpiresAt.getTime() > now.getTime()
-      ) {
-        // Cancelled or slotless plans end the bundled badge now; a badge
-        // already inside its renewal window keeps the original end date.
-        store.verificationBadgeExpiresAt = now;
-      }
-    }
-    if (stores.length) await manager.save(stores);
-    return stores.length;
   }
 
   private sanitize(error: unknown): never {
@@ -396,7 +348,7 @@ export class SubscriptionPlansService {
         // Cancelling ends the subscription now, so bundled badges enter their
         // renewal window instead of running past the plan that paid for them.
         const now = new Date();
-        await this.syncIncludedBadges(
+        await syncIncludedBadgesForOwner(
           manager,
           subscription.userId,
           { included: true, expiresAt: now },
@@ -404,6 +356,96 @@ export class SubscriptionPlansService {
         );
       },
     );
+  }
+
+  /**
+   * One-click monthly renewal. The plan and recipient stay the same; only the
+   * end date moves. A newer assignment makes this row obsolete, so it is
+   * refused instead of silently extending an old plan. The free plan is a
+   * one-time trial and has nothing to renew.
+   */
+  async extendSubscription(
+    id: string,
+    actorId: string,
+  ): Promise<{ success: true; id: string; expiresAt: Date }> {
+    try {
+      return await this.adminWrite(
+        actorId,
+        'subscription.extend',
+        id,
+        ['expiresAt', 'renewalDeclinedAt'],
+        async (manager) => {
+          const subscription = await manager.findOne(UserSubscription, {
+            where: { id },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!subscription)
+            throw new NotFoundException('Subscription not found');
+          if (subscription.status !== SubscriptionStatus.ACTIVE)
+            throw new BadRequestException(
+              'Only an active assignment can be renewed',
+            );
+          const plan = await manager.findOne(SubscriptionPlan, {
+            where: { id: subscription.planId },
+            lock: { mode: 'pessimistic_read' },
+          });
+          if (!plan) throw new NotFoundException('Subscription plan not found');
+          if (plan.slug === 'free')
+            throw new BadRequestException({
+              code: 'FREE_PLAN_NO_RENEWAL',
+              message:
+                'The free trial cannot be renewed. Assign a paid plan instead.',
+            });
+          // An assignment created after this row is the live one. Extending the
+          // old row would report a renewal that the owner never receives.
+          const newest = await manager.findOne(UserSubscription, {
+            where: {
+              userId: subscription.userId,
+              status: SubscriptionStatus.ACTIVE,
+            },
+            order: { startsAt: 'DESC' },
+          });
+          if (newest && newest.id !== subscription.id)
+            throw new BadRequestException({
+              code: 'SUBSCRIPTION_SUPERSEDED',
+              message:
+                'A newer active assignment exists. Renew that assignment instead.',
+            });
+          const now = new Date();
+          const expiresAt = nextSubscriptionRenewalExpiry(
+            subscription.expiresAt,
+            now,
+          );
+          subscription.expiresAt = expiresAt;
+          subscription.renewalDeclinedAt = null;
+          await manager.save(subscription);
+          // Bundled badges are paid by this subscription, so they move with it.
+          const maxBadges = plan.limits?.maxVerificationBadges;
+          const includesBadges =
+            maxBadges === null ||
+            (typeof maxBadges === 'number' && maxBadges > 0);
+          await syncIncludedBadgesForOwner(
+            manager,
+            subscription.userId,
+            {
+              included: includesBadges,
+              expiresAt: includesBadges ? expiresAt : now,
+            },
+            now,
+          );
+          return { success: true as const, id, expiresAt };
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      this.sanitize(error);
+    }
   }
 
   /**
@@ -527,7 +569,7 @@ export class SubscriptionPlansService {
           const includesBadges =
             maxBadges === null ||
             (typeof maxBadges === 'number' && maxBadges > 0);
-          const synced = await this.syncIncludedBadges(
+          const synced = await syncIncludedBadgesForOwner(
             manager,
             userId,
             {

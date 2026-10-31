@@ -380,6 +380,46 @@ test('an administrator controls the platform badge price and payment number', as
   ]);
 });
 
+test('a monthly extension clears a declined renewal', async () => {
+  const store = Object.assign(new Store(), {
+    id: 'shop',
+    ownerId: 'owner',
+    hasVerificationBadge: true,
+    verificationBadgeExpiresAt: new Date('2026-11-05T00:00:00Z'),
+    verificationIncludedInPlan: false,
+    renewalDeclinedAt: new Date('2026-10-30T00:00:00Z'),
+  });
+  const manager = {
+    findOneBy: async () => ({
+      id: 'admin',
+      email: 'admin@example.test',
+      suspendedAt: null,
+    }),
+    findOne: async () => store,
+    find: async () => [],
+    save: async () => undefined,
+    insert: async () => undefined,
+  };
+  const service = new VerificationService(
+    {
+      manager,
+      transaction: async (work: (value: unknown) => Promise<unknown>) =>
+        work(manager),
+    } as never,
+    { get: () => 'admin@example.test' } as never,
+  );
+  await service.adminExtend(
+    { id: 'admin', requestId: 'request' },
+    'shop',
+    'Monthly renewal paid',
+  );
+  // Renewing is the owner's answer: a decline recorded before the payment no
+  // longer keeps the shop out of the action queue.
+  assert.equal(store.renewalDeclinedAt, null);
+  assert.equal(store.verificationIncludedInPlan, false);
+  assert.ok(store.verificationBadgeExpiresAt);
+});
+
 test('an administrator can give a special shop unlimited verification', async () => {
   const store = Object.assign(new Store(), {
     id: 'shop',

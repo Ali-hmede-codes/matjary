@@ -10,6 +10,7 @@ import {
 } from './entities';
 import { ownerWhere } from './visibility-policy';
 import { TRIAL_EXPIRED_CODE } from './subscription-errors';
+import { VERIFICATION_GRACE_DAYS } from './verification-policy';
 
 export const FREE_LIMITS: SubscriptionLimits = {
   maxVideoDurationSeconds: 60,
@@ -165,6 +166,53 @@ export async function effectiveLimits(
   return limitsFromSubscription(
     await effectiveSubscription(manager, userId, now),
   );
+}
+
+// Plan-bundled verification badges are paid by the subscription, so they
+// follow the plan: a new or extended subscription moves their end date, and a
+// plan without badge slots ends them (the usual grace window still applies).
+// Only badges still inside the renewal window are touched, so a lapsed badge is
+// never revived without a fresh administrator review. Shared by plan assignment
+// and the one-click monthly extension so both write the same dates.
+export async function syncIncludedBadgesForOwner(
+  manager: EntityManager,
+  userId: string,
+  next: { included: boolean; expiresAt: Date | null },
+  now = new Date(),
+): Promise<number> {
+  const graceBorder = new Date(
+    now.getTime() - VERIFICATION_GRACE_DAYS * DAY_MS,
+  );
+  const stores = await manager
+    .getRepository(Store)
+    .createQueryBuilder('store')
+    .where('store.ownerId = :userId', { userId })
+    .andWhere('store.hasVerificationBadge = true')
+    .andWhere('store.verificationIncludedInPlan = true')
+    .andWhere(
+      '(store.verificationBadgeExpiresAt IS NULL OR store.verificationBadgeExpiresAt > :graceBorder)',
+      { graceBorder },
+    )
+    .setLock('pessimistic_write')
+    .getMany();
+  for (const store of stores) {
+    if (!next.included) store.verificationIncludedInPlan = false;
+    if (next.included && next.expiresAt === null) {
+      // The plan itself never ends, so the bundled badge does not either.
+      store.verificationBadgeExpiresAt = null;
+    } else if (next.expiresAt && next.expiresAt.getTime() > now.getTime()) {
+      store.verificationBadgeExpiresAt = next.expiresAt;
+    } else if (
+      !store.verificationBadgeExpiresAt ||
+      store.verificationBadgeExpiresAt.getTime() > now.getTime()
+    ) {
+      // Cancelled or slotless plans end the bundled badge now; a badge already
+      // inside its renewal window keeps the original end date.
+      store.verificationBadgeExpiresAt = now;
+    }
+  }
+  if (stores.length) await manager.save(stores);
+  return stores.length;
 }
 
 export async function assertSubscriptionActive(

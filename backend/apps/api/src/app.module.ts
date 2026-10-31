@@ -15,6 +15,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { CartsModule } from './modules/carts/carts.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { RenewalsModule } from './modules/renewals/renewals.module';
 import { UserDashboardModule } from './modules/user-dashboard/user-dashboard.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { BoostModule } from './modules/boost/boost.module';
@@ -42,6 +43,7 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     CategoriesModule,
     CartsModule,
     SubscriptionsModule,
+    RenewalsModule,
     UserDashboardModule,
     SeoModule,
     BoostModule,

@@ -54,6 +54,7 @@ import { ShopSettings } from './ShopSettings';
 import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
 import { OwnerVerification } from './OwnerVerification';
+import { OwnerNotifications, OwnerRenewalBanner } from './OwnerNotifications';
 import { StoreQr } from './StoreQr';
 import { StoreManager } from './StoreManager';
 import { TeamPanel } from './TeamPanel';
@@ -352,6 +353,10 @@ export default function OwnerPanel({ session }: { session: Session }) {
                   <NoStore />
                 )
               }
+            />
+            <Route
+              path="notifications"
+              element={member ? <OwnerOnly /> : <OwnerNotifications />}
             />
             <Route
               path="verification"
@@ -670,7 +675,15 @@ function TeamAccessCard({ store }: { store: OwnerStore }) {
 }
 function OwnerHome() {
   const { store, session, summary } = useOwner();
-  if (!store) return <NoStore />;
+  // A plan belongs to the account, so its renewal reminder must stay visible
+  // even when the owner currently has no shop to open.
+  if (!store)
+    return (
+      <>
+        <OwnerRenewalBanner />
+        <NoStore />
+      </>
+    );
   const member = store.teamRole === 'member';
   return (
     <>
@@ -703,6 +716,7 @@ function OwnerHome() {
           )
         }
       />
+      <OwnerRenewalBanner />
       <section className="panel-store-hero">
         <div>
           <span className="panel-pill">

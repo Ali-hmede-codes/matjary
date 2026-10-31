@@ -123,6 +123,11 @@ export async function purgeStoreRecords(
     'DELETE FROM store_verification_requests WHERE store_id = ?',
     [storeId],
   );
+  // Reminders have no foreign key (they are disposable), so they must be
+  // removed explicitly or a deleted shop keeps answering in the owner's tab.
+  await manager.query('DELETE FROM renewal_notices WHERE store_id = ?', [
+    storeId,
+  ]);
   await manager.query('DELETE FROM stores WHERE id = ?', [storeId]);
 
   return keys;
