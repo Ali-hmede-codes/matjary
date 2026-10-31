@@ -1,3 +1,6 @@
+// The favorites page shares the directory's shop grid and hero, and it is a
+// separate lazy route: without this import a direct visit renders unstyled.
+import './ShopsPage.css';
 import { useEffect, useMemo, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
@@ -134,6 +137,9 @@ export function FavoritesPage() {
               className="favorites-empty"
               aria-labelledby="favorites-title"
             >
+              <span className="favorites-mark" aria-hidden="true">
+                <Heart size={26} />
+              </span>
               <span className="shops-eyebrow">
                 <Heart size={13} aria-hidden="true" /> Your favorites
               </span>

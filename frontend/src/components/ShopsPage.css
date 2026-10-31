@@ -1,4 +1,7 @@
 .shops-main {
+  /* `margin: auto` turns off cross-axis stretching inside the favorites page's
+     flex column, so the width is stated explicitly instead of shrinking to fit. */
+  width: 100%;
   max-width: var(--content-max-width);
   margin: auto;
   padding: 24px var(--page-padding) 24px;
@@ -376,11 +379,25 @@
 }
 /* With no favorites there is nothing worth framing: the title, the invitation
    and the action sit flat on the page as one calm screen, while the shops and
-   their posts keep their cards once favorites exist. */
-.favorites-main-empty {
+   their posts keep their cards once favorites exist. The page owns the viewport
+   height so that calm screen centers between the topbar and the footer, and the
+   footer rests on the bottom edge of a desktop monitor instead of floating in
+   the middle of a half-empty page. */
+.favorites-page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 190px);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.favorites-page > .page-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.favorites-main-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 .favorites-empty {
   display: grid;
@@ -391,7 +408,23 @@
   padding: 40px 20px;
   text-align: center;
 }
-/* The eyebrow drops its pill here as well; nothing on this screen is boxed. */
+/* A single warm mark gives the otherwise text-only screen a focal point; it
+   echoes the rounded icon tiles used by the feed's empty state. */
+.favorites-mark {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 4px;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--line));
+  border-radius: 20px;
+  background: var(--accent-wash);
+  color: var(--primary);
+  box-shadow: 0 18px 30px -26px
+    color-mix(in srgb, var(--primary) 70%, transparent);
+}
+/* The eyebrow drops its pill here as well, leaving the heart mark above it as
+   the screen's only boxed element. */
 .favorites-empty .shops-eyebrow {
   padding: 0;
   border: 0;
@@ -553,11 +586,6 @@
 @media (max-width: 900px) {
   .shops-main {
     padding: 16px 20px 24px;
-  }
-  /* Leaves room for the header, the floating dock and the footer so the empty
-     state still reads as a single screen. */
-  .favorites-main-empty {
-    min-height: calc(100dvh - 300px);
   }
 }
 @media (max-width: 600px) {
