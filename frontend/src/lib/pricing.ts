@@ -64,6 +64,30 @@ function storageQuota(bytes: number | null | undefined): string {
   return `${value} ${units[index]}`;
 }
 
+export interface PlanVerification {
+  // A null slot count means the plan never runs out of badges.
+  unlimited: boolean;
+  included: number;
+  addOnPriceCents: number | null;
+}
+
+/*
+ * The pricing page gives the blue tick its own block, so a plan that offers it
+ * hides the plain feature row and reads this shape instead. A plan with no
+ * slots and no add-on price keeps the ordinary "not included" row.
+ */
+export function planVerification(
+  plan: SubscriptionPlan,
+): PlanVerification | null {
+  const slots = plan.limits.maxVerificationBadges;
+  const price = plan.limits.verificationBadgePriceCents;
+  const addOnPriceCents = typeof price === 'number' && price > 0 ? price : null;
+  if (slots === null) return { unlimited: true, included: 0, addOnPriceCents };
+  const included = typeof slots === 'number' && slots > 0 ? slots : 0;
+  if (!included && addOnPriceCents === null) return null;
+  return { unlimited: false, included, addOnPriceCents };
+}
+
 function verificationFeature(limits: SubscriptionPlan['limits']) {
   const included = limits.maxVerificationBadges;
   const price = limits.verificationBadgePriceCents;

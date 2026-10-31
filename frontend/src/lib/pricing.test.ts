@@ -5,6 +5,7 @@ import {
   planBadge,
   planFeatures,
   planPrice,
+  planVerification,
   type SubscriptionPlan,
 } from './pricing.ts';
 
@@ -102,4 +103,32 @@ test('pricing distinguishes zero, unlimited, missing quotas and disabled feature
       expected,
     );
   }
+});
+
+test('pricing exposes the verification offer behind the badge block', () => {
+  const verification = (limits: SubscriptionPlan['limits']) =>
+    planVerification({ ...plan, limits });
+  assert.equal(verification({}), null);
+  assert.equal(verification({ maxVerificationBadges: 0 }), null);
+  assert.deepEqual(verification({ maxVerificationBadges: null }), {
+    unlimited: true,
+    included: 0,
+    addOnPriceCents: null,
+  });
+  assert.deepEqual(verification({ maxVerificationBadges: 2 }), {
+    unlimited: false,
+    included: 2,
+    addOnPriceCents: null,
+  });
+  assert.deepEqual(
+    verification({
+      maxVerificationBadges: 0,
+      verificationBadgePriceCents: 500,
+    }),
+    { unlimited: false, included: 0, addOnPriceCents: 500 },
+  );
+  assert.deepEqual(
+    verification({ maxVerificationBadges: 1, verificationBadgePriceCents: 0 }),
+    { unlimited: false, included: 1, addOnPriceCents: null },
+  );
 });

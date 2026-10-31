@@ -3,30 +3,43 @@ import { usePageSeo } from '../hooks/usePageSeo';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from 'react';
+import {
   ArrowRight,
+  BadgeCheck,
   Building2,
   Check,
   ChevronDown,
   CircleHelp,
   CreditCard,
+  Crown,
   Gift,
-  Layers,
-  Mail,
+  MessageCircle,
   Minus,
+  Rocket,
   ShieldCheck,
   Store,
   Tag,
+  X,
 } from 'lucide-react';
 import { getJson, loginUrl } from '../lib/api';
-import { SUPPORT_EMAIL } from '../lib/contact';
+import { SUPPORT_PHONE } from '../lib/contact';
+import { planInquiryLink } from '../lib/plan-inquiry';
 import {
   billingLabel,
   planBadge,
   planFeatures,
   planPrice,
+  planVerification,
   type SubscriptionPlan,
 } from '../lib/pricing';
+import { formatProductPrice } from '../lib/storefront';
+import { contrastColor } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { StatusBanner } from './Feedback';
 import { SiteFooter } from './SiteFooter';
@@ -34,13 +47,77 @@ import { SiteHeader } from './SiteHeader';
 
 const isFreePlan = (plan: SubscriptionPlan) => /^0+$/u.test(plan.priceCents);
 
+// Each paid tier owns a visual identity instead of sharing one card: the calm
+// entry tier, the brand-filled middle, and the dark premium field. Known slugs
+// keep their identity even when an administrator reorders the plan list, and
+// any extra plan cycles through the tones so the page never looks broken.
+const tierTones = ['calm', 'brand', 'lux'] as const;
+type TierTone = (typeof tierTones)[number];
+
+function tierTone(plan: SubscriptionPlan, index: number): TierTone {
+  const slug = plan.slug.toLowerCase();
+  if (slug.includes('premium')) return 'lux';
+  if (slug.includes('pro')) return 'brand';
+  if (slug.includes('basic') || slug.includes('starter')) return 'calm';
+  return tierTones[index % tierTones.length] ?? 'calm';
+}
+
+function tierIcon(plan: SubscriptionPlan) {
+  const slug = plan.slug.toLowerCase();
+  if (slug.includes('premium')) return Crown;
+  if (slug.includes('pro')) return Rocket;
+  if (slug.includes('basic') || slug.includes('starter')) return Store;
+  return Building2;
+}
+
+// Long quota names wrap the leader rows; the shortened forms keep one line.
+function shortLabel(label: string) {
+  const short = label
+    .replace(/^Max /u, '')
+    .replace(/^Story slots/u, 'Stories')
+    .replace(/^Shopping cart$/u, 'Cart');
+  return short.charAt(0).toUpperCase() + short.slice(1);
+}
+
 // Quota rows ("1", "Unlimited") read better as values than as checkmarks, so the
-// free-trial summary shows them as compact stat pills instead of a full list.
+// free-trial summary shows them as compact stats instead of a full list. The
+// labels are shortened again so six of them still share one row of columns.
+function trialStatLabel(label: string) {
+  return shortLabel(label)
+    .replace(/ per shop$/u, '')
+    .replace(/^Media storage$/u, 'Storage');
+}
+
 function trialStats(plan: SubscriptionPlan) {
   return planFeatures(plan).flatMap(({ label, value }) =>
-    typeof value === 'string'
-      ? [{ label: label.replace(/^Max /u, ''), value }]
-      : [],
+    typeof value === 'string' ? [{ label: trialStatLabel(label), value }] : [],
+  );
+}
+
+function VerificationMark({ plan }: { plan: SubscriptionPlan }) {
+  const offer = planVerification(plan);
+  if (!offer) return null;
+  // Badge add-ons are priced in USD regardless of the plan's own currency, the
+  // same way the feature row formats them, so both readings always agree.
+  const addOn =
+    offer.addOnPriceCents === null
+      ? null
+      : `${formatProductPrice(String(offer.addOnPriceCents), 'USD')}/mo`;
+  const detail = offer.unlimited
+    ? 'Every shop you own can carry the blue tick.'
+    : offer.included > 0
+      ? `${offer.included} verified ${offer.included === 1 ? 'badge' : 'badges'} each month${addOn ? `, then ${addOn} each` : '.'}`
+      : `Add the blue tick for ${addOn} per shop.`;
+  return (
+    <div className="tier-verify">
+      <span className="tier-verify-seal" aria-hidden="true">
+        <BadgeCheck size={19} />
+      </span>
+      <div className="tier-verify-copy">
+        <strong>Verified badge</strong>
+        <span>{detail}</span>
+      </div>
+    </div>
   );
 }
 
@@ -51,7 +128,7 @@ function TrialCard({ plan }: { plan: SubscriptionPlan }) {
     <article className="trial-card">
       <div className="trial-intro">
         <span className="trial-icon" aria-hidden="true">
-          <Gift size={24} />
+          <Gift size={22} />
         </span>
         <div className="trial-copy">
           <p className="trial-kicker">{planBadge(plan)}</p>
@@ -93,88 +170,234 @@ function TrialCard({ plan }: { plan: SubscriptionPlan }) {
   );
 }
 
-function PlanCard({
+interface ContactSession {
+  user: { email: string; displayName: string };
+}
+
+/*
+ * The plan buttons hand the visitor to the platform's global WhatsApp number.
+ * The message is built from this dialog, so the team receives a lead with the
+ * person's name, address and chosen plan; a signed-in visitor is prefilled from
+ * the session and can still correct the fields before sending.
+ */
+function PlanContactDialog({
   plan,
-  contactEmail,
+  siteName,
+  onClose,
+}: {
+  plan: SubscriptionPlan | null;
+  siteName: string;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const session = useQuery({
+    queryKey: ['session'],
+    queryFn: ({ signal }) => getJson<ContactSession>('auth/me', signal),
+    // A signed-out visitor answers 401; that is simply an empty form.
+    retry: false,
+    staleTime: 30_000,
+  });
+  const [name, setName] = useState(session.data?.user.displayName ?? '');
+  const [email, setEmail] = useState(session.data?.user.email ?? '');
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    element.showModal();
+    element.querySelector('input')?.focus();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+      element.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const user = session.data?.user;
+    if (!user) return;
+    // A late session answer fills the fields unless the visitor already typed.
+    setName((value) => value || user.displayName);
+    setEmail((value) => value || user.email);
+  }, [session.data]);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const link = planInquiryLink({
+      name,
+      email,
+      planName: plan?.name,
+      priceLabel: plan ? planPrice(plan) : null,
+      billingLabel: plan ? billingLabel(plan.billingCycle) : null,
+      siteName,
+    });
+    // `noopener` in the feature string makes window.open return null even when
+    // it succeeds, so open normally, cut the opener, and navigate only when the
+    // browser truly blocked the tab.
+    const popup = window.open(link, '_blank');
+    if (popup) popup.opener = null;
+    else window.location.assign(link);
+    onClose();
+  };
+
+  return (
+    <dialog
+      ref={dialog}
+      className="plan-contact"
+      aria-labelledby="plan-contact-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form className="plan-contact-card" onSubmit={submit}>
+        <div className="plan-contact-head">
+          <span className="plan-contact-icon" aria-hidden="true">
+            <MessageCircle size={18} />
+          </span>
+          <div>
+            <p className="plan-contact-kicker">WhatsApp</p>
+            <h2 id="plan-contact-title">
+              {plan ? `Ask about ${plan.name}` : 'Talk to our team'}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="plan-contact-close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        {plan && (
+          <p className="plan-contact-plan">
+            <span>{plan.name}</span>
+            <strong>
+              {planPrice(plan)} <small>{billingLabel(plan.billingCycle)}</small>
+            </strong>
+          </p>
+        )}
+        <div className="plan-contact-fields">
+          <label>
+            <span>Your name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoComplete="name"
+              maxLength={120}
+              required
+            />
+          </label>
+          <label>
+            <span>Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              placeholder="you@gmail.com"
+              maxLength={254}
+              required
+            />
+          </label>
+        </div>
+        <p className="plan-contact-hint">
+          Your name, email and {plan ? 'this plan' : 'your question'} are added
+          to a WhatsApp message for {SUPPORT_PHONE}. You can edit it before
+          sending.
+        </p>
+        <div className="plan-contact-actions">
+          <button className="primary-button" type="submit">
+            <MessageCircle size={17} aria-hidden="true" /> Open WhatsApp
+          </button>
+          <button className="secondary-button" type="button" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function PlanTier({
+  plan,
+  index,
+  onAsk,
   featured,
 }: {
   plan: SubscriptionPlan;
-  contactEmail: string | null;
+  index: number;
+  onAsk: (plan: SubscriptionPlan) => void;
   featured: boolean;
 }) {
-  const contact = Boolean(contactEmail);
-  const actionUrl = contact
-    ? `mailto:${contactEmail}?subject=${encodeURIComponent(`I'm interested in the ${plan.name} plan`)}`
-    : loginUrl;
-  const PlanIcon =
-    plan.slug === 'basic'
-      ? Store
-      : plan.slug === 'premium'
-        ? Layers
-        : Building2;
+  const Icon = tierIcon(plan);
+  const offer = planVerification(plan);
+  // A plan with its own verification block hides the duplicate row below.
+  const features = planFeatures(plan).filter(
+    ({ label }) => !(offer && label === 'Verification badge'),
+  );
   return (
-    <article className={`plan-card ${featured ? 'plan-card-featured' : ''}`}>
-      <div className="plan-head">
-        <span className="plan-icon" aria-hidden="true">
-          <PlanIcon size={22} />
+    <article
+      className={`tier tier-${tierTone(plan, index)}${featured ? ' tier-featured' : ''}`}
+    >
+      {featured && (
+        <p className="tier-flag">
+          <span aria-hidden="true" />
+          Best value
+        </p>
+      )}
+      <div className="tier-head">
+        <Icon className="tier-mark" size={26} aria-hidden="true" />
+        <span className="tier-index" aria-hidden="true">
+          {String(index + 1).padStart(2, '0')}
         </span>
-        {featured && <span className="plan-flag">Best value</span>}
       </div>
       <h2>{plan.name}</h2>
-      <span className="plan-kind">{planBadge(plan)}</span>
-      <p className="plan-description">
+      <p className="tier-description">
         {plan.description || 'Explore the features included in this plan.'}
       </p>
-      <div className="plan-price">
+      <p className="tier-price">
         <strong>{planPrice(plan)}</strong>
         <span>{billingLabel(plan.billingCycle)}</span>
-      </div>
-      <p className="plan-currency">Prices in {plan.currency}</p>
-      <a
-        className={featured ? 'primary-button' : 'secondary-button'}
-        href={actionUrl}
-        aria-label={
-          contact
-            ? `Contact us about the ${plan.name} plan`
-            : `Sign in to get started with ${plan.name}`
-        }
+      </p>
+      <p className="tier-currency">Prices in {plan.currency}</p>
+      <VerificationMark plan={plan} />
+      <button
+        className="tier-action"
+        type="button"
+        onClick={() => onAsk(plan)}
+        aria-label={`Ask about the ${plan.name} plan on WhatsApp`}
       >
-        {contact ? 'Ask about this plan' : 'Sign in to get started'}
-        <ArrowRight size={17} aria-hidden="true" />
-      </a>
-      <div className="plan-inclusions">
+        Ask on WhatsApp
+        <MessageCircle size={16} aria-hidden="true" />
+      </button>
+      <div className="tier-features">
         <h3>What’s included</h3>
         <ul>
-          {planFeatures(plan).map(({ label, value }) => (
+          {features.map(({ label, value }) => (
             <li
               key={label}
-              className={value === false ? 'plan-unavailable' : ''}
+              className={`tier-feature-row${value === false ? ' is-off' : ''}`}
             >
-              <span
-                className={`plan-feature-icon ${
-                  typeof value === 'string'
-                    ? 'is-quota'
-                    : value
-                      ? 'is-included'
-                      : 'is-off'
-                }`}
-                aria-hidden="true"
-              >
-                {typeof value === 'string' ? (
-                  <span className="plan-feature-dot" />
-                ) : value ? (
-                  <Check size={13} />
-                ) : (
-                  <Minus size={13} />
-                )}
-              </span>
-              <span className="plan-feature-label">{label}</span>
+              <span className="tier-feature-name">{shortLabel(label)}</span>
               {typeof value === 'string' ? (
-                <strong>{value}</strong>
+                <strong className="tier-feature-value">{value}</strong>
               ) : (
-                <span className="sr-only">
-                  {value ? 'Included' : 'Not included'}
-                </span>
+                <>
+                  <span
+                    className={`tier-feature-state ${value ? 'is-on' : 'is-off'}`}
+                    aria-hidden="true"
+                  >
+                    {value ? <Check size={14} /> : <Minus size={14} />}
+                  </span>
+                  <span className="sr-only">
+                    {value ? 'Included' : 'Not included'}
+                  </span>
+                </>
               )}
             </li>
           ))}
@@ -190,9 +413,10 @@ export function PricingPage() {
   // The dashboard sends an owner here once when the plan ends, so the page can
   // say why they arrived instead of looking like a generic marketing page.
   const planEnded = params.get('ended') === '1';
-  // An administrator can point plan questions at a different inbox; otherwise
-  // the platform support address is used.
-  const contactEmail = settings.contactEmail || SUPPORT_EMAIL;
+  // Closed dialog is null; a plan (or a null plan for general help) opens it.
+  const [contact, setContact] = useState<{
+    plan: SubscriptionPlan | null;
+  } | null>(null);
   const plansQuery = useQuery({
     queryKey: ['subscription-plans'],
     queryFn: ({ signal }) =>
@@ -207,6 +431,10 @@ export function PricingPage() {
   const featuredSlug = paidPlans.length
     ? (paidPlans[Math.floor((paidPlans.length - 1) / 2)]?.slug ?? null)
     : null;
+  // Gold buttons need readable text whatever secondary colour the site uses.
+  const secondaryInk = {
+    '--tier-secondary-ink': contrastColor(settings.secondaryColor),
+  } as CSSProperties;
 
   usePageSeo({
     title: `Plans & pricing — ${settings.siteName}`,
@@ -222,34 +450,69 @@ export function PricingPage() {
       </a>
       <SiteHeader settings={settings} view="pricing" />
       <div className="page-shell">
-        <main className="pricing-main" id="pricing-main" tabIndex={-1}>
+        <main
+          className="pricing-main"
+          id="pricing-main"
+          tabIndex={-1}
+          style={secondaryInk}
+        >
           <section className="pricing-hero" aria-labelledby="pricing-title">
-            <span className="pricing-eyebrow">
-              <Tag size={13} aria-hidden="true" /> Plans for every stage
-            </span>
-            <h1 id="pricing-title">Plans &amp; pricing</h1>
-            <p className="pricing-lede">
-              Find the right space for your posts, products, and next big idea.
-            </p>
-            <ul className="pricing-highlights">
-              {freeTrialDays && (
+            <div className="pricing-hero-copy">
+              <span className="pricing-eyebrow">
+                <Tag size={13} aria-hidden="true" /> Plans for every stage
+              </span>
+              <h1 id="pricing-title">Plans &amp; pricing</h1>
+              <p className="pricing-lede">
+                Find the right space for your posts, products, and next big
+                idea.
+              </p>
+              <ul className="pricing-highlights">
+                {freeTrialDays && (
+                  <li>
+                    <Gift size={14} aria-hidden="true" />
+                    {freeTrialDays}-day free trial
+                  </li>
+                )}
                 <li>
-                  <Gift size={14} aria-hidden="true" />
-                  {freeTrialDays}-day free trial
+                  <CreditCard size={14} aria-hidden="true" />
+                  No card required
                 </li>
-              )}
+                <li>
+                  <ShieldCheck size={14} aria-hidden="true" />
+                  Set up with our team
+                </li>
+              </ul>
+              <a className="pricing-help-link" href="#pricing-faq">
+                <CircleHelp size={16} aria-hidden="true" /> Plan help
+              </a>
+            </div>
+            <ol className="pricing-steps" aria-label="How plans work">
               <li>
-                <CreditCard size={14} aria-hidden="true" />
-                No card required
+                <span aria-hidden="true">01</span>
+                <div>
+                  <strong>Start with the trial</strong>
+                  <p>
+                    {freeTrialDays
+                      ? `${freeTrialDays} days of the core features, no card needed.`
+                      : 'Core features first, no card needed.'}
+                  </p>
+                </div>
               </li>
               <li>
-                <ShieldCheck size={14} aria-hidden="true" />
-                Set up with our team
+                <span aria-hidden="true">02</span>
+                <div>
+                  <strong>Pick a paid plan</strong>
+                  <p>Our team activates it and confirms the terms with you.</p>
+                </div>
               </li>
-            </ul>
-            <a className="pricing-help-link" href="#pricing-faq">
-              <CircleHelp size={16} aria-hidden="true" /> Plan help
-            </a>
+              <li>
+                <span aria-hidden="true">03</span>
+                <div>
+                  <strong>Keep everything live</strong>
+                  <p>Published shops and posts stay online as you grow.</p>
+                </div>
+              </li>
+            </ol>
           </section>
 
           {planEnded && (
@@ -283,9 +546,9 @@ export function PricingPage() {
                   <span />
                   <span />
                 </div>
-                <div className="pricing-grid" aria-hidden="true">
+                <div className="pricing-tiers-skeleton" aria-hidden="true">
                   {[0, 1, 2].map((id) => (
-                    <div className="plan-skeleton" key={id}>
+                    <div className="tier-skeleton" key={id}>
                       <span />
                       <span />
                       <span />
@@ -325,14 +588,13 @@ export function PricingPage() {
                   </div>
                 )}
                 {paidPlans.length > 0 && (
-                  <div
-                    className={`pricing-grid ${paidPlans.length < 3 ? 'is-sparse' : ''}`}
-                  >
-                    {paidPlans.map((plan) => (
-                      <PlanCard
+                  <div className="pricing-tiers">
+                    {paidPlans.map((plan, index) => (
+                      <PlanTier
                         key={plan.slug}
                         plan={plan}
-                        contactEmail={contactEmail}
+                        index={index}
+                        onAsk={(chosen) => setContact({ plan: chosen })}
                         featured={plan.slug === featuredSlug}
                       />
                     ))}
@@ -340,8 +602,8 @@ export function PricingPage() {
                 )}
                 <p className="pricing-note">
                   Every account starts with a free trial. Paid plans are
-                  arranged with our team; signing in does not purchase or
-                  activate a paid subscription.
+                  arranged with our team on WhatsApp; signing in does not
+                  purchase or activate a paid subscription.
                 </p>
               </>
             )}
@@ -379,9 +641,10 @@ export function PricingPage() {
                   <ChevronDown size={18} aria-hidden="true" />
                 </summary>
                 <p>
-                  Contact our team to arrange your plan and confirm its terms.
-                  Paid subscriptions are assigned by an administrator; there is
-                  no online payment checkout on this page.
+                  Message our team on WhatsApp to arrange your plan and confirm
+                  its terms. Paid subscriptions are assigned by an
+                  administrator; there is no online payment checkout on this
+                  page.
                 </p>
               </details>
               <details>
@@ -396,6 +659,18 @@ export function PricingPage() {
                   your account.
                 </p>
               </details>
+              <details>
+                <summary>
+                  How does the verified badge work?
+                  <ChevronDown size={18} aria-hidden="true" />
+                </summary>
+                <p>
+                  The blue tick is reviewed and granted by an administrator. A
+                  plan can bundle monthly badge slots; beyond those slots an
+                  add-on price applies per shop. Each badge lasts one month and
+                  stays visible for a short grace window after it ends.
+                </p>
+              </details>
             </div>
           </section>
           <section
@@ -405,27 +680,26 @@ export function PricingPage() {
             <div>
               <h2 id="pricing-help-title">Need a hand choosing?</h2>
               <p>
-                {contactEmail
-                  ? 'Have questions about a plan? We’re here to help.'
-                  : 'See what independent businesses are sharing on our platform.'}
+                Have questions about a plan? Message us and we’ll help you
+                choose.
               </p>
             </div>
-            <a
+            <button
               className="primary-button"
-              href={contactEmail ? `mailto:${contactEmail}` : '/'}
+              type="button"
+              onClick={() => setContact({ plan: null })}
             >
-              {contactEmail ? (
-                <>
-                  <Mail size={17} aria-hidden="true" /> Get in touch
-                </>
-              ) : (
-                <>
-                  <ArrowLeft size={17} aria-hidden="true" /> Explore discoveries
-                </>
-              )}
-            </a>
+              <MessageCircle size={17} aria-hidden="true" /> Message us
+            </button>
           </section>
           <SiteFooter settings={settings} />
+          {contact && (
+            <PlanContactDialog
+              plan={contact.plan}
+              siteName={settings.siteName}
+              onClose={() => setContact(null)}
+            />
+          )}
         </main>
       </div>
     </div>
