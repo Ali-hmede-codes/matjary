@@ -847,65 +847,12 @@
 .panel-app .panel-settings-fieldset > .panel-two-fields {
   margin-top: 0;
 }
-/* Availability has two explicit states: "out of stock" stays published but
-   stops taking orders, so it must not look like archiving. */
-.panel-app .panel-availability {
-  display: block;
-  min-width: 0;
-}
-.panel-availability > legend {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  margin-bottom: 10px;
-}
-.panel-availability > legend span {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #eef3ec;
-  color: var(--panel-muted);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.panel-availability-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.panel-app .panel-availability-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--panel-line);
-  border-radius: 11px;
-  background: #fff;
-  font-weight: 500;
-  cursor: pointer;
-}
-.panel-availability-option.is-selected {
-  border-color: #7f9a79;
-  background: #f1f6eb;
-}
-.panel-availability-option input {
-  flex: none;
-  margin-top: 1px;
-}
-.panel-availability-option strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 650;
-}
-.panel-availability-option small {
-  display: block;
-  margin-top: 2px;
-  color: var(--panel-muted);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.5;
+/* The editor opens with one short sentence so a new owner knows how little is
+   required before the form itself starts. */
+.panel-editor-intro {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 .panel-option-group {
   display: grid;
@@ -2437,9 +2384,6 @@
   .panel-content-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
-  }
-  .panel-availability-options {
-    grid-template-columns: 1fr;
   }
   .panel-content-card .panel-content-body {
     padding: 12px;

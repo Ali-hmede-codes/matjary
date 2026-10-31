@@ -210,6 +210,20 @@ function wholeNumber(value: string, max: number): number | null | undefined {
     : undefined;
 }
 
+// An existing item that already stores inventory details keeps its group open
+// so nothing it saved looks lost. A new item starts folded away.
+function hasInventoryDetails(item: Content | null): boolean {
+  if (!item) return false;
+  return (
+    item.stockQuantity != null ||
+    Boolean(item.sku) ||
+    item.weightGrams != null ||
+    Boolean(item.tags?.length) ||
+    item.requiresShipping === false ||
+    (item.sortOrder ?? 0) > 0
+  );
+}
+
 function seoWrite(draft: SeoDraft, product: boolean) {
   const articleTags = tagList(draft.articleTags);
   return {
@@ -320,6 +334,14 @@ export function ContentEditor({
   const [sortOrder, setSortOrder] = useState(String(item?.sortOrder ?? 0));
   const [shipping, setShipping] = useState(
     item?.requiresShipping ?? store.storeType !== 'restaurant_menu',
+  );
+  // The optional groups stay folded until the owner asks for them, so a new
+  // item shows only what is needed to publish.
+  const [inventoryOpen, setInventoryOpen] = useState(() =>
+    hasInventoryDetails(item),
+  );
+  const [optionsOpen, setOptionsOpen] = useState(() =>
+    Boolean(item?.options?.length),
   );
   const [seo, setSeo] = useState<SeoDraft>(emptySeo);
   const [seoBaseline, setSeoBaseline] = useState(JSON.stringify(emptySeo));
@@ -833,27 +855,34 @@ export function ContentEditor({
       : { groups: null, error: '' };
     if (validated.error) {
       setOptionsError(validated.error);
+      // The field at fault may sit in the folded group, so open it before the
+      // owner is asked to fix anything.
+      setOptionsOpen(true);
       return;
     }
     // Inventory fields are optional, but anything typed must be a whole number
     // the API will accept; blank clears the stored value.
     const stockQuantity = wholeNumber(stock, 4294967295);
     if (product && stockQuantity === undefined) {
+      setInventoryOpen(true);
       setError('Available stock must be a whole number, or left blank.');
       return;
     }
     const weightGrams = wholeNumber(weight, 4294967295);
     if (product && weightGrams === undefined) {
+      setInventoryOpen(true);
       setError('Weight must be a whole number of grams, or left blank.');
       return;
     }
     const sortOrderValue = wholeNumber(sortOrder, 4294967295);
     if (product && sortOrderValue === undefined) {
+      setInventoryOpen(true);
       setError('Sort order must be a whole number, or left blank.');
       return;
     }
     const parsedTags = tagList(tags);
     if (product && parsedTags === undefined) {
+      setInventoryOpen(true);
       setError(
         'Use up to 20 tags, each under 100 characters, separated by commas.',
       );
@@ -1152,6 +1181,12 @@ export function ContentEditor({
     >
       <form className="panel-form" onSubmit={submit}>
         {notice && <Notice>{notice}</Notice>}
+        {product && (
+          <p className="panel-muted panel-editor-intro">
+            Only a name, a description, a price and a photo are needed.
+            Everything else is optional.
+          </p>
+        )}
         <label>
           {product ? 'Item name' : 'Post title'}
           <input
@@ -1166,7 +1201,7 @@ export function ContentEditor({
             }
           />
         </label>
-        {product && (
+        {product && record && (
           <div className="panel-slug-preview">
             <span className="panel-slug-preview-label">Web address</span>
             <code>
@@ -1243,7 +1278,80 @@ export function ContentEditor({
                 {priceError}
               </p>
             )}
-            {saleEditor}
+          </>
+        )}
+        {!product && record && (
+          <>
+            {media.isPending ? (
+              <Loading />
+            ) : media.isError ? (
+              <Retry error={media.error} retry={() => void media.refetch()} />
+            ) : (
+              <div className="panel-photo-grid">
+                {media.data.map((asset) => {
+                  const key = asset.variants.find(
+                    (v) =>
+                      v.mimeType ===
+                      (asset.kind === 'video' ? 'video/mp4' : 'image/webp'),
+                  )?.storageKey;
+                  return key ? (
+                    asset.kind === 'video' ? (
+                      <video key={asset.id} controls src={storeMediaUrl(key)} />
+                    ) : (
+                      <img
+                        key={asset.id}
+                        src={storeMediaUrl(key)}
+                        alt="Post media"
+                      />
+                    )
+                  ) : (
+                    <span className="panel-pill" key={asset.id}>
+                      {asset.status}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+        {/* Media is part of the essentials, so it sits right behind the name
+            and price it depends on. Media hangs off a saved row: the first
+            picked file creates the private draft instead of asking the owner
+            to save first. */}
+        <MediaUpload
+          targetId={record ? record.id : ensureDraftId}
+          purpose={product ? 'product_image' : 'post'}
+          label={product ? 'Product photos' : 'Photos & videos'}
+          keys={keys}
+          onChange={changeMedia}
+          onBusy={setUploading}
+          onPending={setProcessing}
+          disabled={busy || uploading || processing || !readyForMedia}
+          allowVideo={!product}
+          maxImageBytes={maxImageBytes}
+          maxVideoBytes={maxVideoBytes}
+        />
+        {!readyForMedia && (
+          <p className="panel-muted">
+            {product
+              ? 'Add a name and a valid price, then choose photos. They upload right away.'
+              : 'Add a title, then choose photos or videos. They upload right away.'}
+          </p>
+        )}
+        {!product && (processing || existingPending) && (
+          <p className="panel-muted" role="status">
+            Media is still processing. You can publish now; it will appear
+            automatically when it is ready.
+          </p>
+        )}
+        {existingFailed && (
+          <Notice error>
+            A media upload failed. You can add a supported replacement; failed
+            uploads are not shown publicly.
+          </Notice>
+        )}
+        {product && (
+          <>
             <label>
               Category
               <select
@@ -1324,276 +1432,282 @@ export function ContentEditor({
                 </p>
               )}
             </div>
-            <fieldset className="panel-availability">
-              <legend>
-                Availability <span>Shown to shoppers</span>
-              </legend>
-              <div className="panel-availability-options">
-                {(
-                  [
-                    [
-                      'active',
-                      'In stock',
-                      'Shoppers can order this item right away.',
-                    ],
-                    [
-                      'out_of_stock',
-                      'Out of stock',
-                      'It stays on your shop, but ordering is paused.',
-                    ],
-                  ] as const
-                ).map(([value, title, hint]) => (
-                  <label
-                    key={value}
-                    className={`panel-availability-option${availability === value ? ' is-selected' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="availability"
-                      value={value}
-                      checked={availability === value}
-                      onChange={() => setAvailability(value)}
-                    />
-                    <span>
-                      <strong>{title}</strong>
-                      <small>{hint}</small>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <label className="panel-toggle">
+              <input
+                type="checkbox"
+                checked={availability === 'active'}
+                onChange={(e) =>
+                  setAvailability(e.target.checked ? 'active' : 'out_of_stock')
+                }
+              />
+              In stock
+              <small>
+                Shoppers can order this item right away. Turn it off when you
+                run out; the item stays on your shop but ordering pauses.
+              </small>
+            </label>
+            {saleEditor}
             <fieldset className="panel-settings-fieldset">
               <legend>
                 Inventory &amp; shipping <span>Optional</span>
               </legend>
-              <p className="panel-muted">
-                Stock, SKU and weight help you track what you sell. Tags and
-                sort order shape how this item appears in your shop.
-              </p>
-              <div className="panel-two-fields">
-                <label>
-                  Available stock
-                  <input
-                    type="number"
-                    min={0}
-                    max={4294967295}
-                    step={1}
-                    value={stock}
-                    onChange={(e) => setStock(e.target.value)}
-                    placeholder="Leave blank to skip stock tracking"
-                  />
-                </label>
-                <label>
-                  SKU
-                  <input
-                    maxLength={100}
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
-                    placeholder="e.g. MUG-001"
-                  />
-                  <small>Your own code for this item.</small>
-                </label>
-              </div>
-              <div className="panel-two-fields">
-                <label>
-                  Weight (grams)
-                  <input
-                    type="number"
-                    min={0}
-                    max={4294967295}
-                    step={1}
-                    value={weight}
-                    onChange={(e) => setWeight(e.target.value)}
-                    placeholder="Used for shipping"
-                  />
-                </label>
-                <label>
-                  Sort order
-                  <input
-                    type="number"
-                    min={0}
-                    max={4294967295}
-                    step={1}
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value)}
-                  />
-                  <small>Lower numbers appear first in your shop.</small>
-                </label>
-              </div>
-              <label>
-                Tags
-                <input
-                  maxLength={2100}
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  placeholder="e.g. handmade, ceramic, gift"
-                />
-                <small>
-                  Separate tags with commas. Up to 20 tags help shoppers find
-                  this item.
-                </small>
-              </label>
               <label className="panel-toggle">
                 <input
                   type="checkbox"
-                  checked={shipping}
-                  onChange={(e) => setShipping(e.target.checked)}
+                  checked={inventoryOpen}
+                  onChange={(e) => setInventoryOpen(e.target.checked)}
                 />
-                This item needs shipping
+                Track stock and shipping
                 <small>
-                  Turn off for pickups, digital goods, or dishes served at your
-                  place.
+                  Stock count, SKU, weight, tags and sort order. Leave this off
+                  if you do not need them.
                 </small>
               </label>
+              {inventoryOpen && (
+                <>
+                  <div className="panel-two-fields">
+                    <label>
+                      Available stock
+                      <input
+                        type="number"
+                        min={0}
+                        max={4294967295}
+                        step={1}
+                        value={stock}
+                        onChange={(e) => setStock(e.target.value)}
+                        placeholder="Leave blank to skip stock tracking"
+                      />
+                    </label>
+                    <label>
+                      SKU
+                      <input
+                        maxLength={100}
+                        value={sku}
+                        onChange={(e) => setSku(e.target.value)}
+                        placeholder="e.g. MUG-001"
+                      />
+                      <small>Your own code for this item.</small>
+                    </label>
+                  </div>
+                  <div className="panel-two-fields">
+                    <label>
+                      Weight (grams)
+                      <input
+                        type="number"
+                        min={0}
+                        max={4294967295}
+                        step={1}
+                        value={weight}
+                        onChange={(e) => setWeight(e.target.value)}
+                        placeholder="Used for shipping"
+                      />
+                    </label>
+                    <label>
+                      Sort order
+                      <input
+                        type="number"
+                        min={0}
+                        max={4294967295}
+                        step={1}
+                        value={sortOrder}
+                        onChange={(e) => setSortOrder(e.target.value)}
+                      />
+                      <small>Lower numbers appear first in your shop.</small>
+                    </label>
+                  </div>
+                  <label>
+                    Tags
+                    <input
+                      maxLength={2100}
+                      value={tags}
+                      onChange={(e) => setTags(e.target.value)}
+                      placeholder="e.g. handmade, ceramic, gift"
+                    />
+                    <small>
+                      Separate tags with commas. Up to 20 tags help shoppers
+                      find this item.
+                    </small>
+                  </label>
+                  <label className="panel-toggle">
+                    <input
+                      type="checkbox"
+                      checked={shipping}
+                      onChange={(e) => setShipping(e.target.checked)}
+                    />
+                    This item needs shipping
+                    <small>
+                      Turn off for pickups, digital goods, or dishes served at
+                      your place.
+                    </small>
+                  </label>
+                </>
+              )}
             </fieldset>
             <fieldset className="panel-option-editor">
               <legend>
                 Options <span>Optional</span>
               </legend>
-              <p className="panel-muted">
-                Add choices such as Size or Color. Shoppers must pick one value
-                from each option. Prices are optional: leave them blank to use
-                the item’s base price.
-              </p>
-              {options.map((group, index) => (
-                <div className="panel-option-group" key={index}>
-                  <div className="panel-option-group-head">
-                    <label>
-                      Option name
-                      <input
-                        maxLength={60}
-                        value={group.name}
-                        onChange={(e) =>
-                          updateOption(index, {
-                            ...group,
-                            name: e.target.value,
-                          })
-                        }
-                        placeholder="e.g. Size"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="panel-option-remove"
-                      aria-label={`Remove ${group.name || 'option'}`}
-                      title="Remove option"
-                      onClick={() => removeOption(index)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  <label className="panel-option-price-toggle">
-                    <input
-                      type="checkbox"
-                      checked={group.priced}
-                      onChange={() => toggleOptionPrices(index)}
-                    />
-                    <span>
-                      Set a price for each value
-                      <small>
-                        Example: $10 small, $15 medium, $20 large. A blank price
-                        uses the item’s base price.
-                      </small>
-                    </span>
-                  </label>
-                  <div className="panel-option-values">
-                    {group.values.map((value, valueIndex) => (
-                      <div
-                        className={`panel-option-value-row${group.priced ? '' : ' is-plain'}`}
-                        key={valueIndex}
-                      >
-                        <label className="panel-option-value-label">
-                          Value
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={optionsOpen}
+                  onChange={(e) => {
+                    const open = e.target.checked;
+                    setOptionsOpen(open);
+                    // Opening an empty group would ask for a second click, so
+                    // the first option starts right away.
+                    if (open && !options.length) addOption();
+                  }}
+                />
+                Sell choices such as Size or Color
+                <small>
+                  Shoppers pick one value from each option. Prices are optional:
+                  a blank price uses the item’s base price.
+                </small>
+              </label>
+              {optionsOpen && (
+                <>
+                  {options.map((group, index) => (
+                    <div className="panel-option-group" key={index}>
+                      <div className="panel-option-group-head">
+                        <label>
+                          Option name
                           <input
-                            maxLength={80}
-                            value={value.label}
+                            maxLength={60}
+                            value={group.name}
                             onChange={(e) =>
-                              updateValue(index, valueIndex, {
-                                label: e.target.value,
+                              updateOption(index, {
+                                ...group,
+                                name: e.target.value,
                               })
                             }
-                            placeholder="e.g. Large"
+                            placeholder="e.g. Size"
                           />
                         </label>
-                        {group.priced && (
-                          <label className="panel-option-value-price">
-                            Price
-                            <input
-                              inputMode="decimal"
-                              maxLength={18}
-                              value={value.price}
-                              onChange={(e) =>
-                                updateValue(index, valueIndex, {
-                                  price: e.target.value,
-                                })
-                              }
-                              placeholder={price || 'Item price'}
-                            />
-                          </label>
-                        )}
                         <button
                           type="button"
-                          className="panel-option-value-remove"
-                          aria-label={`Remove ${value.label || 'value'}`}
-                          title="Remove value"
-                          onClick={() => removeValue(index, valueIndex)}
+                          className="panel-option-remove"
+                          aria-label={`Remove ${group.name || 'option'}`}
+                          title="Remove option"
+                          onClick={() => removeOption(index)}
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
-                    ))}
+                      <label className="panel-option-price-toggle">
+                        <input
+                          type="checkbox"
+                          checked={group.priced}
+                          onChange={() => toggleOptionPrices(index)}
+                        />
+                        <span>
+                          Set a price for each value
+                          <small>
+                            Example: $10 small, $15 medium, $20 large. A blank
+                            price uses the item’s base price.
+                          </small>
+                        </span>
+                      </label>
+                      <div className="panel-option-values">
+                        {group.values.map((value, valueIndex) => (
+                          <div
+                            className={`panel-option-value-row${group.priced ? '' : ' is-plain'}`}
+                            key={valueIndex}
+                          >
+                            <label className="panel-option-value-label">
+                              Value
+                              <input
+                                maxLength={80}
+                                value={value.label}
+                                onChange={(e) =>
+                                  updateValue(index, valueIndex, {
+                                    label: e.target.value,
+                                  })
+                                }
+                                placeholder="e.g. Large"
+                              />
+                            </label>
+                            {group.priced && (
+                              <label className="panel-option-value-price">
+                                Price
+                                <input
+                                  inputMode="decimal"
+                                  maxLength={18}
+                                  value={value.price}
+                                  onChange={(e) =>
+                                    updateValue(index, valueIndex, {
+                                      price: e.target.value,
+                                    })
+                                  }
+                                  placeholder={price || 'Item price'}
+                                />
+                              </label>
+                            )}
+                            <button
+                              type="button"
+                              className="panel-option-value-remove"
+                              aria-label={`Remove ${value.label || 'value'}`}
+                              title="Remove value"
+                              onClick={() => removeValue(index, valueIndex)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="panel-option-add-value"
+                          onClick={() => addValue(index)}
+                          disabled={group.values.length >= 25}
+                        >
+                          <Plus size={15} /> Add value
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="panel-option-tools">
                     <button
                       type="button"
-                      className="panel-option-add-value"
-                      onClick={() => addValue(index)}
-                      disabled={group.values.length >= 25}
+                      onClick={addOption}
+                      disabled={options.length >= 10}
                     >
-                      <Plus size={15} /> Add value
+                      <Plus size={16} /> Add option
                     </button>
+                    {sourceProducts.length > 0 && (
+                      <label className="panel-option-copy">
+                        <span>
+                          <Copy size={15} /> Copy from another product
+                        </span>
+                        <select
+                          value=""
+                          onChange={(e) => copyOptions(e.target.value)}
+                        >
+                          <option value="">Choose a product…</option>
+                          {sourceProducts.map((source) => (
+                            <option key={source.id} value={source.id}>
+                              {source.name || 'Untitled'} ·{' '}
+                              {source.options?.length ?? 0}{' '}
+                              {(source.options?.length ?? 0) === 1
+                                ? 'option'
+                                : 'options'}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                   </div>
-                </div>
-              ))}
-              <div className="panel-option-tools">
-                <button
-                  type="button"
-                  onClick={addOption}
-                  disabled={options.length >= 10}
-                >
-                  <Plus size={16} /> Add option
-                </button>
-                {sourceProducts.length > 0 && (
-                  <label className="panel-option-copy">
-                    <span>
-                      <Copy size={15} /> Copy from another product
-                    </span>
-                    <select
-                      value=""
-                      onChange={(e) => copyOptions(e.target.value)}
-                    >
-                      <option value="">Choose a product…</option>
-                      {sourceProducts.map((source) => (
-                        <option key={source.id} value={source.id}>
-                          {source.name || 'Untitled'} ·{' '}
-                          {source.options?.length ?? 0}{' '}
-                          {(source.options?.length ?? 0) === 1
-                            ? 'option'
-                            : 'options'}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-              {optionSources.isError && (
-                <small>
-                  The products you can copy from could not load. You can still
-                  add options manually.
-                </small>
-              )}
-              {optionsError && (
-                <p className="panel-field-error" role="alert">
-                  {optionsError}
-                </p>
+                  {optionSources.isError && (
+                    <small>
+                      The products you can copy from could not load. You can
+                      still add options manually.
+                    </small>
+                  )}
+                  {optionsError && (
+                    <p className="panel-field-error" role="alert">
+                      {optionsError}
+                    </p>
+                  )}
+                </>
               )}
             </fieldset>
           </>
@@ -1838,74 +1952,6 @@ export function ContentEditor({
             Save this {product ? 'item' : 'post'} once to add search and sharing
             settings.
           </p>
-        )}
-        {!product && record && (
-          <>
-            {media.isPending ? (
-              <Loading />
-            ) : media.isError ? (
-              <Retry error={media.error} retry={() => void media.refetch()} />
-            ) : (
-              <div className="panel-photo-grid">
-                {media.data.map((asset) => {
-                  const key = asset.variants.find(
-                    (v) =>
-                      v.mimeType ===
-                      (asset.kind === 'video' ? 'video/mp4' : 'image/webp'),
-                  )?.storageKey;
-                  return key ? (
-                    asset.kind === 'video' ? (
-                      <video key={asset.id} controls src={storeMediaUrl(key)} />
-                    ) : (
-                      <img
-                        key={asset.id}
-                        src={storeMediaUrl(key)}
-                        alt="Post media"
-                      />
-                    )
-                  ) : (
-                    <span className="panel-pill" key={asset.id}>
-                      {asset.status}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-        {/* Media hangs off a saved row, so the first picked file creates the
-            private draft instead of asking the owner to save first. */}
-        <MediaUpload
-          targetId={record ? record.id : ensureDraftId}
-          purpose={product ? 'product_image' : 'post'}
-          label={product ? 'Product photos' : 'Photos & videos'}
-          keys={keys}
-          onChange={changeMedia}
-          onBusy={setUploading}
-          onPending={setProcessing}
-          disabled={busy || uploading || processing || !readyForMedia}
-          allowVideo={!product}
-          maxImageBytes={maxImageBytes}
-          maxVideoBytes={maxVideoBytes}
-        />
-        {!readyForMedia && (
-          <p className="panel-muted">
-            {product
-              ? 'Add a name and a valid price, then choose photos. They upload right away.'
-              : 'Add a title, then choose photos or videos. They upload right away.'}
-          </p>
-        )}
-        {!product && (processing || existingPending) && (
-          <p className="panel-muted" role="status">
-            Media is still processing. You can publish now; it will appear
-            automatically when it is ready.
-          </p>
-        )}
-        {existingFailed && (
-          <Notice error>
-            A media upload failed. You can add a supported replacement; failed
-            uploads are not shown publicly.
-          </Notice>
         )}
         {error && <Notice error>{error}</Notice>}
         <div className="panel-actions panel-editor-actions">
