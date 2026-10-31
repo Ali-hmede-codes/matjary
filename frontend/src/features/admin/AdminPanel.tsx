@@ -526,6 +526,7 @@ function AdminList({
               <option value="active">Online</option>
               <option value="offline">Off</option>
               <option value="archived">Archived</option>
+              <option value="locked">Locked</option>
               <option value="trashed">In Trash</option>
             </select>
           )}
@@ -593,9 +594,11 @@ function AdminList({
                           : resource === 'stores'
                             ? item.status === 'trashed'
                               ? 'In Trash'
-                              : isStoreVerified(item)
-                                ? 'Verified'
-                                : 'Not verified'
+                              : item.status === 'locked'
+                                ? 'Locked'
+                                : isStoreVerified(item)
+                                  ? 'Verified'
+                                  : 'Not verified'
                             : resource === 'users'
                               ? item.role === 'admin'
                                 ? item.adminScope === 'stores'
@@ -1271,7 +1274,21 @@ function Detail({
                         ? 'Off'
                         : data.status === 'trashed'
                           ? 'In Trash'
-                          : 'Archived'}
+                          : data.status === 'locked'
+                            ? 'Locked'
+                            : 'Archived'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Plan lifecycle</dt>
+                  <dd>
+                    {data.subscriptionLockedAt
+                      ? `Locked ${dateLabel(data.subscriptionLockedAt)} · the grace window ended`
+                      : 'Plan active or inside the 7-day grace window'}
+                    {data.mediaArchiveState &&
+                    data.mediaArchiveState !== 'none' ? (
+                      <small>Media archive: {data.mediaArchiveState}</small>
+                    ) : null}
                   </dd>
                 </div>
                 <div>
@@ -1367,7 +1384,7 @@ function Detail({
               )}
             {resource === 'stores' && (
               <>
-                {data.status !== 'trashed' && (
+                {data.status !== 'trashed' && data.status !== 'locked' && (
                   <Link className="panel-secondary" to={`/stores/${data.slug}`}>
                     Open storefront
                   </Link>

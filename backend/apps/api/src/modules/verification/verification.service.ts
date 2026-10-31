@@ -224,9 +224,11 @@ export class VerificationService {
         request.status = VerificationRequestStatus.PENDING;
         const saved = await manager.save(request);
         // A fresh application is the owner saying they want the badge after
-        // all, so an earlier "do not renew" answer no longer applies.
-        if (store.renewalDeclinedAt) {
+        // all, so an earlier "do not renew" answer and a pending renewal
+        // request no longer apply.
+        if (store.renewalDeclinedAt || store.renewalRequestedAt) {
           store.renewalDeclinedAt = null;
+          store.renewalRequestedAt = null;
           await manager.save(store);
         }
         return this.requestView(saved);
@@ -499,6 +501,7 @@ export class VerificationService {
         store.verificationBadgeGrantedBy = audited.id;
         store.verificationBadgeExpiresAt = expiresAt;
         store.renewalDeclinedAt = null;
+        store.renewalRequestedAt = null;
         request.status = VerificationRequestStatus.APPROVED;
         request.reviewedBy = audited.id;
         request.reviewedAt = now;
@@ -626,6 +629,7 @@ export class VerificationService {
         store.verificationBadgeGrantedBy = audited.id;
         store.verificationBadgeExpiresAt = expiresAt;
         store.renewalDeclinedAt = null;
+        store.renewalRequestedAt = null;
         await manager.save(store);
         await this.settlePendingRequests(
           manager,
@@ -712,6 +716,7 @@ export class VerificationService {
         store.verificationBadgeExpiresAt = null;
         store.verificationIncludedInPlan = false;
         store.renewalDeclinedAt = null;
+        store.renewalRequestedAt = null;
         await manager.save(store);
         // The shop is verified for good, so any waiting application is settled
         // with an open-ended period instead of a paid month.

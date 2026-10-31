@@ -203,7 +203,9 @@ export function StoreManager() {
       ? 'archived'
       : params.get('tab') === 'trashed'
         ? 'trashed'
-        : 'current';
+        : params.get('tab') === 'locked'
+          ? 'locked'
+          : 'current';
   const matches = (store: OwnerStore, value: string) =>
     value === 'current' ? isCurrentStore(store) : store.status === value;
   const visible = stores.filter((store) => matches(store, tab));
@@ -238,6 +240,7 @@ export function StoreManager() {
             ['current', 'Current'],
             ['archived', 'Archived'],
             ['trashed', 'Trash'],
+            ['locked', 'Locked'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -259,6 +262,13 @@ export function StoreManager() {
           its content from your account. Permanent deletion cannot be undone.
         </p>
       )}
+      {tab === 'locked' && (
+        <p className="panel-muted">
+          A locked store ended its plan and the 7-day grace window passed. It is
+          hidden from shoppers and nothing was deleted. Renew your plan to open
+          it again; photos and videos are restored with their original quality.
+        </p>
+      )}
       {!visible.length ? (
         <Empty
           title={
@@ -266,13 +276,17 @@ export function StoreManager() {
               ? 'No current stores'
               : tab === 'archived'
                 ? 'No archived stores'
-                : 'Trash is empty'
+                : tab === 'locked'
+                  ? 'No locked stores'
+                  : 'Trash is empty'
           }
         >
           <p>
             {tab === 'current'
               ? 'Create a store, or restore one from Archived or Trash.'
-              : 'Your stores will appear here when you move them.'}
+              : tab === 'locked'
+                ? 'Stores appear here only when a plan ends and the grace window passes.'
+                : 'Your stores will appear here when you move them.'}
           </p>
         </Empty>
       ) : (
@@ -322,6 +336,10 @@ export function StoreManager() {
                     Posts & stories
                   </Link>
                 </div>
+              ) : store.status === 'locked' ? (
+                <Link className="panel-primary" to="/dashboard/locked">
+                  Renew to open
+                </Link>
               ) : (
                 store.status !== 'trashed' &&
                 !store.restricted && (

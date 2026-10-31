@@ -260,7 +260,7 @@ export function OwnerVerification() {
           <div>
             <strong>The blue tick is no longer shown.</strong>
             <span>
-              Your verification and its five-day renewal window have ended.
+              Your verification and its seven-day renewal window have ended.
               Request a new month to restore it.
             </span>
           </div>
@@ -499,7 +499,7 @@ export function OwnerVerification() {
             <li>
               <ShieldCheck size={16} />
               <span>
-                If a month ends without renewal, the tick stays for 5 days and
+                If a month ends without renewal, the tick stays for 7 days and
                 then disappears. A badge included with your plan ends when the
                 subscription ends.
               </span>

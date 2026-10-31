@@ -11,13 +11,14 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  NotFoundException,
   RequestTimeoutException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { MediaService } from './media.service';
 import { PresignedUrlDto, OwnerUploadDto } from './dto/presigned-url.dto';
 import { MediaCompleteDto } from './dto/media-complete.dto';
-import { StorageService } from '@app/storage';
+import { MediaArchiveService, StorageService } from '@app/storage';
 import {
   AuthOriginGuard,
   AuthRateLimitGuard,
@@ -66,8 +67,27 @@ export class MediaController {
   constructor(
     private readonly media: MediaService,
     private readonly storage: StorageService,
+    private readonly archive: MediaArchiveService,
     private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
+
+  // Live bytes first. A locked shop's files live in the archive tier until the
+  // worker restores them after a renewal; the shop page must keep rendering
+  // during that window, so the same authorized request falls back to it.
+  private async objectSource(
+    key: string,
+    storeId: string | null,
+  ): Promise<{ size: number; archived: boolean }> {
+    try {
+      return { ...(await this.storage.statObject(key)), archived: false };
+    } catch (error) {
+      if (!(error instanceof NotFoundException) || !storeId) throw error;
+      return {
+        ...(await this.archive.statObject(storeId, key)),
+        archived: true,
+      };
+    }
+  }
 
   private administrator(
     request: Request & {
@@ -150,7 +170,9 @@ export class MediaController {
       request.user?.id,
       this.administrator(request),
     );
-    const { size } = await this.storage.statObject(key);
+    const source = await this.objectSource(key, access.storeId);
+    const { size } = source;
+    const archiveStore = source.archived ? access.storeId : null;
     const header = request.headers.range;
     const range = header ? parseMediaRange(header, size) : undefined;
     // Public variant keys contain the asset UUID and never change bytes, so a
@@ -203,7 +225,9 @@ export class MediaController {
       response.end();
       return;
     }
-    const stream = await this.storage.openReadStream(key, range);
+    const stream = archiveStore
+      ? await this.archive.openReadStream(archiveStore, key, range)
+      : await this.storage.openReadStream(key, range);
     // pipeline destroys the source when the reader disconnects.
     await pipeline(stream, response).catch(() => response.destroy());
   }

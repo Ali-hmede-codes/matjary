@@ -47,7 +47,7 @@ test('an expired badge is not reported as active', () => {
   );
   assert.equal(active.hasVerificationBadge, true);
 
-  // The five-day renewal window still shows the tick; beyond it the badge is
+  // The seven-day renewal window still shows the tick; beyond it the badge is
   // gone even though the store row keeps its grant history.
   const grace = toStoreDirectoryItemDto(
     source({
@@ -60,7 +60,7 @@ test('an expired badge is not reported as active', () => {
   const expired = toStoreDirectoryItemDto(
     source({
       hasVerificationBadge: true,
-      verificationBadgeExpiresAt: new Date(Date.now() - 6 * 86_400_000),
+      verificationBadgeExpiresAt: new Date(Date.now() - 8 * 86_400_000),
     }),
   );
   assert.equal(expired.hasVerificationBadge, false);

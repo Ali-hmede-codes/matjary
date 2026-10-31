@@ -206,6 +206,10 @@ export class SubscriptionStateDto {
   planSlug!: string | null;
   expiresAt!: Date | null;
   daysRemaining!: number | null;
+  // active, the seven-day grace window, or locked (shops hidden until renewed).
+  phase!: 'active' | 'grace' | 'locked';
+  graceEndsAt!: Date | null;
+  renewalRequestedAt!: Date | null;
 }
 
 // Effective content allowance per section after trading a turned-off section's

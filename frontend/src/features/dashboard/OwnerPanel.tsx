@@ -55,6 +55,11 @@ import { OwnerContent } from './OwnerContent.tsx';
 import { OwnerBoost } from './OwnerBoost';
 import { OwnerVerification } from './OwnerVerification';
 import { OwnerNotifications, OwnerRenewalBanner } from './OwnerNotifications';
+import {
+  LockedShopNotice,
+  LockedShopsPage,
+  RenewalAction,
+} from './OwnerLocked';
 import { StoreQr } from './StoreQr';
 import { StoreManager } from './StoreManager';
 import { TeamPanel } from './TeamPanel';
@@ -65,6 +70,13 @@ export interface OwnerStore extends Store {
   restricted?: boolean;
   enableCart: boolean;
   enableWhatsAppCheckout: boolean;
+  // Plan lifecycle, owner view only. A locked shop is hidden from shoppers and
+  // keeps only its renewal page; mediaArchiveState says where its bytes are.
+  subscriptionLockedAt?: string | null;
+  mediaArchiveState?: string | null;
+  renewalRequestedAt?: string | null;
+  productsCount?: number;
+  postsCount?: number;
 }
 export interface OwnerSummary {
   stats: Record<string, number>;
@@ -86,6 +98,10 @@ export interface OwnerSummary {
     planSlug: string | null;
     expiresAt: string | null;
     daysRemaining: number | null;
+    // active → grace (7 days, public but read-only) → locked (hidden).
+    phase?: 'active' | 'grace' | 'locked';
+    graceEndsAt?: string | null;
+    renewalRequestedAt?: string | null;
   };
 }
 interface OwnerState {
@@ -117,6 +133,19 @@ export function useOwner() {
   const value = useContext(OwnerContext);
   if (!value) throw new Error('Owner workspace unavailable');
   return value;
+}
+// A locked shop never opens an editor: its only destination is the renewal
+// screen. The render callback stays lazy so no store field is read before the
+// status is known. Members only reach active shops (the API omits locked ones).
+function requireStore(
+  store: OwnerStore | undefined,
+  member: boolean,
+  render: (store: OwnerStore) => React.ReactNode,
+): React.ReactNode {
+  if (!store) return <NoStore />;
+  if (store.status === 'locked')
+    return <LockedShopNotice store={store} member={member} />;
+  return render(store);
 }
 export default function OwnerPanel({ session }: { session: Session }) {
   // This panel remounts on every tab change, so the chosen store is restored
@@ -171,7 +200,18 @@ export default function OwnerPanel({ session }: { session: Session }) {
       getJson<TeamInvitationSummary[]>('team/invitations', signal),
   });
   const selectable = available.filter(
-    (s) => !s.restricted && (isCurrentStore(s) || s.id === store?.id),
+    (s) =>
+      !s.restricted &&
+      s.status !== 'locked' &&
+      (isCurrentStore(s) || s.id === store?.id),
+  );
+  // Shops frozen by an expired plan. The API already omits shops a member only
+  // helps with; the owner renews them here instead of opening an editor.
+  const lockedShops = available.filter(
+    (candidate) =>
+      candidate.status === 'locked' &&
+      !candidate.restricted &&
+      candidate.teamRole === 'owner',
   );
   const pending = selectable.find((s) => s.id === pendingStore);
   function switchStore(id: string) {
@@ -314,97 +354,71 @@ export default function OwnerPanel({ session }: { session: Session }) {
             <Route path="store/new" element={<StoreEditor key="new" />} />
             <Route
               path="store"
-              element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <StoreEditor key={store.id} store={store} />
-                  )
+              element={requireStore(store, member, (current) =>
+                member ? (
+                  <OwnerOnly />
                 ) : (
-                  <NoStore />
-                )
-              }
+                  <StoreEditor key={current.id} store={current} />
+                ),
+              )}
             />
             <Route
               path="design"
-              element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <StoreDesignStudio key={store.id} />
-                  )
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) =>
+                member ? <OwnerOnly /> : <StoreDesignStudio key={current.id} />,
+              )}
             />
             <Route
               path="settings"
-              element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <ShopSettings key={store.id} />
-                  )
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) =>
+                member ? <OwnerOnly /> : <ShopSettings key={current.id} />,
+              )}
             />
             <Route
               path="notifications"
               element={member ? <OwnerOnly /> : <OwnerNotifications />}
             />
             <Route
-              path="verification"
+              path="locked"
               element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <OwnerVerification key={store.id} />
-                  )
+                member ? (
+                  <OwnerOnly />
                 ) : (
-                  <NoStore />
+                  <LockedShopsPage
+                    shops={lockedShops}
+                    userId={session.user.id}
+                    renewalRequestedAt={
+                      summary.data?.subscriptionState?.renewalRequestedAt ??
+                      null
+                    }
+                    trial={summary.data?.subscriptionState?.planSlug === 'free'}
+                  />
                 )
               }
+            />
+            <Route
+              path="verification"
+              element={requireStore(store, member, (current) =>
+                member ? <OwnerOnly /> : <OwnerVerification key={current.id} />,
+              )}
             />
             <Route
               path="qr"
-              element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <StoreQr key={store.id} />
-                  )
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) =>
+                member ? <OwnerOnly /> : <StoreQr key={current.id} />,
+              )}
             />
             <Route
               path="products"
-              element={
-                store ? (
-                  <OwnerContent key={`products-${store.id}`} kind="products" />
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) => (
+                <OwnerContent key={`products-${current.id}`} kind="products" />
+              ))}
             />
             <Route
               path="posts"
-              element={
-                store ? (
-                  <OwnerContent key={`posts-${store.id}`} kind="posts" />
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) => (
+                <OwnerContent key={`posts-${current.id}`} kind="posts" />
+              ))}
             />
             <Route
               path="plan"
@@ -412,31 +426,15 @@ export default function OwnerPanel({ session }: { session: Session }) {
             />
             <Route
               path="boost"
-              element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <OwnerBoost key={store.id} />
-                  )
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) =>
+                member ? <OwnerOnly /> : <OwnerBoost key={current.id} />,
+              )}
             />
             <Route
               path="team"
-              element={
-                store ? (
-                  member ? (
-                    <OwnerOnly />
-                  ) : (
-                    <TeamPanel key={store.id} />
-                  )
-                ) : (
-                  <NoStore />
-                )
-              }
+              element={requireStore(store, member, (current) =>
+                member ? <OwnerOnly /> : <TeamPanel key={current.id} />,
+              )}
             />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
@@ -451,25 +449,65 @@ function PlanBanner() {
   if (store?.teamRole === 'member') return null;
   const state = summary.subscriptionState;
   if (!state) return null;
-  const expired = state.state === 'expired';
+  const phase = state.phase ?? (state.state === 'expired' ? 'grace' : 'active');
+  // A trial can only be upgraded; a paid plan can be renewed. The CTA must say
+  // which one the owner is looking at.
+  const offerPlan = state.planSlug === 'free';
+  const renewLabel = offerPlan ? 'Choose a plan' : 'Renew my shops';
+  const renewTarget = offerPlan ? '/pricing' : '/dashboard/locked';
+  if (phase === 'locked')
+    return (
+      <section className="panel-plan-banner is-expired">
+        <div>
+          <strong>
+            {offerPlan
+              ? 'Your free trial ended and your shops are locked.'
+              : 'Your plan ended and your shops are locked.'}
+          </strong>
+          <span>
+            Nothing was deleted. Renew to reopen them; every product, post,
+            photo and video returns with its original quality.
+          </span>
+        </div>
+        <Link className="panel-primary" to={renewTarget}>
+          {renewLabel} <ArrowUpRight size={16} />
+        </Link>
+      </section>
+    );
+  if (phase === 'grace')
+    return (
+      <section className="panel-plan-banner is-expired">
+        <div>
+          <strong>
+            {offerPlan ? 'Your free trial ended.' : 'Your plan ended.'} Your
+            shops stay online until {dateLabel(state.graceEndsAt)}.
+          </strong>
+          <span>
+            After the 7-day grace window they are locked and hidden from
+            shoppers. {offerPlan ? 'Choose a paid plan' : 'Renew'} to keep
+            editing and stay online.
+          </span>
+        </div>
+        <Link className="panel-primary" to={renewTarget}>
+          {renewLabel} <ArrowUpRight size={16} />
+        </Link>
+      </section>
+    );
   const endingSoon =
     state.state === 'trial' &&
     state.daysRemaining != null &&
     state.daysRemaining <= 2;
-  if (!expired && !endingSoon) return null;
+  if (!endingSoon) return null;
   const days = state.daysRemaining ?? 0;
   return (
-    <section className={`panel-plan-banner ${expired ? 'is-expired' : ''}`}>
+    <section className="panel-plan-banner">
       <div>
         <strong>
-          {expired
-            ? 'Your free trial has ended.'
-            : `Your free trial ends in ${days} day${days === 1 ? '' : 's'}.`}
+          {`Your free trial ends in ${days} day${days === 1 ? '' : 's'}.`}
         </strong>
         <span>
-          {expired
-            ? 'Your published content is still online. Choose a plan to keep creating.'
-            : 'Choose a paid plan to keep creating without interruption.'}
+          Choose a paid plan to keep creating. Your shops stay online during the
+          7-day grace window after it ends, then they are locked.
         </span>
       </div>
       <Link className="panel-primary" to="/pricing">
@@ -500,7 +538,8 @@ export function TrialOffer() {
         </strong>
         <span>
           Build your store now. Want more shops, products, and posts? Upgrade
-          anytime — your published work stays online.
+          anytime. After the trial ends your shops stay online for a 7-day grace
+          window, then they are locked until you renew.
         </span>
       </div>
       <Link className="panel-primary" to="/pricing">
@@ -674,16 +713,38 @@ function TeamAccessCard({ store }: { store: OwnerStore }) {
   );
 }
 function OwnerHome() {
-  const { store, session, summary } = useOwner();
+  const { store, session, summary, stores } = useOwner();
+  // A locked shop has exactly one destination; opening the studio here would
+  // only show forms the API refuses.
+  if (store?.status === 'locked')
+    return (
+      <LockedShopNotice store={store} member={store.teamRole === 'member'} />
+    );
   // A plan belongs to the account, so its renewal reminder must stay visible
   // even when the owner currently has no shop to open.
-  if (!store)
+  if (!store) {
+    const lockedShops = stores.filter(
+      (candidate) =>
+        candidate.status === 'locked' && candidate.teamRole === 'owner',
+    );
     return (
       <>
         <OwnerRenewalBanner />
-        <NoStore />
+        {lockedShops.length ? (
+          <LockedShopsPage
+            shops={lockedShops}
+            userId={session.user.id}
+            renewalRequestedAt={
+              summary.subscriptionState?.renewalRequestedAt ?? null
+            }
+            trial={summary.subscriptionState?.planSlug === 'free'}
+          />
+        ) : (
+          <NoStore />
+        )}
       </>
     );
+  }
   const member = store.teamRole === 'member';
   return (
     <>
@@ -846,24 +907,34 @@ function OwnerHome() {
   );
 }
 function OwnerPlan() {
-  const { summary, store } = useOwner();
+  const { summary, store, session } = useOwner();
   const state = summary.subscriptionState;
   const expired = state?.state === 'expired';
   const trial = state?.state === 'trial';
-  const planName = expired
-    ? 'Trial ended'
-    : state?.planName || summary.subscription?.planName || 'Free';
-  const planDetail = expired
-    ? 'Published content stays online. Choose a paid plan to start creating again.'
-    : trial && state?.daysRemaining != null
-      ? `${state.daysRemaining} day${state.daysRemaining === 1 ? '' : 's'} left · ends ${dateLabel(state.expiresAt)}`
-      : state?.expiresAt
-        ? `Expires ${dateLabel(state.expiresAt)}`
-        : state?.state === 'paid'
-          ? 'No expiry'
-          : summary.subscription
-            ? `Expires ${dateLabel(summary.subscription.expiresAt)}`
-            : 'A great place to start your business.';
+  const phase = state?.phase ?? (expired ? 'grace' : 'active');
+  // The newest row still names the plan that ended: a trial is upgraded, a
+  // paid plan is renewed.
+  const trialPlan = state?.planSlug === 'free';
+  const planName =
+    phase === 'locked'
+      ? 'Locked'
+      : expired
+        ? 'Plan ended'
+        : state?.planName || summary.subscription?.planName || 'Free';
+  const planDetail =
+    phase === 'locked'
+      ? 'Your shops are hidden from shoppers and their media is archived. Renew to reopen them; nothing was deleted.'
+      : phase === 'grace'
+        ? `Ended ${dateLabel(state?.expiresAt)} · your shops stay online until ${dateLabel(state?.graceEndsAt)}, then they are locked.`
+        : trial && state?.daysRemaining != null
+          ? `${state.daysRemaining} day${state.daysRemaining === 1 ? '' : 's'} left · ends ${dateLabel(state.expiresAt)}`
+          : state?.expiresAt
+            ? `Expires ${dateLabel(state.expiresAt)}`
+            : state?.state === 'paid'
+              ? 'No expiry'
+              : summary.subscription
+                ? `Expires ${dateLabel(summary.subscription.expiresAt)}`
+                : 'A great place to start your business.';
   const sections = summary.sections;
   const sectionLimits = [
     {
@@ -917,7 +988,13 @@ function OwnerPlan() {
       <div className="panel-two-columns">
         <section className="panel-card panel-feature">
           <span className="panel-pill">
-            {trial ? 'FREE TRIAL' : expired ? 'TRIAL ENDED' : 'CURRENT PLAN'}
+            {trial
+              ? 'FREE TRIAL'
+              : phase === 'locked'
+                ? 'LOCKED'
+                : phase === 'grace'
+                  ? 'GRACE PERIOD'
+                  : 'CURRENT PLAN'}
           </span>
           <h2>{planName}</h2>
           <p>{planDetail}</p>
@@ -944,10 +1021,22 @@ function OwnerPlan() {
             {expired ? 'Choose a paid plan' : 'Explore plans'}{' '}
             <ArrowUpRight size={16} />
           </Link>
+          {(phase === 'grace' || phase === 'locked') && !trialPlan && (
+            <RenewalAction
+              userId={session.user.id}
+              requested={Boolean(state?.renewalRequestedAt)}
+              trial={false}
+              onRequested={() => undefined}
+            />
+          )}
           <small>
-            {expired
-              ? 'An administrator assigns paid plans. Your published content remains online.'
-              : 'Subscriptions are assigned by an administrator. There is no automatic payment or checkout.'}
+            {phase === 'locked'
+              ? 'A renewal reopens every locked shop and restores its photos and videos with their original quality.'
+              : phase === 'grace'
+                ? 'After the 7-day grace window your shops are locked and hidden until the team confirms a renewal.'
+                : expired
+                  ? 'An administrator assigns paid plans. Renew to keep creating; your shops stay online during the 7-day grace window.'
+                  : 'Subscriptions are assigned by an administrator. There is no automatic payment or checkout.'}
           </small>
         </section>
         <section className="panel-card panel-feature">

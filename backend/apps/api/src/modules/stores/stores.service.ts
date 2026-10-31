@@ -7,6 +7,7 @@ import {
   BadRequestException,
   Logger,
   HttpException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError, Not, In, EntityManager } from 'typeorm';
@@ -29,6 +30,7 @@ import {
   sectionHasRoom,
   SECTION_LAST_ENABLED_CODE,
   SECTION_NO_ROOM_CODE,
+  SHOP_RENEWAL_REQUIRED_CODE,
   moderationWhere,
   ownerWhere,
   publicWhere,
@@ -59,7 +61,7 @@ import {
   requireAdmin,
   type AdminActor,
 } from '@app/database';
-import { StorageService } from '@app/storage';
+import { MediaArchiveService, StorageService } from '@app/storage';
 import { CreateStoreDto, CreateStoreLocationDto } from './dto/create-store.dto';
 import { UpdateStoreDto, UpdateStoreLocationDto } from './dto/update-store.dto';
 import { StoreBranchDto } from './dto/store-branch.dto';
@@ -75,7 +77,7 @@ import {
 } from './services/location.service';
 import { SeoService } from '../seo/seo.service';
 import { AdminGuard } from '../auth/guards/auth.guards';
-import { deleteStoredObjects } from '../media-cleanup';
+import { deleteArchivedShop, deleteStoredObjects } from '../media-cleanup';
 
 const MAX_BRANCHES = 10;
 const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -113,6 +115,10 @@ export class StoresService {
     private readonly seoService: SeoService,
     private readonly admin: AdminGuard,
     private readonly storage: StorageService,
+    // Optional in unit fixtures; production always provides it through
+    // StorageModule. Permanent deletion also clears the archive directory.
+    @Optional()
+    private readonly archive?: MediaArchiveService,
   ) {}
 
   private sanitize(error: unknown): never {
@@ -939,6 +945,7 @@ export class StoresService {
   // never erase an active shop. The locked row is checked again under the lock.
   async purge(slug: string, userId: string): Promise<void> {
     let keys: string[] = [];
+    let storeId = '';
     try {
       keys = await this.stores.manager.transaction(async (manager) => {
         const user = await manager.findOne(User, {
@@ -956,12 +963,14 @@ export class StoresService {
           throw new ConflictException(
             'Move the store to Trash before deleting it permanently',
           );
+        storeId = store.id;
         return purgeStoreRecords(manager, store.id);
       });
     } catch (error) {
       this.sanitize(error);
     }
     await deleteStoredObjects(this.storage, keys);
+    await deleteArchivedShop(this.archive, storeId);
   }
 
   private async transition(
@@ -982,6 +991,11 @@ export class StoresService {
           lock: { mode: 'pessimistic_write' },
         });
         if (!store) throw new NotFoundException('Store not found');
+        // A shop frozen by the subscription sweep has exactly one way back:
+        // a renewal. Owner lifecycle buttons stay hidden in the UI and are
+        // refused here even if a stale page submits them.
+        if (store.status === StoreStatus.LOCKED)
+          throw new ForbiddenException({ code: SHOP_RENEWAL_REQUIRED_CODE });
         let next: StoreStatus;
         if (action === 'restore') {
           if (
@@ -1052,8 +1066,10 @@ export class StoresService {
               where: {
                 id: In(memberIds),
                 // A trashed shop stays out of the member's panel even when the
-                // owner asked to include their own trash.
-                status: Not(StoreStatus.TRASHED),
+                // owner asked to include their own trash. A locked shop is left
+                // out too: only its owner can renew it, so a member never gets a
+                // workspace that cannot save anything.
+                status: Not(In([StoreStatus.TRASHED, StoreStatus.LOCKED])),
                 ...ownerWhere('store'),
               },
               relations: { branches: true },

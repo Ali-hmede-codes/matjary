@@ -488,7 +488,7 @@ export class MediaService {
     key: string,
     userId?: string,
     administrator?: AdminActor,
-  ): Promise<{ mimeType: string; public: boolean }> {
+  ): Promise<{ mimeType: string; public: boolean; storeId: string | null }> {
     this.requireLocal();
     if (administrator)
       await requireAdmin(
@@ -506,7 +506,8 @@ export class MediaService {
         relations: ['asset'],
       });
     if (variant) {
-      if (administrator) return { mimeType: variant.mimeType, public: false };
+      if (administrator)
+        return { mimeType: variant.mimeType, public: false, storeId: null };
       const {
         post,
         store,
@@ -547,7 +548,13 @@ export class MediaService {
         variant.asset.purpose,
       );
       if (visible || manageable)
-        return { mimeType: variant.mimeType, public: visible };
+        return {
+          mimeType: variant.mimeType,
+          public: visible,
+          // The shop that owns the bytes; a locked shop's files may live in the
+          // archive tier, and the route needs its id to find them.
+          storeId: store?.id ?? null,
+        };
     }
     const original = await this.mediaAssets.findOne({
       where: {
@@ -566,7 +573,11 @@ export class MediaService {
           original.purpose,
         ))
       )
-        return { mimeType: original.mimeType, public: false };
+        return {
+          mimeType: original.mimeType,
+          public: false,
+          storeId: parent.store?.id ?? null,
+        };
     }
     throw new NotFoundException('Media asset not found');
   }

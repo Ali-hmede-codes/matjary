@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { In, Not, type EntityManager } from 'typeorm';
 import {
@@ -36,6 +37,7 @@ import {
   assertContentAvailable,
   isBusinessCategory,
   purgeStoreRecords,
+  unlockOwnerShops,
   STORE_SLUG_TAKEN_CODE,
   OWNER_PLAN_FULL_CODE,
   OWNER_PLAN_INACTIVE_CODE,
@@ -46,7 +48,7 @@ import {
   VERIFICATION_PERIOD_DAYS,
   type AdminActor,
 } from '@app/database';
-import { StorageService } from '@app/storage';
+import { MediaArchiveService, StorageService } from '@app/storage';
 import { QueueService } from '@app/queue';
 import { AdminAccessService } from './admin-access.service';
 import {
@@ -60,7 +62,7 @@ import {
 } from './admin.dto';
 import { SeoService } from '../seo/seo.service';
 import { StoresService } from '../stores/stores.service';
-import { deleteStoredObjects } from '../media-cleanup';
+import { deleteArchivedShop, deleteStoredObjects } from '../media-cleanup';
 
 // A store-scoped administrator never assumes another scope by omission, so the
 // assignment list is bounded and validated before it is written.
@@ -76,6 +78,10 @@ export class AdminCatalogService {
     private readonly seo: SeoService,
     private readonly queue: QueueService,
     private readonly stores: StoresService,
+    // Optional in unit fixtures; production provides it through StorageModule.
+    // Named mediaArchive because `archive` is the moderation method below.
+    @Optional()
+    private readonly mediaArchive?: MediaArchiveService,
   ) {}
 
   async updateUser(id: string, dto: AdminUserUpdateDto, actor: AdminActor) {
@@ -396,6 +402,10 @@ export class AdminCatalogService {
       // bundled slots. Future renewals follow the new owner's plan.
       if (releasedBundledBadge) store.verificationIncludedInPlan = false;
       await manager.save(store);
+      // The receiving account passed the plan check above, so a shop that was
+      // frozen under the previous owner reopens here and its archive is queued
+      // for a byte-exact restore.
+      await unlockOwnerShops(manager, owner.id);
       // Shop posts and stories are authored for the shop owner, so they follow
       // the shop; their media and products reference the shop itself already.
       const posts = await manager.update(
@@ -549,6 +559,7 @@ export class AdminCatalogService {
       return keys;
     });
     await deleteStoredObjects(this.storage, keys);
+    await deleteArchivedShop(this.mediaArchive, id);
     return { id };
   }
 

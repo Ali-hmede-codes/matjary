@@ -28,6 +28,12 @@ interface OwnerRenewalNotice {
   dueAt: string;
   seenAt: string | null;
   declinedAt: string | null;
+  requestedAt: string | null;
+  // The free plan is a trial: it is upgraded, never renewed or declined.
+  trial: boolean;
+  // active → grace (7 days) → locked for the plan itself.
+  phase: 'active' | 'grace' | 'locked';
+  graceEndsAt: string | null;
   plan: {
     id: string;
     name: string;
@@ -77,10 +83,15 @@ function noticeTitle(notice: OwnerRenewalNotice): string {
 
 function dueText(notice: OwnerRenewalNotice): string {
   const past = new Date(notice.dueAt).getTime() <= Date.now();
-  if (notice.kind === 'subscription')
+  if (notice.kind === 'subscription') {
+    if (notice.phase === 'locked')
+      return `ended ${dateLabel(notice.dueAt)} — your shops are locked`;
+    if (notice.phase === 'grace')
+      return `ended ${dateLabel(notice.dueAt)} — shops stay online until ${dateLabel(notice.graceEndsAt)}`;
     return past
       ? `ended ${dateLabel(notice.dueAt)}`
       : `ends ${dateLabel(notice.dueAt)}`;
+  }
   if (notice.store?.state === 'grace')
     return `ended ${dateLabel(notice.dueAt)} — the tick hides ${dateLabel(notice.store.graceEndsAt)}`;
   if (notice.store?.state === 'expired')
@@ -100,16 +111,19 @@ function RenewalCard({
   notice,
   compact = false,
   busy,
+  onRenew,
   onDecline,
   onDismiss,
 }: {
   notice: OwnerRenewalNotice;
   compact?: boolean;
   busy: boolean;
+  onRenew: (notice: OwnerRenewalNotice) => void;
   onDecline: (notice: OwnerRenewalNotice) => void;
   onDismiss: (notice: OwnerRenewalNotice) => void;
 }) {
   const declined = Boolean(notice.declinedAt);
+  const requested = Boolean(notice.requestedAt);
   const price = priceLabel(notice);
   const kindLabel =
     notice.kind === 'subscription' ? 'Plan renewal' : 'Verification renewal';
@@ -136,17 +150,28 @@ function RenewalCard({
           <span className={notice.kind === 'verification' ? 'notranslate' : ''}>
             {dueText(notice)}
           </span>
-          {price ? ` · ${price} per month` : ' · price arranged with the team'}
+          {notice.trial
+            ? ' · free trial'
+            : price
+              ? ` · ${price} per month`
+              : ' · price arranged with the team'}
         </p>
-        {declined ? (
+        {requested ? (
+          <small>You asked to renew. The team will call or message you.</small>
+        ) : declined ? (
           <small>
             You told us you will not renew. Your current period stays active
             until it ends.
           </small>
+        ) : notice.trial ? (
+          <small>
+            The free trial is one-time. Choose a paid plan before it ends; your
+            shops stay online for the 7-day grace window.
+          </small>
         ) : compact ? null : (
           <small>
-            The team confirms renewals by phone or WhatsApp. Declining only
-            stops reminders.
+            The team confirms renewals by phone or WhatsApp. Renewing records
+            your request; the paid period only moves after confirmation.
           </small>
         )}
       </div>
@@ -163,23 +188,45 @@ function RenewalCard({
             Dismiss
           </button>
         )}
-        {declined ? (
+        {notice.trial ? (
+          <Link className="panel-primary" to="/pricing">
+            Choose a plan
+          </Link>
+        ) : requested ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onDecline(notice)}
+          >
+            Do not renew
+          </button>
+        ) : declined ? (
           <button
             type="button"
             className="panel-primary"
             disabled={busy}
-            onClick={() => onDecline(notice)}
+            onClick={() => onRenew(notice)}
           >
             I want to renew
           </button>
         ) : (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onDecline(notice)}
-          >
-            I don't want to renew
-          </button>
+          <>
+            <button
+              type="button"
+              className="panel-primary"
+              disabled={busy}
+              onClick={() => onRenew(notice)}
+            >
+              Renew
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDecline(notice)}
+            >
+              I don't want to renew
+            </button>
+          </>
         )}
       </div>
     </article>
@@ -237,6 +284,22 @@ export function OwnerRenewalBanner() {
       setBusy('');
     }
   }
+  // The owner's Renew choice records a request for the team; the plan does not
+  // change until an administrator confirms the payment.
+  async function renew(notice: OwnerRenewalNotice) {
+    setBusy(notice.id);
+    setError('');
+    try {
+      await mutate(`notifications/${notice.id}/renew`);
+      await client.invalidateQueries({
+        queryKey: ['panel', session.user.id],
+      });
+    } catch (reason) {
+      setError(panelError(reason));
+    } finally {
+      setBusy('');
+    }
+  }
   return (
     <section className="panel-renewal-banner" aria-label="Renewal reminders">
       <header>
@@ -261,9 +324,8 @@ export function OwnerRenewalBanner() {
           notice={notice}
           compact
           busy={busy === notice.id}
-          onDecline={(value) =>
-            value.declinedAt ? void respond(value, false) : setConfirming(value)
-          }
+          onRenew={(value) => void renew(value)}
+          onDecline={(value) => setConfirming(value)}
           onDismiss={(value) => void dismiss(value)}
         />
       ))}
@@ -317,7 +379,8 @@ function DecisionDialog({
       </p>
       <p className="panel-muted">
         You can change your mind from Notifications at any time. Declining never
-        removes your published content or shortens the paid period.
+        shortens the paid period. If the plan ends, your shops stay online for
+        the 7-day grace window and are then locked until a renewal is confirmed.
       </p>
       <div className="panel-actions">
         <button type="button" className="panel-secondary" onClick={close}>
@@ -375,6 +438,22 @@ export function OwnerNotifications() {
       setBusy('');
     }
   }
+  async function renew(value: OwnerRenewalNotice) {
+    setBusy(value.id);
+    setError('');
+    setNotice('');
+    try {
+      await mutate(`notifications/${value.id}/renew`);
+      await client.invalidateQueries({ queryKey: ['panel', session.user.id] });
+      setNotice(
+        'Your renewal request is saved. The team calls or messages you to confirm the payment; your period does not change yet.',
+      );
+    } catch (reason) {
+      setError(panelError(reason));
+    } finally {
+      setBusy('');
+    }
+  }
   async function readAll() {
     setBusy('all');
     setError('');
@@ -423,19 +502,18 @@ export function OwnerNotifications() {
           </div>
           <p className="panel-muted">
             The team calls or messages you on WhatsApp before the end date.
-            Renewing gives you another 30 days. A badge included in your plan
-            renews with the plan, so it does not appear separately.
+            Renewing gives you another 30 days. If the plan ends, your shops
+            stay online for a 7-day grace window and are then locked until the
+            renewal is confirmed. A badge included in your plan renews with the
+            plan, so it does not appear separately.
           </p>
           {items.map((item) => (
             <RenewalCard
               key={item.id}
               notice={item}
               busy={busy === item.id}
-              onDecline={(value) =>
-                value.declinedAt
-                  ? void respond(value, false)
-                  : setConfirming(value)
-              }
+              onRenew={(value) => void renew(value)}
+              onDecline={(value) => setConfirming(value)}
               onDismiss={async (value) => {
                 setBusy(value.id);
                 try {
@@ -455,8 +533,9 @@ export function OwnerNotifications() {
       ) : (
         <Empty title="Nothing needs renewing">
           <p>
-            When a paid plan or an add-on verification badge is one day from its
-            end date, the reminder appears here and on your home screen.
+            When a plan, a free trial, or an add-on verification badge is one
+            day from its end date, the reminder appears here and on your home
+            screen.
           </p>
           <Link className="panel-secondary" to="/dashboard/plan">
             My plan <ArrowUpRight size={15} />

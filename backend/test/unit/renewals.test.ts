@@ -11,6 +11,11 @@ import {
   renewalNoticeKey,
 } from '../../libs/database/src/renewal-policy';
 import { RenewalKind } from '../../libs/database/src/entities';
+import {
+  SUBSCRIPTION_GRACE_DAYS,
+  subscriptionGraceEndsAt,
+} from '../../libs/database/src/subscription-policy';
+import { VERIFICATION_GRACE_DAYS } from '../../libs/database/src/verification-policy';
 import { nextMidnightDelay } from '../../apps/api/src/modules/renewals/renewal-scheduler.service';
 import { RenewalReminders1796078400000 } from '../../libs/database/src/migrations/1796078400000-RenewalReminders';
 import type { QueryRunner } from 'typeorm';
@@ -118,6 +123,15 @@ test('the renewal migration keeps small, reversible DDL steps', async () => {
   );
   assert.match(queries[2] ?? '', /DROP COLUMN `renewal_declined_at`/);
   assert.match(queries[3] ?? '', /DROP COLUMN `renewal_declined_at`/);
+});
+
+test('the plan and badge grace windows stay aligned at seven days', () => {
+  assert.equal(SUBSCRIPTION_GRACE_DAYS, 7);
+  assert.equal(VERIFICATION_GRACE_DAYS, SUBSCRIPTION_GRACE_DAYS);
+  assert.equal(
+    subscriptionGraceEndsAt(now)?.getTime(),
+    now.getTime() + 7 * day,
+  );
 });
 
 test('the midnight timer follows the business time zone, not the server one', () => {

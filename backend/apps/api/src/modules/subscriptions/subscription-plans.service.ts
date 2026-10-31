@@ -29,6 +29,7 @@ import {
   StoreSubscriptionTier,
   syncIncludedBadgesForOwner,
   nextSubscriptionRenewalExpiry,
+  unlockOwnerShops,
 } from '@app/database';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
 import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
@@ -418,7 +419,11 @@ export class SubscriptionPlansService {
           );
           subscription.expiresAt = expiresAt;
           subscription.renewalDeclinedAt = null;
+          subscription.renewalRequestedAt = null;
           await manager.save(subscription);
+          // A renewal reopens every shop the grace window locked, and queues a
+          // byte-exact media restore for the ones already archived.
+          await unlockOwnerShops(manager, subscription.userId);
           // Bundled badges are paid by this subscription, so they move with it.
           const maxBadges = plan.limits?.maxVerificationBadges;
           const includesBadges =
@@ -444,6 +449,54 @@ export class SubscriptionPlansService {
       ) {
         throw error;
       }
+      this.sanitize(error);
+    }
+  }
+
+  /**
+   * The owner's explicit renewal request. It records intent only: the paid
+   * period, the grace window and every published shop stay untouched until an
+   * administrator confirms the payment with extend or assign.
+   */
+  async requestRenewal(userId: string): Promise<{ requestedAt: Date }> {
+    try {
+      return await this.userSubscriptions.manager.transaction(
+        async (manager) => {
+          const user = await manager.findOne(User, {
+            where: { id: userId },
+            lock: { mode: 'pessimistic_read' },
+          });
+          if (!user || user.suspendedAt)
+            throw new NotFoundException('Active user not found');
+          // The newest assignment is the one the queue would extend; an older
+          // superseded row must never be requested.
+          const subscription = await manager.findOne(UserSubscription, {
+            where: { userId, status: SubscriptionStatus.ACTIVE },
+            relations: ['plan'],
+            order: { startsAt: 'DESC' },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!subscription)
+            throw new NotFoundException('Subscription not found');
+          if (subscription.plan?.slug === 'free')
+            throw new BadRequestException({
+              code: 'FREE_PLAN_NO_RENEWAL',
+              message:
+                'The free trial cannot be renewed. Choose a paid plan instead.',
+            });
+          const requestedAt = new Date();
+          subscription.renewalRequestedAt = requestedAt;
+          subscription.renewalDeclinedAt = null;
+          await manager.save(subscription);
+          return { requestedAt };
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      )
+        throw error;
       this.sanitize(error);
     }
   }
@@ -563,6 +616,9 @@ export class SubscriptionPlansService {
               notes: notes ?? null,
             }),
           );
+          // A plan assignment is the payment confirmation: locked shops reopen
+          // here and their archived media is restored by the worker.
+          await unlockOwnerShops(manager, userId);
           // A plan with bundled badge slots lets the owner's bundled badges run
           // to the subscription end; a plan without slots ends them now.
           const maxBadges = plan.limits?.maxVerificationBadges;

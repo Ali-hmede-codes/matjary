@@ -70,6 +70,18 @@ export class RenewalNoticesController {
     return this.notifications.decline(request.user.id, id);
   }
 
+  // The owner's Renew choice. It records intent for the administrator queue; the
+  // paid period is untouched until the team confirms the payment.
+  @Post(':id/renew')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthOriginGuard, AuthRateLimitGuard)
+  renew(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.notifications.requestRenewal(request.user.id, id);
+  }
+
   @Post(':id/resume')
   @HttpCode(HttpStatus.OK)
   @UseGuards(AuthOriginGuard, AuthRateLimitGuard)

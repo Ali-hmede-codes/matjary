@@ -70,6 +70,81 @@ export const EXPIRED_LIMITS: SubscriptionLimits = {
 
 const DAY_MS = 86_400_000;
 
+// A lapsed plan keeps its shop public, with the owner read-only, for one week.
+// When the window ends the sweeper locks the shop (hidden, renew only) and
+// queues its media for the lossless archive tier. The same seven days apply to
+// an add-on verification badge's grace window.
+export const SUBSCRIPTION_GRACE_DAYS = 7;
+
+export type SubscriptionPhase = 'active' | 'grace' | 'locked';
+
+export interface SubscriptionLifecycle {
+  phase: SubscriptionPhase;
+  // End of the paid period. Null means the plan has no end date.
+  endsAt: Date | null;
+  // Moment the public grace window ends and the shop is locked.
+  graceEndsAt: Date | null;
+  // Days left in the paid period, or in the grace window once it ended.
+  daysRemaining: number | null;
+}
+
+export function subscriptionGraceEndsAt(endsAt: Date | null): Date | null {
+  return endsAt
+    ? new Date(endsAt.getTime() + SUBSCRIPTION_GRACE_DAYS * DAY_MS)
+    : null;
+}
+
+// Boundaries are exclusive: the moment the paid period ends the phase becomes
+// `grace`, and the moment the window ends it becomes `locked`. A plan with no
+// end date never locks, which matches the admin-assigned never-ending plan.
+export function subscriptionLifecycle(
+  endsAt: Date | null,
+  now = new Date(),
+): SubscriptionLifecycle {
+  if (!endsAt)
+    return {
+      phase: 'active',
+      endsAt: null,
+      graceEndsAt: null,
+      daysRemaining: null,
+    };
+  const graceEndsAt = subscriptionGraceEndsAt(endsAt)!;
+  const remaining = (until: Date) =>
+    Math.max(0, Math.ceil((until.getTime() - now.getTime()) / DAY_MS));
+  if (now.getTime() < endsAt.getTime())
+    return {
+      phase: 'active',
+      endsAt,
+      graceEndsAt,
+      daysRemaining: remaining(endsAt),
+    };
+  if (now.getTime() < graceEndsAt.getTime())
+    return {
+      phase: 'grace',
+      endsAt,
+      graceEndsAt,
+      daysRemaining: remaining(graceEndsAt),
+    };
+  return { phase: 'locked', endsAt, graceEndsAt, daysRemaining: 0 };
+}
+
+// When the grace clock starts for the newest subscription row. An active row
+// uses its recorded end date; a cancelled row was ended early, so the
+// cancellation moment wins when it is earlier than the old end date. A paid
+// plan with no end date never starts the clock.
+export function subscriptionLockAnchor(
+  row: Pick<UserSubscription, 'expiresAt' | 'status' | 'updatedAt'>,
+): Date | null {
+  if (row.status === SubscriptionStatus.ACTIVE) return row.expiresAt;
+  if (row.status === SubscriptionStatus.CANCELLED) {
+    if (!row.expiresAt) return row.updatedAt;
+    return row.expiresAt.getTime() < row.updatedAt.getTime()
+      ? row.expiresAt
+      : row.updatedAt;
+  }
+  return row.expiresAt ?? row.updatedAt;
+}
+
 export interface SubscriptionState {
   state: 'trial' | 'paid' | 'expired';
   subscription: UserSubscription | null;
@@ -77,6 +152,12 @@ export interface SubscriptionState {
   planSlug: string | null;
   expiresAt: Date | null;
   daysRemaining: number | null;
+  // Where the account sits after the paid period: active, the seven-day grace
+  // window (shops stay public and read-only), or locked (shops hidden).
+  phase: SubscriptionPhase;
+  graceEndsAt: Date | null;
+  // The owner asked the team to renew the newest assignment.
+  renewalRequestedAt: Date | null;
 }
 
 // One row is effective only while it runs and its plan is loaded. The free plan
@@ -118,17 +199,37 @@ export async function subscriptionState(
   now = new Date(),
 ): Promise<SubscriptionState> {
   const subscription = await effectiveSubscription(manager, userId, now);
-  if (!subscription || !subscription.plan)
+  if (!subscription || !subscription.plan) {
+    // No live assignment: the newest row still tells the dashboard when the
+    // grace window ends, so the lock appears on its own without a scheduler read.
+    const latestRows = await manager.getRepository(UserSubscription).find({
+      where: { userId },
+      relations: ['plan'],
+      order: { startsAt: 'DESC' },
+      take: 1,
+    });
+    const latest = latestRows[0] ?? null;
+    const lifecycle = subscriptionLifecycle(
+      latest ? subscriptionLockAnchor(latest) : null,
+      now,
+    );
     return {
       state: 'expired',
       subscription: null,
-      planName: null,
-      planSlug: null,
-      expiresAt: null,
-      daysRemaining: null,
+      // The newest row still names the plan that ended, so the dashboard can
+      // offer the plans page for a free trial instead of a renewal request.
+      planName: latest?.plan?.name ?? null,
+      planSlug: latest?.plan?.slug ?? null,
+      expiresAt: latest?.expiresAt ?? null,
+      daysRemaining: lifecycle.daysRemaining,
+      phase: lifecycle.phase,
+      graceEndsAt: lifecycle.graceEndsAt,
+      renewalRequestedAt: latest?.renewalRequestedAt ?? null,
     };
+  }
   const trial = subscription.plan.slug === 'free';
   const expiresAt = subscription.expiresAt ?? null;
+  const lifecycle = subscriptionLifecycle(expiresAt, now);
   return {
     state: trial ? 'trial' : 'paid',
     subscription,
@@ -138,6 +239,9 @@ export async function subscriptionState(
     daysRemaining: expiresAt
       ? Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / DAY_MS))
       : null,
+    phase: lifecycle.phase,
+    graceEndsAt: lifecycle.graceEndsAt,
+    renewalRequestedAt: subscription.renewalRequestedAt,
   };
 }
 

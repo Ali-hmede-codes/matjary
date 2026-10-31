@@ -258,6 +258,9 @@ export class UserDashboardService {
           planSlug: subscriptionState.planSlug,
           expiresAt: subscriptionState.expiresAt,
           daysRemaining: subscriptionState.daysRemaining,
+          phase: subscriptionState.phase,
+          graceEndsAt: subscriptionState.graceEndsAt,
+          renewalRequestedAt: subscriptionState.renewalRequestedAt,
         },
         limits: effectiveLimits,
         sections: {

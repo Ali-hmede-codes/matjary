@@ -10,11 +10,13 @@ import {
   Showcase,
   PostEngagement,
   PostLike,
+  Store,
   StoreStory,
 } from '@app/database';
 import { MediaProcessor } from './jobs/media.process';
 import { MediaRecovery } from './jobs/media.recovery';
 import { StorySweeper } from './jobs/story.sweeper';
+import { ShopMediaArchiver } from './jobs/shop.archive';
 import { EngagementFlusher } from './jobs/engagement.flush';
 import { WorkerHeartbeat } from './worker-heartbeat';
 import { ObservabilityModule } from '@app/observability';
@@ -39,12 +41,15 @@ import { ObservabilityModule } from '@app/observability';
       PostEngagement,
       PostLike,
       StoreStory,
+      // Store rows drive the locked-shop media archive pass.
+      Store,
     ]),
   ],
   providers: [
     MediaProcessor,
     MediaRecovery,
     StorySweeper,
+    ShopMediaArchiver,
     EngagementFlusher,
     WorkerHeartbeat,
   ],

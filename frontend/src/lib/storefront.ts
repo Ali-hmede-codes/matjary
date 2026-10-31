@@ -15,7 +15,7 @@ export type { CatalogLayout } from './design.ts';
 import { contrastColor, safeUrl } from './website.ts';
 
 export type StoreLifecycleStatus =
-  'active' | 'offline' | 'archived' | 'trashed';
+  'active' | 'offline' | 'archived' | 'trashed' | 'locked';
 export type StoreLifecycleAction =
   'active' | 'offline' | 'archived' | 'trashed' | 'restore' | 'delete';
 export const storeStatusLabel: Record<StoreLifecycleStatus, string> = {
@@ -23,6 +23,7 @@ export const storeStatusLabel: Record<StoreLifecycleStatus, string> = {
   offline: 'Off',
   archived: 'Archived',
   trashed: 'In Trash',
+  locked: 'Locked · renew to open',
 };
 export function isCurrentStore(store: { status: StoreLifecycleStatus }) {
   return store.status === 'active' || store.status === 'offline';
@@ -89,6 +90,9 @@ export function storeLifecycleActions(store: {
   status: StoreLifecycleStatus;
   restricted?: boolean;
 }): StoreLifecycleAction[] {
+  // A locked shop has one way back: a renewal. No owner lifecycle action is
+  // offered, and the API refuses even a stale request.
+  if (store.status === 'locked') return [];
   if (store.status === 'trashed') return ['restore', 'delete'];
   if (store.status === 'archived') return ['restore', 'trashed'];
   if (!isCurrentStore(store)) return [];
@@ -105,7 +109,7 @@ export function storeLifecycleActions(store: {
 
 // Mirrors VERIFICATION_GRACE_DAYS in the backend policy: after the paid month
 // ends, the blue tick stays visible for these days while the owner renews.
-export const VERIFICATION_GRACE_DAYS = 5;
+export const VERIFICATION_GRACE_DAYS = 7;
 const VERIFICATION_DAY_MS = 86_400_000;
 
 export function isStoreVerified(

@@ -76,10 +76,14 @@ services:
       REDIS_PORT: 6379
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_LOCAL_DIR: /var/lib/matjary/media
+      # Locked-shop media moves, unchanged, to this second volume; renewal moves
+      # it back. Point it at a different disk to actually free the live volume.
+      MEDIA_ARCHIVE_ROOT: /var/lib/matjary/media-archive
       MEDIA_TEMP_DIR: /app/.tmp/media
       WORKER_HEARTBEAT_FILE: /app/.tmp/worker-heartbeat
     volumes:
       - media-data:/var/lib/matjary/media
+      - media-archive-data:/var/lib/matjary/media-archive
     stop_grace_period: 16m
     security_opt:
       - no-new-privileges:true
@@ -124,10 +128,12 @@ services:
       REDIS_PORT: 6379
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_LOCAL_DIR: /var/lib/matjary/media
+      MEDIA_ARCHIVE_ROOT: /var/lib/matjary/media-archive
       MEDIA_TEMP_DIR: /app/.tmp/media
       WORKER_HEARTBEAT_FILE: /app/.tmp/worker-heartbeat
     volumes:
       - media-data:/var/lib/matjary/media
+      - media-archive-data:/var/lib/matjary/media-archive
     stop_grace_period: 16m
     security_opt:
       - no-new-privileges:true
@@ -170,3 +176,4 @@ volumes:
   mysql-data:
   redis-data:
   media-data:
+  media-archive-data:

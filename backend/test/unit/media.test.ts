@@ -16,6 +16,7 @@ import {
   type AppEnvironment,
 } from '../../libs/config/src/environment';
 import { StorageService } from '../../libs/storage/src/storage.service';
+import { MediaArchiveService } from '../../libs/storage/src/archive/media-archive.service';
 import { LocalStorageProvider } from '../../libs/storage/src/providers/local.storage.provider';
 import {
   MediaAsset,
@@ -140,6 +141,8 @@ test('store and product images require the correct owner, target, readiness and 
   assert.deepEqual(await media.authorizeDownload('image-key', 'owner'), {
     mimeType: 'image/webp',
     public: false,
+    // The shop that owns the bytes, so the route can fall back to the archive.
+    storeId: store.id,
   });
   await assertMediaAttachment(manager, 'owner', 'store_logo', store.id, [
     'image-key',
@@ -602,6 +605,9 @@ test('HTTP local bytes enforce ownership, publication, origin, provider and rang
     providers: [
       { provide: MediaService, useValue: media },
       { provide: StorageService, useValue: storage },
+      // The archive tier is disabled in this configuration, so the route keeps
+      // serving live bytes exactly as before.
+      MediaArchiveService,
       { provide: ConfigService, useValue: config },
       { provide: AuthService, useValue: auth },
       AuthCookies,
@@ -1242,5 +1248,6 @@ test('story media is public only while its story is live', async () => {
   assert.deepEqual(await media.authorizeDownload('story-image', 'owner'), {
     mimeType: 'image/webp',
     public: false,
+    storeId: store.id,
   });
 });

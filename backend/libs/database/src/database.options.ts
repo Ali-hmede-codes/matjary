@@ -27,6 +27,7 @@ import { ArabicSlugRepair1795819200000 } from './migrations/1795819200000-Arabic
 import { UserPhones1795905600000 } from './migrations/1795905600000-UserPhones';
 import { VerificationSettings1795992000000 } from './migrations/1795992000000-VerificationSettings';
 import { RenewalReminders1796078400000 } from './migrations/1796078400000-RenewalReminders';
+import { SubscriptionLockLifecycle1796164800000 } from './migrations/1796164800000-SubscriptionLockLifecycle';
 import { OwnerMediaTargets1793832000000 } from './migrations/1793832000000-OwnerMediaTargets';
 import { AddUserRoles1793745600000 } from './migrations/1793745600000-AddUserRoles';
 import { WebsiteSettings1793659200000 } from './migrations/1793659200000-WebsiteSettings';
@@ -114,6 +115,7 @@ export function createDatabaseOptions(
       UserPhones1795905600000,
       VerificationSettings1795992000000,
       RenewalReminders1796078400000,
+      SubscriptionLockLifecycle1796164800000,
     ],
     migrationsTableName: 'schema_migrations',
     // MySQL DDL implicitly commits; never pretend migrations are atomic.

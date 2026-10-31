@@ -5,6 +5,9 @@ import { STORY_LIMIT_CODE, STORY_OFFLINE_CODE } from './story-policy';
 
 export const TRIAL_EXPIRED_CODE = 'TRIAL_EXPIRED';
 export const FREE_TRIAL_CAP_CODE = 'FREE_TRIAL_CAP';
+// The plan grace window ended and the shop is locked: hidden from shoppers and
+// limited to its renewal page until an administrator confirms the renewal.
+export const SHOP_RENEWAL_REQUIRED_CODE = 'SHOP_RENEWAL_REQUIRED';
 // A content section the owner turned off cannot receive new content.
 export const SECTION_DISABLED_CODE = 'SECTION_DISABLED';
 // Turning a section back on needs at least one free slot in the shared pool.
@@ -19,6 +22,8 @@ export const OWNER_PLAN_FULL_CODE = 'OWNER_PLAN_FULL';
 export const SAFE_SUBSCRIPTION_CODES: ReadonlySet<string> = new Set([
   TRIAL_EXPIRED_CODE,
   FREE_TRIAL_CAP_CODE,
+  // Locked-shop writes drive the "Renew to open your shop" screen.
+  SHOP_RENEWAL_REQUIRED_CODE,
   SECTION_DISABLED_CODE,
   SECTION_NO_ROOM_CODE,
   SECTION_LAST_ENABLED_CODE,

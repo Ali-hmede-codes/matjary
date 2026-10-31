@@ -143,6 +143,17 @@ function fixture() {
     Object.entries(where).every(([key, value]) => {
       if (value instanceof FindOperator) {
         const expected = value.value as unknown;
+        if (value.type === 'isNull') return row[key] == null;
+        if (value.type === 'not') {
+          if (expected instanceof FindOperator) {
+            if (expected.type === 'isNull') return row[key] != null;
+            if (expected.type === 'in' && Array.isArray(expected.value))
+              return !(expected.value as unknown[]).includes(row[key]);
+            return true;
+          }
+          if (Array.isArray(expected)) return !expected.includes(row[key]);
+          return row[key] !== expected;
+        }
         return value.type === 'in' && Array.isArray(expected)
           ? expected.includes(row[key])
           : true;
@@ -174,6 +185,23 @@ function fixture() {
           assert.ok(row);
           row.adminScope = parameters[0];
           return;
+        }
+        // Subscription lock/unlock writes. `status` is update:false on the
+        // entity, so the services use raw SQL; the fake mirrors the guards.
+        if (sql.startsWith('UPDATE stores SET status = ?')) {
+          const unlocking = /subscription_locked_at = NULL/.test(sql);
+          const row = await find(Store, { id: parameters[unlocking ? 2 : 3] });
+          if (!row) return { affectedRows: 0 };
+          if (
+            unlocking
+              ? row.subscriptionLockedAt == null
+              : row.subscriptionLockedAt != null
+          )
+            return { affectedRows: 0 };
+          row.status = parameters[0];
+          row.subscriptionLockedAt = unlocking ? null : parameters[1];
+          row.mediaArchiveState = parameters[unlocking ? 1 : 2];
+          return { affectedRows: 1 };
         }
         assert.match(
           sql,

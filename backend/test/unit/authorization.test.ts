@@ -82,10 +82,10 @@ test('public shop badges disappear after expiration or revocation', (t) => {
   }
   for (const expires of [now, new Date(now.getTime() - 1000)]) {
     store.verificationBadgeExpiresAt = expires;
-    // The five-day renewal window keeps the tick visible after the month ends.
+    // The seven-day renewal window keeps the tick visible after the month ends.
     assert.equal(toStoreResponseDto(store).hasVerificationBadge, true);
   }
-  store.verificationBadgeExpiresAt = new Date(now.getTime() - 6 * 86_400_000);
+  store.verificationBadgeExpiresAt = new Date(now.getTime() - 8 * 86_400_000);
   assert.equal(toStoreResponseDto(store).hasVerificationBadge, false);
   store.hasVerificationBadge = false;
   store.verificationBadgeExpiresAt = null;
@@ -888,7 +888,10 @@ test('effective subscriptions honor dates, trials, null limits and hard media bo
       target === UserSubscription
         ? {
             find: async (options: any) => {
-              assert.equal(options.where.status, SubscriptionStatus.ACTIVE);
+              // The effective lookup filters by status; the grace fallback asks
+              // for the newest row of any status.
+              if (options.where.status)
+                assert.equal(options.where.status, SubscriptionStatus.ACTIVE);
               return rows;
             },
           }

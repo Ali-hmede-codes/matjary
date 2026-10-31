@@ -47,7 +47,12 @@ interface SubscriptionRenewal {
   } | null;
   expiresAt: string | null;
   daysLeft: number | null;
+  // Where the account sits: active, the 7-day grace window, or locked.
+  phase: 'active' | 'grace' | 'locked';
+  graceEndsAt: string | null;
+  lockedShops: number;
   declinedAt: string | null;
+  requestedAt: string | null;
   notifiedAt: string | null;
   seenAt: string | null;
 }
@@ -66,6 +71,7 @@ interface BadgeRenewal {
   currency: string;
   contactPhone: string | null;
   declinedAt: string | null;
+  requestedAt: string | null;
   notifiedAt: string | null;
   seenAt: string | null;
 }
@@ -77,6 +83,7 @@ interface RenewalQueueResponse {
     verification: number;
     total: number;
     declined: number;
+    locked: number;
   };
   subscriptions: SubscriptionRenewal[];
   badges: BadgeRenewal[];
@@ -108,6 +115,10 @@ const priceOf = (
 
 function planDueText(row: SubscriptionRenewal): string {
   const date = dateLabel(row.expiresAt);
+  if (row.lockedShops > 0)
+    return `Locked · ${row.lockedShops} shop${row.lockedShops === 1 ? '' : 's'} hidden · ended ${date}`;
+  if (row.phase === 'grace')
+    return `Grace window · shops online until ${dateLabel(row.graceEndsAt)}`;
   if (row.daysLeft == null) return `Ended ${date}`;
   if (row.daysLeft < 0) return `Lapsed · ended ${date}`;
   if (row.daysLeft === 0) return `Less than a day left · ends ${date}`;
@@ -271,7 +282,9 @@ function ExtendDialog({
       <form className="panel-form" onSubmit={(event) => void submit(event)}>
         <p>
           The new month starts where the current one ends, or today when it has
-          already lapsed. The owner's reminder disappears immediately.
+          already lapsed. The owner's reminder disappears immediately. A locked
+          shop reopens and its archived photos and videos are restored
+          automatically.
         </p>
         <label>
           Reason for the audit log
@@ -339,6 +352,16 @@ function PlanRow({
       </div>
       <div className="panel-renewal-tags">
         <ReminderStatus notifiedAt={row.notifiedAt} seenAt={row.seenAt} />
+        {row.requestedAt && (
+          <span className="panel-pill">
+            Owner asked to renew · {dateLabel(row.requestedAt)}
+          </span>
+        )}
+        {row.lockedShops > 0 && (
+          <span className="panel-pill muted">
+            {row.lockedShops} shop{row.lockedShops === 1 ? '' : 's'} locked
+          </span>
+        )}
         {row.declinedAt && (
           <span className="panel-pill muted">Owner declined renewal</span>
         )}
@@ -404,6 +427,11 @@ function BadgeRow({
       </div>
       <div className="panel-renewal-tags">
         <ReminderStatus notifiedAt={row.notifiedAt} seenAt={row.seenAt} />
+        {row.requestedAt && (
+          <span className="panel-pill">
+            Owner asked to renew · {dateLabel(row.requestedAt)}
+          </span>
+        )}
         {row.declinedAt && (
           <span className="panel-pill muted">Owner declined renewal</span>
         )}
@@ -460,11 +488,18 @@ export function RenewalQueue({
           <p className="panel-muted">
             Owners get one reminder at midnight when the end date is today or
             tomorrow. Renew with one month, or send the prepared Arabic message
-            on WhatsApp.
+            on WhatsApp. After a plan ends the shops stay online for a 7-day
+            grace window, then they are locked until a renewal is confirmed.
           </p>
         </div>
         <div className="panel-renewal-queue-counts">
           <span className="panel-pill">{data.counts.total} to renew</span>
+          {data.counts.locked > 0 && (
+            <span className="panel-pill">
+              {data.counts.locked} owner{data.counts.locked === 1 ? '' : 's'}{' '}
+              with locked shops
+            </span>
+          )}
           {data.counts.declined > 0 && (
             <span className="panel-pill muted">
               {data.counts.declined} declined
@@ -595,6 +630,13 @@ export function AdminNotifications({ id }: { id: string }) {
           </span>
           <strong>{counts?.declined ?? 0}</strong>
           <small>Kept visible until the end date</small>
+        </div>
+        <div className="panel-stat">
+          <span>
+            Shops locked <StoreIcon size={17} />
+          </span>
+          <strong>{counts?.locked ?? 0}</strong>
+          <small>Owners whose grace window ended</small>
         </div>
       </div>
       {query.isError && <Notice error>{panelError(query.error)}</Notice>}

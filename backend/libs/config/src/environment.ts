@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import path from 'node:path';
 
 export interface DatabaseEnvironment {
   MYSQL_HOST: string;
@@ -29,6 +30,10 @@ export interface AppEnvironment extends DatabaseEnvironment {
   // requires copying/verifying existing objects and arranging delivery.
   STORAGE_PROVIDER: 's3' | 'local';
   STORAGE_LOCAL_DIR: string;
+  // Optional second root for locked-shop media. Bytes are moved unchanged, so a
+  // separate volume frees the live one without losing anything on renewal.
+  // Empty disables archiving (locked shops keep their files in place).
+  MEDIA_ARCHIVE_ROOT: string;
   STORAGE_PUBLIC_BASE_URL: string;
   // Engagement (like/view) counters are buffered in Redis and flushed to
   // MySQL asynchronously, so a click never writes synchronously to the DB.
@@ -77,6 +82,10 @@ export interface AppEnvironment extends DatabaseEnvironment {
 }
 
 type Environment = Record<string, unknown>;
+
+function resolveEnvironmentPath(value: string): string {
+  return path.resolve(value);
+}
 
 function text(env: Environment, key: string, fallback?: string): string {
   const value = env[key] ?? fallback;
@@ -288,6 +297,23 @@ export function validateEnvironment(
       );
     }
   }
+  // The archive must be a separate tree; keeping it inside the live root would
+  // move bytes into the same volume (no saving) and confuse key resolution.
+  const archiveRoot = String(env.MEDIA_ARCHIVE_ROOT ?? '').trim();
+  if (archiveRoot) {
+    const liveRoot = resolveEnvironmentPath(
+      String(env.STORAGE_LOCAL_DIR ?? 'storage'),
+    );
+    const resolvedArchive = resolveEnvironmentPath(archiveRoot);
+    const nested =
+      resolvedArchive === liveRoot ||
+      resolvedArchive.startsWith(`${liveRoot}${path.sep}`) ||
+      liveRoot.startsWith(`${resolvedArchive}${path.sep}`);
+    if (nested)
+      throw new Error(
+        'MEDIA_ARCHIVE_ROOT must be a directory outside STORAGE_LOCAL_DIR',
+      );
+  }
   return {
     ...env,
     ...validateDatabaseEnvironment(env),
@@ -352,6 +378,7 @@ export function validateEnvironment(
     // Storage provider selection: 's3' (object storage) or 'local' (VPS disk).
     STORAGE_PROVIDER: storageProvider as AppEnvironment['STORAGE_PROVIDER'],
     STORAGE_LOCAL_DIR: text(env, 'STORAGE_LOCAL_DIR', 'storage'),
+    MEDIA_ARCHIVE_ROOT: archiveRoot,
     STORAGE_PUBLIC_BASE_URL: localBase,
     // Engagement counters: buffered in Redis, flushed to MySQL asynchronously.
     ENGAGEMENT_RATE_LIMIT_PER_MIN: integer(

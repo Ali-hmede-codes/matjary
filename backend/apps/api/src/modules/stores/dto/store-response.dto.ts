@@ -1,6 +1,7 @@
 import {
   Store,
   StoreBranch,
+  StoreMediaArchiveState,
   StoreStatus,
   StoreSubscriptionTier,
   StoreType,
@@ -135,6 +136,12 @@ export class StoreResponseDto {
   verificationBadgeGrantedAt!: Date | null;
   verificationBadgeExpiresAt!: Date | null;
 
+  // Owner-only plan lifecycle. A locked shop is hidden from shoppers and only
+  // its renewal page is reachable; the archive state says where its bytes are.
+  subscriptionLockedAt?: Date | null;
+  mediaArchiveState?: StoreMediaArchiveState;
+  renewalRequestedAt?: Date | null;
+
   // True when the signed-in viewer can manage this shop (owner or team);
   // backs the story "+" on the storefront. Never a security check, the API
   // still authorizes every write.
@@ -219,6 +226,14 @@ export function toStoreResponseDto(
     hasVerificationBadge: verificationBadgeInfo(store).visible,
     verificationBadgeGrantedAt: store.verificationBadgeGrantedAt,
     verificationBadgeExpiresAt: store.verificationBadgeExpiresAt,
+    ...(includeOwnerId
+      ? {
+          subscriptionLockedAt: store.subscriptionLockedAt ?? null,
+          mediaArchiveState:
+            store.mediaArchiveState ?? StoreMediaArchiveState.NONE,
+          renewalRequestedAt: store.renewalRequestedAt ?? null,
+        }
+      : {}),
     viewerIsOwner: includeOwnerId,
     location: hasLocation
       ? {

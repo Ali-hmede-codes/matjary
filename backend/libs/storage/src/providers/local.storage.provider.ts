@@ -15,6 +15,7 @@ import { pipeline } from 'node:stream/promises';
 import { ByteLimit } from '../bounded-stream';
 import path from 'path';
 import type { StorageProvider } from '../contracts/storage.port';
+import { safeStoragePath } from '../safe-path';
 
 /**
  * Local-disk storage provider. Writes media files to a directory on this VPS
@@ -42,51 +43,8 @@ export class LocalStorageProvider implements StorageProvider {
       config.get('APP_ORIGIN', { infer: true });
   }
 
-  private async filePath(key: string, create = false): Promise<string> {
-    const segments = key.split('/');
-    if (
-      !key ||
-      key.length > 512 ||
-      !/^[a-zA-Z0-9_./-]+$/.test(key) ||
-      segments.some((part) => !part || part === '.' || part === '..')
-    ) {
-      throw new BadRequestException('Invalid storage key');
-    }
-    const file = path.resolve(this.root, ...segments);
-    const relative = path.relative(this.root, file);
-    if (relative.startsWith('..') || path.isAbsolute(relative))
-      throw new BadRequestException('Invalid storage key');
-    if (create) await fs.mkdir(this.root, { recursive: true });
-    const rootInfo = await fs.lstat(this.root);
-    if (
-      rootInfo.isSymbolicLink() ||
-      !rootInfo.isDirectory() ||
-      path.relative(await fs.realpath(this.root), this.root) !== ''
-    )
-      throw new BadRequestException('Invalid storage directory');
-    let current = this.root;
-    for (let i = 0; i < segments.length; i++) {
-      current = path.join(current, segments[i]!);
-      try {
-        const entry = await fs.lstat(current);
-        if (
-          entry.isSymbolicLink() ||
-          (i < segments.length - 1 && !entry.isDirectory())
-        )
-          throw new BadRequestException('Invalid storage key');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        if (create && i < segments.length - 1) {
-          await fs.mkdir(current).catch((mkdirError: NodeJS.ErrnoException) => {
-            if (mkdirError.code !== 'EEXIST') throw mkdirError;
-          });
-          const entry = await fs.lstat(current);
-          if (entry.isSymbolicLink() || !entry.isDirectory())
-            throw new BadRequestException('Invalid storage key');
-        }
-      }
-    }
-    return file;
+  private filePath(key: string, create = false): Promise<string> {
+    return safeStoragePath(this.root, key, create);
   }
 
   async statObject(key: string): Promise<{ size: number }> {

@@ -83,6 +83,12 @@ export interface PanelRecord {
   verificationBadgeExpiresAt?: string | null;
   adminArchivedAt?: string | null;
   suspendedAt?: string | null;
+  // Plan lifecycle of a shop: when the grace window ended, where its media
+  // lives, and whether the owner asked to renew a badge or a plan.
+  subscriptionLockedAt?: string | null;
+  mediaArchiveState?: string | null;
+  mediaArchivedAt?: string | null;
+  renewalRequestedAt?: string | null;
   logoKey?: string | null;
   bannerKey?: string | null;
   imageKeys?: string[] | null;
@@ -126,9 +132,13 @@ export async function mutate<T = void>(
 export function panelError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 'TRIAL_EXPIRED')
-      return 'Your free trial has ended. Choose a paid plan to keep creating. Your published content stays online.';
+      return 'This billing period has ended, so the dashboard is read-only. Renew to keep editing; your shop stays online during the 7-day grace window.';
+    if (error.code === 'SHOP_RENEWAL_REQUIRED')
+      return 'This shop is locked because its plan ended. Renew to open your shop again.';
     if (error.code === 'FREE_TRIAL_CAP')
       return 'Free-plan assignments are limited to the trial length. Assign a paid plan for longer access.';
+    if (error.code === 'FREE_PLAN_NO_RENEWAL')
+      return 'The free trial cannot be renewed. Choose a paid plan instead.';
     if (error.code === 'PRODUCT_SLUG_TAKEN')
       return 'That web address is already used by another product. Choose a different one.';
     if (error.code === 'STORE_SLUG_TAKEN')

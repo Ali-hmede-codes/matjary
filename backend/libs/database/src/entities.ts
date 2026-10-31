@@ -388,6 +388,21 @@ export enum StoreStatus {
   OFFLINE = 'offline',
   ARCHIVED = 'archived',
   TRASHED = 'trashed',
+  // Set by the subscription sweeper after the plan grace window ends. The shop
+  // is hidden from shoppers and the owner only sees its renewal page; no owner
+  // transition can produce or leave this value without an effective plan.
+  LOCKED = 'locked',
+}
+
+// Where a locked shop's media bytes live. The archive is byte-exact (no
+// re-encoding, no deletion) so renewal restores the original files; `none`
+// also covers deployments without an archive volume configured.
+export enum StoreMediaArchiveState {
+  NONE = 'none',
+  PENDING = 'pending',
+  ARCHIVED = 'archived',
+  RESTORING = 'restoring',
+  FAILED = 'failed',
 }
 
 @Entity({ name: 'stores', engine: 'InnoDB' })
@@ -403,6 +418,8 @@ export enum StoreStatus {
   'hasVerificationBadge',
   'verificationBadgeExpiresAt',
 ])
+@Index('idx_stores_subscription_lock', ['subscriptionLockedAt'])
+@Index('idx_stores_media_archive', ['mediaArchiveState'])
 @Index('idx_stores_business_category', ['businessCategory'])
 export class Store extends BaseEntity {
   // Only the locked lifecycle operation writes these; stale form saves cannot republish.
@@ -684,6 +701,44 @@ export class Store extends BaseEntity {
   })
   renewalDeclinedAt!: Date | null;
 
+  // The owner asked the team to renew this add-on badge. The paid month and the
+  // grace window are untouched; the administrator's queue shows the request and
+  // approval or extension clears it.
+  @Column({
+    name: 'renewal_requested_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  renewalRequestedAt!: Date | null;
+
+  // Set by the subscription sweeper once the plan grace window ends. The live
+  // shop is locked and its media is moved into the lossless archive tier; both
+  // clear automatically when the owner renews.
+  @Column({
+    name: 'subscription_locked_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  subscriptionLockedAt!: Date | null;
+
+  @Column({
+    name: 'media_archive_state',
+    type: 'enum',
+    enum: StoreMediaArchiveState,
+    default: StoreMediaArchiveState.NONE,
+  })
+  mediaArchiveState: StoreMediaArchiveState = StoreMediaArchiveState.NONE;
+
+  @Column({
+    name: 'media_archived_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  mediaArchivedAt!: Date | null;
+
   @OneToMany(() => Showcase, (showcase) => showcase.store)
   posts!: Relation<Showcase[]>;
 
@@ -874,6 +929,16 @@ export class UserSubscription extends BaseEntity {
     nullable: true,
   })
   renewalDeclinedAt!: Date | null;
+
+  // The owner asked the team to renew. The request is informational until the
+  // administrator extends or assigns a plan; it never moves the end date.
+  @Column({
+    name: 'renewal_requested_at',
+    type: 'datetime',
+    precision: 6,
+    nullable: true,
+  })
+  renewalRequestedAt!: Date | null;
 
   // For manual admin assignment
   @Column({ name: 'assigned_by', type: 'varchar', length: 36, nullable: true })

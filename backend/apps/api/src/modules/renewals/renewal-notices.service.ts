@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   HttpException,
   Injectable,
@@ -34,6 +35,7 @@ import {
   renewalNoticeIsLive,
   renewalNoticeKey,
   requireAdmin,
+  subscriptionLifecycle,
   verificationAddOnPriceCents,
   verificationBadgeInfo,
   type AdminActor,
@@ -52,6 +54,13 @@ interface OwnerRenewalNotice {
   dueAt: Date;
   seenAt: Date | null;
   declinedAt: Date | null;
+  // The owner asked the team to renew; the paid period is unchanged.
+  requestedAt: Date | null;
+  // The free plan is a trial: it can only be upgraded, never renewed.
+  trial: boolean;
+  // active, seven-day grace, or locked (for the plan itself).
+  phase: 'active' | 'grace' | 'locked';
+  graceEndsAt: Date | null;
   plan: {
     id: string;
     name: string;
@@ -75,6 +84,9 @@ interface DueQueryOptions {
   // queue also keeps lapsed rows until they are renewed.
   futureOnly: boolean;
   includeDeclined: boolean;
+  // Owners also hear about the one-time free trial, which is upgraded rather
+  // than renewed. The administrator queue never lists it.
+  includeTrial?: boolean;
 }
 
 @Injectable()
@@ -111,6 +123,7 @@ export class RenewalNoticesService {
         await this.dueSubscriptions(manager, now, {
           futureOnly: true,
           includeDeclined: false,
+          includeTrial: true,
         }),
       );
       const stores = await this.dueStores(manager, now, {
@@ -221,8 +234,9 @@ export class RenewalNoticesService {
       .andWhere('subscription.expiresAt IS NOT NULL')
       .andWhere('subscription.expiresAt < :horizon', { horizon })
       .andWhere('subscription.startsAt <= :now', { now })
-      .andWhere('plan.slug <> :free', { free: 'free' })
       .andWhere('user.suspendedAt IS NULL');
+    if (!options.includeTrial)
+      query.andWhere('plan.slug <> :free', { free: 'free' });
     if (options.futureOnly)
       query.andWhere('subscription.expiresAt > :now', { now });
     if (!options.includeDeclined)
@@ -369,6 +383,8 @@ export class RenewalNoticesService {
             subscription.status === SubscriptionStatus.ACTIVE,
           );
           subscription.renewalDeclinedAt = value;
+          // Declining withdraws a pending renewal request; resuming keeps it.
+          if (declined) subscription.renewalRequestedAt = null;
           await manager.save(subscription);
         } else {
           if (!notice.storeId) throw new NotFoundException('Store not found');
@@ -383,6 +399,7 @@ export class RenewalNoticesService {
             store.hasVerificationBadge && !store.verificationIncludedInPlan,
           );
           store.renewalDeclinedAt = value;
+          if (declined) store.renewalRequestedAt = null;
           await manager.save(store);
         }
         await manager.update(
@@ -404,6 +421,70 @@ export class RenewalNoticesService {
   ): void {
     if (!renewalNoticeIsLive(notice.dueAt, targetExpiresAt, stillRelevant))
       throw new ConflictException('This reminder is no longer active');
+  }
+
+  /**
+   * The owner's Renew choice. It records intent only: the paid period, the
+   * grace window and every shop stay exactly as they are until an administrator
+   * confirms the payment with an extension or a new assignment.
+   */
+  async requestRenewal(userId: string, id: string) {
+    try {
+      return await this.database.transaction(async (manager) => {
+        const notice = await manager.findOneBy(RenewalNotice, { id, userId });
+        if (!notice) throw new NotFoundException('Notification not found');
+        const requestedAt = new Date();
+        if (notice.kind === RenewalKind.SUBSCRIPTION) {
+          if (!notice.subscriptionId)
+            throw new NotFoundException('Subscription not found');
+          const subscription = await manager.findOne(UserSubscription, {
+            where: { id: notice.subscriptionId, userId },
+            relations: ['plan'],
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!subscription)
+            throw new NotFoundException('Subscription not found');
+          this.assertLive(
+            notice,
+            subscription.expiresAt,
+            subscription.status === SubscriptionStatus.ACTIVE,
+          );
+          // The free plan is a one-time trial; the reminder only points at plans.
+          if (subscription.plan?.slug === 'free')
+            throw new BadRequestException({
+              code: 'FREE_PLAN_NO_RENEWAL',
+              message:
+                'The free trial cannot be renewed. Choose a paid plan instead.',
+            });
+          subscription.renewalRequestedAt = requestedAt;
+          subscription.renewalDeclinedAt = null;
+          await manager.save(subscription);
+        } else {
+          if (!notice.storeId) throw new NotFoundException('Store not found');
+          const store = await manager.findOne(Store, {
+            where: { id: notice.storeId, ownerId: userId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!store) throw new NotFoundException('Store not found');
+          this.assertLive(
+            notice,
+            store.verificationBadgeExpiresAt,
+            store.hasVerificationBadge && !store.verificationIncludedInPlan,
+          );
+          store.renewalRequestedAt = requestedAt;
+          store.renewalDeclinedAt = null;
+          await manager.save(store);
+        }
+        await manager.update(
+          RenewalNotice,
+          { id },
+          { seenAt: notice.seenAt ?? requestedAt },
+        );
+        return { requestedAt };
+      });
+    } catch (error) {
+      this.sanitize(error);
+    }
   }
 
   /**
@@ -466,16 +547,20 @@ export class RenewalNoticesService {
           !subscription ||
           subscription.userId !== userId ||
           subscription.status !== SubscriptionStatus.ACTIVE ||
-          subscription.plan?.slug === 'free' ||
           !renewalNoticeIsLive(notice.dueAt, subscription.expiresAt, true)
         )
           continue;
+        const lifecycle = subscriptionLifecycle(subscription.expiresAt);
         items.push({
           id: notice.id,
           kind: notice.kind,
           dueAt: notice.dueAt,
           seenAt: notice.seenAt,
           declinedAt: subscription.renewalDeclinedAt,
+          requestedAt: subscription.renewalRequestedAt,
+          trial: subscription.plan?.slug === 'free',
+          phase: lifecycle.phase,
+          graceEndsAt: lifecycle.graceEndsAt,
           plan: subscription.plan
             ? {
                 id: subscription.plan.id,
@@ -511,6 +596,10 @@ export class RenewalNoticesService {
           dueAt: notice.dueAt,
           seenAt: notice.seenAt,
           declinedAt: store.renewalDeclinedAt,
+          requestedAt: store.renewalRequestedAt,
+          trial: false,
+          phase: 'active',
+          graceEndsAt: null,
           plan: null,
           store: {
             id: store.id,
@@ -554,6 +643,7 @@ export class RenewalNoticesService {
               await this.dueSubscriptions(manager, now, {
                 futureOnly: false,
                 includeDeclined: true,
+                includeTrial: false,
               }),
             );
       const stores =
@@ -570,25 +660,45 @@ export class RenewalNoticesService {
         ]),
       ];
       const storeIds = stores.map((store) => store.id);
-      const [activeSubscriptions, requests, settings] = await Promise.all([
-        ownerIds.length
-          ? manager.find(UserSubscription, {
-              where: {
-                userId: In(ownerIds),
-                status: SubscriptionStatus.ACTIVE,
-              },
-              relations: ['plan'],
-              order: { startsAt: 'DESC' },
-            })
-          : Promise.resolve([] as UserSubscription[]),
-        storeIds.length
-          ? manager.find(StoreVerificationRequest, {
-              where: { storeId: In(storeIds) },
-              order: { createdAt: 'DESC' },
-            })
-          : Promise.resolve([] as StoreVerificationRequest[]),
-        manager.findOneBy(VerificationSettings, { id: 1 }),
-      ]);
+      const [activeSubscriptions, requests, settings, lockedRows] =
+        await Promise.all([
+          ownerIds.length
+            ? manager.find(UserSubscription, {
+                where: {
+                  userId: In(ownerIds),
+                  status: SubscriptionStatus.ACTIVE,
+                },
+                relations: ['plan'],
+                order: { startsAt: 'DESC' },
+              })
+            : Promise.resolve([] as UserSubscription[]),
+          storeIds.length
+            ? manager.find(StoreVerificationRequest, {
+                where: { storeId: In(storeIds) },
+                order: { createdAt: 'DESC' },
+              })
+            : Promise.resolve([] as StoreVerificationRequest[]),
+          manager.findOneBy(VerificationSettings, { id: 1 }),
+          // How many shops of each owner the grace window already locked, so the
+          // queue can say "renew and reopen N shops".
+          ownerIds.length
+            ? manager.query(
+                `SELECT owner_id AS ownerId, COUNT(*) AS locked
+                   FROM stores
+                  WHERE subscription_locked_at IS NOT NULL
+                    AND owner_id IN (${ownerIds.map(() => '?').join(', ')})
+                  GROUP BY owner_id`,
+                ownerIds,
+              )
+            : Promise.resolve(
+                [] as Array<{ ownerId: string; locked: number | string }>,
+              ),
+        ]);
+      const lockedByOwner = new Map<string, number>(
+        (lockedRows as Array<{ ownerId: string; locked: number | string }>).map(
+          (row) => [row.ownerId, Number(row.locked ?? 0)],
+        ),
+      );
       const currentSubscriptions = new Map<string, UserSubscription>();
       for (const subscription of activeSubscriptions)
         if (
@@ -620,6 +730,7 @@ export class RenewalNoticesService {
           notices.get(`${RenewalKind.SUBSCRIPTION}:${subscription.id}`),
           subscription.expiresAt,
         );
+        const lifecycle = subscriptionLifecycle(subscription.expiresAt);
         return {
           id: subscription.id,
           owner: this.ownerView(subscription.user),
@@ -635,7 +746,11 @@ export class RenewalNoticesService {
           daysLeft: subscription.expiresAt
             ? renewalDaysLeft(subscription.expiresAt, now)
             : null,
+          phase: lifecycle.phase,
+          graceEndsAt: lifecycle.graceEndsAt,
+          lockedShops: lockedByOwner.get(subscription.userId) ?? 0,
           declinedAt: subscription.renewalDeclinedAt,
+          requestedAt: subscription.renewalRequestedAt,
           notifiedAt: notice?.createdAt ?? null,
           seenAt: notice?.seenAt ?? null,
         };
@@ -675,6 +790,7 @@ export class RenewalNoticesService {
           // team to call; the plan phone is the fallback.
           contactPhone: phoneByStore.get(store.id) ?? store.owner.phone,
           declinedAt: store.renewalDeclinedAt,
+          requestedAt: store.renewalRequestedAt,
           notifiedAt: notice?.createdAt ?? null,
           seenAt: notice?.seenAt ?? null,
         };
@@ -687,6 +803,10 @@ export class RenewalNoticesService {
       const declinedBadges = badgeRows.filter((row) => row.declinedAt).length;
       const subscriptionCount = subscriptionRows.length - declinedSubscriptions;
       const verificationCount = badgeRows.length - declinedBadges;
+      // Owners whose shops are already frozen; a renewal is the only way back.
+      const lockedOwners = subscriptionRows.filter(
+        (row) => row.lockedShops > 0,
+      ).length;
       return {
         now,
         counts: {
@@ -694,6 +814,7 @@ export class RenewalNoticesService {
           verification: verificationCount,
           total: subscriptionCount + verificationCount,
           declined: declinedSubscriptions + declinedBadges,
+          locked: lockedOwners,
         },
         subscriptions: subscriptionRows,
         badges: badgeRows,
@@ -713,7 +834,7 @@ export class RenewalNoticesService {
       const manager = this.database.manager;
       const now = new Date();
       const horizon = new Date(now.getTime() + RENEWAL_WINDOW_MS);
-      const [subscription, verification] = await Promise.all([
+      const [subscription, verification, locked] = await Promise.all([
         manager
           .getRepository(UserSubscription)
           .createQueryBuilder('subscription')
@@ -744,8 +865,24 @@ export class RenewalNoticesService {
           .andWhere('store.adminArchivedAt IS NULL')
           .andWhere('owner.suspendedAt IS NULL')
           .getCount(),
+        // Owners (not shops) whose grace window already ended; the navigation
+        // badge stays a person count so one owner is never counted twice.
+        manager
+          .getRepository(Store)
+          .createQueryBuilder('store')
+          .innerJoin('store.owner', 'owner')
+          .where('store.subscription_locked_at IS NOT NULL')
+          .andWhere('owner.suspendedAt IS NULL')
+          .select('COUNT(DISTINCT store.owner_id)', 'count')
+          .getRawOne<{ count: string | number }>()
+          .then((row) => Number(row?.count ?? 0)),
       ]);
-      return { subscription, verification, total: subscription + verification };
+      return {
+        subscription,
+        verification,
+        locked,
+        total: subscription + verification,
+      };
     } catch (error) {
       this.sanitize(error);
     }
@@ -786,9 +923,17 @@ export class RenewalNoticesService {
   }
 
   private sortRenewals<
-    T extends { expiresAt: Date | null; declinedAt: Date | null },
+    T extends {
+      expiresAt: Date | null;
+      declinedAt: Date | null;
+      requestedAt?: Date | null;
+    },
   >(rows: T[]): void {
     rows.sort((a, b) => {
+      // An owner who asked to renew is the first person the team should call.
+      const requested =
+        Number(Boolean(b.requestedAt)) - Number(Boolean(a.requestedAt));
+      if (requested) return requested;
       const declined =
         Number(Boolean(a.declinedAt)) - Number(Boolean(b.declinedAt));
       if (declined) return declined;

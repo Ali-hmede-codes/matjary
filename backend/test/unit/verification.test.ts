@@ -77,16 +77,16 @@ test('a badge stays visible through the paid month and the grace window', () => 
   );
   assert.equal(grace.state, 'grace');
   assert.equal(grace.visible, true);
-  assert.equal(grace.daysRemaining, 2);
+  assert.equal(grace.daysRemaining, 4);
   assert.equal(
     grace.graceEndsAt?.toISOString(),
-    new Date(now.getTime() - 3 * day + 5 * day).toISOString(),
+    new Date(now.getTime() - 3 * day + 7 * day).toISOString(),
   );
 
   const expired = verificationBadgeInfo(
     {
       hasVerificationBadge: true,
-      verificationBadgeExpiresAt: new Date(now.getTime() - 6 * day),
+      verificationBadgeExpiresAt: new Date(now.getTime() - 8 * day),
     },
     now,
   );
@@ -97,7 +97,7 @@ test('a badge stays visible through the paid month and the grace window', () => 
     verificationBadgeVisible(
       {
         hasVerificationBadge: true,
-        verificationBadgeExpiresAt: new Date(now.getTime() - 6 * day),
+        verificationBadgeExpiresAt: new Date(now.getTime() - 8 * day),
       },
       now,
     ),

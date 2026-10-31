@@ -3,9 +3,10 @@ import type { SubscriptionLimits } from './entities';
 // A verification badge is a monthly subscription. After the paid month ends the
 // blue tick stays visible for a short grace window so an owner can renew, then
 // it disappears on its own. The badge row itself is never deleted, so renewing
-// later simply extends the same verification.
+// later simply extends the same verification. Seven days matches the plan
+// grace window; an expired badge never locks the shop.
 export const VERIFICATION_PERIOD_DAYS = 30;
-export const VERIFICATION_GRACE_DAYS = 5;
+export const VERIFICATION_GRACE_DAYS = 7;
 
 const DAY_MS = 86_400_000;
 

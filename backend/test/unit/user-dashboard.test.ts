@@ -611,6 +611,9 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
           planSlug: null,
           expiresAt: null,
           daysRemaining: null,
+          phase: 'active',
+          graceEndsAt: null,
+          renewalRequestedAt: null,
         };
       },
       getEffectiveLimits: async (id: string) => {
@@ -631,6 +634,9 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
     planSlug: null,
     expiresAt: null,
     daysRemaining: null,
+    phase: 'active',
+    graceEndsAt: null,
+    renewalRequestedAt: null,
   });
   assert.equal(queries.length, 4);
   for (const query of queries) {
