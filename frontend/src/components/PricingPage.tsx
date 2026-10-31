@@ -33,6 +33,7 @@ import { planInquiryLink } from '../lib/plan-inquiry';
 import {
   billingLabel,
   planBadge,
+  planCompareAtPriceCents,
   planFeatures,
   planPrice,
   planVerification,
@@ -336,6 +337,7 @@ function PlanTier({
 }) {
   const Icon = tierIcon(plan);
   const offer = planVerification(plan);
+  const compareAt = planCompareAtPriceCents(plan, index);
   // A plan with its own verification block hides the duplicate row below.
   const features = planFeatures(plan).filter(
     ({ label }) => !(offer && label === 'Verification badge'),
@@ -344,11 +346,16 @@ function PlanTier({
     <article
       className={`tier tier-${tierTone(plan, index)}${featured ? ' tier-featured' : ''}`}
     >
-      {featured && (
-        <p className="tier-flag">
-          <span aria-hidden="true" />
-          Best value
-        </p>
+      {(featured || compareAt) && (
+        <div className="tier-badges">
+          {featured && (
+            <p className="tier-flag">
+              <span aria-hidden="true" />
+              Best value
+            </p>
+          )}
+          {compareAt && <p className="tier-flag tier-flag-sale">Sale</p>}
+        </div>
       )}
       <div className="tier-head">
         <Icon className="tier-mark" size={26} aria-hidden="true" />
@@ -363,6 +370,12 @@ function PlanTier({
       <p className="tier-price">
         <strong>{planPrice(plan)}</strong>
         <span>{billingLabel(plan.billingCycle)}</span>
+        {compareAt && (
+          <span className="tier-was">
+            <span className="tier-was-label">Was</span>
+            <s>{formatProductPrice(compareAt, plan.currency)}</s>
+          </span>
+        )}
       </p>
       <p className="tier-currency">Prices in {plan.currency}</p>
       <VerificationMark plan={plan} />

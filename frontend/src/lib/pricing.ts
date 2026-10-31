@@ -1,4 +1,4 @@
-import { formatProductPrice } from './storefront.ts';
+import { formatProductPrice, linkCompareAtPriceCents } from './storefront.ts';
 
 export interface SubscriptionPlan {
   name: string;
@@ -43,6 +43,22 @@ export function planBadge(plan: SubscriptionPlan) {
   if (plan.slug === 'free' && plan.trialDays)
     return `${plan.trialDays}-day free trial`;
   return /^0+$/u.test(plan.priceCents) ? 'Free plan' : 'Paid plan';
+}
+
+// The third paid tier is promoted from this fixed anchor. It is display-only:
+// the dashboard price stays the amount charged, and a plan priced at or above
+// the anchor shows no sale at all, so a stale price can never fake a discount.
+const PLAN_SALE_ANCHOR_CENTS = '2999';
+
+export function planCompareAtPriceCents(
+  plan: SubscriptionPlan,
+  index: number,
+): string | null {
+  // Index keeps the promotion on "plan 3"; the slug keeps it on Premium when
+  // an administrator reorders the list.
+  const third = index === 2 || plan.slug.toLowerCase().includes('premium');
+  if (!third) return null;
+  return linkCompareAtPriceCents(PLAN_SALE_ANCHOR_CENTS, plan.priceCents);
 }
 
 function quota(value: number | null | undefined): string {

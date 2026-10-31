@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   billingLabel,
   planBadge,
+  planCompareAtPriceCents,
   planFeatures,
   planPrice,
   planVerification,
@@ -103,6 +104,21 @@ test('pricing distinguishes zero, unlimited, missing quotas and disabled feature
       expected,
     );
   }
+});
+
+test('pricing marks the third plan on sale from the fixed anchor', () => {
+  const sale = (priceCents: string, index = 2, slug = 'premium') =>
+    planCompareAtPriceCents({ ...plan, slug, priceCents }, index);
+  assert.equal(sale('1999'), '2999');
+  // A plan at or above the anchor must never advertise a fake discount.
+  assert.equal(sale('2999'), null);
+  assert.equal(sale('7900'), null);
+  // Only the third tier (or Premium, if the order changes) is promoted.
+  assert.equal(sale('1999', 0, 'basic'), null);
+  // A malformed price is ignored exactly like a product's old price.
+  assert.equal(sale('not-a-price'), null);
+  // The slug keeps the sale on Premium when plans are reordered.
+  assert.equal(sale('1999', 0, 'premium'), '2999');
 });
 
 test('pricing exposes the verification offer behind the badge block', () => {

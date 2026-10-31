@@ -430,10 +430,16 @@
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.tier-flag {
+/* Badges sit above the plan name; a tier can carry a promotion and a sale. */
+.tier-badges {
   position: absolute;
   inset-block-start: 16px;
   inset-inline-start: var(--tier-pad);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tier-flag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -446,6 +452,12 @@
   letter-spacing: 1.3px;
   text-transform: uppercase;
   line-height: 1.4;
+}
+/* Sales keep the storefront's warm red so the promotion reads the same across
+   the platform, while "Best value" uses the tier's own accent. */
+.tier-flag-sale {
+  background: #c2452d;
+  color: #fff;
 }
 .tier-flag > span {
   width: 5px;
@@ -499,6 +511,25 @@
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.1px;
+}
+.tier-was {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--field-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tier-was-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.tier-was s {
+  text-decoration-thickness: 1.5px;
+  font-variant-numeric: tabular-nums;
 }
 .tier-currency {
   margin-top: 7px;
