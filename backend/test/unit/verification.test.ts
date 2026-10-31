@@ -8,6 +8,7 @@ import {
   VERIFICATION_PERIOD_DAYS,
   includedBadgeExpiry,
   nextVerificationExpiry,
+  verificationAddOnPriceCents,
   verificationBadgeInfo,
   verificationBadgeVisible,
   verificationGraceEndsAt,
@@ -219,6 +220,27 @@ test('pricing bundles a badge slot or sells the monthly add-on', () => {
       },
     ),
     { included: true, priceCents: 0, available: true },
+  );
+});
+
+test('the add-on price stays visible even when a bundled slot pays', () => {
+  // The plan's own add-on price wins over the platform-wide fallback.
+  assert.equal(
+    verificationAddOnPriceCents({ verificationBadgePriceCents: 700 }, 500),
+    700,
+  );
+  // Plans that set no add-on price use the platform-wide one.
+  assert.equal(
+    verificationAddOnPriceCents({ verificationBadgePriceCents: null }, 500),
+    500,
+  );
+  assert.equal(verificationAddOnPriceCents({}, 500), 500);
+  // No configured price at all stays zero, so the tab asks the team instead.
+  assert.equal(verificationAddOnPriceCents({}, 0), 0);
+  // Negative input can never turn into a price.
+  assert.equal(
+    verificationAddOnPriceCents({ verificationBadgePriceCents: -5 }, -2),
+    0,
   );
 });
 

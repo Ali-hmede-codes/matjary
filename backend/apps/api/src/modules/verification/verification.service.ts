@@ -22,6 +22,7 @@ import {
   nextVerificationExpiry,
   ownerWhere,
   requireAdmin,
+  verificationAddOnPriceCents,
   verificationBadgeInfo,
   verificationBadgeVisible,
   verificationPricing,
@@ -100,6 +101,11 @@ export class VerificationService {
         // A lapsed subscription fails every quota closed, including this one.
         fallbackPriceCents: subscription ? platform.priceCents : 0,
       });
+      // The tab always shows what one badge month is worth, even when the plan
+      // covers it and nothing is charged.
+      const addOnPriceCents = subscription
+        ? verificationAddOnPriceCents(limits, platform.priceCents)
+        : 0;
       return {
         store: {
           id: store.id,
@@ -129,7 +135,10 @@ export class VerificationService {
         eligibility: {
           available: pricing.available,
           included: pricing.included,
+          // What this shop pays per month; zero while a bundled slot covers it.
           priceCents: String(pricing.priceCents),
+          // The monthly value of one badge outside a bundled slot.
+          addOnPriceCents: String(addOnPriceCents),
           currency: 'USD',
           reason: pricing.available
             ? null

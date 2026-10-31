@@ -60,7 +60,10 @@ interface VerificationStatus {
   eligibility: {
     available: boolean;
     included: boolean;
+    // What this shop pays per month; zero while a bundled slot covers it.
     priceCents: string;
+    // The monthly value of one badge outside a bundled slot.
+    addOnPriceCents: string;
     currency: string;
     reason: string | null;
   };
@@ -171,6 +174,18 @@ export function OwnerVerification() {
     data.eligibility.priceCents,
     data.eligibility.currency,
   );
+  // The monthly value stays visible even when a bundled slot pays for it; the
+  // effective price is zero in that case, so the add-on price is shown instead.
+  const addOnPrice = Number(data.eligibility.addOnPriceCents);
+  const priceLabel =
+    addOnPrice > 0
+      ? formatProductPrice(
+          data.eligibility.addOnPriceCents,
+          data.eligibility.currency,
+        )
+      : price > 0
+        ? monthlyPrice
+        : null;
   // The plan's free slots are all occupied by other shops, so this shop is a
   // paid add-on even though the plan bundles badges.
   const bundleFull =
@@ -189,15 +204,14 @@ export function OwnerVerification() {
         description={`The blue tick tells shoppers this business is real and reachable. Verification is reviewed by the ${brand} team and renewed month by month.`}
         action={
           <>
-            {!lifetime && !data.eligibility.included && price > 0 && (
+            {lifetime ? (
+              <span className="panel-pill">No monthly fee</span>
+            ) : priceLabel ? (
               <span className="panel-pill">
-                {formatProductPrice(
-                  data.eligibility.priceCents,
-                  data.eligibility.currency,
-                )}{' '}
-                / month
+                {priceLabel} / month
+                {data.eligibility.included ? ' · included' : ''}
               </span>
-            )}
+            ) : null}
             <span className={`panel-pill ${badge.visible ? '' : 'muted'}`}>
               {STATE_LABEL[badge.state]}
             </span>
@@ -252,22 +266,60 @@ export function OwnerVerification() {
           </div>
         </div>
       )}
-      {price > 0 && !badge.included && !lifetime && (
+      {!lifetime && (
         <div className="panel-note">
-          <Phone size={22} />
+          {data.eligibility.included ? (
+            <BadgeCheck size={22} />
+          ) : (
+            <Phone size={22} />
+          )}
           <div>
-            <strong>Pay {monthlyPrice} to start the next month.</strong>
+            <strong>
+              {data.eligibility.included
+                ? priceLabel
+                  ? `Monthly price: ${priceLabel} — included in your plan.`
+                  : 'Your badge month is included in your plan.'
+                : priceLabel
+                  ? `Pay ${priceLabel} to start the next month.`
+                  : data.eligibility.available
+                    ? 'The monthly badge price is set by the team.'
+                    : 'A monthly price appears once a plan is active.'}
+            </strong>
             <span>
-              {paymentPhone ? (
+              {data.eligibility.included ? (
                 <>
-                  Call or message{' '}
-                  <a className="notranslate" href={`tel:${telHref}`}>
-                    {paymentPhone}
-                  </a>{' '}
-                  and send {monthlyPrice}. Once the team receives it, your
-                  request is approved and the blue tick starts for 30 days.
+                  Your {data.plan.name ?? 'current'} plan covers this badge, so
+                  nothing is charged each month
+                  {data.plan.endsAt
+                    ? ` and it ends with the plan on ${dateLabel(data.plan.endsAt)}`
+                    : ''}
+                  .
                 </>
-              ) : (
+              ) : priceLabel ? (
+                paymentPhone ? (
+                  <>
+                    Call or message{' '}
+                    <a className="notranslate" href={`tel:${telHref}`}>
+                      {paymentPhone}
+                    </a>{' '}
+                    and send {priceLabel}. Once the team receives it, your
+                    request is approved and the blue tick starts for 30 days.
+                  </>
+                ) : (
+                  <>
+                    Contact the {brand} team
+                    {contactEmail ? (
+                      <>
+                        {' '}
+                        at <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+                      </>
+                    ) : null}{' '}
+                    to arrange the {priceLabel} payment. Once it is received,
+                    your request is approved and the blue tick starts for 30
+                    days.
+                  </>
+                )
+              ) : data.eligibility.available ? (
                 <>
                   Contact the {brand} team
                   {contactEmail ? (
@@ -276,9 +328,12 @@ export function OwnerVerification() {
                       at <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
                     </>
                   ) : null}{' '}
-                  to arrange the {monthlyPrice} payment. Once it is received,
-                  your request is approved and the blue tick starts for 30 days.
+                  to arrange the monthly price for this shop. The amount is
+                  confirmed before the blue tick starts.
                 </>
+              ) : (
+                (data.eligibility.reason ??
+                'Verification is not available on your current plan.')
               )}
             </span>
           </div>
@@ -300,7 +355,9 @@ export function OwnerVerification() {
             {lifetime
               ? `The ${brand} team granted this badge with no end date. It stays on until an administrator removes it.`
               : data.eligibility.included
-                ? `Verification is included in your ${data.plan.name ?? 'current'} plan. The badge runs as long as your subscription and ends with it.`
+                ? priceLabel
+                  ? `Verification is included in your ${data.plan.name ?? 'current'} plan, so the ${priceLabel} month is covered by your subscription and ends with it.`
+                  : `Verification is included in your ${data.plan.name ?? 'current'} plan. The badge runs as long as your subscription and ends with it.`
                 : price > 0
                   ? data.plan.maxBadges === 0
                     ? `Your ${data.plan.name ?? 'current'} plan does not include a verification badge, so this shop can be verified for ${monthlyPrice} per month. Send your details, pay ${monthlyPrice}, and the team activates the tick for 30 days after confirming the payment.`

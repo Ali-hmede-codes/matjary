@@ -123,6 +123,18 @@ export interface VerificationPricing {
   available: boolean;
 }
 
+// What one badge month costs when it is not covered by a bundled slot: the
+// plan's own add-on price, or the platform-wide fallback. It is also shown to
+// owners whose plan covers the badge, so the monthly value stays visible even
+// though nothing is charged.
+export function verificationAddOnPriceCents(
+  limits: Pick<SubscriptionLimits, 'verificationBadgePriceCents'>,
+  fallbackPriceCents = 0,
+): number {
+  const planPrice = Math.max(0, limits.verificationBadgePriceCents ?? 0);
+  return planPrice > 0 ? planPrice : Math.max(0, fallbackPriceCents);
+}
+
 // Plans decide whether a badge is bundled (maxVerificationBadges) or sold as a
 // monthly add-on (verificationBadgePriceCents). A shop already inside a bundled
 // slot renews that same slot; any other shop needs a free slot, otherwise it is
@@ -152,11 +164,8 @@ export function verificationPricing(
     maxBadges === null ||
     (maxBadges > 0 &&
       (input.includedBadge || input.activeIncludedBadges < maxBadges));
-  const planPrice = Math.max(0, limits.verificationBadgePriceCents ?? 0);
   const priceCents = included
     ? 0
-    : planPrice > 0
-      ? planPrice
-      : Math.max(0, input.fallbackPriceCents ?? 0);
+    : verificationAddOnPriceCents(limits, input.fallbackPriceCents);
   return { included, priceCents, available: included || priceCents > 0 };
 }
