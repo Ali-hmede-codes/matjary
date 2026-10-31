@@ -621,6 +621,10 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
         return { maxTotalPosts: 0 };
       },
     } as never,
+    {
+      get: (key: string) =>
+        key === 'TRIAL_SHOP_DELETE_AFTER_HOURS' ? 24 : undefined,
+    } as never,
   );
   const result = await service.getDashboard(ownerId);
   assert.equal(result.stats.totalStores, 0);
@@ -637,6 +641,7 @@ test('dashboard summary and lists scope every query to the owner and exclude mod
     phase: 'active',
     graceEndsAt: null,
     renewalRequestedAt: null,
+    trialDeleteAfterHours: 24,
   });
   assert.equal(queries.length, 4);
   for (const query of queries) {
@@ -758,6 +763,7 @@ test('owner content lists return the panel { items, total } envelope', async () 
     repository(post) as never,
     repository(product) as never,
     mediaAssets as never,
+    {} as never,
     {} as never,
     {} as never,
     {} as never,

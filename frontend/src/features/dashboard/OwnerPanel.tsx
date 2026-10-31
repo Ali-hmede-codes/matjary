@@ -5,6 +5,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useSearchParams,
 } from 'react-router-dom';
@@ -102,6 +103,9 @@ export interface OwnerSummary {
     phase?: 'active' | 'grace' | 'locked';
     graceEndsAt?: string | null;
     renewalRequestedAt?: string | null;
+    // Hours after a trial shop locks before it is permanently deleted; 0 keeps
+    // trial shops forever. Paid-plan shops are never deleted.
+    trialDeleteAfterHours?: number;
   };
 }
 interface OwnerState {
@@ -134,19 +138,46 @@ export function useOwner() {
   if (!value) throw new Error('Owner workspace unavailable');
   return value;
 }
-// A locked shop never opens an editor: its only destination is the renewal
-// screen. The render callback stays lazy so no store field is read before the
-// status is known. Members only reach active shops (the API omits locked ones).
-function requireStore(
-  store: OwnerStore | undefined,
-  member: boolean,
-  render: (store: OwnerStore) => React.ReactNode,
-): React.ReactNode {
-  if (!store) return <NoStore />;
-  if (store.status === 'locked')
-    return <LockedShopNotice store={store} member={member} />;
-  return render(store);
+// A lapsed plan sends the owner to the plans page once, on the dashboard home.
+// The marker is per end date, so a later visit (and the locked-shop page) is
+// never trapped in a redirect loop.
+const planEndedMarker = (expiresAt?: string | null) =>
+  `matjary:plan-ended:${expiresAt ?? 'unknown'}`;
+function readPlanEndedMarker(key: string): boolean {
+  try {
+    return window.sessionStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
 }
+function PlanEndedRedirect({
+  state,
+  pathname,
+}: {
+  state?: OwnerSummary['subscriptionState'];
+  pathname: string;
+}) {
+  const shouldRedirect =
+    pathname === '/dashboard' &&
+    state?.state === 'expired' &&
+    state.phase === 'grace';
+  const key = planEndedMarker(state?.expiresAt);
+  const [alreadySent] = useState(() => readPlanEndedMarker(key));
+  useEffect(() => {
+    if (!shouldRedirect) return;
+    try {
+      window.sessionStorage.setItem(key, '1');
+    } catch {
+      // Private browsing can refuse storage; the redirect still happens once
+      // per mount, and the plans page is reachable at any time.
+    }
+  }, [shouldRedirect, key]);
+  if (!shouldRedirect || alreadySent) return null;
+  return <Navigate to="/pricing?ended=1" replace />;
+}
+// A locked shop never opens an editor: its only destination is the renewal
+// screen. The panel builds the gate below so it can also pass the trial
+// deletion window. Members only reach active shops (the API omits locked ones).
 export default function OwnerPanel({ session }: { session: Session }) {
   // This panel remounts on every tab change, so the chosen store is restored
   // from device storage instead of falling back to the first store.
@@ -156,6 +187,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
   const [pendingStore, setPendingStore] = useState('');
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const client = useQueryClient();
   const refresh = () =>
     Promise.all(
@@ -213,6 +245,25 @@ export default function OwnerPanel({ session }: { session: Session }) {
       !candidate.restricted &&
       candidate.teamRole === 'owner',
   );
+  const planHours = summary.data?.subscriptionState?.trialDeleteAfterHours ?? 0;
+  // The render callback stays lazy so no store field is read before the status
+  // is known. A locked shop only gets the renewal screen.
+  const requireStore = (
+    target: OwnerStore | undefined,
+    isMember: boolean,
+    render: (store: OwnerStore) => React.ReactNode,
+  ): React.ReactNode => {
+    if (!target) return <NoStore />;
+    if (target.status === 'locked')
+      return (
+        <LockedShopNotice
+          store={target}
+          member={isMember}
+          trialDeleteAfterHours={planHours}
+        />
+      );
+    return render(target);
+  };
   const pending = selectable.find((s) => s.id === pendingStore);
   function switchStore(id: string) {
     setSelected(id);
@@ -290,6 +341,12 @@ export default function OwnerPanel({ session }: { session: Session }) {
             removedStore,
           }}
         >
+          {!member && (
+            <PlanEndedRedirect
+              state={summary.data.subscriptionState}
+              pathname={location.pathname}
+            />
+          )}
           {selectable.length > 1 && (
             <label className="panel-store-switch">
               {member ? 'Your shop' : 'Your store'}
@@ -392,6 +449,7 @@ export default function OwnerPanel({ session }: { session: Session }) {
                       null
                     }
                     trial={summary.data?.subscriptionState?.planSlug === 'free'}
+                    trialDeleteAfterHours={planHours}
                   />
                 )
               }
@@ -455,18 +513,22 @@ function PlanBanner() {
   const offerPlan = state.planSlug === 'free';
   const renewLabel = offerPlan ? 'Choose a plan' : 'Renew my shops';
   const renewTarget = offerPlan ? '/pricing' : '/dashboard/locked';
+  const trialHours = state.trialDeleteAfterHours ?? 0;
+  const trialDeletion =
+    trialHours > 0 ? ` and deleted ${trialHours} hours later` : '';
   if (phase === 'locked')
     return (
       <section className="panel-plan-banner is-expired">
         <div>
           <strong>
             {offerPlan
-              ? 'Your free trial ended and your shops are locked.'
+              ? 'Your free trial ended and your shop is locked.'
               : 'Your plan ended and your shops are locked.'}
           </strong>
           <span>
-            Nothing was deleted. Renew to reopen them; every product, post,
-            photo and video returns with its original quality.
+            {offerPlan
+              ? `A trial shop is permanently deleted ${trialHours > 0 ? `${trialHours} hours` : 'shortly'} after it locks. Choose a plan to keep it.`
+              : 'Nothing was deleted. Renew to reopen them; every product, post, photo and video returns with its original quality.'}
           </span>
         </div>
         <Link className="panel-primary" to={renewTarget}>
@@ -484,8 +546,9 @@ function PlanBanner() {
           </strong>
           <span>
             After the 7-day grace window they are locked and hidden from
-            shoppers. {offerPlan ? 'Choose a paid plan' : 'Renew'} to keep
-            editing and stay online.
+            shoppers{trialDeletion}.{' '}
+            {offerPlan ? 'Choose a paid plan' : 'Renew'} to keep editing and
+            stay online.
           </span>
         </div>
         <Link className="panel-primary" to={renewTarget}>
@@ -506,8 +569,8 @@ function PlanBanner() {
           {`Your free trial ends in ${days} day${days === 1 ? '' : 's'}.`}
         </strong>
         <span>
-          Choose a paid plan to keep creating. Your shops stay online during the
-          7-day grace window after it ends, then they are locked.
+          Choose a paid plan to keep creating. Your shop stays online during the
+          7-day grace window after the trial ends, then it locks{trialDeletion}.
         </span>
       </div>
       <Link className="panel-primary" to="/pricing">
@@ -538,8 +601,8 @@ export function TrialOffer() {
         </strong>
         <span>
           Build your store now. Want more shops, products, and posts? Upgrade
-          anytime. After the trial ends your shops stay online for a 7-day grace
-          window, then they are locked until you renew.
+          anytime. After the trial ends your shop stays online for a 7-day grace
+          window, then it locks and is deleted unless you choose a plan.
         </span>
       </div>
       <Link className="panel-primary" to="/pricing">
@@ -718,7 +781,13 @@ function OwnerHome() {
   // only show forms the API refuses.
   if (store?.status === 'locked')
     return (
-      <LockedShopNotice store={store} member={store.teamRole === 'member'} />
+      <LockedShopNotice
+        store={store}
+        member={store.teamRole === 'member'}
+        trialDeleteAfterHours={
+          summary.subscriptionState?.trialDeleteAfterHours ?? 0
+        }
+      />
     );
   // A plan belongs to the account, so its renewal reminder must stay visible
   // even when the owner currently has no shop to open.
@@ -738,6 +807,9 @@ function OwnerHome() {
               summary.subscriptionState?.renewalRequestedAt ?? null
             }
             trial={summary.subscriptionState?.planSlug === 'free'}
+            trialDeleteAfterHours={
+              summary.subscriptionState?.trialDeleteAfterHours ?? 0
+            }
           />
         ) : (
           <NoStore />
@@ -915,6 +987,9 @@ function OwnerPlan() {
   // The newest row still names the plan that ended: a trial is upgraded, a
   // paid plan is renewed.
   const trialPlan = state?.planSlug === 'free';
+  const trialHours = state?.trialDeleteAfterHours ?? 0;
+  const trialDeletion =
+    trialHours > 0 ? ` and deleted ${trialHours} hours later` : '';
   const planName =
     phase === 'locked'
       ? 'Locked'
@@ -923,9 +998,11 @@ function OwnerPlan() {
         : state?.planName || summary.subscription?.planName || 'Free';
   const planDetail =
     phase === 'locked'
-      ? 'Your shops are hidden from shoppers and their media is archived. Renew to reopen them; nothing was deleted.'
+      ? trialPlan
+        ? `Your free trial ended and the shop is locked. A trial shop is permanently deleted ${trialHours > 0 ? `${trialHours} hours` : 'shortly'} after it locks, so choose a plan to keep it.`
+        : 'Your shops are hidden from shoppers and their media is archived. Renew to reopen them; nothing was deleted.'
       : phase === 'grace'
-        ? `Ended ${dateLabel(state?.expiresAt)} · your shops stay online until ${dateLabel(state?.graceEndsAt)}, then they are locked.`
+        ? `Ended ${dateLabel(state?.expiresAt)} · your shops stay online until ${dateLabel(state?.graceEndsAt)}, then they are locked${trialPlan ? trialDeletion : ''}.`
         : trial && state?.daysRemaining != null
           ? `${state.daysRemaining} day${state.daysRemaining === 1 ? '' : 's'} left · ends ${dateLabel(state.expiresAt)}`
           : state?.expiresAt
@@ -1031,9 +1108,13 @@ function OwnerPlan() {
           )}
           <small>
             {phase === 'locked'
-              ? 'A renewal reopens every locked shop and restores its photos and videos with their original quality.'
+              ? trialPlan
+                ? `A trial shop is deleted ${trialHours > 0 ? `${trialHours} hours` : 'shortly'} after it locks; a paid plan opens it again.`
+                : 'A renewal reopens every locked shop and restores its photos and videos with their original quality.'
               : phase === 'grace'
-                ? 'After the 7-day grace window your shops are locked and hidden until the team confirms a renewal.'
+                ? trialPlan
+                  ? 'After the 7-day grace window the shop locks and is deleted unless a plan is activated.'
+                  : 'After the 7-day grace window your shops are locked and hidden until the team confirms a renewal.'
                 : expired
                   ? 'An administrator assigns paid plans. Renew to keep creating; your shops stay online during the 7-day grace window.'
                   : 'Subscriptions are assigned by an administrator. There is no automatic payment or checkout.'}

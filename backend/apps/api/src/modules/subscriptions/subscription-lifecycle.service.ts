@@ -9,10 +9,12 @@ import {
   UserSubscription,
   effectiveSubscription,
   isGlobalAdminUser,
+  isTrialOnlyOwner,
   lockOwnerShops,
   lockedShopsForOwner,
   subscriptionLifecycle,
   subscriptionLockAnchor,
+  trialDeletionAt,
 } from '@app/database';
 
 interface CandidateOwner {
@@ -132,7 +134,24 @@ export class SubscriptionLifecycleService {
     }
   }
 
-  lockedShops(userId: string) {
-    return lockedShopsForOwner(this.database.manager, userId);
+  /**
+   * Locked shops plus the moment each one is deleted, but only for trial-only
+   * accounts. Paid-plan shops report null: they are archived, never deleted.
+   */
+  async lockedShops(userId: string) {
+    const shops = await lockedShopsForOwner(this.database.manager, userId);
+    const hours = this.trialDeleteAfterHours();
+    const trialOnly =
+      shops.length > 0 &&
+      (await isTrialOnlyOwner(this.database.manager, userId));
+    return shops.map((shop) => ({
+      ...shop,
+      deletesAt:
+        trialOnly && hours > 0 ? trialDeletionAt(shop.lockedAt, hours) : null,
+    }));
+  }
+
+  trialDeleteAfterHours(): number {
+    return this.config.get('TRIAL_SHOP_DELETE_AFTER_HOURS', { infer: true });
   }
 }

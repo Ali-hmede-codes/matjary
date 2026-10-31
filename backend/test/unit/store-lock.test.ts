@@ -14,7 +14,13 @@ import {
   subscriptionGraceEndsAt,
   subscriptionLifecycle,
   subscriptionLockAnchor,
+  trialDeletionAt,
+  trialDeletionDue,
 } from '../../libs/database/src/subscription-policy';
+import {
+  isTrialOnlyOwner,
+  trialShopsDueForDeletion,
+} from '../../libs/database/src/trial-cleanup';
 import {
   lockOwnerShops,
   lockedShopsForOwner,
@@ -271,6 +277,55 @@ test('the renewal page lists locked shops with their content counts', async () =
       postsCount: 7,
     },
   ]);
+});
+
+test('trial shops are deleted only after the configured retention delay', () => {
+  const lockedAt = at(-3 * DAY);
+  assert.equal(trialDeletionAt(null, 24), null);
+  assert.equal(trialDeletionAt(lockedAt, 0), null);
+  assert.equal(
+    trialDeletionAt(lockedAt, 24)?.toISOString(),
+    new Date(lockedAt.getTime() + DAY).toISOString(),
+  );
+  assert.equal(trialDeletionDue(lockedAt, 24, now), true);
+  assert.equal(
+    trialDeletionDue(at(-30 * 60_000), 24, now),
+    false,
+    'the shop must stay for the full retention window',
+  );
+  assert.equal(trialDeletionDue(lockedAt, 0, now), false);
+});
+
+test('only trial-only accounts qualify for automatic shop deletion', async () => {
+  const queries: { sql: string; parameters: unknown[] }[] = [];
+  const managerFor = (trial: number, paid: number) =>
+    ({
+      query: async (sql: string, parameters: unknown[] = []) => {
+        queries.push({ sql, parameters });
+        if (sql.includes('AS trial')) return [{ trial, paid }];
+        return [{ id: 'shop-1', ownerId: 'owner' }];
+      },
+    }) as unknown as EntityManager;
+
+  assert.equal(await isTrialOnlyOwner(managerFor(1, 0), 'owner'), true);
+  assert.equal(await isTrialOnlyOwner(managerFor(1, 1), 'owner'), false);
+  assert.equal(await isTrialOnlyOwner(managerFor(0, 0), 'owner'), false);
+
+  const cutoff = at(-DAY);
+  assert.deepEqual(
+    await trialShopsDueForDeletion(managerFor(1, 0), cutoff, 5),
+    [{ id: 'shop-1', ownerId: 'owner' }],
+  );
+  const statement = queries.at(-1)!;
+  assert.deepEqual(statement.parameters, [cutoff]);
+  // Paid history is a permanent opt-out, and a shop still moving bytes waits.
+  assert.match(statement.sql, /pp\.slug <> 'free'/);
+  assert.match(
+    statement.sql,
+    /media_archive_state IN \('none', 'archived', 'failed'\)/,
+  );
+  assert.match(statement.sql, /subscription_locked_at <= \?/);
+  assert.match(statement.sql, /LIMIT 5/);
 });
 
 test('the lock migration keeps small, reversible DDL steps', async () => {

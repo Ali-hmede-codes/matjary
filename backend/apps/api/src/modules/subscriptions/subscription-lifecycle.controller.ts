@@ -39,6 +39,8 @@ export class SubscriptionLifecycleController {
       phase: state.phase,
       graceEndsAt: state.graceEndsAt,
       renewalRequestedAt: state.renewalRequestedAt,
+      // 0 means trial shops are kept forever; the locked page hides the timer.
+      trialDeleteAfterHours: this.lifecycle.trialDeleteAfterHours(),
       lockedShops: await this.lifecycle.lockedShops(request.user.id),
     };
   }

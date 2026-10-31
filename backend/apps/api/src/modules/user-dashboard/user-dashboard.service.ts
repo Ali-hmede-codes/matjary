@@ -6,7 +6,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository, LessThan } from 'typeorm';
+import type { AppEnvironment } from '@app/config';
 import {
   User,
   Store,
@@ -77,6 +79,7 @@ export class UserDashboardService {
     @InjectRepository(SubscriptionPlan)
     private readonly subscriptionPlans: Repository<SubscriptionPlan>,
     private readonly plansService: SubscriptionPlansService,
+    private readonly config: ConfigService<AppEnvironment, true>,
   ) {}
 
   private sanitize(error: unknown): never {
@@ -261,6 +264,12 @@ export class UserDashboardService {
           phase: subscriptionState.phase,
           graceEndsAt: subscriptionState.graceEndsAt,
           renewalRequestedAt: subscriptionState.renewalRequestedAt,
+          // The exact trial retention used by the worker, so the dashboard and
+          // the deletion job can never disagree.
+          trialDeleteAfterHours: this.config.get(
+            'TRIAL_SHOP_DELETE_AFTER_HOURS',
+            { infer: true },
+          ),
         },
         limits: effectiveLimits,
         sections: {

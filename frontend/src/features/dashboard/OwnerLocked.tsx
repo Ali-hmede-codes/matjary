@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUpRight, Clock3, Lock } from 'lucide-react';
+import { ArrowUpRight, Clock3, Lock, Trash2 } from 'lucide-react';
 import { dateLabel, mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle } from '../shared/PanelUI';
 import { storeStatusLabel } from '../../lib/storefront';
@@ -16,6 +16,18 @@ const archiveLabel: Record<string, string> = {
   restoring: 'Photos and videos are being restored',
   failed: 'The archive needs an administrator check',
 };
+
+const HOUR_MS = 3_600_000;
+
+// Trial-only shops are deleted after a short retention window that starts when
+// the shop locks. Paid-plan shops never get a date: they stay archived.
+function trialDeletionAt(store: OwnerStore, hours: number): Date | null {
+  if (!hours || hours <= 0 || !store.subscriptionLockedAt) return null;
+  const lockedAt = Date.parse(store.subscriptionLockedAt);
+  return Number.isFinite(lockedAt)
+    ? new Date(lockedAt + hours * HOUR_MS)
+    : null;
+}
 
 export function RenewalAction({
   userId,
@@ -76,11 +88,14 @@ export function RenewalAction({
 
 function LockedCard({
   store,
+  trialDeleteAfterHours,
   action,
 }: {
   store: OwnerStore;
+  trialDeleteAfterHours: number;
   action?: React.ReactNode;
 }) {
+  const deletesAt = trialDeletionAt(store, trialDeleteAfterHours);
   return (
     <article className="panel-card panel-locked-shop">
       <div>
@@ -96,6 +111,13 @@ function LockedCard({
           <Lock size={14} />{' '}
           {archiveLabel[store.mediaArchiveState ?? 'none'] ?? archiveLabel.none}
         </p>
+        {deletesAt && (
+          <p className="panel-muted">
+            <Trash2 size={14} /> Permanent deletion on{' '}
+            <strong>{dateLabel(deletesAt.toISOString())}</strong> unless a plan
+            is activated.
+          </p>
+        )}
       </div>
       <div className="store-lifecycle-actions">
         <Link className="panel-secondary" to="/dashboard/plan">
@@ -114,11 +136,13 @@ export function LockedShopsPage({
   userId,
   renewalRequestedAt,
   trial,
+  trialDeleteAfterHours,
 }: {
   shops: OwnerStore[];
   userId: string;
   renewalRequestedAt: string | null;
   trial: boolean;
+  trialDeleteAfterHours: number;
 }) {
   const [notice, setNotice] = useState('');
   if (!shops.length)
@@ -134,12 +158,26 @@ export function LockedShopsPage({
         </Link>
       </>
     );
+  const firstDeletion = trial
+    ? (shops
+        .map((shop) => trialDeletionAt(shop, trialDeleteAfterHours))
+        .filter((value): value is Date => value instanceof Date)
+        .sort((a, b) => a.getTime() - b.getTime())[0] ?? null)
+    : null;
   return (
     <>
       <PageTitle
         eyebrow="YOUR PERSONAL STUDIO"
-        title="Renew to open your shops."
-        description="Your plan ended and the 7-day grace window is over. Nothing was deleted: every product, post and photo is stored and returns when the team confirms the renewal."
+        title={
+          trial
+            ? 'Choose a plan to keep your shop.'
+            : 'Renew to open your shops.'
+        }
+        description={
+          trial && trialDeleteAfterHours > 0
+            ? `Your free trial ended and the shop is locked. A trial shop is permanently deleted ${trialDeleteAfterHours} hours after it locks, so choose a plan before the date below.`
+            : 'Your plan ended and the 7-day grace window is over. Nothing was deleted: every product, post and photo is stored and returns when the team confirms the renewal.'
+        }
       />
       {notice && <Notice>{notice}</Notice>}
       <section className="panel-card panel-feature">
@@ -159,11 +197,24 @@ export function LockedShopsPage({
             </span>
           </li>
           <li>
-            <Clock3 size={16} />
-            <span>
-              Photos and videos are kept byte for byte and restored after the
-              renewal, with their original quality.
-            </span>
+            {trial && firstDeletion ? (
+              <>
+                <Trash2 size={16} />
+                <span>
+                  The shop, its products, posts, photos and videos are deleted
+                  on {dateLabel(firstDeletion.toISOString())} unless a plan is
+                  activated.
+                </span>
+              </>
+            ) : (
+              <>
+                <Clock3 size={16} />
+                <span>
+                  Photos and videos are kept byte for byte and restored after
+                  the renewal, with their original quality.
+                </span>
+              </>
+            )}
           </li>
         </ul>
         <RenewalAction
@@ -181,9 +232,10 @@ export function LockedShopsPage({
         <LockedCard
           key={store.id}
           store={store}
+          trialDeleteAfterHours={trialDeleteAfterHours}
           action={
             <Link className="panel-primary" to="/dashboard/locked">
-              Renew to open
+              {trial ? 'Choose a plan' : 'Renew to open'}
             </Link>
           }
         />
@@ -201,10 +253,13 @@ export function LockedShopsPage({
 export function LockedShopNotice({
   store,
   member,
+  trialDeleteAfterHours,
 }: {
   store: OwnerStore;
   member: boolean;
+  trialDeleteAfterHours: number;
 }) {
+  const deletesAt = trialDeletionAt(store, trialDeleteAfterHours);
   return (
     <>
       <PageTitle
@@ -213,15 +268,20 @@ export function LockedShopNotice({
         description={
           member
             ? 'The plan of the account that owns this shop ended. Only the owner can renew it; your own plan does not cover someone else’s shop.'
-            : 'Its plan ended and the 7-day grace window is over. Renew to open it again; every product, post and photo returns with the original quality.'
+            : deletesAt
+              ? `Its free trial ended and the shop is locked. It is permanently deleted on ${dateLabel(deletesAt.toISOString())} unless a plan is activated.`
+              : 'Its plan ended and the 7-day grace window is over. Renew to open it again; every product, post and photo returns with the original quality.'
         }
       />
       <LockedCard
         store={store}
+        trialDeleteAfterHours={trialDeleteAfterHours}
         action={
           member ? undefined : (
             <Link className="panel-primary" to="/dashboard/locked">
-              Renew to open
+              {trialDeleteAfterHours > 0 && deletesAt
+                ? 'Choose a plan'
+                : 'Renew to open'}
             </Link>
           )
         }

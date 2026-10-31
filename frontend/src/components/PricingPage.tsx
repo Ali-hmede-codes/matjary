@@ -1,6 +1,7 @@
 import './PricingPage.css';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -185,6 +186,10 @@ function PlanCard({
 
 export function PricingPage() {
   const { settings, theme, settingsQuery } = useWebsiteSettings();
+  const [params] = useSearchParams();
+  // The dashboard sends an owner here once when the plan ends, so the page can
+  // say why they arrived instead of looking like a generic marketing page.
+  const planEnded = params.get('ended') === '1';
   // An administrator can point plan questions at a different inbox; otherwise
   // the platform support address is used.
   const contactEmail = settings.contactEmail || SUPPORT_EMAIL;
@@ -246,6 +251,14 @@ export function PricingPage() {
               <CircleHelp size={16} aria-hidden="true" /> Plan help
             </a>
           </section>
+
+          {planEnded && (
+            <p className="pricing-note pricing-ended" role="status">
+              Your trial has ended, so your shop is read-only. It stays online
+              for 7 more days, then locks and is deleted shortly after unless a
+              plan is activated. Message our team to choose one.
+            </p>
+          )}
 
           {settingsQuery.isError && (
             <StatusBanner
@@ -354,8 +367,10 @@ export function PricingPage() {
                   {freeTrialDays
                     ? `Every account starts with a ${freeTrialDays}-day free trial.`
                     : 'Every account starts with a free trial.'}{' '}
-                  After the trial, choose a paid plan to keep creating. Your
-                  published stores and posts stay online.
+                  After the trial ends, choose a paid plan to keep creating.
+                  Shops stay online for a 7-day grace window, then lock; an
+                  abandoned free-trial shop is deleted shortly after it locks.
+                  Paid-plan shops are never deleted automatically.
                 </p>
               </details>
               <details>

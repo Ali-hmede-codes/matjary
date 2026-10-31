@@ -17,6 +17,7 @@ import { MediaProcessor } from './jobs/media.process';
 import { MediaRecovery } from './jobs/media.recovery';
 import { StorySweeper } from './jobs/story.sweeper';
 import { ShopMediaArchiver } from './jobs/shop.archive';
+import { TrialShopPurger } from './jobs/trial.purge';
 import { EngagementFlusher } from './jobs/engagement.flush';
 import { WorkerHeartbeat } from './worker-heartbeat';
 import { ObservabilityModule } from '@app/observability';
@@ -50,6 +51,7 @@ import { ObservabilityModule } from '@app/observability';
     MediaRecovery,
     StorySweeper,
     ShopMediaArchiver,
+    TrialShopPurger,
     EngagementFlusher,
     WorkerHeartbeat,
   ],

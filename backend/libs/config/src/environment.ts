@@ -23,6 +23,10 @@ export interface AppEnvironment extends DatabaseEnvironment {
   NOTIFICATION_TIME_ZONE: string;
   // The free plan is a one-time trial; expired owners become read-only.
   FREE_TRIAL_DAYS: number;
+  // Abandoned free-trial shops are deleted this many hours after the lock
+  // (trial end + grace window). 0 keeps them forever. Paid plans are never
+  // auto-deleted, whatever this value says.
+  TRIAL_SHOP_DELETE_AFTER_HOURS: number;
   REDIS_HOST: string;
   REDIS_PORT: number;
   REDIS_PASSWORD: string;
@@ -331,6 +335,13 @@ export function validateEnvironment(
     ),
     NOTIFICATION_TIME_ZONE: notificationTimeZone,
     FREE_TRIAL_DAYS: integer(env, 'FREE_TRIAL_DAYS', 3, 1, 90),
+    TRIAL_SHOP_DELETE_AFTER_HOURS: integer(
+      env,
+      'TRIAL_SHOP_DELETE_AFTER_HOURS',
+      24,
+      0,
+      8760,
+    ),
     REDIS_HOST: text(env, 'REDIS_HOST', '127.0.0.1'),
     REDIS_PORT: integer(env, 'REDIS_PORT', 6379, 1, 65535),
     REDIS_PASSWORD: text(env, 'REDIS_PASSWORD'),

@@ -27,3 +27,4 @@ export * from './verification-policy';
 export * from './renewal-policy';
 export * from './store-lock';
 export * from './store-media';
+export * from './trial-cleanup';

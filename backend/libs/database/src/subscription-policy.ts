@@ -128,6 +128,26 @@ export function subscriptionLifecycle(
   return { phase: 'locked', endsAt, graceEndsAt, daysRemaining: 0 };
 }
 
+// When an abandoned free-trial shop becomes eligible for permanent deletion.
+// The clock starts at the lock (trial end + grace window), and only trial-only
+// accounts qualify. Hours of 0 disables deletion entirely.
+export function trialDeletionAt(
+  lockedAt: Date | null,
+  hours: number,
+): Date | null {
+  if (!lockedAt || hours <= 0) return null;
+  return new Date(lockedAt.getTime() + hours * 3_600_000);
+}
+
+export function trialDeletionDue(
+  lockedAt: Date | null,
+  hours: number,
+  now = new Date(),
+): boolean {
+  const at = trialDeletionAt(lockedAt, hours);
+  return Boolean(at && at.getTime() <= now.getTime());
+}
+
 // When the grace clock starts for the newest subscription row. An active row
 // uses its recorded end date; a cancelled row was ended early, so the
 // cancellation moment wins when it is earlier than the old end date. A paid

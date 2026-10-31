@@ -210,6 +210,9 @@ export class SubscriptionStateDto {
   phase!: 'active' | 'grace' | 'locked';
   graceEndsAt!: Date | null;
   renewalRequestedAt!: Date | null;
+  // Hours after the lock before an abandoned free-trial shop is deleted.
+  // Zero means trial shops are kept forever.
+  trialDeleteAfterHours!: number;
 }
 
 // Effective content allowance per section after trading a turned-off section's
