@@ -117,14 +117,18 @@ write_facts() {
   } > "$out/host.txt" 2>/dev/null || true
 
   # Container limits, field-whitelisted: Env is never read because it holds
-  # database credentials. RestartCount reveals a restart inside the window.
+  # database credentials. RestartCount reveals a restart inside the window, and
+  # both CPU-cap encodings are read because Compose records a fraction as
+  # NanoCpus on some daemons and as a CFS quota/period pair on others. Each
+  # field goes through `json` so an empty string keeps its column instead of
+  # shifting every later value one place left.
   {
     local id name values
     while read -r id name; do
       [[ -n "$id" && -n "$name" ]] || continue
       values=$(nice -n 19 docker inspect -f \
-        '{{.HostConfig.NanoCpus}} {{.Config.Memory}} {{.RestartCount}}' \
-        "$id" 2>/dev/null || printf '0 0 0')
+        '{{json .HostConfig.NanoCpus}} {{json .HostConfig.Memory}} {{json .RestartCount}} {{json .HostConfig.CpuQuota}} {{json .HostConfig.CpuPeriod}} {{json .HostConfig.CpusetCpus}} {{json .HostConfig.CpuShares}}' \
+        "$id" 2>/dev/null || printf '0 0 0 0 0 "" 0')
       printf '%s\t%s\n' "$name" "$values"
     done < <(nice -n 19 docker ps --format '{{.ID}} {{.Names}}' 2>/dev/null || true)
   } > "$out/limits.txt" 2>/dev/null || true
@@ -352,12 +356,35 @@ def host_facts(capture):
         parts = line.split("\t")
         if len(parts) != 2:
             continue
-        fields = parts[1].split() + ["0", "0", "0"]
+        # Exactly seven columns, so a short or long line cannot invent a cap: a
+        # missing CpusetCpus must stay empty rather than read as "0".
+        fields = (parts[1].split() + ["0", "0", "0", "0", "0", '""', "0"])[:7]
+
+        def number(token):
+            return float(token.strip().strip('"') or 0)
+
+        def text(token):
+            return token.strip().strip('"')
+
         try:
+            nano = number(fields[0]) / 1e9
+            quota = number(fields[3])
+            period = number(fields[4])
+            cpuset = text(fields[5])
+            cpus, source = 0.0, ""
+            if nano > 0:
+                cpus, source = nano, "nano"
+            elif quota > 0 and period > 0:
+                # A CFS pair is the real cap even when NanoCpus reads as zero.
+                cpus, source = quota / period, "cfs %d/%d" % (quota, period)
+            elif cpuset:
+                cpus, source = float(len(cpuset.split(","))), "cpuset"
             limits[parts[0]] = {
-                "cpus": float(fields[0]) / 1e9,
-                "mem_bytes": float(fields[1]),
-                "restarts": int(float(fields[2])),
+                "cpus": cpus,
+                "cpu_source": source,
+                "shares": number(fields[6]),
+                "mem_bytes": number(fields[1]),
+                "restarts": int(number(fields[2])),
             }
         except ValueError:
             continue
@@ -977,11 +1004,20 @@ def main(capture):
     if limits:
         print("Declared container limits (from docker inspect, Env never read)")
         for name, values in sorted(limits.items()):
-            print("  %-30s cpus %-5s mem %-8s restarts %s" % (
+            print("  %-30s cpus %-16s mem %-8s shares %-6s restarts %s" % (
                 name[:29],
-                ("%.2f" % values["cpus"]) if values["cpus"] else "none",
+                ("%.2f (%s)" % (values["cpus"], values["cpu_source"]))
+                if values["cpus"] else "UNCAPPED",
                 ("%dM" % (values["mem_bytes"] / 1024 / 1024)) if values["mem_bytes"] else "none",
+                ("%.0f" % values["shares"]) if values["shares"] else "-",
                 values["restarts"]))
+        uncapped = [name for name, values in limits.items() if not values["cpus"]]
+        if len(uncapped) == len(limits):
+            print(
+                "  None of these containers carries a CPU cap, so one worker encode can use every"
+                "\n  core on the host, not the two compose.yaml asks for. That changes the fix: the"
+                "\n  limits were never being applied, which a running container can confirm."
+            )
         print()
     summarize(rows, vcpu, names)
     print("\nCapture kept at %s" % capture)
@@ -1087,6 +1123,10 @@ self_test() {
   mkdir -p "$dir/ticks/000001" "$dir/ticks/000002" "$dir/ticks/000003"
   printf 'vcpu=4\njiffies_per_second=100\ncaptured_at=selftest\n' > "$dir/host.txt"
   printf 'matjary-fcc883335b03-worker-1\t2000000000 2147483648 0\n' > "$dir/limits.txt"
+  # A second service whose cap only exists as a CFS pair, the encoding some
+  # daemons use instead of NanoCpus: 200000/100000 is two cores.
+  printf 'matjary-fcc883335b03-mysql-1\t0 2147483648 0 200000 100000 "" 1024\n' >> "$dir/limits.txt"
+  printf 'matjary-d8776ee1f32c-redis-1\t0 0 0 0 0 "" 0\n' >> "$dir/limits.txt"
   printf 'abcdef123456\tmatjary-fcc883335b03-worker-1\n' > "$dir/containers.txt"
 
   # Synthetic cumulative counters on 4 cores with 100 ticks per second per core.
@@ -1135,6 +1175,10 @@ self_test() {
   grep -E '^  ffmpeg .* worker@fcc883$' "$file" > /dev/null ||
     die 'process was not labelled with its container and project'
   grep -q 'matjary-fcc883335b03-worker-1' "$file" || die 'container series missing'
+  grep -qE 'worker-1 +cpus 2\.00 \(nano\)' "$file" || die 'NanoCpus cap not read'
+  grep -qE 'mysql-1 +cpus 2\.00 \(cfs 200000/100000\).*shares 1024' "$file" ||
+    die 'CFS quota cap not read'
+  grep -qE 'redis-1 +cpus UNCAPPED' "$file" || die 'unlimited container not marked UNCAPPED'
   grep -q 'peak   4.0% busy, 0.2 MB/s' "$file" || die 'device utilisation wrong'
   grep -E 'Com_select +100\.0/s' "$file" > /dev/null ||
     die 'database counter rate wrong'
