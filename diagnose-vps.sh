@@ -378,10 +378,18 @@ def role(cid, names):
     name = names.get(cid)
     if not name:
         return "host"
-    for part in name.split("-"):
-        if part in ("api", "worker", "mysql", "redis", "phpmyadmin"):
-            return part
-    return name[:10]
+    parts = name.split("-")
+    service = next(
+        (part for part in parts
+         if part in ("api", "worker", "mysql", "redis", "phpmyadmin")),
+        "",
+    )
+    if not service:
+        return name[:14]
+    # Two deployments can share one VPS (the live domain and a retired one), so
+    # keep the Compose project fragment: api@fcc883 is not api@d8776.
+    fragment = next((part for part in parts if re.fullmatch(r"[0-9a-f]{8,16}", part)), "")
+    return "%s@%s" % (service, fragment[:6]) if fragment else service
 
 
 def ticks(capture):
@@ -747,7 +755,7 @@ def summarize(samples, vcpu, names):
         seen = ",".join(sorted(role(cid, names) for cid in where.get(name, set()))) or "host"
         print("  %-18s %10.1f %10.1f %8.1f %8s  %s" % (
             name[:18], entry["seconds"], entry["peak"], mean(entry["series"]),
-            ("%.2f" % score) if score else "-", seen[:24]))
+            ("%.2f" % score) if score else "-", seen[:34]))
 
     containers = {}
     for row in samples:
@@ -758,12 +766,12 @@ def summarize(samples, vcpu, names):
             entry["quota"].append(values["mem_quota"])
     if containers:
         print("\nContainers")
-        print("  %-22s %9s %9s %9s %8s" % ("name", "peakCPU%", "p95CPU%", "peakMem%", "corr"))
+        print("  %-30s %9s %9s %9s %8s" % ("name", "peakCPU%", "p95CPU%", "peakMem%", "corr"))
         for name, entry in sorted(containers.items()):
             cpus = [value for value in entry["cpu"]]
             mems = [value for value in entry["mem"] if value is not None]
-            print("  %-22s %9.1f %9.1f %9s %8s" % (
-                name[:22], max(cpus), percentile(cpus, 0.95),
+            print("  %-30s %9.1f %9.1f %9s %8s" % (
+                name[:29], max(cpus), percentile(cpus, 0.95),
                 ("%.1f" % max(mems)) if mems else "-",
                 ("%.2f" % pearson(totals, cpus)) if pearson(totals, cpus) is not None else "-"))
 
@@ -969,8 +977,8 @@ def main(capture):
     if limits:
         print("Declared container limits (from docker inspect, Env never read)")
         for name, values in sorted(limits.items()):
-            print("  %-22s cpus %-5s mem %-8s restarts %s" % (
-                name[:22],
+            print("  %-30s cpus %-5s mem %-8s restarts %s" % (
+                name[:29],
                 ("%.2f" % values["cpus"]) if values["cpus"] else "none",
                 ("%dM" % (values["mem_bytes"] / 1024 / 1024)) if values["mem_bytes"] else "none",
                 values["restarts"]))
@@ -1078,8 +1086,8 @@ self_test() {
   dir=$SELFTEST_TMP
   mkdir -p "$dir/ticks/000001" "$dir/ticks/000002" "$dir/ticks/000003"
   printf 'vcpu=4\njiffies_per_second=100\ncaptured_at=selftest\n' > "$dir/host.txt"
-  printf 'matjary-worker-1\t2000000000 2147483648 0\n' > "$dir/limits.txt"
-  printf 'abcdef123456\tmatjary-worker-1\n' > "$dir/containers.txt"
+  printf 'matjary-fcc883335b03-worker-1\t2000000000 2147483648 0\n' > "$dir/limits.txt"
+  printf 'abcdef123456\tmatjary-fcc883335b03-worker-1\n' > "$dir/containers.txt"
 
   # Synthetic cumulative counters on 4 cores with 100 ticks per second per core.
   # Each 5-second step: 610 busy jiffies out of 2060 total = 29.6% host CPU, 160
@@ -1098,7 +1106,7 @@ self_test() {
     printf 'MemTotal: 8388608\nMemAvailable: 4194304\nSwapTotal: 0\nSwapFree: 0\n' > "$d/meminfo.txt"
     printf 'pswpin 0\npswpout 0\npgpgin 10\npgpgout 20\npgmajfault 0\n' > "$d/vmstat.txt"
     printf '# cpu\nsome avg10=1.00 avg60=0.50 total=1\n' > "$d/pressure.txt"
-    printf 'matjary-worker-1\t195.00%%\t40.00%%\t800MiB / 2GiB\t0B / 0B\t0B / 0B\n' > "$d/docker.txt"
+    printf 'matjary-fcc883335b03-worker-1\t195.00%%\t40.00%%\t800MiB / 2GiB\t0B / 0B\t0B / 0B\n' > "$d/docker.txt"
   done
   printf '253 0 vda 100 0 1000 20 50 0 2000 30 0 100 130\n' > "$first/diskstats.txt"
   printf '253 0 vda 120 0 1600 25 60 0 3000 35 0 300 160\n' > "$second/diskstats.txt"
@@ -1124,9 +1132,9 @@ self_test() {
   grep -q 'RAM used    avg  50.0' "$file" || die 'memory percentage wrong'
   grep -E '^  ffmpeg +8\.0 +20\.0' "$file" > /dev/null ||
     die 'ffmpeg not attributed as 0.8 core across two steps'
-  grep -E '^  ffmpeg .* worker$' "$file" > /dev/null ||
-    die 'process was not labelled with its container'
-  grep -q 'matjary-worker-1' "$file" || die 'container series missing'
+  grep -E '^  ffmpeg .* worker@fcc883$' "$file" > /dev/null ||
+    die 'process was not labelled with its container and project'
+  grep -q 'matjary-fcc883335b03-worker-1' "$file" || die 'container series missing'
   grep -q 'peak   4.0% busy, 0.2 MB/s' "$file" || die 'device utilisation wrong'
   grep -E 'Com_select +100\.0/s' "$file" > /dev/null ||
     die 'database counter rate wrong'
