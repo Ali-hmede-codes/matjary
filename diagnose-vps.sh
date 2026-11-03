@@ -4,7 +4,9 @@
 #   sudo bash diagnose-vps.sh                                  sample 15 min, then report
 #   sudo bash diagnose-vps.sh --duration 3600 --interval 10    a longer, cheaper window
 #   sudo bash diagnose-vps.sh --snapshot                       one pass of the whole state
+#   sudo bash diagnose-vps.sh --bundle /root/diag.tar.gz       choose where the archive lands
 #   bash   diagnose-vps.sh --report /var/tmp/matjary-diag.XXX  re-summarize a capture
+#   bash   diagnose-vps.sh --report diag.tar.gz                re-summarize a shared bundle
 #   bash   diagnose-vps.sh --self-test                         validate the parser, change nothing
 #
 # Answers "why does usage climb to ~50% and then fall back to 15%": it records per-core CPU,
@@ -20,6 +22,10 @@
 # nothing printed here is a secret. The capture holds only counters, process names, container
 # names, and queue lengths, so it is safe to keep; delete it when done:
 #   rm -rf /var/tmp/matjary-diag.*
+#
+# Every run ends by packing that capture, including the rendered report, into one .tar.gz next
+# to it and printing the scp command that copies it to your computer. The diagnosis then
+# travels as a single file, and --report can rebuild the report from that same file later.
 set +x
 set -Eeuo pipefail
 umask 077
@@ -30,7 +36,7 @@ Matjary VPS resource forensics (Ubuntu 24.04 + CloudPanel Nginx + Docker)
 
   sudo bash diagnose-vps.sh                 sample the default window, print a report
   sudo bash diagnose-vps.sh --snapshot      single full-state pass, no loop
-  sudo bash diagnose-vps.sh --report DIR    re-render a saved capture (no root needed)
+  sudo bash diagnose-vps.sh --report PATH   re-render a saved capture or .tar.gz bundle
   sudo bash diagnose-vps.sh --self-test     validate the parser on synthetic data
   bash diagnose-vps.sh --help               this text
 
@@ -44,10 +50,23 @@ Sampling options (combine freely)
   --dir PATH           capture directory
                        (default /var/tmp/matjary-diag.<UTC stamp>)
 
+Output (one shareable file)
+  --bundle PATH        where to write the .tar.gz archive; a directory keeps
+                       the default name inside it
+                       (default <capture>.tar.gz next to the capture)
+  --no-bundle          keep only the capture directory, write no archive
+
 Why the numbers differ per run
   --duration 900 --interval 5 spans three 5-minute sweeps and seven share-shell passes, which
   is enough for the periodicity check. Use --duration 3600 to also cover the hourly share-shell
   reconciliation. Ctrl-C stops early and still prints the report for what was collected.
+
+Share the result
+  At the end one .tar.gz holds report.txt plus the raw ticks, so the numbers can be
+  re-checked without sampling twice. The script prints the exact scp command for it; under
+  sudo it also copies the archive into the invoking user's home, because /var/tmp stays
+  readable only by root. The archive contains counters, process and container names and
+  queue lengths only: no credentials, environment, database rows, media, or user data.
 HELP
 }
 
@@ -60,18 +79,26 @@ DOCKER_EVERY=2
 DB_EVERY=12
 READ_DB=1
 DIR=''
+BUNDLE=1
+BUNDLE_PATH=''
 SELFTEST_TMP=''
+REPORT_TMP=''
 STOP=0
 MYSQL_C=''
 REDIS_C=''
 DB_NAME=''
 
+# Only paths this script created under the temporary root are ever removed, and
+# rm -rf covers both the directories and the self-test archive.
 cleanup() {
-  [[ -n "$SELFTEST_TMP" && -d "$SELFTEST_TMP" ]] || return 0
-  case "$SELFTEST_TMP" in
-    /tmp/matjary-diag-selftest.* | "${TMPDIR:-/tmp}"/matjary-diag-selftest.*)
-      rm -rf -- "$SELFTEST_TMP" ;;
-  esac
+  local path
+  for path in "$REPORT_TMP" "$SELFTEST_TMP" "$SELFTEST_TMP-bundle.tar.gz"; do
+    [[ -n "$path" && -e "$path" ]] || continue
+    case "$path" in
+      /tmp/matjary-diag-* | "${TMPDIR:-/tmp}"/matjary-diag-*)
+        rm -rf -- "$path" ;;
+    esac
+  done
 }
 trap cleanup EXIT
 
@@ -324,6 +351,86 @@ SHOW GLOBAL STATUS WHERE Variable_name IN
    'Innodb_data_written','Questions','Uptime');
 SQL
   chmod 0600 "$1/query.sql" 2>/dev/null || true
+}
+
+# -------------------------------------------------------------------- bundle
+
+# One archive is the only thing that has to leave the server. It carries the
+# rendered report and the raw ticks, so a reader can re-run the arithmetic
+# without a second sampling window.
+write_capture_readme() {
+  cat > "$DIR/README.txt" <<'TXT'
+Matjary VPS resource capture
+
+  report.txt      the rendered diagnosis; read this first
+  host.txt        kernel, vCPU count, swap size, docker version
+  limits.txt      container CPU/memory caps read from docker inspect
+  containers.txt  container id prefix to name
+  disk.txt        filesystem layout and capacity
+  ticks/          one directory per sample: /proc counters, per-process CPU,
+                  docker stats, queue and database counters
+
+It contains counters, process names, container names and queue lengths only:
+no environment variables, passwords, tokens, database rows, media bytes,
+request bodies or user data. It is safe to send to whoever is debugging.
+
+Re-render the report without sampling again, from a capture directory or from
+the .tar.gz bundle:
+
+  bash diagnose-vps.sh --report /var/tmp/matjary-diag.<stamp>
+  bash diagnose-vps.sh --report /var/tmp/matjary-diag.<stamp>.tar.gz
+
+Delete when done:  rm -rf /var/tmp/matjary-diag.<stamp>*
+TXT
+}
+
+bundle_capture() {
+  [[ $BUNDLE == 1 ]] || return 0
+  [[ -n $DIR && -d $DIR ]] || die 'there is no capture directory to bundle'
+  local target=${BUNDLE_PATH:-} resolved size digest owner home copy
+  [[ -n $target ]] || target=${DIR%/}.tar.gz
+  # An existing directory is a destination, not a file name.
+  if [[ -d $target ]]; then
+    target=${target%/}/$(basename -- "${DIR%/}").tar.gz
+  fi
+  resolved=$(realpath -m -- "$target") || die 'cannot resolve the bundle path'
+  # Archiving a file into the directory being archived would loop or truncate.
+  case "$resolved" in
+    "$DIR"/*) die 'Choose a bundle path outside the capture directory.' ;;
+  esac
+  mkdir -p -- "$(dirname -- "$resolved")" || die "cannot create $(dirname -- "$resolved")"
+  # --force-local keeps a path like C:/... from being read as a remote host;
+  # GNU tar on the VPS accepts the flag and does nothing different with it.
+  tar --force-local -czf "$resolved" -C "$(dirname -- "$DIR")" "$(basename -- "$DIR")" ||
+    die 'could not write the bundle'
+  chmod 0600 -- "$resolved" 2>/dev/null || true
+  size=$(du -h -- "$resolved" 2>/dev/null | cut -f1)
+  digest=$(sha256sum -- "$resolved" 2>/dev/null | cut -d' ' -f1)
+  printf '\nBundle: %s (%s)\n' "$resolved" "${size:-unknown size}"
+  [[ -z $digest ]] || printf 'sha256: %s\n' "$digest"
+
+  # Under sudo the operator usually has no root login and cannot read a 0600
+  # file in /var/tmp. Hand them a copy their own account can scp away.
+  copy=''
+  owner=${SUDO_USER:-}
+  if [[ -n $owner && $owner != root ]]; then
+    home=$(getent passwd "$owner" | cut -d: -f6 || true)
+    if [[ -n $home && -d $home ]]; then
+      copy=$home/$(basename -- "$resolved")
+      install -m 0644 -o "$owner" -g "$(id -gn "$owner")" -- "$resolved" "$copy" 2>/dev/null ||
+        copy=''
+    fi
+  fi
+
+  printf '\nDownload that one file to your computer and share it:\n'
+  printf '  scp root@<your-server>:%s .\n' "$resolved"
+  if [[ -n $copy ]]; then
+    printf '  # or, without root, from an account that can log in:\n'
+    printf '  scp %s@<your-server>:%s .\n' "$owner" "$copy"
+  fi
+  printf 'On Windows, scp works in PowerShell, or use WinSCP/FileZilla over SFTP.\n'
+  printf 'It holds counters and names only, never credentials or user data.\n'
+  printf 'Re-render it later: bash diagnose-vps.sh --report %s\n' "$resolved"
 }
 
 # -------------------------------------------------------------------- report
@@ -1030,6 +1137,16 @@ if __name__ == "__main__":
 PY
 }
 
+# Print the report, keep the identical text inside the capture, and only then
+# archive: a failed render must never cost the raw samples.
+finish_capture() {
+  write_capture_readme || true
+  if ! report | tee -- "$DIR/report.txt"; then
+    printf '\nThe report could not be rendered on this host; the raw capture is complete.\n' >&2
+  fi
+  bundle_capture || true
+}
+
 # --------------------------------------------------------------------- setup
 
 parse_args() {
@@ -1045,6 +1162,8 @@ parse_args() {
       --db-every) [[ -n ${2:-} ]] || die '--db-every needs a count'; DB_EVERY=$2; shift 2 ;;
       --no-db) READ_DB=0; shift ;;
       --dir) [[ -n ${2:-} ]] || die '--dir needs a path'; DIR=$2; shift 2 ;;
+      --bundle) [[ -n ${2:-} ]] || die '--bundle needs a path'; BUNDLE_PATH=$2; shift 2 ;;
+      --no-bundle) BUNDLE=0; shift ;;
       *) die "Unknown option: $1 (use --help)" ;;
     esac
   done
@@ -1078,7 +1197,19 @@ main() {
   fi
   case $MODE in
     report)
-      [[ -d $DIR ]] || die "no capture at $DIR"
+      # A shared bundle is re-rendered by unpacking it, so the recipient needs
+      # nothing but this script and the one file.
+      if [[ ! -d $DIR ]]; then
+        case $DIR in
+          *.tar.gz | *.tgz) ;;
+          *) die "no capture at $DIR (expected a directory or a .tar.gz bundle)" ;;
+        esac
+        REPORT_TMP=$(mktemp -d "${TMPDIR:-/tmp}/matjary-diag-bundle.XXXXXXXX") ||
+          die 'cannot create a temporary directory for the bundle'
+        tar --force-local -xzf "$DIR" -C "$REPORT_TMP" || die "cannot unpack $DIR"
+        DIR=$(find "$REPORT_TMP" -mindepth 1 -maxdepth 1 -type d -print -quit)
+        [[ -n $DIR ]] || die 'the bundle contains no capture directory'
+      fi
       ;;
     *)
       mkdir -p "$DIR/ticks" || die 'cannot create the capture directory'
@@ -1102,12 +1233,12 @@ main() {
       tick 2
       sleep "$INTERVAL"
       tick 3
-      report
+      finish_capture
       ;;
     *)
       trap 'STOP=1' INT TERM
       run_window
-      report
+      finish_capture
       ;;
   esac
 }
@@ -1185,7 +1316,24 @@ self_test() {
   grep -E 'hit ratio +99\.0' "$file" > /dev/null || die 'buffer pool ratio wrong'
   grep -q 'The media worker is pegging' "$file" || die 'verdict did not name the worker'
   grep -q 'window too short' "$file" || die 'short window should not claim cadence'
-  printf 'Self-test passed on a synthetic capture. Nothing outside %s was touched.\n' "$dir"
+
+  # The end product is one archive: rendered report plus raw ticks, so a capture
+  # can be shared as a single file and re-rendered later from that file.
+  DIR=$dir write_capture_readme || die 'the capture README could not be written'
+  DIR=$dir BUNDLE=1 BUNDLE_PATH="$SELFTEST_TMP-bundle.tar.gz" bundle_capture > "$dir/bundle.txt" ||
+    die 'the bundle could not be written'
+  [[ -s "$SELFTEST_TMP-bundle.tar.gz" ]] || die 'the bundle is empty'
+  # Listing to a file first: grep -q closes the pipe early, and pipefail would
+  # report that as a failed archive even when the member is present.
+  tar --force-local -tzf "$SELFTEST_TMP-bundle.tar.gz" > "$dir/listing.txt" ||
+    die 'the bundle is not a readable archive'
+  grep -q 'report.txt$' "$dir/listing.txt" ||
+    die 'the bundle does not contain the rendered report'
+  grep -q 'README.txt$' "$dir/listing.txt" ||
+    die 'the bundle does not contain the capture README'
+  grep -q '^Bundle: ' "$dir/bundle.txt" || die 'the bundle path was not printed'
+  grep -q 'scp root@<your-server>:' "$dir/bundle.txt" || die 'no download command was printed'
+  printf 'Self-test passed on a synthetic capture. Nothing outside %s was touched.\n' "$SELFTEST_TMP*"
 }
 
 main "$@"
