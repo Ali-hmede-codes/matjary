@@ -142,6 +142,52 @@ test('error events are bounded, grouped and contain no raw synthetic secrets', (
   assert.doesNotMatch(JSON.stringify(event), /secret-cookie/);
 });
 
+test('a server failure is attributable without leaking its message', (context) => {
+  const output: string[] = [];
+  context.mock.method(process.stderr, 'write', (value: string) => {
+    output.push(value);
+    return true;
+  });
+  const filter = new MonitoringExceptionFilter();
+  const captured: { status?: number; body?: Record<string, unknown> } = {};
+  const response = {
+    locals: { requestId: 'request-2' },
+    headersSent: false,
+    status(code: number) {
+      captured.status = code;
+      return this;
+    },
+    json(value: Record<string, unknown>) {
+      captured.body = value;
+      return this;
+    },
+  };
+  const host = {
+    switchToHttp: () => ({
+      getRequest: () => ({
+        method: 'GET',
+        path: '/api/v1/uploads/media/x.webp',
+      }),
+      getResponse: () => response,
+    }),
+  };
+  const failure = Object.assign(
+    new TypeError('EACCES: open /secret-path password=synthetic-secret'),
+    { code: 'EACCES' },
+  );
+  filter.catch(failure, host as never);
+
+  assert.equal(captured.status, 500);
+  assert.equal(captured.body?.message, 'Service temporarily unavailable');
+  const detail = output.join('');
+  assert.match(detail, /http_failure/);
+  assert.match(detail, /TypeError/);
+  assert.match(detail, /EACCES/);
+  assert.match(detail, /"frames":\["[^"]+"/);
+  assert.doesNotMatch(detail, /secret-path|synthetic-secret|password/);
+  clearErrors();
+});
+
 function persistenceFixture(
   options: { full?: boolean; fail?: boolean; prune?: boolean } = {},
 ) {

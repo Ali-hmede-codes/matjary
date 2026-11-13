@@ -46,6 +46,55 @@ const MESSAGES: Record<number, string> = {
   429: 'Too many requests; try again shortly',
 };
 
+// A 5xx is otherwise unexplainable in production: SafeLogger drops every
+// message so driver text can never reach a log file, and the error event it
+// records carries only a route fingerprint. A TypeError, EACCES and a MySQL
+// ER_LOCK_WAIT_TIMEOUT therefore look identical while the site is down. The
+// error class, its machine-readable code (filesystem errno, MySQL/Redis code)
+// and the stack's function names identify the failing component without any
+// message, SQL text, bound parameters or request data.
+const STACK_FRAME = /^\s*at\s+(?:async\s+|new\s+)?([^\s(]+)/;
+
+function failureDetail(error: unknown): {
+  name: string;
+  code?: string;
+  frames: string[];
+} {
+  if (!(error instanceof Error)) return { name: 'non_error', frames: [] };
+  const candidate =
+    (error as { code?: unknown }).code ??
+    (error as { driverError?: { code?: unknown } }).driverError?.code;
+  return {
+    name: (error.name || 'Error').slice(0, 40),
+    ...(typeof candidate === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(candidate)
+      ? { code: candidate }
+      : {}),
+    frames: (error.stack ?? '')
+      .split('\n')
+      .slice(1, 9)
+      .map((line) => STACK_FRAME.exec(line)?.[1])
+      .filter((frame): frame is string => Boolean(frame))
+      .map((frame) => frame.slice(0, 80)),
+  };
+}
+
+let failureWindow = 0;
+let failureCount = 0;
+
+// A failing dependency can reject thousands of requests per second, so the
+// diagnostics are throttled exactly like error events are.
+function logFailure(detail: Record<string, unknown>): void {
+  const window = Math.floor(Date.now() / 1000);
+  if (window !== failureWindow) {
+    failureWindow = window;
+    failureCount = 0;
+  }
+  if (++failureCount > 10) return;
+  process.stderr.write(
+    JSON.stringify({ event: 'http_failure', ...detail }) + '\n',
+  );
+}
+
 // Only known subscription codes may reach the client. Everything else keeps
 // the generic status message so driver details and internal text never leak.
 function safeBusinessCode(error: unknown, status: number): string | undefined {
@@ -82,14 +131,22 @@ export class MonitoringExceptionFilter implements ExceptionFilter {
         ? response.locals.requestId
         : undefined;
     const code = safeBusinessCode(error, status);
-    if (status >= 500)
+    if (status >= 500) {
+      const operation = `${requestMethod(request)} ${routeTemplate(request)}`;
       errorTracker.capture(
         'api',
-        `${requestMethod(request)} ${routeTemplate(request)}`,
+        operation,
         'HTTP_FAILURE',
         'error',
         requestId,
       );
+      logFailure({
+        operation,
+        status,
+        ...(requestId ? { requestId } : {}),
+        ...failureDetail(error),
+      });
+    }
     if (response.headersSent) {
       response.destroy();
       return;

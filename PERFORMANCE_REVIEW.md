@@ -267,6 +267,19 @@ Do not add TTLs to pending engagement or rely on eviction to solve memory pressu
 
 Media streaming and decoding are different costs: browser rendering/decoding does not consume VPS CPU, while uncached origin streams, authorization queries, and worker encoding do. Keep Sharp/FFmpeg worker-only. Never expose the media volume through an unrestricted static alias or cache private responses to reduce load.
 
+## Open incident (2026-11-13): media byte requests answer 500
+
+Production `GET /api/v1/uploads/media/<parent>/<asset>/webp-1080.webp` returns 500. Because Nginx bypasses the proxy cache for `Range` requests, a failing origin breaks every video on every page while only uncached images look broken, which matches the report exactly.
+
+The last change is **not** the cause, and this is verified rather than assumed:
+
+- The generated SQL for [authorizeDownload](backend/apps/api/src/modules/showcases/media.service.ts#L487-L523) selects the joined asset's `id/status/kind/purpose/showcase_id/store_id/product_id`, which is every field `mediaParent` and the visibility rule read.
+- TypeORM's row transformer was run directly over that select's raw row: `variant.asset` hydrates with all seven fields, so the partial `select` cannot produce a `TypeError`.
+
+What remains unverified is the deployed filesystem/database, and the failure was undiagnosable because `SafeLogger` drops message text and the filter recorded only a route fingerprint. [The exception filter](backend/apps/api/src/modules/monitoring/monitoring.filter.ts) now also writes one throttled, message-free line per 5xx with the error class, its machine code (`EACCES`, `ER_*`, `ECONNRESET`) and the stack's function names — no message, SQL, parameters or request data, so the no-leak invariant holds.
+
+Next: reproduce once, read that line, then check `/var/lib/matjary/media` ownership (the API runs as UID 1000; a volume created by another UID yields `EACCES` on every read) and the `media_variants`/`media_assets` rows for the key. The archive volume is mounted but never created or chowned in [Dockerfile.api](backend/infra/Dockerfile.api#L28), so a fresh `media-archive-data` volume is root-owned and locked-shop archiving cannot write to it — fix that when the serving regression is closed.
+
 ## Coverage and safeguards already present
 
 Static review is not a guarantee of production capacity.
