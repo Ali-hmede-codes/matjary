@@ -504,6 +504,22 @@ export class MediaService {
           ...(administrator ? {} : { asset: ownerWhere('media') }),
         },
         relations: ['asset'],
+        // A byte request only needs identity and visibility. Selecting the
+        // whole asset would hydrate large JSON processing settings for every
+        // image a visitor loads.
+        select: {
+          assetId: true,
+          mimeType: true,
+          asset: {
+            id: true,
+            status: true,
+            kind: true,
+            purpose: true,
+            showcaseId: true,
+            storeId: true,
+            productId: true,
+          },
+        },
       });
     if (variant) {
       if (administrator)

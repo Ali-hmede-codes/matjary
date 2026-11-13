@@ -64,6 +64,67 @@ Scoped patches for findings 1–3. Findings 4 and 5 and the durable dirty-work r
 
 No migration, schema, `.env`, or deployment change was made.
 
+## Second pass — CPU per visitor (2026-11-13)
+
+Three read-path defects were fixed and verified. None of them required a
+configuration or data change; one needs a migration.
+
+### A. The personalized feed could issue a cartesian join
+
+`GET /feed` (session-guarded) used `leftJoin('store', 's2')` with no condition
+when the viewer had no liked/own shops — i.e. almost every new account. An
+unconditional join is a `posts x stores` intermediate result, and TypeORM's
+`take()` wraps it in `SELECT DISTINCT ... ORDER BY`, so MySQL materialises and
+sorts that product for every request. Provider code now only adds the
+`storeId IN (...)` filter and always orders by `published_at`; the shaping of
+the response is unchanged. Test: `test/unit/feed-cache.test.ts` asserts no
+unconditional join is added.
+
+### B. Anonymous explore pages re-ranked the whole candidate pool per scroll
+
+The shared cache key included the cursor, so page 1, 2, 3, ... of the same feed
+each re-ran the candidate SQL, hydrated up to `limit * 8` (max 300) posts with
+their assets, variants and counters, then returned `limit` of them. Worse, the
+20 s TTL and 40-key cap meant a handful of visitors evicted each other.
+
+Now the cache holds the *ranked candidate list* per filter set + page size
+(cursor excluded), pages are sliced locally, the TTL is 60 s, the cap is 60
+keys, and the pool cap is 160 instead of 300. Signed-in feeds still compute per
+request because their ordering uses personal affinity. Test:
+`test/unit/feed-cache.test.ts` asserts two cursor pages perform one candidate
+scan and a signed-in viewer performs one per request.
+
+### C. Missing indexes on two hot filters
+
+`Migration FeedQueryIndexes1796251200000` adds:
+
+- `post_likes (voter_id, voter_type)` — every signed-in explore request asks
+  "what did this viewer like?" for category affinity and related-shop feeds.
+  The only index led with `post_id`, so the voter filter was a full scan.
+- `showcases (store_id, published_at)` — shop pages and the favorites feed
+  filter by shop and order by publication; the old `(store_id, created_at)`
+  index forced a filesort of the shop's entire history.
+
+Both are read-path only and reversible. Run `npm run db:migrate` before the new
+API build goes live.
+
+### Verification
+
+`npm run typecheck`, `npm run format:check`, `npm test` (381 tests) and
+`npm run build` all pass.
+
+### Still unmeasured, still expensive
+
+These are code-visible costs, not confirmed incident causes. Measure before
+changing them.
+
+| Area | Cost | Next step |
+| --- | --- | --- |
+| `/api/v1/uploads/:key` | Each byte request authorizes (1 variant query + 1-2 parent queries with visibility `EXISTS`), then `stat`s twice (once for size, once inside `openReadStream`). Video seeking bypasses the Nginx cache by design, so each range pays this again. | Confirm the Nginx `matjary_media` zone is actually installed and that non-range image hits return `HIT`. Then consider a bounded positive-auth cache for public variants, or `X-Accel-Redirect` so Nginx serves the bytes. |
+| Share shells | Any content change re-renders every public shop, section, product and post `index.html` inside the API process (read existing file, render, atomic write). Cost is O(catalogue) per save. | Implement the durable dirty-store work from finding 1; until then, avoid bulk imports/publishes during peak traffic. |
+| Worker encode | `MEDIA_WORKER_CONCURRENCY=1`, FFmpeg at 2 threads + 1 filter thread and Sharp at 4 libvips threads. On a 4 vCPU VPS an upload legitimately shows as +50 % vCPU for its duration. | Expected. Verify it is the worker, not `mysqld`, in `docker stats`; keep encoding off the API host when the shop count grows. |
+| Engagement flush | Batch size grows with dirty posts and with likes per post (full liker map in JSON). | Finding 5 remains open; measure state sizes first. |
+
 ## Prioritized remaining work
 
 | Order | Current behavior | Resources at risk | Recommendation |
@@ -76,7 +137,7 @@ No migration, schema, `.env`, or deployment change was made.
 
 Implementation order can change if existing metrics show another workload dominating. Findings 1 and 2 are especially relevant because crawler/background traffic can compete with visitors opening an otherwise inexpensive product URL.
 
-**State after this pass:** findings 1, 2, and 3 have scoped patches (see above). Finding 1's durable dirty-store invalidation, finding 4, and finding 5 remain open and measurement-gated.
+**State after this pass:** findings 1, 2, and 3 have scoped patches (see above); the second pass additionally fixed the personalized-feed cartesian join, shared anonymous ranked lists across cursor pages, and added the two missing indexes. Finding 1's durable dirty-store invalidation, the deeper exploration hydration split, and finding 5 remain open and measurement-gated.
 
 ## 1. Activity can still trigger whole-catalog preview work
 
@@ -147,6 +208,11 @@ Successful cart reads on cart-enabled stores cause writes even for visitors who 
 ## 4. Explore enriches more candidates than it returns
 
 ### Evidence and trigger
+
+> Addressed in the second pass: the cache key no longer contains the cursor, one
+> ranked list is shared by every page of the same filters, the TTL is 60 s and
+> the pool cap is 160. The voter-leading `post_likes` index was added in
+> `FeedQueryIndexes1796251200000`. Signed-in feeds still compute per request.
 
 - [Explore cache and pagination](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L475-L566) share anonymous visitor work; signed-in requests bypass the shared response-cache branch. Cursor values create distinct cache keys.
 - [Mixed explore](backend/apps/api/src/modules/showcases/services/feed-explore.service.ts#L654-L720) chooses up to `min(max(limit * 8, 60), 300)` posts, fully enriches them, ranks/diversifies them, and only then paginates.

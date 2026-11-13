@@ -137,6 +137,16 @@ export interface FeedResponse {
   algorithm: string;
 }
 
+/**
+ * A fully scored, unpaginated page candidate list. Sharing this between cursor
+ * pages is what keeps anonymous scrolling from repeating the SQL and hydration
+ * work of the same filters.
+ */
+interface RankedFeed {
+  items: FeedItem[];
+  algorithm: string;
+}
+
 export interface ExploreCategoryFacet {
   slug: string;
   label: string;
@@ -223,16 +233,19 @@ export class FeedExploreService {
   private static readonly AFFINITY_CACHE_MAX = 500;
 
   // Anonymous visitors all request the same first pages. A very short shared
-  // cache turns a thundering herd into one ranking pass per key, and the
-  // per-visitor like state is patched on the way out. Authenticated feeds skip
-  // it because their ordering depends on personal affinity.
+  // cache turns a thundering herd into one ranking pass per filter set. The
+  // ranked list is keyed *without* the cursor, so every page of the same feed
+  // reuses one candidate scan instead of paying for it again per scroll. Each
+  // cursor is then sliced locally and the per-visitor like state patched on the
+  // way out. Authenticated feeds skip it because their ordering depends on
+  // personal affinity.
   private readonly feedCache = new Map<
     string,
-    { expiresAt: number; response: FeedResponse }
+    { expiresAt: number; ranked: RankedFeed }
   >();
-  private readonly feedInflight = new Map<string, Promise<FeedResponse>>();
-  private static readonly FEED_CACHE_TTL_MS = 20 * 1000;
-  private static readonly FEED_CACHE_MAX = 40;
+  private readonly feedInflight = new Map<string, Promise<RankedFeed>>();
+  private static readonly FEED_CACHE_TTL_MS = 60 * 1000;
+  private static readonly FEED_CACHE_MAX = 60;
 
   // Explore filters change rarely and every visitor asks for them on load.
   private categoriesCache:
@@ -385,14 +398,11 @@ export class FeedExploreService {
         query = query.andWhere('showcase.storeId IN (:...storeIds)', {
           storeIds: relevantStoreIds,
         });
-      } else {
-        // If no relevant stores, fall back to recent posts from all stores
-        // But prioritize stores with high engagement
-        query = query
-          .leftJoin('store', 's2')
-          .addSelect('s2.id')
-          .orderBy('showcase.publishedAt', 'DESC');
       }
+      // Without relevant stores the feed falls back to every published post,
+      // newest first. It must not join another table without a condition: an
+      // unconditional join is a cartesian product whose row count is
+      // posts x stores, which is exactly the kind of query that pins a CPU.
 
       // Cursor-based pagination
       if (cursor) {
@@ -476,43 +486,52 @@ export class FeedExploreService {
     params: ExploreParams,
     viewer?: ResolvedViewer,
   ): Promise<FeedResponse> {
-    const { limit = 20, cursor, algorithm = 'mixed' } = params;
+    const { limit = 20, cursor } = params;
     const normalized: ExploreParams = {
       ...params,
       categories: this.normalizedCategories(params),
     };
+    const algorithm = normalized.algorithm ?? 'mixed';
 
-    // Visitors share one ranked page; owners keep their personalised ordering.
+    // Visitors share one ranked candidate list per filter set and page size;
+    // owners keep their personalised ordering.
     const cacheable = viewer?.voterType === 'visitor';
-    const key = cacheable ? this.feedCacheKey(normalized, limit, cursor) : '';
+    const key = cacheable ? this.feedCacheKey(normalized, limit) : '';
     if (cacheable) {
       const cached = this.feedCache.get(key);
       if (cached && cached.expiresAt > Date.now())
-        return this.patchViewerLikes(cached.response, viewer);
+        return this.patchViewerLikes(
+          this.pageFeed(cached.ranked, limit, cursor),
+          viewer,
+        );
       const pending = this.feedInflight.get(key);
-      if (pending) return this.patchViewerLikes(await pending, viewer);
+      if (pending) {
+        const ranked = await pending;
+        return this.patchViewerLikes(
+          this.pageFeed(ranked, limit, cursor),
+          viewer,
+        );
+      }
     }
 
-    const work = this.computeExploreFeed(normalized, viewer, limit, cursor);
-    if (!cacheable) return work;
+    const work = this.computeRankedFeed(normalized, algorithm, viewer);
+    if (!cacheable) return this.pageFeed(await work, limit, cursor);
     // Single flight: the first visitor computes, everyone waiting shares it.
     this.feedInflight.set(key, work);
     try {
-      const response = await work;
-      this.storeFeedCache(key, response);
-      return response;
+      const ranked = await work;
+      this.storeFeedCache(key, ranked);
+      return this.pageFeed(ranked, limit, cursor);
     } finally {
       this.feedInflight.delete(key);
     }
   }
 
-  private async computeExploreFeed(
+  private async computeRankedFeed(
     normalized: ExploreParams,
+    algorithm: string,
     viewer: ResolvedViewer | undefined,
-    limit: number,
-    cursor: string | undefined,
-  ): Promise<FeedResponse> {
-    const algorithm = normalized.algorithm ?? 'mixed';
+  ): Promise<RankedFeed> {
     let items: FeedItem[] = [];
 
     switch (algorithm) {
@@ -534,23 +553,26 @@ export class FeedExploreService {
         break;
     }
 
-    // Apply cursor pagination
-    const paginated = this.paginateItems(items, limit, cursor);
+    return { items, algorithm };
+  }
 
+  /** Slices a ranked candidate list for one cursor. */
+  private pageFeed(
+    ranked: RankedFeed,
+    limit: number,
+    cursor: string | undefined,
+  ): FeedResponse {
+    const paginated = this.paginateItems(ranked.items, limit, cursor);
     return {
       items: paginated.items,
-      total: items.length,
+      total: ranked.items.length,
       hasMore: paginated.hasMore,
       nextCursor: paginated.nextCursor,
-      algorithm,
+      algorithm: ranked.algorithm,
     };
   }
 
-  private feedCacheKey(
-    params: ExploreParams,
-    limit: number,
-    cursor?: string,
-  ): string {
+  private feedCacheKey(params: ExploreParams, limit: number): string {
     return JSON.stringify([
       params.algorithm ?? 'mixed',
       params.categories ?? [],
@@ -561,17 +583,19 @@ export class FeedExploreService {
       params.longitude ?? '',
       params.radiusKm ?? '',
       params.timeWindowHours ?? '',
+      // The candidate pool is sized from the page size, so pages of different
+      // sizes need their own ranked list. The cursor is deliberately absent:
+      // every page of the same feed reuses one computation.
       limit,
-      cursor ?? '',
     ]);
   }
 
-  private storeFeedCache(key: string, response: FeedResponse): void {
+  private storeFeedCache(key: string, ranked: RankedFeed): void {
     // The entry is shared between visitors, so it must not carry one
-    // visitor's like state; every hit is patched for its own viewer.
-    const snapshot: FeedResponse = {
-      ...response,
-      items: response.items.map((item) => ({
+    // visitor's like state; every page is patched for its own viewer.
+    const snapshot: RankedFeed = {
+      algorithm: ranked.algorithm,
+      items: ranked.items.map((item) => ({
         ...item,
         engagement: { ...item.engagement, viewerLiked: false },
       })),
@@ -582,7 +606,7 @@ export class FeedExploreService {
     }
     this.feedCache.set(key, {
       expiresAt: Date.now() + FeedExploreService.FEED_CACHE_TTL_MS,
-      response: snapshot,
+      ranked: snapshot,
     });
   }
 
@@ -690,7 +714,9 @@ export class FeedExploreService {
     query = this.applyStoreScope(query, params);
 
     // A wider pool gives the small mixer room to balance freshness and reach.
-    const poolSize = Math.min(Math.max(limit * 8, 60), 300);
+    // It stays bounded: every extra candidate is fully hydrated (assets,
+    // variants, engagement, shop) even though one page shows far fewer.
+    const poolSize = Math.min(Math.max(limit * 8, 60), 160);
     const rawItems = await query
       .orderBy('showcase.publishedAt', 'DESC')
       .take(poolSize)
@@ -885,7 +911,7 @@ export class FeedExploreService {
 
     const items = await query
       .orderBy('showcase.publishedAt', 'DESC')
-      .take(Math.min(Math.max(limit * 8, 60), 300))
+      .take(Math.min(Math.max(limit * 8, 60), 160))
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer);
@@ -934,7 +960,7 @@ export class FeedExploreService {
 
     const items = await query
       .orderBy('showcase.publishedAt', 'DESC')
-      .take(Math.min(Math.max(limit * 8, 60), 300))
+      .take(Math.min(Math.max(limit * 8, 60), 160))
       .getMany();
 
     const enriched = await this.enrichFeedItems(items, viewer);
@@ -1012,7 +1038,9 @@ export class FeedExploreService {
       ...new Set(showcases.map((s) => s.storeId).filter(Boolean)),
     ] as string[];
 
-    // Fetch media assets for all showcases
+    // Fetch media assets for all showcases. Only the columns the response needs
+    // are selected: this can be hundreds of rows per request and the table also
+    // carries large JSON processing settings nobody reads here.
     const mediaAssets = await this.mediaAssets.find({
       where: {
         showcaseId: In(showcaseIds),
@@ -1020,6 +1048,15 @@ export class FeedExploreService {
         ...publicWhere('media'),
       },
       order: { position: 'ASC' },
+      select: {
+        id: true,
+        showcaseId: true,
+        kind: true,
+        mimeType: true,
+        width: true,
+        height: true,
+        durationMs: true,
+      },
     });
 
     // All variants of the page in one query, grouped by asset.
