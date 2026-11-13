@@ -285,7 +285,6 @@ export class User extends BaseEntity {
 @Index('idx_showcases_store', ['storeId'])
 @Index('idx_showcases_owner_status_created', ['ownerId', 'status', 'createdAt'])
 @Index('idx_showcases_store_created', ['storeId', 'createdAt'])
-@Index('idx_showcases_store_published', ['storeId', 'publishedAt'])
 @Index('idx_showcases_admin_archive', ['adminArchivedAt'])
 export class Showcase extends BaseEntity {
   // Ordinary and worker saves must never overwrite a concurrent moderation action.
@@ -1468,7 +1467,6 @@ export class PostEngagement {
 @Entity({ name: 'post_likes', engine: 'InnoDB' })
 @Index('uq_post_likes_post_voter', ['postId', 'voterId'], { unique: true })
 @Index('idx_post_likes_post', ['postId'])
-@Index('idx_post_likes_voter', ['voterId', 'voterType'])
 export class PostLike extends BaseEntity {
   @Column({ name: 'post_id', type: 'varchar', length: 36 })
   postId!: string;
