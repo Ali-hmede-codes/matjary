@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store } from 'lucide-react';
 import { ApiError, assetUrl } from '../../lib/api';
 import { brandingUrl } from '../../lib/website';
 import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
@@ -195,45 +194,14 @@ export function LoginPage() {
       <Navigate to={session.data.isAdmin ? '/admin' : '/dashboard'} replace />
     );
   return (
-    <div className="panel-app panel-login">
-      <section className="panel-login-story">
-        <Link to="/" className="panel-brand notranslate">
-          <img src={brandLogo} alt="" /> {settings.siteName}
+    <div className="panel-app login-screen">
+      <main className="login-card">
+        <Link to="/" className="login-brand notranslate">
+          <img src={brandLogo} alt="" /> <span>{settings.siteName}</span>
         </Link>
-        <div>
-          <p className="panel-eyebrow">YOUR NEXT CHAPTER</p>
-          <h1>
-            Your business.
-            <br />
-            Beautifully simple.
-          </h1>
-          <p>
-            Create a little home for what you do. Share your products, choose
-            your colors, and make it yours.
-          </p>
-          <div className="panel-login-features">
-            <span>
-              <Store size={20} /> Your own store
-            </span>
-            <span>
-              <ShieldCheck size={20} /> One secure account
-            </span>
-          </div>
-        </div>
-        <small>Made for independent businesses.</small>
-      </section>
-      <main className="panel-login-card">
-        <p className="panel-eyebrow">
-          WELCOME TO {settings.siteName.toUpperCase()}
-        </p>
-        <h2>
-          A fresh start,
-          <br />
-          or right where you left off.
-        </h2>
-        <p>
-          Continue with Google. Your account is created automatically if you're
-          new.
+        <h1>Sign in</h1>
+        <p className="login-intro">
+          Continue with Google to open your studio. No password needed.
         </p>
         {session.isPending ? (
           <Loading />
@@ -244,7 +212,7 @@ export function LoginPage() {
           <Retry error={session.error} retry={() => void session.refetch()} />
         ) : (
           <>
-            <div className="panel-google" ref={button} />
+            <div className="login-google" ref={button} />
             {busy && <Loading />}
             {error && (
               <Notice error>
@@ -259,12 +227,12 @@ export function LoginPage() {
             )}
           </>
         )}
-        <small>
-          No extra password. Your store stays yours.
-          <br />
-          Administrators have a separate workspace.
-        </small>
-        <Link to="/">Back to exploring</Link>
+        <p className="login-note">
+          Your account is created the first time you continue with Google.
+        </p>
+        <Link className="login-back" to="/">
+          Back to exploring
+        </Link>
       </main>
     </div>
   );

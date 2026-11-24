@@ -1728,66 +1728,68 @@
   place-items: center;
   padding: 30px;
 }
-.panel-login {
+/* One small card, because signing in is a single decision: it has to read
+   clearly on a phone and paint instantly for a returning owner. */
+.login-screen {
   display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  align-items: stretch;
+  place-items: center;
+  padding: 24px;
+  background: #f4f6f1;
 }
-.panel-login-story {
-  padding: 48px clamp(30px, 6vw, 100px);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 70px;
-  background: #e9efdf;
-  min-height: 100dvh;
-}
-.panel-login-story h1 {
-  font-size: clamp(38px, 4.5vw, 67px);
-  margin-bottom: 28px;
-  line-height: 1.05;
-}
-.panel-login-story p:not(.panel-eyebrow) {
+.login-card {
+  width: 100%;
   max-width: 380px;
-  color: #62715b;
-  line-height: 1.8;
+  padding: 34px 30px 26px;
+  background: #fff;
+  border: 1px solid var(--panel-line);
+  border-radius: 22px;
+  box-shadow: 0 18px 45px rgba(32, 46, 41, 0.06);
 }
-.panel-login-features {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 22px;
-  margin-top: 40px;
-}
-.panel-login-features span {
+.login-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 10px;
+  margin-bottom: 26px;
+  color: var(--panel-ink);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-decoration: none;
 }
-.panel-login-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 25px;
-  padding: 48px clamp(28px, 6vw, 95px);
+.login-brand img {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  object-fit: cover;
 }
-.panel-login-card h2 {
-  font-size: clamp(27px, 2.7vw, 40px);
+.login-card h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
-.panel-login-card > p:not(.panel-eyebrow) {
-  max-width: 350px;
+.login-intro {
+  margin: 0 0 22px;
   color: var(--panel-muted);
+  font-size: 14px;
 }
-.panel-login-card > a {
-  font-size: 12px;
-  color: #597457;
-  margin-top: 25px;
-  text-decoration: underline;
-}
-.panel-google {
+.login-google {
   width: 100%;
   min-height: 44px;
+  display: flex;
+  justify-content: center;
+}
+.login-note {
+  margin: 22px 0 0;
+  color: var(--panel-muted);
+  font-size: 12px;
+}
+.login-back {
+  display: inline-block;
+  margin-top: 14px;
+  color: #597457;
+  font-size: 12px;
+  text-decoration: underline;
 }
 .store-branches-editor {
   display: grid;
@@ -2417,23 +2419,8 @@
   .panel-editor-actions button {
     flex: 1;
   }
-  .panel-login {
-    grid-template-columns: 1fr;
-  }
-  .panel-login-story {
-    min-height: auto;
-    padding: 25px;
-    gap: 40px;
-  }
-  .panel-login-story h1 {
-    font-size: 38px;
-  }
-  .panel-login-story > small,
-  .panel-login-features {
-    display: none;
-  }
-  .panel-login-card {
-    padding: 35px 25px 50px;
+  .login-card {
+    padding: 28px 22px 22px;
   }
   .store-branches-empty {
     grid-template-columns: auto minmax(0, 1fr);
