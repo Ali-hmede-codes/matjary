@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
 import { ApiError, assetUrl } from '../../lib/api';
 import { brandingUrl } from '../../lib/website';
 import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
@@ -198,9 +197,6 @@ export function LoginPage() {
     <div className="panel-app login-screen">
       <span className="login-decor" aria-hidden="true" />
       <main className="login-card">
-        <span className="login-spark" aria-hidden="true">
-          <Sparkles size={20} strokeWidth={2.1} />
-        </span>
         <Link to="/" className="login-brand notranslate">
           <img src={brandLogo} alt="" /> <span>{settings.siteName}</span>
         </Link>

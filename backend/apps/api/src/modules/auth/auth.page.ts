@@ -77,23 +77,6 @@ export const AUTH_HTML = String.raw`<!doctype html>
         0 36px 80px -34px rgba(37, 78, 64, .42),
         0 12px 28px -18px rgba(37, 78, 64, .28);
     }
-    .spark {
-      position: absolute;
-      top: -14px;
-      right: -10px;
-      display: grid;
-      place-items: center;
-      width: 46px;
-      height: 46px;
-      border: 2px solid #fff;
-      border-radius: 15px;
-      color: #254e40;
-      background: linear-gradient(145deg, #e2f0c4, #a9d69b);
-      box-shadow: 0 14px 26px -14px rgba(37, 78, 64, .55);
-      transform: rotate(-8deg);
-      animation: bob 6s ease-in-out infinite;
-    }
-    .spark svg { width: 22px; height: 22px; fill: currentColor; }
     .brand {
       display: flex;
       align-items: center;
@@ -180,18 +163,12 @@ export const AUTH_HTML = String.raw`<!doctype html>
       from { transform: translate3d(0, 0, 0) scale(1); }
       to { transform: translate3d(46px, 34px, 0) scale(1.08); }
     }
-    @keyframes bob {
-      0%, 100% { transform: rotate(-8deg) translateY(0); }
-      50% { transform: rotate(-4deg) translateY(-7px); }
-    }
     @media (prefers-reduced-motion: reduce) {
-      .card, .google, .spark, .decor::before, .decor::after { animation: none; }
+      .card, .google, .decor::before, .decor::after { animation: none; }
       .card { transition: none; }
     }
     @media (max-width: 420px) {
       .card { padding: 30px 24px 24px; }
-      .spark { top: -12px; right: -6px; width: 42px; height: 42px; border-radius: 14px; }
-      .spark svg { width: 20px; height: 20px; }
     }
   </style>
   <script src="/api/v1/auth/client.js" defer></script>
@@ -199,9 +176,6 @@ export const AUTH_HTML = String.raw`<!doctype html>
 <body>
   <span class="decor" aria-hidden="true"></span>
   <main class="card">
-    <span class="spark" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M12 2.6 14.6 9.4 21.4 12 14.6 14.6 12 21.4 9.4 14.6 2.6 12 9.4 9.4Z"/></svg>
-    </span>
     <div class="brand">
       <span class="mark" id="mark" aria-hidden="true">M</span>
       <img class="logo" id="logo" alt="" hidden>
