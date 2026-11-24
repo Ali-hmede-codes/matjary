@@ -22,6 +22,7 @@ import {
 } from '../../lib/branches';
 import { getJson, mutate } from '../shared/panel-api';
 import { Notice } from '../shared/PanelUI';
+import { SettingsSection } from '../shared/SettingsSections';
 
 export interface DayHoursDraft {
   open: boolean;
@@ -386,17 +387,16 @@ export function StoreBranchesEditor({
   }
 
   return (
-    <section className="panel-card store-branches-editor">
-      <div className="store-branches-heading">
-        <div>
-          <h2>Branches & opening hours</h2>
-          <p className="panel-muted">
-            Add every place customers can visit or order from. Each branch has
-            its own call and WhatsApp number, map pin, and weekly hours.
-          </p>
-        </div>
+    <SettingsSection
+      id="store-branches"
+      icon={MapPin}
+      title="Branches & opening hours"
+      hint="Add every place customers can visit or order from. Each branch has its own call and WhatsApp number, map pin, and weekly hours."
+      action={
         <span className="panel-pill">{branches.length} / 10 branches</span>
-      </div>
+      }
+      className="store-branches-editor"
+    >
       {branches.length === 0 && (
         <div className="panel-empty store-branches-empty">
           <span className="panel-empty-mark">
@@ -795,6 +795,6 @@ export function StoreBranchesEditor({
           </small>
         </div>
       )}
-    </section>
+    </SettingsSection>
   );
 }

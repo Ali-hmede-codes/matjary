@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   Mail,
   Palette,
+  Sparkles,
   Type,
   Wallet,
 } from 'lucide-react';
@@ -18,6 +19,11 @@ import {
   Retry,
   useUnsaved,
 } from '../shared/PanelUI';
+import {
+  SettingsGroup,
+  SettingsJump,
+  SettingsSection,
+} from '../shared/SettingsSections';
 import { assetUrl } from '../../lib/api';
 import { SUPPORT_EMAIL } from '../../lib/contact';
 import {
@@ -249,12 +255,17 @@ function SettingsForm({
       noValidate
     >
       <div className="settings-main">
-        <section className="panel-card settings-card">
-          <SectionHead
-            icon={Type}
-            title="Identity"
-            hint="The name and description visitors read on the home page, in page titles, and in search and social previews."
-          />
+        <SettingsGroup
+          icon={Sparkles}
+          title="Brand identity"
+          hint="The name, wording and pictures every visitor sees."
+        />
+        <SettingsSection
+          id="settings-identity"
+          icon={Type}
+          title="Identity"
+          hint="The name and description visitors read on the home page, in page titles, and in search and social previews."
+        >
           <label>
             Website name
             <input
@@ -307,14 +318,14 @@ function SettingsForm({
               </small>
             )}
           </label>
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <SectionHead
-            icon={ImageIcon}
-            title="Logo and images"
-            hint="Address of an image that is already online. Upload a file to the website's public folder first, then paste its path here."
-          />
+        <SettingsSection
+          id="settings-images"
+          icon={ImageIcon}
+          title="Logo and images"
+          hint="Address of an image that is already online. Upload a file to the website's public folder first, then paste its path here."
+        >
           <div className="settings-subgrid">
             <ImageField
               label="Logo"
@@ -345,14 +356,19 @@ function SettingsForm({
             banner
             onChange={(value) => edit('bannerUrl', value)}
           />
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <SectionHead
-            icon={Palette}
-            title="Colors"
-            hint="Used across the public website. This workspace keeps its own colors."
-          />
+        <SettingsGroup
+          icon={Palette}
+          title="Look and feel"
+          hint="One set of colours used across the public website."
+        />
+        <SettingsSection
+          id="settings-colors"
+          icon={Palette}
+          title="Colors"
+          hint="Used across the public website. This workspace keeps its own colors."
+        >
           <div className="settings-color-grid">
             {colorFields.map(([key, label, hint]) => (
               <ColorField
@@ -366,14 +382,19 @@ function SettingsForm({
               />
             ))}
           </div>
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <SectionHead
-            icon={Mail}
-            title="Contact and footer"
-            hint="How visitors reach the platform, and the line printed at the bottom of every page."
-          />
+        <SettingsGroup
+          icon={Mail}
+          title="Contact and commerce"
+          hint="How visitors reach you, and what price lines shops may show."
+        />
+        <SettingsSection
+          id="settings-contact"
+          icon={Mail}
+          title="Contact and footer"
+          hint="How visitors reach the platform, and the line printed at the bottom of every page."
+        >
           <label>
             Contact email
             <input
@@ -411,14 +432,14 @@ function SettingsForm({
               <small>Leave empty to show the default copyright line.</small>
             )}
           </label>
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <SectionHead
-            icon={Wallet}
-            title="Prices"
-            hint="Shops that turn on LBP prices print this rate in small text under each US dollar price. Stored prices and orders stay in USD."
-          />
+        <SettingsSection
+          id="settings-prices"
+          icon={Wallet}
+          title="Prices"
+          hint="Shops that turn on LBP prices print this rate in small text under each US dollar price. Stored prices and orders stay in USD."
+        >
           <label>
             LBP per $1
             <input
@@ -441,7 +462,7 @@ function SettingsForm({
               </small>
             )}
           </label>
-        </section>
+        </SettingsSection>
 
         {error && <Notice error>{error}</Notice>}
         {notice && <Notice>{notice}</Notice>}
@@ -456,6 +477,17 @@ function SettingsForm({
       </div>
 
       <aside className="settings-aside">
+        <SettingsJump
+          variant="list"
+          label="Website settings"
+          items={[
+            { id: 'settings-identity', label: 'Identity', icon: Type },
+            { id: 'settings-images', label: 'Logo & images', icon: ImageIcon },
+            { id: 'settings-colors', label: 'Colors', icon: Palette },
+            { id: 'settings-contact', label: 'Contact & footer', icon: Mail },
+            { id: 'settings-prices', label: 'Prices', icon: Wallet },
+          ]}
+        />
         <section className="panel-card settings-preview-card">
           <h2>What visitors see</h2>
           <p className="panel-muted">
@@ -535,28 +567,6 @@ const colorFields = [
   ['backgroundColor', 'Background', 'The page behind every section.'],
   ['textColor', 'Text', 'Headings and body copy.'],
 ] as const;
-
-function SectionHead({
-  icon: Icon,
-  title,
-  hint,
-}: {
-  icon: typeof Type;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <header className="settings-head">
-      <span className="settings-icon">
-        <Icon size={18} />
-      </span>
-      <div>
-        <h2>{title}</h2>
-        <p className="panel-muted">{hint}</p>
-      </div>
-    </header>
-  );
-}
 
 function ImageField({
   label,

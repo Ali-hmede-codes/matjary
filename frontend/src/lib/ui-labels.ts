@@ -56,6 +56,15 @@ export const ARABIC_UI_LABELS: Record<string, string> = {
   'Shop settings': 'إعدادات المتجر',
   'My plan': 'خطتي',
   Team: 'الفريق',
+
+  // Panel navigation groups.
+  'Your shop': 'متجرك',
+  'Your shops': 'متاجرك',
+  Platform: 'المنصة',
+  'Money & trust': 'المدفوعات والثقة',
+  Website: 'الموقع',
+  Growth: 'النمو',
+  Account: 'الحساب',
 };
 
 export function uiLabel(language: Language, english: string): string {

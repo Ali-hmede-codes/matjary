@@ -1,0 +1,240 @@
+/* Shared heading parts for the owner and administrator settings pages. */
+
+.settings-section {
+  /* A sticky "On this page" strip sits above the form, so anchor targets need
+     breathing room or the heading lands underneath it. */
+  scroll-margin-top: 108px;
+  padding: 22px;
+}
+.settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.settings-section-copy {
+  flex: 1;
+  min-width: 0;
+}
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-section-head h2 {
+  margin: 0;
+  font-size: 19px;
+}
+/* Beats the generic .panel-app h2 size regardless of stylesheet order. */
+.panel-app .settings-section-head h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.settings-section-head .panel-muted {
+  margin: 4px 0 0;
+  max-width: 64ch;
+}
+.settings-section-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #e9efe9;
+  color: var(--panel-green);
+}
+.settings-section-step {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #eef3e8;
+  color: #3f5a4c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.settings-section-action {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+/* A dialog has its own surface; nested cards would look like boxes in a box. */
+.settings-section.is-flush {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.settings-section.is-flush .settings-section-icon {
+  flex-basis: 30px;
+  width: 30px;
+  height: 30px;
+}
+.settings-section.is-flush .settings-section-head h2 {
+  font-size: 17px;
+}
+/* ---------- Group headings between cards ---------- */
+.settings-group {
+  display: grid;
+  gap: 2px;
+  padding: 10px 4px 0;
+}
+.settings-group:first-child {
+  padding-top: 0;
+}
+.settings-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #5c7263;
+}
+.settings-group-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #edf2e8;
+  color: #4a6555;
+}
+.settings-group-hint {
+  margin: 0;
+  padding-inline-start: 27px;
+  font-size: 12px;
+  color: var(--panel-muted);
+}
+
+/* ---------- Sub-groups inside a dialog or a detail panel ---------- */
+.settings-subsection {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+/* Dialogs are not grids, so stacked detail groups need their own rhythm. */
+.panel-dialog > .settings-subsection + .settings-subsection {
+  margin-top: 22px;
+}
+.settings-subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5c7263;
+}
+.panel-app h3.settings-subsection-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5c7263;
+}
+.settings-subsection-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #edf2e8;
+  color: #4a6555;
+}
+.settings-subsection > .panel-details {
+  padding: 4px 0;
+}
+
+/* ---------- "On this page" jump strip ---------- */
+.settings-jump {
+  display: grid;
+  gap: 8px;
+  padding: 11px 14px 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  background: #fff;
+  position: sticky;
+  top: 10px;
+  z-index: 6;
+  min-width: 0;
+  margin-bottom: 18px;
+}
+.settings-jump-label {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7b877e;
+}
+.settings-jump-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.panel-app button.settings-jump-link {
+  min-height: 34px;
+  padding: 6px 11px;
+  border-color: transparent;
+  border-radius: 999px;
+  background: #f5f8f2;
+  color: #526659;
+  font-size: 12px;
+  font-weight: 600;
+}
+.panel-app button.settings-jump-link:hover {
+  background: #ecf2e7;
+  color: #254e40;
+}
+.panel-app button.settings-jump-link.is-active {
+  border-color: #c3d3ba;
+  background: #e8f0e2;
+  color: #254e40;
+}
+.settings-jump.is-list {
+  position: static;
+  padding: 16px;
+  margin-bottom: 0;
+}
+.settings-jump.is-list .settings-jump-links {
+  display: grid;
+  gap: 2px;
+}
+.panel-app .settings-jump.is-list button.settings-jump-link {
+  justify-content: flex-start;
+  width: 100%;
+  background: none;
+}
+.panel-app .settings-jump.is-list button.settings-jump-link.is-active {
+  background: #eef3e8;
+}
+
+@media (max-width: 900px) {
+  .settings-jump {
+    top: 78px;
+  }
+  .settings-section {
+    scroll-margin-top: 148px;
+  }
+}
+@media (max-width: 620px) {
+  .settings-section {
+    padding: 18px;
+  }
+  .settings-section-head {
+    gap: 10px;
+  }
+  .panel-app .settings-section-head h2 {
+    font-size: 17px;
+  }
+}

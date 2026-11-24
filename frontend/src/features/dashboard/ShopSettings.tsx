@@ -17,6 +17,7 @@ import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import { storePath } from '../../lib/storefront';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
+import { SettingsSection } from '../shared/SettingsSections';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 
 // Order messages follow the branch the customer picks; the social link is the
@@ -185,18 +186,12 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
         onSubmit={(event) => void save(event)}
       >
         <div className="shop-settings-main">
-          <section className="panel-card shop-settings-card">
-            <header className="shop-settings-head">
-              <span className="shop-settings-icon">
-                <ShoppingBag size={18} />
-              </span>
-              <div>
-                <h2>Cart &amp; checkout</h2>
-                <p className="panel-muted">
-                  How customers collect items and send you their order.
-                </p>
-              </div>
-            </header>
+          <SettingsSection
+            id="shop-checkout"
+            icon={ShoppingBag}
+            title="Cart & checkout"
+            hint="How customers collect items and send you their order."
+          >
             <label className="panel-toggle">
               <input
                 type="checkbox"
@@ -237,20 +232,13 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
                 <Link to="/dashboard/plan">See what your plan includes</Link>.
               </p>
             )}
-          </section>
-          <section className="panel-card shop-settings-card">
-            <header className="shop-settings-head">
-              <span className="shop-settings-icon">
-                <Wallet size={18} />
-              </span>
-              <div>
-                <h2>Prices</h2>
-                <p className="panel-muted">
-                  Items stay priced in US dollars; the LBP line is a display
-                  helper.
-                </p>
-              </div>
-            </header>
+          </SettingsSection>
+          <SettingsSection
+            id="shop-prices"
+            icon={Wallet}
+            title="Prices"
+            hint="Items stay priced in US dollars; the LBP line is a display helper."
+          >
             <label className="panel-toggle">
               <input
                 type="checkbox"
@@ -267,20 +255,13 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
                   : `You can turn this on once ${settings.siteName} sets the LBP exchange rate.`}
               </small>
             </label>
-          </section>
-          <section className="panel-card shop-settings-card">
-            <header className="shop-settings-head">
-              <span className="shop-settings-icon">
-                <Layers size={18} />
-              </span>
-              <div>
-                <h2>Shop sections</h2>
-                <p className="panel-muted">
-                  Turn off a section you don’t use. Its unused plan allowance
-                  moves to the section that stays on.
-                </p>
-              </div>
-            </header>
+          </SettingsSection>
+          <SettingsSection
+            id="shop-sections"
+            icon={Layers}
+            title="Shop sections"
+            hint="Turn off a section you don’t use. Its unused plan allowance moves to the section that stays on."
+          >
             <label className="panel-toggle">
               <input
                 type="checkbox"
@@ -335,7 +316,7 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
                 allowance has room. If it’s full, delete some items first.
               </p>
             )}
-          </section>
+          </SettingsSection>
           {error && <Notice error>{error}</Notice>}
           {notice && <Notice>{notice}</Notice>}
           <div className="panel-save-bar">

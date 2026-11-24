@@ -1,7 +1,20 @@
 import './StoreDesignStudio.css';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, ChevronDown, Palette, Undo2, Wand2 } from 'lucide-react';
+import {
+  ArrowUpRight,
+  ChevronDown,
+  Eye,
+  Image as ImageIcon,
+  Layers,
+  LayoutGrid,
+  Palette,
+  Ruler,
+  SlidersHorizontal,
+  Type,
+  Undo2,
+  Wand2,
+} from 'lucide-react';
 import {
   catalogLayoutInfo,
   catalogLayouts,
@@ -29,6 +42,7 @@ import {
 } from '../../lib/storefront';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
+import { SettingsJump, SettingsSection } from '../shared/SettingsSections';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 
 type WireBoxes = readonly (readonly [number, number, number, number])[];
@@ -331,27 +345,31 @@ function LayoutWire({ boxes }: { boxes: WireBoxes }) {
 }
 
 function StudioSection({
+  id,
   step,
+  icon,
   title,
   hint,
   children,
 }: {
+  id: string;
   step: string;
+  icon: typeof Palette;
   title: string;
   hint?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="panel-card design-card">
-      <header className="design-card-head">
-        <span className="design-step">{step}</span>
-        <div>
-          <h2>{title}</h2>
-          {hint && <p className="panel-muted">{hint}</p>}
-        </div>
-      </header>
+    <SettingsSection
+      id={id}
+      step={step}
+      icon={icon}
+      title={title}
+      hint={hint}
+      className="design-card"
+    >
       {children}
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -555,8 +573,23 @@ function DesignStudio({ store }: { store: OwnerStore }) {
       )}
       <div className="design-studio">
         <div className="design-studio-main">
+          <SettingsJump
+            label="Jump to a design step"
+            items={[
+              { id: 'design-posts', label: 'Post layout', icon: LayoutGrid },
+              { id: 'design-sections', label: 'Sections', icon: Layers },
+              { id: 'design-style', label: 'Colours & type', icon: Type },
+              {
+                id: 'design-advanced',
+                label: 'Advanced',
+                icon: SlidersHorizontal,
+              },
+            ]}
+          />
           <StudioSection
+            id="design-posts"
             step="01"
+            icon={LayoutGrid}
             title="Post layout"
             hint={`${postLayouts.length} arrangements. Pick the one that fits your shop.`}
           >
@@ -572,7 +605,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </StudioSection>
 
           <StudioSection
+            id="design-sections"
             step="02"
+            icon={Layers}
             title={preview.restaurant ? 'Menu sections' : 'Product sections'}
             hint="Choose one layout for every section, or repeat two or three layouts."
           >
@@ -627,7 +662,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </StudioSection>
 
           <StudioSection
+            id="design-style"
             step="03"
+            icon={Type}
             title="Colors & type"
             hint="Keep it simple: one palette, one type."
           >
@@ -683,20 +720,26 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </StudioSection>
 
           <details
+            id="design-advanced"
             className="panel-card design-advanced"
             open={advancedOpen}
             onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
           >
             <summary>
-              <span>
-                <strong>Advanced</strong>
-                <small>{advancedSummary}</small>
+              <span className="design-advanced-title">
+                <SlidersHorizontal size={16} aria-hidden="true" />
+                <span>
+                  <strong>Advanced</strong>
+                  <small>{advancedSummary}</small>
+                </span>
               </span>
               <ChevronDown size={18} aria-hidden="true" />
             </summary>
             <div className="design-advanced-body">
               <div className="design-advanced-block">
-                <h3>Cover style</h3>
+                <h3>
+                  <ImageIcon size={13} aria-hidden="true" /> Cover style
+                </h3>
                 <div className="design-heroes">
                   {heroes.map((choice) => (
                     <button
@@ -718,7 +761,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
               </div>
 
               <div className="design-advanced-block">
-                <h3>Spacing & corners</h3>
+                <h3>
+                  <Ruler size={13} aria-hidden="true" /> Spacing & corners
+                </h3>
                 <div className="design-control-grid">
                   <div className="design-control">
                     <strong>Corners</strong>
@@ -760,7 +805,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
               </div>
 
               <div className="design-advanced-block">
-                <h3>Product details</h3>
+                <h3>
+                  <Eye size={13} aria-hidden="true" /> Product details
+                </h3>
                 <div className="design-toggles">
                   <label className="panel-toggle">
                     <input

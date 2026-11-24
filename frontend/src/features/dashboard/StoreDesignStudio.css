@@ -12,41 +12,30 @@
   gap: 14px;
   min-width: 0;
 }
+.design-studio-main > .settings-jump {
+  margin-bottom: 0;
+}
+/* Each step keeps the compact studio density but wears the shared settings
+   header (icon + number + title) so both panels read the same way. */
 .design-card {
   min-width: 0;
+}
+.settings-section.design-card {
   padding: 18px;
 }
-.design-card-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
+.settings-section.design-card .settings-section-head {
   margin-bottom: 12px;
 }
-.design-card-head > div {
-  flex: 1;
-  min-width: 0;
-}
-.design-card-head h2 {
-  margin: 0 0 2px;
+.settings-section.design-card .settings-section-head h2 {
   font-size: 17px;
 }
-.design-card-head p {
-  margin: 0;
-  max-width: 62ch;
+.settings-section.design-card .settings-section-head .panel-muted {
   font-size: 12.5px;
 }
-.design-step {
-  display: grid;
-  place-items: center;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #e9efe9;
-  color: var(--panel-green);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+.settings-section.design-card .settings-section-icon {
+  flex-basis: 30px;
+  width: 30px;
+  height: 30px;
 }
 .design-inline-link {
   display: inline-flex;
@@ -443,6 +432,16 @@
   display: none;
 }
 .design-advanced summary > span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.design-advanced-title > svg {
+  flex-shrink: 0;
+  color: #4a6555;
+}
+.design-advanced-title > span {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -454,12 +453,12 @@
   color: var(--panel-muted);
   font-size: 11.5px;
 }
-.design-advanced summary svg {
+.design-advanced summary > svg {
   flex-shrink: 0;
   color: var(--panel-muted);
   transition: transform 0.18s ease;
 }
-.design-advanced[open] summary svg {
+.design-advanced[open] summary > svg {
   transform: rotate(180deg);
 }
 .design-advanced-body {
@@ -473,12 +472,18 @@
   gap: 9px;
 }
 .design-advanced-block h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--panel-muted);
   font-size: 10.5px;
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.design-advanced-block h3 svg {
+  color: #4a6555;
 }
 
 /* ---------- Toggles ---------- */
@@ -1165,7 +1170,7 @@
 }
 
 @media (max-width: 720px) {
-  .design-card {
+  .settings-section.design-card {
     padding: 14px;
   }
   .design-control-grid {

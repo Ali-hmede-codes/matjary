@@ -15,6 +15,7 @@ import {
   Clock3,
   Coins,
   CreditCard,
+  Info,
   Palette,
   Phone,
   Plus,
@@ -49,6 +50,7 @@ import {
   PanelShell,
   Retry,
 } from '../shared/PanelUI';
+import { SettingsSubsection } from '../shared/SettingsSections';
 import {
   storeMediaUrl,
   storePath,
@@ -1196,76 +1198,83 @@ function Detail({
           <p className="panel-muted">
             {data.description || 'No description provided.'}
           </p>
-          <dl className="panel-details">
-            <div>
-              <dt>Owner</dt>
-              <dd>
-                {data.owner?.displayName || data.displayName || '—'}
-                <small>{data.owner?.email || data.email}</small>
-              </dd>
-            </div>
-            {data.store && (
+          <SettingsSubsection icon={Info} title="Overview">
+            <dl className="panel-details">
               <div>
-                <dt>Store</dt>
-                <dd className="notranslate">{data.store.name}</dd>
-              </div>
-            )}
-            {data.plan && (
-              <div>
-                <dt>Plan</dt>
-                <dd>{data.plan.name}</dd>
-              </div>
-            )}
-            {data.priceCents != null && (
-              <div>
-                <dt>Price</dt>
+                <dt>Owner</dt>
                 <dd>
-                  {formatProductPrice(data.priceCents, data.currency || 'USD')}
+                  {data.owner?.displayName || data.displayName || '—'}
+                  <small>{data.owner?.email || data.email}</small>
                 </dd>
               </div>
-            )}
-            <div>
-              <dt>Created</dt>
-              <dd>{dateLabel(data.createdAt)}</dd>
-            </div>
-            {resource === 'users' && data.phone && (
+              {data.store && (
+                <div>
+                  <dt>Store</dt>
+                  <dd className="notranslate">{data.store.name}</dd>
+                </div>
+              )}
+              {data.plan && (
+                <div>
+                  <dt>Plan</dt>
+                  <dd>{data.plan.name}</dd>
+                </div>
+              )}
+              {data.priceCents != null && (
+                <div>
+                  <dt>Price</dt>
+                  <dd>
+                    {formatProductPrice(
+                      data.priceCents,
+                      data.currency || 'USD',
+                    )}
+                  </dd>
+                </div>
+              )}
               <div>
-                <dt>Phone</dt>
-                <dd>
-                  <a href={`tel:${data.phone}`} className="notranslate">
-                    {data.phone}
-                  </a>
-                </dd>
+                <dt>Created</dt>
+                <dd>{dateLabel(data.createdAt)}</dd>
               </div>
-            )}
-            {resource === 'users' && (
-              <div>
-                <dt>Role</dt>
-                <dd>
-                  {data.role === 'admin' ? 'Administrator' : 'User'}
-                  {data.roleManagedByEnvironment && (
-                    <small>Managed by server configuration</small>
-                  )}
-                </dd>
-              </div>
-            )}
-            {resource === 'users' && data.role === 'admin' && (
-              <div>
-                <dt>Store access</dt>
-                <dd>
-                  {data.adminScope === 'stores'
-                    ? data.adminStores?.length
-                      ? data.adminStores.map((shop) => shop.name).join(', ')
-                      : 'No shops assigned'
-                    : 'All stores'}
-                  {data.adminScope === 'stores' && (
-                    <small>Limited to the assigned shops</small>
-                  )}
-                </dd>
-              </div>
-            )}
-            {resource === 'stores' && (
-              <>
+              {resource === 'users' && data.phone && (
+                <div>
+                  <dt>Phone</dt>
+                  <dd>
+                    <a href={`tel:${data.phone}`} className="notranslate">
+                      {data.phone}
+                    </a>
+                  </dd>
+                </div>
+              )}
+              {resource === 'users' && (
+                <div>
+                  <dt>Role</dt>
+                  <dd>
+                    {data.role === 'admin' ? 'Administrator' : 'User'}
+                    {data.roleManagedByEnvironment && (
+                      <small>Managed by server configuration</small>
+                    )}
+                  </dd>
+                </div>
+              )}
+              {resource === 'users' && data.role === 'admin' && (
+                <div>
+                  <dt>Store access</dt>
+                  <dd>
+                    {data.adminScope === 'stores'
+                      ? data.adminStores?.length
+                        ? data.adminStores.map((shop) => shop.name).join(', ')
+                        : 'No shops assigned'
+                      : 'All stores'}
+                    {data.adminScope === 'stores' && (
+                      <small>Limited to the assigned shops</small>
+                    )}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </SettingsSubsection>
+          {resource === 'stores' && (
+            <SettingsSubsection icon={ShieldCheck} title="Store status">
+              <dl className="panel-details">
                 <div>
                   <dt>Owner status</dt>
                   <dd>
@@ -1308,10 +1317,12 @@ function Detail({
                       : 'Not active'}
                   </dd>
                 </div>
-              </>
-            )}
-            {resource === 'subscriptions' && (
-              <>
+              </dl>
+            </SettingsSubsection>
+          )}
+          {resource === 'subscriptions' && (
+            <SettingsSubsection icon={Clock3} title="Subscription period">
+              <dl className="panel-details">
                 <div>
                   <dt>Status</dt>
                   <dd>{data.status}</dd>
@@ -1333,42 +1344,48 @@ function Detail({
                     </dd>
                   </div>
                 )}
-              </>
-            )}
-          </dl>
-          {!!imageKeys.length && (
-            <div className="panel-photo-grid">
-              {imageKeys.map((key) => (
-                <img
-                  key={key}
-                  src={storeMediaUrl(key)}
-                  alt="Store content"
-                  loading="lazy"
-                />
-              ))}
-            </div>
+              </dl>
+            </SettingsSubsection>
           )}
-          {data.media?.map((media) =>
-            media.key ? (
-              media.kind === 'video' ? (
-                <video
-                  className="panel-preview-media"
-                  key={media.id}
-                  controls
-                  preload="metadata"
-                  src={storeMediaUrl(media.key)}
-                />
-              ) : (
-                <img
-                  className="panel-preview-media"
-                  key={media.id}
-                  src={storeMediaUrl(media.key)}
-                  alt="Post content"
-                />
-              )
-            ) : (
-              <p key={media.id}>Media: {media.status}</p>
-            ),
+          {!!imageKeys.length && (
+            <SettingsSubsection icon={Images} title="Photos">
+              <div className="panel-photo-grid">
+                {imageKeys.map((key) => (
+                  <img
+                    key={key}
+                    src={storeMediaUrl(key)}
+                    alt="Store content"
+                    loading="lazy"
+                  />
+                ))}
+              </div>
+            </SettingsSubsection>
+          )}
+          {!!data.media?.length && (
+            <SettingsSubsection icon={Images} title="Attached media">
+              {data.media.map((media) =>
+                media.key ? (
+                  media.kind === 'video' ? (
+                    <video
+                      className="panel-preview-media"
+                      key={media.id}
+                      controls
+                      preload="metadata"
+                      src={storeMediaUrl(media.key)}
+                    />
+                  ) : (
+                    <img
+                      className="panel-preview-media"
+                      key={media.id}
+                      src={storeMediaUrl(media.key)}
+                      alt="Post content"
+                    />
+                  )
+                ) : (
+                  <p key={media.id}>Media: {media.status}</p>
+                ),
+              )}
+            </SettingsSubsection>
           )}
           <div className="panel-actions">
             {resource === 'users' && (
@@ -2346,168 +2363,177 @@ function CreateStore({ id, close }: { id: string; close: () => void }) {
             The shop is created for the owner you choose and does not use any of
             their plan's shop allowance.
           </p>
-          <div className="panel-note">
-            <Users size={20} />
-            <div>
-              <strong>{owner?.displayName || 'You (the administrator)'}</strong>
-              <small>{owner?.email || 'Owner of the new shop'}</small>
+          <SettingsSubsection icon={Users} title="Owner">
+            <div className="panel-note">
+              <Users size={20} />
+              <div>
+                <strong>
+                  {owner?.displayName || 'You (the administrator)'}
+                </strong>
+                <small>{owner?.email || 'Owner of the new shop'}</small>
+              </div>
+              <button type="button" onClick={() => setPicking((open) => !open)}>
+                {owner ? 'Change owner' : 'Choose another owner'}
+              </button>
             </div>
-            <button type="button" onClick={() => setPicking((open) => !open)}>
-              {owner ? 'Change owner' : 'Choose another owner'}
-            </button>
-          </div>
-          {picking && (
-            <>
-              <div className="panel-toolbar">
-                <label className="panel-search">
-                  <Search size={18} />
-                  <input
-                    aria-label="Find an owner"
-                    placeholder="Search name or email"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      e.preventDefault();
+            {picking && (
+              <>
+                <div className="panel-toolbar">
+                  <label className="panel-search">
+                    <Search size={18} />
+                    <input
+                      aria-label="Find an owner"
+                      placeholder="Search name or email"
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        setSearch(searchInput);
+                        setOffset(0);
+                      }}
+                      maxLength={100}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
                       setSearch(searchInput);
                       setOffset(0);
                     }}
-                    maxLength={100}
+                  >
+                    Search
+                  </button>
+                </div>
+                {users.isPending ? (
+                  <Loading />
+                ) : users.isError ? (
+                  <Retry
+                    error={users.error}
+                    retry={() => void users.refetch()}
                   />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch(searchInput);
-                    setOffset(0);
-                  }}
-                >
-                  Search
-                </button>
-              </div>
-              {users.isPending ? (
-                <Loading />
-              ) : users.isError ? (
-                <Retry error={users.error} retry={() => void users.refetch()} />
-              ) : (
-                <>
-                  {users.data.items.map((account) => (
-                    <button
-                      className="panel-picker-row"
-                      type="button"
-                      key={account.id}
-                      onClick={() => {
-                        setOwner(account);
-                        setPicking(false);
-                      }}
-                    >
-                      <strong>{account.displayName}</strong>
-                      <small>{account.email}</small>
-                    </button>
-                  ))}
-                  {!users.data.items.length && <p>No matching users.</p>}
-                  <Pagination
-                    total={users.data.total}
-                    offset={offset}
-                    onChange={setOffset}
-                  />
-                </>
-              )}
-            </>
-          )}
-          <label>
-            Store name
-            <input
-              required
-              maxLength={200}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="A name people will remember"
-            />
-          </label>
-          <label>
-            Web address (optional)
-            <input
-              maxLength={191}
-              value={slug}
-              onChange={(e) => setSlug(e.target.value.toLowerCase())}
-              placeholder="my-new-shop"
-              pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            />
-            <small>
-              Leave it empty to build one from the store name. Use lowercase
-              letters, numbers, and dashes.
-            </small>
-          </label>
-          <fieldset>
-            <legend>Shop type</legend>
-            <div className="panel-plan-options">
-              <label
-                className={`panel-choice ${type === 'ecommerce' ? 'selected' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="store-type"
-                  checked={type === 'ecommerce'}
-                  onChange={() => setType('ecommerce')}
-                />
-                <strong>Shop</strong>
-                <span>Products with prices and a cart.</span>
-              </label>
-              <label
-                className={`panel-choice ${type === 'restaurant_menu' ? 'selected' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="store-type"
-                  checked={type === 'restaurant_menu'}
-                  onChange={() => setType('restaurant_menu')}
-                />
-                <strong>Restaurant / menu</strong>
-                <span>A menu-first storefront.</span>
-              </label>
-            </div>
-          </fieldset>
-          <label>
-            Business category
-            <select
-              required
-              value={category}
-              disabled={!catalog.data}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="">
-                {catalog.data ? 'Choose a category…' : 'Loading categories…'}
-              </option>
-              {catalog.data?.groups.map((group) => (
-                <optgroup key={group.slug} label={group.label}>
-                  {catalog.data.categories
-                    .filter((item) => item.group === group.slug)
-                    .map((item) => (
-                      <option key={item.slug} value={item.slug}>
-                        {item.label}
-                      </option>
+                ) : (
+                  <>
+                    {users.data.items.map((account) => (
+                      <button
+                        className="panel-picker-row"
+                        type="button"
+                        key={account.id}
+                        onClick={() => {
+                          setOwner(account);
+                          setPicking(false);
+                        }}
+                      >
+                        <strong>{account.displayName}</strong>
+                        <small>{account.email}</small>
+                      </button>
                     ))}
-                </optgroup>
-              ))}
-            </select>
-            {catalog.isError && (
-              <small>
-                Categories could not load. Retry in a moment or set one from the
-                owner's store editor.
-              </small>
+                    {!users.data.items.length && <p>No matching users.</p>}
+                    <Pagination
+                      total={users.data.total}
+                      offset={offset}
+                      onChange={setOffset}
+                    />
+                  </>
+                )}
+              </>
             )}
-          </label>
-          <label>
-            Description (optional)
-            <textarea
-              rows={3}
-              maxLength={5000}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What should visitors know?"
-            />
-          </label>
+          </SettingsSubsection>
+          <SettingsSubsection icon={Store} title="Shop details">
+            <label>
+              Store name
+              <input
+                required
+                maxLength={200}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="A name people will remember"
+              />
+            </label>
+            <label>
+              Web address (optional)
+              <input
+                maxLength={191}
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase())}
+                placeholder="my-new-shop"
+                pattern="[a-z0-9]+(-[a-z0-9]+)*"
+              />
+              <small>
+                Leave it empty to build one from the store name. Use lowercase
+                letters, numbers, and dashes.
+              </small>
+            </label>
+            <fieldset>
+              <legend>Shop type</legend>
+              <div className="panel-plan-options">
+                <label
+                  className={`panel-choice ${type === 'ecommerce' ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="store-type"
+                    checked={type === 'ecommerce'}
+                    onChange={() => setType('ecommerce')}
+                  />
+                  <strong>Shop</strong>
+                  <span>Products with prices and a cart.</span>
+                </label>
+                <label
+                  className={`panel-choice ${type === 'restaurant_menu' ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="store-type"
+                    checked={type === 'restaurant_menu'}
+                    onChange={() => setType('restaurant_menu')}
+                  />
+                  <strong>Restaurant / menu</strong>
+                  <span>A menu-first storefront.</span>
+                </label>
+              </div>
+            </fieldset>
+            <label>
+              Business category
+              <select
+                required
+                value={category}
+                disabled={!catalog.data}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">
+                  {catalog.data ? 'Choose a category…' : 'Loading categories…'}
+                </option>
+                {catalog.data?.groups.map((group) => (
+                  <optgroup key={group.slug} label={group.label}>
+                    {catalog.data.categories
+                      .filter((item) => item.group === group.slug)
+                      .map((item) => (
+                        <option key={item.slug} value={item.slug}>
+                          {item.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+              {catalog.isError && (
+                <small>
+                  Categories could not load. Retry in a moment or set one from
+                  the owner's store editor.
+                </small>
+              )}
+            </label>
+            <label>
+              Description (optional)
+              <textarea
+                rows={3}
+                maxLength={5000}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What should visitors know?"
+              />
+            </label>
+          </SettingsSubsection>
           {error && <Notice error>{error}</Notice>}
           <div className="panel-actions">
             <button type="button" disabled={busy} onClick={close}>
@@ -2633,121 +2659,128 @@ function EditStore({
             Changes take effect on the public storefront immediately and are
             recorded in the administrative activity log.
           </p>
-          <label>
-            Store name
-            <input
-              required
-              maxLength={200}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="A name people will remember"
-            />
-          </label>
-          <label>
-            Web address
-            <input
-              required
-              maxLength={191}
-              value={slug}
-              onChange={(e) => setSlug(e.target.value.toLowerCase())}
-              placeholder="my-shop"
-              pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            />
-            <small>
-              Lowercase letters, numbers, and dashes. The shop lives at /stores/
-              {slug.trim() || '…'}; old links stop working when this changes.
-            </small>
-          </label>
-          <fieldset>
-            <legend>Shop type</legend>
-            <div className="panel-plan-options">
-              <label
-                className={`panel-choice ${type === 'ecommerce' ? 'selected' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="edit-store-type"
-                  checked={type === 'ecommerce'}
-                  onChange={() => setType('ecommerce')}
-                />
-                <strong>Shop</strong>
-                <span>Products with prices and a cart.</span>
-              </label>
-              <label
-                className={`panel-choice ${type === 'restaurant_menu' ? 'selected' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="edit-store-type"
-                  checked={type === 'restaurant_menu'}
-                  onChange={() => setType('restaurant_menu')}
-                />
-                <strong>Restaurant / menu</strong>
-                <span>A menu-first storefront.</span>
-              </label>
-            </div>
-          </fieldset>
-          <label>
-            Business category
-            <select
-              required
-              value={category}
-              disabled={!catalog.data}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="">
-                {catalog.data ? 'Choose a category…' : 'Loading categories…'}
-              </option>
-              {catalog.data?.groups.map((group) => (
-                <optgroup key={group.slug} label={group.label}>
-                  {catalog.data.categories
-                    .filter((item) => item.group === group.slug)
-                    .map((item) => (
-                      <option key={item.slug} value={item.slug}>
-                        {item.label}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
-            {catalog.isError && (
+          <SettingsSubsection icon={Store} title="Identity">
+            <label>
+              Store name
+              <input
+                required
+                maxLength={200}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="A name people will remember"
+              />
+            </label>
+            <label>
+              Web address
+              <input
+                required
+                maxLength={191}
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase())}
+                placeholder="my-shop"
+                pattern="[a-z0-9]+(-[a-z0-9]+)*"
+              />
               <small>
-                Categories could not load. The current category is kept, and you
-                can retry by reopening this form.
+                Lowercase letters, numbers, and dashes. The shop lives at
+                /stores/
+                {slug.trim() || '…'}; old links stop working when this changes.
               </small>
-            )}
-          </label>
-          <label className="panel-color-picker">
-            Signature color
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-            />
-          </label>
-          <label>
-            Description
-            <textarea
-              rows={4}
-              maxLength={5000}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What should visitors know?"
-            />
-          </label>
-          <label>
-            Reason
-            <textarea
-              required
-              minLength={3}
-              maxLength={500}
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Why is this shop changing?"
-            />
-            <small>Recorded in the administrative activity log.</small>
-          </label>
+            </label>
+          </SettingsSubsection>
+          <SettingsSubsection icon={Palette} title="Presentation">
+            <fieldset>
+              <legend>Shop type</legend>
+              <div className="panel-plan-options">
+                <label
+                  className={`panel-choice ${type === 'ecommerce' ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="edit-store-type"
+                    checked={type === 'ecommerce'}
+                    onChange={() => setType('ecommerce')}
+                  />
+                  <strong>Shop</strong>
+                  <span>Products with prices and a cart.</span>
+                </label>
+                <label
+                  className={`panel-choice ${type === 'restaurant_menu' ? 'selected' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="edit-store-type"
+                    checked={type === 'restaurant_menu'}
+                    onChange={() => setType('restaurant_menu')}
+                  />
+                  <strong>Restaurant / menu</strong>
+                  <span>A menu-first storefront.</span>
+                </label>
+              </div>
+            </fieldset>
+            <label>
+              Business category
+              <select
+                required
+                value={category}
+                disabled={!catalog.data}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">
+                  {catalog.data ? 'Choose a category…' : 'Loading categories…'}
+                </option>
+                {catalog.data?.groups.map((group) => (
+                  <optgroup key={group.slug} label={group.label}>
+                    {catalog.data.categories
+                      .filter((item) => item.group === group.slug)
+                      .map((item) => (
+                        <option key={item.slug} value={item.slug}>
+                          {item.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+              {catalog.isError && (
+                <small>
+                  Categories could not load. The current category is kept, and
+                  you can retry by reopening this form.
+                </small>
+              )}
+            </label>
+            <label className="panel-color-picker">
+              Signature color
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                rows={4}
+                maxLength={5000}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What should visitors know?"
+              />
+            </label>
+          </SettingsSubsection>
+          <SettingsSubsection icon={Clock3} title="Audit trail">
+            <label>
+              Reason
+              <textarea
+                required
+                minLength={3}
+                maxLength={500}
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why is this shop changing?"
+              />
+              <small>Recorded in the administrative activity log.</small>
+            </label>
+          </SettingsSubsection>
           {error && <Notice error>{error}</Notice>}
           <div className="panel-actions">
             <button type="button" disabled={busy} onClick={close}>

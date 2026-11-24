@@ -8,7 +8,34 @@ import {
   type ReactNode,
 } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { ArrowUpRight, Check, LogOut, Menu, X } from 'lucide-react';
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  Bell,
+  Building2,
+  Check,
+  CircleUser,
+  CreditCard,
+  Globe,
+  Images,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Megaphone,
+  Menu,
+  Package,
+  Palette,
+  QrCode,
+  Search,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  Store,
+  TrendingUp,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getJson, mutate, panelError, type Session } from './panel-api';
 import { assetUrl } from '../../lib/api';
@@ -16,6 +43,17 @@ import { brandingUrl } from '../../lib/website';
 import { LanguageToggle } from '../../components/LanguageToggle';
 import { useUiLabel } from '../../hooks/useUiLabel';
 import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
+
+interface PanelNavLink {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+}
+interface PanelNavGroup {
+  title?: string;
+  icon?: LucideIcon;
+  links: PanelNavLink[];
+}
 
 export function PanelShell({
   session,
@@ -49,47 +87,131 @@ export function PanelShell({
   // A store-scoped administrator keeps the panel but loses every platform-wide
   // section (users, plans, boost, verification, branding, SEO).
   const scopedAdmin = admin && session.user.adminScope === 'stores';
-  const nav: Array<[string, string]> = admin
+  // Links carry an icon and sit under a small group title, so a long workspace
+  // reads as a few short sections instead of one flat list.
+  const navGroups: PanelNavGroup[] = admin
     ? scopedAdmin
       ? [
-          ['', 'Overview'],
-          ['/stores', 'Stores'],
-          ['/content', 'Content'],
+          {
+            links: [{ path: '', label: 'Overview', icon: LayoutDashboard }],
+          },
+          {
+            title: 'Your shops',
+            icon: Store,
+            links: [
+              { path: '/stores', label: 'Stores', icon: Store },
+              { path: '/content', label: 'Content', icon: Images },
+            ],
+          },
         ]
       : [
-          ['', 'Overview'],
-          ['/notifications', 'Notifications'],
-          ['/users', 'Users'],
-          ['/stores', 'Stores'],
-          ['/content', 'Content'],
-          ['/boost', 'Boost'],
-          ['/subscriptions', 'Subscriptions'],
-          ['/subscriptions/plans', 'Plans'],
-          ['/verification', 'Verification'],
-          ['/settings', 'Website settings'],
-          ['/seo', 'Website SEO'],
+          {
+            links: [{ path: '', label: 'Overview', icon: LayoutDashboard }],
+          },
+          {
+            title: 'Platform',
+            icon: ShieldCheck,
+            links: [
+              { path: '/notifications', label: 'Notifications', icon: Bell },
+              { path: '/users', label: 'Users', icon: Users },
+              { path: '/stores', label: 'Stores', icon: Store },
+              { path: '/content', label: 'Content', icon: Images },
+            ],
+          },
+          {
+            title: 'Money & trust',
+            icon: CreditCard,
+            links: [
+              {
+                path: '/subscriptions',
+                label: 'Subscriptions',
+                icon: CreditCard,
+              },
+              {
+                path: '/subscriptions/plans',
+                label: 'Plans',
+                icon: ListChecks,
+              },
+              { path: '/boost', label: 'Boost', icon: Megaphone },
+              {
+                path: '/verification',
+                label: 'Verification',
+                icon: BadgeCheck,
+              },
+            ],
+          },
+          {
+            title: 'Website',
+            icon: Globe,
+            links: [
+              { path: '/settings', label: 'Website settings', icon: Settings2 },
+              { path: '/seo', label: 'Website SEO', icon: Search },
+            ],
+          },
         ]
     : member
       ? [
-          ['', 'Home'],
-          ['/stores', 'My shops'],
-          ['/products', 'Products / menu'],
-          ['/posts', 'Posts'],
+          {
+            links: [{ path: '', label: 'Home', icon: LayoutDashboard }],
+          },
+          {
+            title: 'Your shop',
+            icon: Store,
+            links: [
+              { path: '/stores', label: 'My shops', icon: Building2 },
+              { path: '/products', label: 'Products / menu', icon: Package },
+              { path: '/posts', label: 'Posts', icon: Images },
+            ],
+          },
         ]
       : [
-          ['', 'Home'],
-          ['/notifications', 'Notifications'],
-          ['/stores', 'My stores'],
-          ['/store', 'Store editor'],
-          ['/design', 'Shop design'],
-          ['/settings', 'Shop settings'],
-          ['/verification', 'Verification'],
-          ['/qr', 'QR code'],
-          ['/products', 'Products / menu'],
-          ['/posts', 'Posts'],
-          ['/boost', 'Boost'],
-          ['/plan', 'My plan'],
-          ['/team', 'Team'],
+          {
+            links: [{ path: '', label: 'Home', icon: LayoutDashboard }],
+          },
+          {
+            title: 'Your shop',
+            icon: Store,
+            links: [
+              { path: '/stores', label: 'My stores', icon: Building2 },
+              { path: '/store', label: 'Store editor', icon: Store },
+              { path: '/design', label: 'Shop design', icon: Palette },
+              {
+                path: '/settings',
+                label: 'Shop settings',
+                icon: SlidersHorizontal,
+              },
+              { path: '/qr', label: 'QR code', icon: QrCode },
+            ],
+          },
+          {
+            title: 'Content',
+            icon: Images,
+            links: [
+              { path: '/products', label: 'Products / menu', icon: Package },
+              { path: '/posts', label: 'Posts', icon: Images },
+            ],
+          },
+          {
+            title: 'Growth',
+            icon: TrendingUp,
+            links: [
+              { path: '/boost', label: 'Boost', icon: Megaphone },
+              {
+                path: '/verification',
+                label: 'Verification',
+                icon: BadgeCheck,
+              },
+              { path: '/plan', label: 'My plan', icon: CreditCard },
+            ],
+          },
+          {
+            title: 'Account',
+            icon: CircleUser,
+            links: [
+              { path: '/notifications', label: 'Notifications', icon: Bell },
+              { path: '/team', label: 'Team', icon: Users },
+            ],
+          },
         ];
   async function logout() {
     setBusy(true);
@@ -136,24 +258,47 @@ export function PanelShell({
           {admin ? 'PLATFORM WORKSPACE' : 'YOUR BUSINESS, SIMPLIFIED'}
         </p>
         <nav aria-label={admin ? 'Administration' : 'Store management'}>
-          {nav.map(([path, label]) => (
-            <NavLink
-              key={path}
-              to={base + path}
-              // Parent sections also own nested routes (plans, post types).
-              end={
-                path === '' || path === '/content' || path === '/subscriptions'
-              }
-              onClick={() => setOpen(false)}
+          {navGroups.map((group, index) => (
+            <div
+              className="panel-nav-group"
+              key={group.title ?? `nav-group-${index}`}
             >
-              <span className="panel-nav-link-label">
-                <span className="notranslate">{uiText(label)}</span>
-                {path === '/notifications' && (
-                  <NotificationCount admin={admin} userId={session.user.id} />
-                )}
-              </span>
-              <ArrowUpRight size={16} />
-            </NavLink>
+              {group.title && (
+                <p className="panel-nav-group-title">
+                  {group.icon && <group.icon size={11} aria-hidden="true" />}
+                  <span className="notranslate">{uiText(group.title)}</span>
+                </p>
+              )}
+              {group.links.map(({ path, label, icon: Icon }) => (
+                <NavLink
+                  key={path}
+                  to={base + path}
+                  // Parent sections also own nested routes (plans, post types).
+                  end={
+                    path === '' ||
+                    path === '/content' ||
+                    path === '/subscriptions'
+                  }
+                  onClick={() => setOpen(false)}
+                >
+                  <span className="panel-nav-link-label">
+                    <Icon
+                      className="panel-nav-icon"
+                      size={16}
+                      aria-hidden="true"
+                    />
+                    <span className="notranslate">{uiText(label)}</span>
+                    {path === '/notifications' && (
+                      <NotificationCount
+                        admin={admin}
+                        userId={session.user.id}
+                      />
+                    )}
+                  </span>
+                  <ArrowUpRight size={16} />
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="panel-sidebar-bottom">

@@ -104,7 +104,8 @@
   border-color: #9a3333;
 }
 .panel-app fieldset.store-editor-fields {
-  display: block;
+  display: grid;
+  gap: 18px;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -281,28 +282,59 @@
 }
 .panel-sidebar nav {
   display: grid;
-  gap: 7px;
+  gap: 15px;
   margin-top: -16px;
+}
+.panel-nav-group {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.panel-nav-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 14px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #8a978d;
+}
+.panel-nav-group-title svg {
+  flex: 0 0 auto;
+  opacity: 0.85;
 }
 .panel-sidebar nav a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 47px;
-  padding: 12px 14px;
+  min-height: 44px;
+  padding: 10px 13px;
   color: #66736c;
   border-radius: 9px;
   font-weight: 550;
 }
-.panel-sidebar nav a svg {
+/* Only the trailing arrow stays hidden until the row is active; the leading
+   icon is part of how the group is read. */
+.panel-sidebar nav a > svg:last-child {
   opacity: 0;
+}
+.panel-sidebar nav a .panel-nav-icon {
+  flex: 0 0 auto;
+  opacity: 0.75;
 }
 .panel-sidebar nav a.active {
   background: #edf3e8;
   color: #254e40;
   font-weight: 700;
 }
-.panel-sidebar nav a.active svg {
+.panel-sidebar nav a.active > svg:last-child {
+  opacity: 1;
+}
+.panel-sidebar nav a.active .panel-nav-icon {
+  color: #254e40;
   opacity: 1;
 }
 .panel-sidebar nav a:hover {
@@ -1284,6 +1316,17 @@
   gap: 28px;
   align-items: start;
 }
+/* The jump strip lives in the form column so it never covers the sticky
+   preview beside it. */
+.store-editor-main {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-width: 0;
+}
+.store-editor-main > .settings-jump {
+  margin-bottom: 0;
+}
 .panel-live-preview {
   position: sticky;
   top: 30px;
@@ -1750,19 +1793,6 @@
   display: grid;
   gap: 18px;
 }
-.store-branches-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-.store-branches-heading h2 {
-  margin-bottom: 6px;
-}
-.store-branches-heading p {
-  max-width: 560px;
-}
 .store-branches-empty {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -1994,19 +2024,6 @@
 }
 .store-settings-card p {
   max-width: 60ch;
-}
-.store-socials-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-.store-socials-heading h2 {
-  margin-bottom: 6px;
-}
-.store-socials-heading p {
-  max-width: 520px;
 }
 .store-socials-preview {
   display: flex;

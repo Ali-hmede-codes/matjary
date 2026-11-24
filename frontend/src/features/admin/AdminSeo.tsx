@@ -20,6 +20,11 @@ import {
   Retry,
   useUnsaved,
 } from '../shared/PanelUI';
+import {
+  SettingsGroup,
+  SettingsJump,
+  SettingsSection,
+} from '../shared/SettingsSections';
 import { assetUrl } from '../../lib/api';
 import {
   brandingUrl,
@@ -564,19 +569,17 @@ function SettingsForm({
       noValidate
     >
       <div className="settings-main">
-        <section className="panel-card settings-card">
-          <header className="settings-head">
-            <span className="settings-icon">
-              <Search size={18} />
-            </span>
-            <div>
-              <h2>Search appearance</h2>
-              <p className="panel-muted">
-                The website name and tagline form the home page title. The SEO
-                defaults fill pages that have no title of their own.
-              </p>
-            </div>
-          </header>
+        <SettingsGroup
+          icon={Search}
+          title="How you appear"
+          hint="The title, description and image search engines and social apps show."
+        />
+        <SettingsSection
+          id="seo-appearance"
+          icon={Search}
+          title="Search appearance"
+          hint="The website name and tagline form the home page title. The SEO defaults fill pages that have no title of their own."
+        >
           <div className="settings-subgrid">
             <Field
               label="Website name"
@@ -657,21 +660,14 @@ function SettingsForm({
               Open Website settings <ArrowUpRight size={13} />
             </Link>
           </p>
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <header className="settings-head">
-            <span className="settings-icon">
-              <ImageIcon size={18} />
-            </span>
-            <div>
-              <h2>Sharing image and logo</h2>
-              <p className="panel-muted">
-                Your website banner or logo is loaded automatically. Paste
-                another public address to use a different image.
-              </p>
-            </div>
-          </header>
+        <SettingsSection
+          id="seo-sharing"
+          icon={ImageIcon}
+          title="Sharing image and logo"
+          hint="Your website banner or logo is loaded automatically. Paste another public address to use a different image."
+        >
           <div className="settings-subgrid">
             <div className="seo-image-field">
               <Field
@@ -784,21 +780,19 @@ function SettingsForm({
               address is empty.
             </p>
           )}
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <header className="settings-head">
-            <span className="settings-icon">
-              <ShieldCheck size={18} />
-            </span>
-            <div>
-              <h2>Search engine verification</h2>
-              <p className="panel-muted">
-                Paste the code each search engine gives you. Leave a field empty
-                to remove its tag.
-              </p>
-            </div>
-          </header>
+        <SettingsGroup
+          icon={ShieldCheck}
+          title="Verification and crawlers"
+          hint="Prove ownership to search engines and decide what they may read."
+        />
+        <SettingsSection
+          id="seo-verification"
+          icon={ShieldCheck}
+          title="Search engine verification"
+          hint="Paste the code each search engine gives you. Leave a field empty to remove its tag."
+        >
           <div className="settings-subgrid">
             <Field
               label="Google"
@@ -846,21 +840,14 @@ function SettingsForm({
               />
             </Field>
           </div>
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <header className="settings-head">
-            <span className="settings-icon">
-              <Bot size={18} />
-            </span>
-            <div>
-              <h2>Sitemap and crawlers</h2>
-              <p className="panel-muted">
-                Controls sitemap.xml, robots.txt, and which AI crawlers may read
-                the site.
-              </p>
-            </div>
-          </header>
+        <SettingsSection
+          id="seo-crawlers"
+          icon={Bot}
+          title="Sitemap and crawlers"
+          hint="Controls sitemap.xml, robots.txt, and which AI crawlers may read the site."
+        >
           <Toggle
             checked={draft.sitemapEnabled}
             disabled={busy}
@@ -967,21 +954,19 @@ function SettingsForm({
               onChange={(event) => edit('robotsTxtCustom', event.target.value)}
             />
           </Field>
-        </section>
+        </SettingsSection>
 
-        <section className="panel-card settings-card">
-          <header className="settings-head">
-            <span className="settings-icon">
-              <Building2 size={18} />
-            </span>
-            <div>
-              <h2>Organization</h2>
-              <p className="panel-muted">
-                Structured data that identifies the business behind the website
-                to search engines.
-              </p>
-            </div>
-          </header>
+        <SettingsGroup
+          icon={Building2}
+          title="About the business"
+          hint="Structured data that tells search engines who is behind the website."
+        />
+        <SettingsSection
+          id="seo-organization"
+          icon={Building2}
+          title="Organization"
+          hint="Structured data that identifies the business behind the website to search engines."
+        >
           <div className="settings-subgrid">
             <Field
               label="Organization name"
@@ -1033,25 +1018,17 @@ function SettingsForm({
               }
             />
           </Field>
-        </section>
+        </SettingsSection>
 
-        <details className="panel-optional seo-advanced">
+        <details id="seo-advanced" className="panel-optional seo-advanced">
           <summary>
             Advanced <span>Optional</span>
           </summary>
-          <section className="panel-card settings-card">
-            <header className="settings-head">
-              <span className="settings-icon">
-                <Wrench size={18} />
-              </span>
-              <div>
-                <h2>Indexing and schema</h2>
-                <p className="panel-muted">
-                  These options rarely need changing; the defaults are safe for
-                  most websites.
-                </p>
-              </div>
-            </header>
+          <SettingsSection
+            icon={Wrench}
+            title="Indexing and schema"
+            hint="These options rarely need changing; the defaults are safe for most websites."
+          >
             <Toggle
               checked={draft.indexNowEnabled}
               disabled={busy}
@@ -1144,7 +1121,7 @@ function SettingsForm({
                 }
               />
             </Field>
-          </section>
+          </SettingsSection>
         </details>
 
         {error && <Notice error>{error}</Notice>}
@@ -1160,6 +1137,22 @@ function SettingsForm({
       </div>
 
       <aside className="settings-aside">
+        <SettingsJump
+          variant="list"
+          label="Website SEO"
+          items={[
+            { id: 'seo-appearance', label: 'Search appearance', icon: Search },
+            { id: 'seo-sharing', label: 'Sharing image', icon: ImageIcon },
+            {
+              id: 'seo-verification',
+              label: 'Verification',
+              icon: ShieldCheck,
+            },
+            { id: 'seo-crawlers', label: 'Sitemap & crawlers', icon: Bot },
+            { id: 'seo-organization', label: 'Organization', icon: Building2 },
+            { id: 'seo-advanced', label: 'Advanced', icon: Wrench },
+          ]}
+        />
         <section className="panel-card settings-preview-card">
           <h2>Search result</h2>
           <p className="panel-muted">How the home page can look on Google.</p>

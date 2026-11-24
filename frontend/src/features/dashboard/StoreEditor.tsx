@@ -7,12 +7,18 @@ import {
 } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  AlignLeft,
   ArrowUpRight,
   Check,
   Coffee,
+  ImagePlus,
   MapPin,
+  Palette,
   Settings2,
+  Share2,
+  Sparkles,
   Store as StoreIcon,
+  Tags,
 } from 'lucide-react';
 import { getJson, type ShopCategoryCatalog } from '../../lib/api';
 import {
@@ -29,6 +35,11 @@ import {
 } from '../../lib/branches';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
+import {
+  SettingsGroup,
+  SettingsJump,
+  SettingsSection,
+} from '../shared/SettingsSections';
 import { MediaUpload } from '../shared/MediaUpload';
 import { SocialIcon, socialNetworks } from '../../components/SocialIcon';
 import { TrialOffer, useOwner, type OwnerStore } from './OwnerPanel';
@@ -401,302 +412,347 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
         </section>
       )}
       <form onSubmit={(e) => void save(e)} className="panel-editor-layout">
-        <fieldset
-          className="panel-form store-editor-fields"
-          disabled={busy || lifecycleBusy}
-        >
-          <section className="panel-card">
-            <h2>The essentials</h2>
-            <label>
-              Store name
-              <input
-                required
-                maxLength={200}
-                value={name}
-                placeholder="e.g. Olive & Oak"
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="organization"
-              />
-            </label>
-            <fieldset>
-              <legend>How should your shop look?</legend>
-              <div className="panel-type-options">
-                {(
-                  [
+        <div className="store-editor-main">
+          <SettingsJump
+            label="Jump to a setting"
+            items={[
+              { id: 'store-basics', label: 'Basics', icon: StoreIcon },
+              { id: 'store-category', label: 'Category', icon: Tags },
+              { id: 'store-brand', label: 'Colour', icon: Palette },
+              { id: 'store-media', label: 'Logo & cover', icon: ImagePlus },
+              { id: 'store-about', label: 'About', icon: AlignLeft },
+              { id: 'store-branches', label: 'Branches', icon: MapPin },
+              { id: 'store-socials', label: 'Social links', icon: Share2 },
+            ]}
+          />
+          <fieldset
+            className="panel-form store-editor-fields"
+            disabled={busy || lifecycleBusy}
+          >
+            <SettingsGroup
+              icon={Sparkles}
+              title="The essentials"
+              hint="The name and the category shoppers use to find you."
+            />
+            <SettingsSection
+              id="store-basics"
+              icon={StoreIcon}
+              title="Store name and type"
+              hint="What you are called on the platform, and how your shop should look."
+            >
+              <label>
+                Store name
+                <input
+                  required
+                  maxLength={200}
+                  value={name}
+                  placeholder="e.g. Olive & Oak"
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="organization"
+                />
+              </label>
+              <fieldset>
+                <legend>How should your shop look?</legend>
+                <div className="panel-type-options">
+                  {(
                     [
-                      'ecommerce',
-                      'Shop',
-                      'Products, collections, and great finds.',
-                    ],
-                    [
-                      'restaurant_menu',
-                      'Restaurant / café',
-                      'A delicious menu, easy to explore.',
-                    ],
-                  ] as const
-                ).map(([value, title, text]) => (
-                  <label
-                    className={`panel-choice ${type === value ? 'selected' : ''}`}
-                    key={value}
+                      [
+                        'ecommerce',
+                        'Shop',
+                        'Products, collections, and great finds.',
+                      ],
+                      [
+                        'restaurant_menu',
+                        'Restaurant / café',
+                        'A delicious menu, easy to explore.',
+                      ],
+                    ] as const
+                  ).map(([value, title, text]) => (
+                    <label
+                      className={`panel-choice ${type === value ? 'selected' : ''}`}
+                      key={value}
+                    >
+                      <input
+                        type="radio"
+                        name="store-type"
+                        value={value}
+                        checked={type === value}
+                        onChange={() => setType(value)}
+                      />
+                      {value === 'ecommerce' ? <StoreIcon /> : <Coffee />}
+                      <strong>{title}</strong>
+                      <span>{text}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </SettingsSection>
+            <SettingsSection
+              id="store-category"
+              icon={Tags}
+              title="Business category"
+              hint="Your business category powers the shop-type filters and the “For you” ranking. You can change it anytime."
+            >
+              {catalogError ? (
+                <Notice error>
+                  {catalogError}{' '}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setCatalogAttempt((attempt) => attempt + 1)}
                   >
+                    Retry
+                  </button>
+                </Notice>
+              ) : (
+                <label>
+                  Business category
+                  <select
+                    required
+                    value={businessCategory}
+                    disabled={!catalog}
+                    onChange={(event) =>
+                      setBusinessCategory(event.target.value)
+                    }
+                  >
+                    <option value="">
+                      {catalog ? 'Choose a category…' : 'Loading categories…'}
+                    </option>
+                    {catalog?.groups.map((group) => (
+                      <optgroup key={group.slug} label={group.label}>
+                        {catalog.categories
+                          .filter((category) => category.group === group.slug)
+                          .map((category) => (
+                            <option key={category.slug} value={category.slug}>
+                              {category.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </SettingsSection>
+            <SettingsGroup
+              icon={Palette}
+              title="Brand and look"
+              hint="One colour, a logo and a cover photo are enough to feel like you."
+            />
+            <SettingsSection
+              id="store-brand"
+              icon={Palette}
+              title="Your signature color"
+              hint="Pick a palette. We take care of readable text and matching accents."
+            >
+              <div className="panel-swatches">
+                {presets.map(([label, value]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    title={label}
+                    aria-label={`${label} color`}
+                    aria-pressed={color === value}
+                    onClick={() => setColor(value)}
+                  >
+                    <span style={{ backgroundColor: value }}>
+                      {color === value && <Check size={19} color="white" />}
+                    </span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="panel-color-picker">
+                Or choose your own
+                <input
+                  type="color"
+                  value={color.length === 7 ? color : '#254e40'}
+                  onChange={(e) => setColor(e.target.value)}
+                />
+              </label>
+              <p className="panel-muted">
+                Want layouts, type and a style for each menu section?{' '}
+                <Link to="/dashboard/design">Open shop design</Link>.
+              </p>
+            </SettingsSection>
+            <SettingsSection
+              id="store-media"
+              icon={ImagePlus}
+              title="Give your store a face"
+              hint="Optional. Your initials and chosen color look great too."
+            >
+              {created && !store && (
+                <Notice>
+                  <strong className="notranslate">{created.name}</strong> is
+                  saved. Your pictures upload straight to it — press Save
+                  changes when you’re done.
+                </Notice>
+              )}
+              {!existing && !readyForMedia && (
+                <p className="panel-muted">
+                  Add a store name and business category first — then choose
+                  your logo and cover photo here.
+                </p>
+              )}
+              <MediaUpload
+                targetId={ensureShop}
+                purpose="store_logo"
+                label="Store logo"
+                keys={logo ? [logo] : []}
+                onChange={(keys) => setLogo(keys[0] || '')}
+                onBusy={setUploading}
+                onPending={setProcessing}
+                disabled={
+                  busy ||
+                  lifecycleBusy ||
+                  uploading ||
+                  processing ||
+                  (!existing && !readyForMedia)
+                }
+                maxImageBytes={
+                  typeof summary.limits.maxImageSizeBytes === 'number'
+                    ? summary.limits.maxImageSizeBytes
+                    : undefined
+                }
+              />
+              <MediaUpload
+                targetId={ensureShop}
+                purpose="store_banner"
+                label="Cover photo"
+                keys={banner ? [banner] : []}
+                onChange={(keys) => setBanner(keys[0] || '')}
+                onBusy={setUploading}
+                onPending={setProcessing}
+                disabled={
+                  busy ||
+                  lifecycleBusy ||
+                  uploading ||
+                  processing ||
+                  (!existing && !readyForMedia)
+                }
+                maxImageBytes={
+                  typeof summary.limits.maxImageSizeBytes === 'number'
+                    ? summary.limits.maxImageSizeBytes
+                    : undefined
+                }
+              />
+            </SettingsSection>
+            <SettingsGroup
+              icon={AlignLeft}
+              title="Store details"
+              hint="The story, the places and the links shown on your shop page."
+            />
+            <SettingsSection
+              id="store-about"
+              icon={AlignLeft}
+              title="About your store"
+              hint="What makes your business special? This text opens your shop page."
+              className="panel-optional store-description-card"
+            >
+              <label>
+                A little about your store
+                <textarea
+                  maxLength={3000}
+                  rows={3}
+                  value={description}
+                  placeholder="What makes your business special?"
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </label>
+            </SettingsSection>
+            {existing && (
+              <SettingsSection
+                id="store-checkout"
+                icon={Settings2}
+                title="Checkout, prices and sections"
+                hint={`Shopping cart, WhatsApp checkout, Lebanese pound prices and the Posts / ${sectionName} switches live together in Shop settings.`}
+                className="panel-optional store-settings-card"
+              >
+                <Link className="panel-secondary" to="/dashboard/settings">
+                  <Settings2 size={16} /> Open shop settings
+                </Link>
+              </SettingsSection>
+            )}
+            <StoreBranchesEditor
+              branches={branches}
+              onChange={setBranches}
+              disabled={busy || lifecycleBusy || uploading || processing}
+            />
+            <SettingsSection
+              id="store-socials"
+              icon={Share2}
+              title="Social links"
+              hint="These icons appear on your shop page. Use full links or just your handle."
+              className="store-socials-card"
+              action={
+                <div className="store-socials-preview" aria-hidden="true">
+                  {socialEntries
+                    .filter((entry) => entry.value.trim())
+                    .map((entry) => (
+                      <span key={entry.network} title={entry.label}>
+                        <SocialIcon network={entry.network} size={16} />
+                      </span>
+                    ))}
+                </div>
+              }
+            >
+              <div className="store-socials-fields">
+                {socialEntries.map((entry) => (
+                  <label key={entry.network}>
+                    <span>
+                      <SocialIcon network={entry.network} size={15} />
+                      {entry.label}
+                    </span>
                     <input
-                      type="radio"
-                      name="store-type"
-                      value={value}
-                      checked={type === value}
-                      onChange={() => setType(value)}
+                      type="text"
+                      value={entry.value}
+                      placeholder={entry.placeholder}
+                      inputMode={entry.network === 'whatsapp' ? 'tel' : 'url'}
+                      autoComplete="url"
+                      onChange={(event) =>
+                        setSocials((current) => ({
+                          ...current,
+                          [entry.network]: event.target.value,
+                        }))
+                      }
                     />
-                    {value === 'ecommerce' ? <StoreIcon /> : <Coffee />}
-                    <strong>{title}</strong>
-                    <span>{text}</span>
                   </label>
                 ))}
               </div>
-            </fieldset>
-          </section>
-          <section className="panel-card">
-            <h2>Where should people find you?</h2>
-            <p className="panel-muted">
-              Your business category powers the shop-type filters and the “For
-              you” ranking. You can change it anytime.
-            </p>
-            {catalogError ? (
-              <Notice error>
-                {catalogError}{' '}
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => setCatalogAttempt((attempt) => attempt + 1)}
-                >
-                  Retry
-                </button>
-              </Notice>
-            ) : (
-              <label>
-                Business category
-                <select
-                  required
-                  value={businessCategory}
-                  disabled={!catalog}
-                  onChange={(event) => setBusinessCategory(event.target.value)}
-                >
-                  <option value="">
-                    {catalog ? 'Choose a category…' : 'Loading categories…'}
-                  </option>
-                  {catalog?.groups.map((group) => (
-                    <optgroup key={group.slug} label={group.label}>
-                      {catalog.categories
-                        .filter((category) => category.group === group.slug)
-                        .map((category) => (
-                          <option key={category.slug} value={category.slug}>
-                            {category.label}
-                          </option>
-                        ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
-            )}
-          </section>
-          <section className="panel-card">
-            <h2>Your signature color</h2>
-            <p className="panel-muted">
-              Pick a palette. We take care of readable text and matching
-              accents.
-            </p>
-            <div className="panel-swatches">
-              {presets.map(([label, value]) => (
-                <button
-                  type="button"
-                  key={value}
-                  title={label}
-                  aria-label={`${label} color`}
-                  aria-pressed={color === value}
-                  onClick={() => setColor(value)}
-                >
-                  <span style={{ backgroundColor: value }}>
-                    {color === value && <Check size={19} color="white" />}
-                  </span>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="panel-color-picker">
-              Or choose your own
-              <input
-                type="color"
-                value={color.length === 7 ? color : '#254e40'}
-                onChange={(e) => setColor(e.target.value)}
-              />
-            </label>
-            <p className="panel-muted">
-              Want layouts, type and a style for each menu section?{' '}
-              <Link to="/dashboard/design">Open shop design</Link>.
-            </p>
-          </section>
-          <section className="panel-card">
-            <h2>Give your store a face</h2>
-            <p className="panel-muted">
-              Optional. Your initials and chosen color look great too.
-            </p>
-            {created && !store && (
-              <Notice>
-                <strong className="notranslate">{created.name}</strong> is
-                saved. Your pictures upload straight to it — press Save changes
-                when you’re done.
-              </Notice>
-            )}
-            {!existing && !readyForMedia && (
-              <p className="panel-muted">
-                Add a store name and business category first — then choose your
-                logo and cover photo here.
+              <p className="panel-muted store-socials-hint">
+                <MapPin size={14} /> Tip: if no branch has a WhatsApp number,
+                the order WhatsApp link here receives checkout messages.
               </p>
-            )}
-            <MediaUpload
-              targetId={ensureShop}
-              purpose="store_logo"
-              label="Store logo"
-              keys={logo ? [logo] : []}
-              onChange={(keys) => setLogo(keys[0] || '')}
-              onBusy={setUploading}
-              onPending={setProcessing}
-              disabled={
-                busy ||
-                lifecycleBusy ||
-                uploading ||
-                processing ||
-                (!existing && !readyForMedia)
-              }
-              maxImageBytes={
-                typeof summary.limits.maxImageSizeBytes === 'number'
-                  ? summary.limits.maxImageSizeBytes
-                  : undefined
-              }
-            />
-            <MediaUpload
-              targetId={ensureShop}
-              purpose="store_banner"
-              label="Cover photo"
-              keys={banner ? [banner] : []}
-              onChange={(keys) => setBanner(keys[0] || '')}
-              onBusy={setUploading}
-              onPending={setProcessing}
-              disabled={
-                busy ||
-                lifecycleBusy ||
-                uploading ||
-                processing ||
-                (!existing && !readyForMedia)
-              }
-              maxImageBytes={
-                typeof summary.limits.maxImageSizeBytes === 'number'
-                  ? summary.limits.maxImageSizeBytes
-                  : undefined
-              }
-            />
-          </section>
-          <section className="panel-card panel-optional store-description-card">
-            <h2>About your store</h2>
-            <label>
-              A little about your store
-              <textarea
-                maxLength={3000}
-                rows={3}
-                value={description}
-                placeholder="What makes your business special?"
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </label>
-          </section>
-          {existing && (
-            <section className="panel-card panel-optional store-settings-card">
-              <h2>Checkout, prices and sections</h2>
-              <p className="panel-muted">
-                Shopping cart, WhatsApp checkout, Lebanese pound prices and the
-                Posts / {sectionName} switches live together in Shop settings.
-              </p>
-              <Link className="panel-secondary" to="/dashboard/settings">
-                <Settings2 size={16} /> Open shop settings
-              </Link>
-            </section>
-          )}
-          <StoreBranchesEditor
-            branches={branches}
-            onChange={setBranches}
-            disabled={busy || lifecycleBusy || uploading || processing}
-          />
-          <section className="panel-card store-socials-card">
-            <div className="store-socials-heading">
-              <div>
-                <h2>Social links</h2>
-                <p className="panel-muted">
-                  These icons appear on your shop page. Use full links or just
-                  your handle.
-                </p>
-              </div>
-              <div className="store-socials-preview" aria-hidden="true">
-                {socialEntries
-                  .filter((entry) => entry.value.trim())
-                  .map((entry) => (
-                    <span key={entry.network} title={entry.label}>
-                      <SocialIcon network={entry.network} size={16} />
-                    </span>
-                  ))}
-              </div>
-            </div>
-            <div className="store-socials-fields">
-              {socialEntries.map((entry) => (
-                <label key={entry.network}>
-                  <span>
-                    <SocialIcon network={entry.network} size={15} />
-                    {entry.label}
-                  </span>
-                  <input
-                    type="text"
-                    value={entry.value}
-                    placeholder={entry.placeholder}
-                    inputMode={entry.network === 'whatsapp' ? 'tel' : 'url'}
-                    autoComplete="url"
-                    onChange={(event) =>
-                      setSocials((current) => ({
-                        ...current,
-                        [entry.network]: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-              ))}
-            </div>
-            <p className="panel-muted store-socials-hint">
-              <MapPin size={14} /> Tip: if no branch has a WhatsApp number, the
-              order WhatsApp link here receives checkout messages.
-            </p>
-          </section>
-          {error && <Notice error>{error}</Notice>}
-          {notice && <Notice>{notice}</Notice>}
-          <div className="panel-save-bar">
-            <span>
-              {uploading
-                ? 'Finishing your upload…'
-                : dirty
-                  ? 'You have unsaved changes'
+            </SettingsSection>
+            {error && <Notice error>{error}</Notice>}
+            {notice && <Notice>{notice}</Notice>}
+            <div className="panel-save-bar">
+              <span>
+                {uploading
+                  ? 'Finishing your upload…'
+                  : dirty
+                    ? 'You have unsaved changes'
+                    : existing
+                      ? 'Everything is up to date'
+                      : 'You can add branches and social links anytime'}
+              </span>
+              <button
+                className="panel-primary"
+                disabled={
+                  busy ||
+                  uploading ||
+                  processing ||
+                  (existing ? !dirty : !name.trim() || !businessCategory)
+                }
+              >
+                {busy
+                  ? 'Saving…'
                   : existing
-                    ? 'Everything is up to date'
-                    : 'You can add branches and social links anytime'}
-            </span>
-            <button
-              className="panel-primary"
-              disabled={
-                busy ||
-                uploading ||
-                processing ||
-                (existing ? !dirty : !name.trim() || !businessCategory)
-              }
-            >
-              {busy ? 'Saving…' : existing ? 'Save changes' : 'Create my store'}
-            </button>
-          </div>
-        </fieldset>
+                    ? 'Save changes'
+                    : 'Create my store'}
+              </button>
+            </div>
+          </fieldset>
+        </div>
         <aside className="panel-live-preview">
           <p className="panel-eyebrow">LIVE PREVIEW</p>
           <div
