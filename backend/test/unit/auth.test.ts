@@ -497,16 +497,30 @@ test('HTTP auth flow enforces CSRF, validates input, restores sessions and revok
   try {
     const root = await fetch(base + '/', { redirect: 'manual' });
     assert.equal(root.headers.get('location'), '/api/v1/auth/login');
+    // The API serves its own sign-in screen, so the login design does not
+    // depend on the separate static frontend being deployed.
     const page = await fetch(base + '/api/v1/auth/login', {
       redirect: 'manual',
     });
-    assert.equal(page.status, 302);
-    assert.equal(page.headers.get('location'), '/login');
+    assert.equal(page.status, 200);
+    assert.equal(page.redirected, false);
+    assert.match(page.headers.get('content-type')!, /text\/html/);
     assert.match(
       page.headers.get('content-security-policy')!,
       /frame-ancestors 'none'/,
     );
     assert.equal(page.headers.get('cache-control'), 'no-store');
+    const html = await page.text();
+    assert.match(html, /\/api\/v1\/auth\/client\.js/);
+    // Inline scripts are blocked by the API's CSP, so the page must not ship one.
+    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/);
+    const script = await fetch(base + '/api/v1/auth/client.js');
+    assert.equal(script.status, 200);
+    assert.match(script.headers.get('content-type')!, /javascript/);
+    const client = await script.text();
+    assert.match(client, /accounts\.google\.com\/gsi\/client/);
+    assert.match(client, /api\('google'/);
+    assert.match(client, /api\('bootstrap'/);
     assert.equal((await fetch(base + '/api/v1/auth/me')).status, 401);
     assert.equal(
       (await post('bootstrap', {}, '', 'https://evil.test')).status,

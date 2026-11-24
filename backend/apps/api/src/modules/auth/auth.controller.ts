@@ -13,6 +13,7 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthCookies } from './auth.cookies';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { AUTH_HTML, AUTH_SCRIPT } from './auth.page';
 import {
   AuthOriginGuard,
   AuthRateLimitGuard,
@@ -27,9 +28,19 @@ export class AuthController {
     private readonly cookies: AuthCookies,
   ) {}
 
+  // The API keeps its own copy of the sign-in screen instead of redirecting to
+  // the static frontend, so /api/v1/auth/login still renders when that site is
+  // not deployed or is being replaced. The SPA keeps serving /login as before.
   @Get('login')
-  loginPage(@Res() response: Response): void {
-    response.redirect('/login');
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  loginPage(): string {
+    return AUTH_HTML;
+  }
+
+  @Get('client.js')
+  @Header('Content-Type', 'application/javascript; charset=utf-8')
+  clientScript(): string {
+    return AUTH_SCRIPT;
   }
 
   @Post('bootstrap')
