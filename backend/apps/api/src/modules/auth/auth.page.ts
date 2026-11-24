@@ -18,28 +18,87 @@ export const AUTH_HTML = String.raw`<!doctype html>
       margin: 0;
       min-height: 100vh;
       min-height: 100dvh;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      background: #f4f6f1;
+      display: flex;
+      justify-content: center;
+      padding: clamp(16px, 4vw, 28px);
+      background:
+        radial-gradient(rgba(37, 78, 64, .08) 1.4px, transparent 1.5px) 0 0 / 26px 26px,
+        radial-gradient(120% 90% at 6% 0%, #e8f2d7 0%, rgba(232, 242, 215, 0) 55%),
+        radial-gradient(120% 90% at 100% 100%, #dbeee3 0%, rgba(219, 238, 227, 0) 55%),
+        #f5f7f0;
       color: #202e29;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.5;
     }
-    .card {
-      width: 100%;
-      max-width: 380px;
-      padding: 34px 30px 26px;
-      background: #fff;
-      border: 1px solid #e2e8dd;
-      border-radius: 22px;
-      box-shadow: 0 18px 45px rgba(32, 46, 41, .06);
+    /* Clipped outside the viewport, so the drifting blobs never add a
+       scrollbar on a narrow phone. */
+    .decor { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+    .decor::before,
+    .decor::after { content: ''; position: absolute; border-radius: 50%; }
+    .decor::before {
+      top: -220px;
+      left: -150px;
+      width: 520px;
+      height: 520px;
+      background: radial-gradient(circle, rgba(183, 217, 138, .55), rgba(183, 217, 138, 0) 68%);
+      animation: drift 18s ease-in-out infinite alternate;
     }
+    .decor::after {
+      right: -170px;
+      bottom: -190px;
+      width: 460px;
+      height: 460px;
+      background: radial-gradient(circle, rgba(133, 199, 170, .45), rgba(133, 199, 170, 0) 68%);
+      animation: drift 22s ease-in-out infinite alternate-reverse;
+    }
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 392px;
+      margin: auto;
+      padding: 34px 32px 28px;
+      background:
+        radial-gradient(120% 90% at 14% 0%, rgba(214, 236, 178, .5), rgba(214, 236, 178, 0) 62%),
+        linear-gradient(180deg, #fff, #fcfdf8);
+      border: 1px solid rgba(37, 78, 64, .09);
+      border-radius: 24px;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .9),
+        0 30px 70px -34px rgba(37, 78, 64, .38),
+        0 10px 24px -18px rgba(37, 78, 64, .25);
+      animation: rise .55s cubic-bezier(.2, .8, .2, 1) backwards;
+      transition: transform .35s ease, box-shadow .35s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .9),
+        0 36px 80px -34px rgba(37, 78, 64, .42),
+        0 12px 28px -18px rgba(37, 78, 64, .28);
+    }
+    .spark {
+      position: absolute;
+      top: -14px;
+      right: -10px;
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border: 2px solid #fff;
+      border-radius: 15px;
+      color: #254e40;
+      background: linear-gradient(145deg, #e2f0c4, #a9d69b);
+      box-shadow: 0 14px 26px -14px rgba(37, 78, 64, .55);
+      transform: rotate(-8deg);
+      animation: bob 6s ease-in-out infinite;
+    }
+    .spark svg { width: 22px; height: 22px; fill: currentColor; }
     .brand {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 28px;
+      margin-bottom: 26px;
       font-size: 16px;
       font-weight: 650;
       letter-spacing: -.02em;
@@ -47,18 +106,34 @@ export const AUTH_HTML = String.raw`<!doctype html>
     .mark {
       display: grid;
       place-items: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
       background: #254e40;
       color: #d9ecc0;
       font-size: 15px;
       font-weight: 700;
     }
-    .logo { width: 32px; height: 32px; border-radius: 10px; object-fit: cover; }
-    h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.25; letter-spacing: -.02em; }
+    .logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
+      object-fit: cover;
+      box-shadow: 0 0 0 4px rgba(183, 217, 138, .22);
+    }
+    /* A lime highlighter stroke keeps the ink dark (contrast) while breaking
+       the plain white page. */
+    h1 {
+      display: inline-block;
+      margin: 0 0 14px;
+      padding: 0 2px;
+      font-size: 25px;
+      line-height: 1.25;
+      letter-spacing: -.02em;
+      background: linear-gradient(transparent 68%, rgba(183, 217, 138, .55) 68%);
+    }
     .intro { margin: 0 0 22px; color: #66736c; font-size: 14px; }
-    .google { min-height: 44px; display: flex; justify-content: center; }
+    .google { min-height: 44px; display: flex; justify-content: center; animation: fade .4s ease backwards; }
     .status { min-height: 20px; margin: 12px 0 0; color: #6b766f; font-size: 13px; }
     .status.error { color: #a03a2b; }
     .account {
@@ -96,12 +171,37 @@ export const AUTH_HTML = String.raw`<!doctype html>
     .footnote { margin: 24px 0 0; color: #8a958e; font-size: 12px; }
     :focus-visible { outline: 3px solid #95b971; outline-offset: 3px; border-radius: 6px; }
     [hidden] { display: none !important; }
-    @media (max-width: 420px) { .card { padding: 28px 22px 22px; } }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(16px) scale(.985); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes drift {
+      from { transform: translate3d(0, 0, 0) scale(1); }
+      to { transform: translate3d(46px, 34px, 0) scale(1.08); }
+    }
+    @keyframes bob {
+      0%, 100% { transform: rotate(-8deg) translateY(0); }
+      50% { transform: rotate(-4deg) translateY(-7px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .card, .google, .spark, .decor::before, .decor::after { animation: none; }
+      .card { transition: none; }
+    }
+    @media (max-width: 420px) {
+      .card { padding: 30px 24px 24px; }
+      .spark { top: -12px; right: -6px; width: 42px; height: 42px; border-radius: 14px; }
+      .spark svg { width: 20px; height: 20px; }
+    }
   </style>
   <script src="/api/v1/auth/client.js" defer></script>
 </head>
 <body>
+  <span class="decor" aria-hidden="true"></span>
   <main class="card">
+    <span class="spark" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 2.6 14.6 9.4 21.4 12 14.6 14.6 12 21.4 9.4 14.6 2.6 12 9.4 9.4Z"/></svg>
+    </span>
     <div class="brand">
       <span class="mark" id="mark" aria-hidden="true">M</span>
       <img class="logo" id="logo" alt="" hidden>

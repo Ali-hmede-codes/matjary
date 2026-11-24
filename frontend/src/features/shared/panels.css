@@ -1728,22 +1728,113 @@
   place-items: center;
   padding: 30px;
 }
-/* One small card, because signing in is a single decision: it has to read
-   clearly on a phone and paint instantly for a returning owner. */
+/* Signing in is a single decision, so the card stays small — but the screen
+   around it can feel welcoming: a soft dotted wash, two slowly drifting
+   greens, and one accent sticker. Motion is transform-only and switched off
+   for prefers-reduced-motion. */
 .login-screen {
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: #f4f6f1;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 28px);
+  background:
+    radial-gradient(rgba(37, 78, 64, 0.08) 1.4px, transparent 1.5px) 0 0 / 26px
+      26px,
+    radial-gradient(120% 90% at 6% 0%, #e8f2d7 0%, rgba(232, 242, 215, 0) 55%),
+    radial-gradient(
+      120% 90% at 100% 100%,
+      #dbeee3 0%,
+      rgba(219, 238, 227, 0) 55%
+    ),
+    #f5f7f0;
+}
+/* The backdrop lives in its own clipped layer, so the blobs can bleed off the
+   edges without ever creating a scrollbar on a narrow screen. */
+.login-decor {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.login-decor::before,
+.login-decor::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+}
+.login-decor::before {
+  top: -220px;
+  left: -150px;
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(
+    circle,
+    rgba(183, 217, 138, 0.55),
+    rgba(183, 217, 138, 0) 68%
+  );
+  animation: login-drift 18s ease-in-out infinite alternate;
+}
+.login-decor::after {
+  right: -170px;
+  bottom: -190px;
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(
+    circle,
+    rgba(133, 199, 170, 0.45),
+    rgba(133, 199, 170, 0) 68%
+  );
+  animation: login-drift 22s ease-in-out infinite alternate-reverse;
 }
 .login-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 380px;
-  padding: 34px 30px 26px;
-  background: #fff;
-  border: 1px solid var(--panel-line);
-  border-radius: 22px;
-  box-shadow: 0 18px 45px rgba(32, 46, 41, 0.06);
+  max-width: 392px;
+  /* `margin: auto` centers the card yet still lets it scroll on a short
+     landscape phone instead of clipping its top edge. */
+  margin: auto;
+  padding: 34px 32px 28px;
+  background:
+    radial-gradient(
+      120% 90% at 14% 0%,
+      rgba(214, 236, 178, 0.5),
+      rgba(214, 236, 178, 0) 62%
+    ),
+    linear-gradient(180deg, #fff, #fcfdf8);
+  border: 1px solid rgba(37, 78, 64, 0.09);
+  border-radius: 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 70px -34px rgba(37, 78, 64, 0.38),
+    0 10px 24px -18px rgba(37, 78, 64, 0.25);
+  animation: login-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  transition:
+    transform 0.35s ease,
+    box-shadow 0.35s ease;
+}
+.login-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 36px 80px -34px rgba(37, 78, 64, 0.42),
+    0 12px 28px -18px rgba(37, 78, 64, 0.28);
+}
+.login-spark {
+  position: absolute;
+  top: -14px;
+  right: -10px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 2px solid #fff;
+  border-radius: 15px;
+  color: #254e40;
+  background: linear-gradient(145deg, #e2f0c4, #a9d69b);
+  box-shadow: 0 14px 26px -14px rgba(37, 78, 64, 0.55);
+  transform: rotate(-8deg);
+  animation: login-bob 6s ease-in-out infinite;
 }
 .login-brand {
   display: flex;
@@ -1757,16 +1848,22 @@
   text-decoration: none;
 }
 .login-brand img {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   object-fit: cover;
+  box-shadow: 0 0 0 4px rgba(183, 217, 138, 0.22);
 }
 .login-card h1 {
-  margin: 0 0 8px;
-  font-size: 24px;
+  /* A lime highlighter stroke instead of gradient text: it keeps the ink
+     darkness for contrast while breaking the plain white page. */
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 0 2px;
+  font-size: 25px;
   line-height: 1.25;
   letter-spacing: -0.02em;
+  background: linear-gradient(transparent 68%, rgba(183, 217, 138, 0.55) 68%);
 }
 .login-intro {
   margin: 0 0 22px;
@@ -1778,6 +1875,7 @@
   min-height: 44px;
   display: flex;
   justify-content: center;
+  animation: login-fade 0.4s ease backwards;
 }
 .login-note {
   margin: 22px 0 0;
@@ -1790,6 +1888,53 @@
   color: #597457;
   font-size: 12px;
   text-decoration: underline;
+}
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes login-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes login-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(46px, 34px, 0) scale(1.08);
+  }
+}
+@keyframes login-bob {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-4deg) translateY(-7px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-card,
+  .login-google,
+  .login-spark,
+  .login-decor::before,
+  .login-decor::after {
+    animation: none;
+  }
+  .login-card {
+    transition: none;
+  }
 }
 .store-branches-editor {
   display: grid;
@@ -2420,7 +2565,14 @@
     flex: 1;
   }
   .login-card {
-    padding: 28px 22px 22px;
+    padding: 30px 24px 24px;
+  }
+  .login-spark {
+    top: -12px;
+    right: -6px;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
   }
   .store-branches-empty {
     grid-template-columns: auto minmax(0, 1fr);
