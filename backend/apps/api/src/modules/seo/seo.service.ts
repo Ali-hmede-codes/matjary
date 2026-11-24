@@ -725,7 +725,7 @@ export class SeoService {
     const description = this.isMenuStore(store)
       ? `Explore ${count} ${count === 1 ? 'item' : 'items'} in ${name}, a menu section at ${store.name}.`
       : `${count} ${count === 1 ? 'item' : 'items'} in ${name} at ${store.name}.`;
-    const canonical = `${this.baseUrl}/stores/${store.slug}/c/${this.categoryPathSlug(name)}`;
+    const canonical = this.categoryUrl(store, this.categoryPathSlug(name));
     // A current banner leads, then a dish photo, and the logo card last: a
     // replaced banner must not stay hidden behind an older generated card.
     const ogImage =
@@ -769,8 +769,31 @@ export class SeoService {
     store: Pick<Store, 'slug'> | null,
   ): string {
     return store
-      ? `/stores/${store.slug}/post/${post.slug}`
+      ? `/stores/${store.slug}/post/${post.slug}/`
       : `/post/${post.slug}`;
+  }
+
+  // Storefront pages are published as static shell directories
+  // (`<slug>/index.html`), so a plain static host answers the trailing-slash
+  // address with 200 and 301s the flat one. Every URL the API advertises has to
+  // be the address that answers directly, otherwise Search Console reports the
+  // whole catalogue as "Page with redirect" and never indexes it.
+  private storeUrl(store: Pick<Store, 'slug'>): string {
+    return `${this.baseUrl}/stores/${store.slug}/`;
+  }
+
+  private productUrl(
+    product: Pick<Product, 'slug'>,
+    store: Pick<Store, 'slug'>,
+  ): string {
+    return `${this.baseUrl}/stores/${store.slug}/p/${product.slug}/`;
+  }
+
+  private categoryUrl(
+    store: Pick<Store, 'slug'>,
+    categorySlug: string,
+  ): string {
+    return `${this.baseUrl}/stores/${store.slug}/c/${categorySlug}/`;
   }
 
   // Category rows have no slug column; mirror the storefront's name slug so a
@@ -1615,8 +1638,7 @@ export class SeoService {
     const previewDescription = menu
       ? this.withMenuLine(description, menuLine)
       : description;
-    const canonical =
-      seo.canonicalUrl || this.baseUrl + '/stores/' + store.slug;
+    const canonical = seo.canonicalUrl || this.storeUrl(store);
 
     // Older releases persisted the shop logo in ogImageKey as an automatic
     // value. A row that no longer carries its auto-generated marker would keep
@@ -1678,7 +1700,13 @@ export class SeoService {
         description: this.truncate(previewOgDescription, 200),
         image: ogImage,
       },
-      jsonLd: await this.buildStoreJsonLd(store, seo, settings),
+      jsonLd: await this.buildStoreJsonLd(
+        store,
+        seo,
+        settings,
+        canonical,
+        ogImage,
+      ),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
       aiTraining: seo.aiTraining || undefined,
@@ -1701,9 +1729,7 @@ export class SeoService {
       (this.isMenuStore(store)
         ? `${product.name} on the menu at ${store.name}.`
         : `${product.name} at ${store.name}.`);
-    const canonical =
-      seo.canonicalUrl ||
-      `${this.baseUrl}/stores/${store.slug}/p/${product.slug}`;
+    const canonical = seo.canonicalUrl || this.productUrl(product, store);
 
     // Honor an explicitly saved image only while it is still one of the
     // product's images; a replaced image leaves a stale key that would 404.
@@ -1767,6 +1793,7 @@ export class SeoService {
         seo,
         price,
         isInStock,
+        ogImage,
       ),
       verificationMeta: this.buildVerificationMeta(settings),
       aiRobots,
@@ -1905,7 +1932,11 @@ export class SeoService {
         '@type': 'Organization',
         name: settings.organizationName,
         url: settings.organizationUrl || this.baseUrl,
-        logo: await this.organizationLogo(settings),
+        // Google's Organization result requires a logo; the shipped brand mark
+        // answers when the administrator has not uploaded one.
+        logo:
+          (await this.organizationLogo(settings)) ??
+          this.absoluteImageUrl('/logo.png'),
         sameAs: settings.organizationSameAs || [],
       });
     }
@@ -1933,24 +1964,41 @@ export class SeoService {
     store: Store,
     seo: StoreSeo | null,
     settings: SeoSettings,
+    canonical: string,
+    previewImage: string,
   ): Promise<Record<string, unknown>[]> {
     const jsonLd = await this.buildSiteJsonLd(settings);
 
-    // Store/Restaurant schema
+    // Store/Restaurant rich results reject an item without `image`, so the
+    // preview image the page already resolved is the guaranteed one. An empty
+    // PostalAddress is worse than none: Google reads it as a missing address.
+    const address = this.buildPostalAddress(store);
+    const openingHours = this.buildOpeningHours(store);
+
     if (seo?.structuredData) {
-      jsonLd.push(seo.structuredData);
+      jsonLd.push({ image: previewImage, ...seo.structuredData });
     } else {
       const storeSchema: Record<string, unknown> = {
         '@context': 'https://schema.org',
         '@type': store.storeType === 'restaurant_menu' ? 'Restaurant' : 'Store',
         name: store.name,
-        url: this.baseUrl + '/stores/' + store.slug,
-        description: store.description,
-        image: await this.buildImageUrl(store.logoKey),
-        address: {
-          '@type': 'PostalAddress',
-          // Address fields would come from store entity if available
-        },
+        url: canonical,
+        description: store.description || undefined,
+        image: previewImage,
+        ...(address ? { address } : {}),
+        ...(store.phone ? { telephone: store.phone } : {}),
+        ...(openingHours.length
+          ? { openingHoursSpecification: openingHours }
+          : {}),
+        ...(store.latitude != null && store.longitude != null
+          ? {
+              geo: {
+                '@type': 'GeoCoordinates',
+                latitude: Number(store.latitude),
+                longitude: Number(store.longitude),
+              },
+            }
+          : {}),
         priceRange: store.storeType === 'restaurant_menu' ? '$$' : undefined,
       };
 
@@ -1966,11 +2014,56 @@ export class SeoService {
     jsonLd.push(
       this.buildBreadcrumbJsonLd([
         { name: 'Home', url: this.baseUrl },
-        { name: store.name, url: this.baseUrl + '/stores/' + store.slug },
+        { name: store.name, url: canonical },
       ]),
     );
 
     return jsonLd;
+  }
+
+  /** The shop's own address, only when at least one component exists. */
+  private buildPostalAddress(
+    store: Pick<Store, 'address' | 'city' | 'country' | 'postalCode'>,
+  ): Record<string, unknown> | undefined {
+    const address: Record<string, unknown> = {
+      '@type': 'PostalAddress',
+      ...(store.address ? { streetAddress: store.address } : {}),
+      ...(store.city ? { addressLocality: store.city } : {}),
+      ...(store.country ? { addressCountry: store.country } : {}),
+      ...(store.postalCode ? { postalCode: store.postalCode } : {}),
+    };
+    return Object.keys(address).length > 1 ? address : undefined;
+  }
+
+  /** `{"mon":"09:00-18:00"}` into schema.org opening-hours entries. */
+  private buildOpeningHours(
+    store: Pick<Store, 'openingHours'>,
+  ): Record<string, unknown>[] {
+    const days: Record<string, string> = {
+      mon: 'Monday',
+      tue: 'Tuesday',
+      wed: 'Wednesday',
+      thu: 'Thursday',
+      fri: 'Friday',
+      sat: 'Saturday',
+      sun: 'Sunday',
+    };
+    const hours: Record<string, unknown>[] = [];
+    for (const [key, day] of Object.entries(days)) {
+      const value = store.openingHours?.[key];
+      const match =
+        typeof value === 'string'
+          ? /^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/u.exec(value.trim())
+          : null;
+      if (!match?.[1] || !match[2]) continue;
+      hours.push({
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: `https://schema.org/${day}`,
+        opens: match[1],
+        closes: match[2],
+      });
+    }
+    return hours;
   }
 
   private async buildProductJsonLd(
@@ -1979,12 +2072,14 @@ export class SeoService {
     seo: ProductSeo | null,
     price: string,
     isInStock: boolean,
+    previewImage: string,
   ): Promise<Record<string, unknown>[]> {
     const jsonLd: Record<string, unknown>[] = [];
+    const productUrl = this.productUrl(product, store);
 
     const offers = {
       '@type': 'Offer',
-      url: this.baseUrl + '/stores/' + store.slug + '/p/' + product.slug,
+      url: productUrl,
       priceCurrency: product.currency,
       price,
       availability: isInStock
@@ -2009,26 +2104,32 @@ export class SeoService {
       },
     };
 
+    // A product without a photo is an invalid Product item. Rather than ship an
+    // empty image list, fall back to the shop's own preview or the platform card
+    // so the item stays eligible; a real photo always wins.
+    const images = (
+      await Promise.all(
+        (product.imageKeys ?? []).map((key) => this.buildImageUrl(key)),
+      )
+    ).filter((url): url is string => Boolean(url));
+    if (!images.length) images.push(previewImage);
+
     const productSchema: Record<string, unknown> = {
       '@context': 'https://schema.org',
       '@type': 'Product',
       name: product.name,
-      description: product.description,
-      image: (
-        await Promise.all(
-          (product.imageKeys ?? []).map((key) => this.buildImageUrl(key)),
-        )
-      ).filter(Boolean),
-      sku: seo?.sku || product.sku,
-      mpn: seo?.mpn,
-      gtin: seo?.gtin,
+      description: product.description || undefined,
+      image: images,
+      sku: seo?.sku || product.sku || undefined,
+      mpn: seo?.mpn || undefined,
+      gtin: seo?.gtin || undefined,
       brand: seo?.brand
         ? { '@type': 'Brand', name: seo.brand }
         : { '@type': 'Brand', name: store.name },
       offers,
       aggregateRating: undefined, // Would be populated from reviews
       // 2026: Additional product properties
-      category: product.category,
+      category: product.category || undefined,
       // color, size, material would come from product variants
     };
 
@@ -2045,14 +2146,14 @@ export class SeoService {
     jsonLd.push(
       this.buildBreadcrumbJsonLd([
         { name: 'Home', url: this.baseUrl },
-        { name: store.name, url: this.baseUrl + '/stores/' + store.slug },
+        { name: store.name, url: this.storeUrl(store) },
         {
           name: 'Products',
-          url: this.baseUrl + '/stores/' + store.slug,
+          url: this.storeUrl(store),
         },
         {
           name: product.name,
-          url: this.baseUrl + '/stores/' + store.slug + '/p/' + product.slug,
+          url: productUrl,
         },
       ]),
     );
@@ -2077,7 +2178,7 @@ export class SeoService {
       description: showcase.description,
       // Structured data needs a real image; the caller resolved the post's own
       // photo or video poster, which beats a logo.
-      image,
+      image: image ?? this.fallbackSharingImage(),
       datePublished:
         seo?.articlePublishedTime?.toISOString() ||
         showcase.publishedAt?.toISOString() ||
@@ -2092,7 +2193,10 @@ export class SeoService {
       publisher: {
         '@type': 'Organization',
         name: settings.organizationName || settings.siteName,
-        logo: logo ? { '@type': 'ImageObject', url: logo } : undefined,
+        logo: {
+          '@type': 'ImageObject',
+          url: logo ?? this.absoluteImageUrl('/logo.png'),
+        },
       },
       mainEntityOfPage: {
         '@type': 'WebPage',
@@ -2114,11 +2218,11 @@ export class SeoService {
     if (store) {
       breadcrumbs.push({
         name: store.name,
-        url: this.baseUrl + '/stores/' + store.slug,
+        url: this.storeUrl(store),
       });
       breadcrumbs.push({
         name: 'Posts',
-        url: this.baseUrl + '/stores/' + store.slug,
+        url: this.storeUrl(store),
       });
     }
     breadcrumbs.push({
@@ -2207,21 +2311,21 @@ export class SeoService {
       if (seo.store && !seo.robots?.includes('noindex')) {
         entries.push({
           title: seo.store.name,
-          url: this.baseUrl + '/stores/' + seo.store.slug,
+          url: this.storeUrl(seo.store),
           description: seo.store.description || `Shop by ${seo.store.name}`,
           priority: 'high',
         });
 
         entries.push({
           title: `${seo.store.name} - Products`,
-          url: this.baseUrl + '/stores/' + seo.store.slug,
+          url: this.storeUrl(seo.store),
           description: `Browse products from ${seo.store.name}`,
           priority: 'medium',
         });
 
         entries.push({
           title: `${seo.store.name} - Posts`,
-          url: this.baseUrl + '/stores/' + seo.store.slug,
+          url: this.storeUrl(seo.store),
           description: `Read posts from ${seo.store.name}`,
           priority: 'medium',
         });
@@ -2242,7 +2346,7 @@ export class SeoService {
       if (product) {
         entries.push({
           title: product.name,
-          url: `${this.baseUrl}/stores/${product.store.slug}/p/${product.slug}`,
+          url: this.productUrl(product, product.store),
           description: product.description?.substring(0, 200) || product.name,
           priority: 'medium',
         });
@@ -2478,7 +2582,7 @@ export class SeoService {
       return;
     let url: string;
     if (entityType === 'store') {
-      url = this.baseUrl + '/stores/' + (entity as Store).slug;
+      url = this.storeUrl(entity as Store);
     } else if (entityType === 'product') {
       const product = entity as Product;
       // Out of stock pages stay indexed; only hidden items are skipped.
@@ -2487,7 +2591,7 @@ export class SeoService {
         id: product.storeId,
       });
       if (!store) return;
-      url = this.baseUrl + '/stores/' + store.slug + '/p/' + product.slug;
+      url = this.productUrl(product, store);
     } else {
       if ((entity as Showcase).status !== ShowcaseStatus.PUBLISHED) return;
       url = this.baseUrl + '/post/' + (entity as Showcase).slug;
@@ -2527,7 +2631,7 @@ export class SeoService {
         const seo = seoByStore.get(store.id) ?? null;
         if (!indexable(seo)) continue;
         urls.push({
-          url: seo?.canonicalUrl || `${this.baseUrl}/stores/${store.slug}`,
+          url: seo?.canonicalUrl || this.storeUrl(store),
           lastmod: store.updatedAt.toISOString().split('T')[0],
           changefreq: 'weekly',
           priority: 0.8,
@@ -2570,9 +2674,7 @@ export class SeoService {
             if (url) images.push({ url, title: product.name });
           }
           urls.push({
-            url:
-              seo?.canonicalUrl ||
-              `${this.baseUrl}/stores/${product.store.slug}/p/${product.slug}`,
+            url: seo?.canonicalUrl || this.productUrl(product, product.store),
             lastmod: product.updatedAt.toISOString().split('T')[0],
             changefreq: 'weekly',
             priority: 0.6,
@@ -2824,9 +2926,13 @@ export class SeoService {
 
   private async buildRobotsTxt(): Promise<string> {
     const settings = await this.getSettings();
+    // Only advertise documents that answer with their real content. The
+    // published /sitemap.xml is a sitemap index over this API's catalogue
+    // sitemap, and llms/ai robots are served by the API itself; the flat root
+    // paths are answered by the single-page app on a plain static host.
     const sitemapUrl = this.baseUrl + '/sitemap.xml';
-    const llmsTxtUrl = this.baseUrl + '/llms.txt';
-    const aiRobotsUrl = this.baseUrl + '/ai.txt';
+    const llmsTxtUrl = this.baseUrl + '/api/v1/seo/llms.txt';
+    const aiRobotsUrl = this.baseUrl + '/api/v1/seo/ai.txt';
 
     let robots = 'User-agent: *\n';
     robots += 'Allow: /\n\n';
@@ -2860,9 +2966,6 @@ export class SeoService {
 
     // Sitemap and llms.txt references
     robots += 'Sitemap: ' + sitemapUrl + '\n';
-    robots += 'Sitemap: ' + this.baseUrl + '/sitemap-stores.xml\n';
-    robots += 'Sitemap: ' + this.baseUrl + '/sitemap-products.xml\n';
-    robots += 'Sitemap: ' + this.baseUrl + '/sitemap-posts.xml\n';
     robots += 'LLMS-TXT: ' + llmsTxtUrl + '\n';
     robots += 'AI-ROBOTS: ' + aiRobotsUrl + '\n';
 

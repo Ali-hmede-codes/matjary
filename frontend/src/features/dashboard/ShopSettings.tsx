@@ -14,6 +14,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
+import { storePath } from '../../lib/storefront';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { useOwner, type OwnerStore } from './OwnerPanel';
@@ -173,7 +174,7 @@ function SettingsEditor({ store }: { store: OwnerStore }) {
         description="Checkout, currency and sections in one place. Changes go live as soon as you save."
         action={
           store.status === 'active' && (
-            <Link className="panel-secondary" to={`/stores/${store.slug}`}>
+            <Link className="panel-secondary" to={storePath(store.slug)}>
               View my shop <ArrowUpRight size={16} />
             </Link>
           )

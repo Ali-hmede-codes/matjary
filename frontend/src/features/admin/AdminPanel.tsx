@@ -51,6 +51,7 @@ import {
 } from '../shared/PanelUI';
 import {
   storeMediaUrl,
+  storePath,
   formatProductPrice,
   isStoreVerified,
 } from '../../lib/storefront';
@@ -1384,11 +1385,13 @@ function Detail({
               )}
             {resource === 'stores' && (
               <>
-                {data.status !== 'trashed' && data.status !== 'locked' && (
-                  <Link className="panel-secondary" to={`/stores/${data.slug}`}>
-                    Open storefront
-                  </Link>
-                )}
+                {data.slug &&
+                  data.status !== 'trashed' &&
+                  data.status !== 'locked' && (
+                    <Link className="panel-secondary" to={storePath(data.slug)}>
+                      Open storefront
+                    </Link>
+                  )}
                 {!scoped && data.status !== 'trashed' && (
                   <button onClick={() => setEditingStore(true)}>
                     Edit shop details
@@ -2327,7 +2330,7 @@ function CreateStore({ id, close }: { id: string; close: () => void }) {
           <div className="panel-actions">
             <Link
               className="panel-secondary"
-              to={`/stores/${saved.slug}`}
+              to={storePath(saved.slug)}
               target="_blank"
             >
               Open storefront <ArrowUpRight size={15} />
@@ -2614,7 +2617,7 @@ function EditStore({
           <div className="panel-actions">
             <Link
               className="panel-secondary"
-              to={`/stores/${saved.slug}`}
+              to={storePath(saved.slug)}
               target="_blank"
             >
               Open storefront <ArrowUpRight size={15} />

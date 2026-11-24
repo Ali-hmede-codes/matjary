@@ -18,6 +18,7 @@ import { getJson, type ShopCategoryCatalog } from '../../lib/api';
 import {
   resolveStoreUploadTarget,
   storeMediaUrl,
+  storePath,
   storePresentation,
   storeStatusLabel,
 } from '../../lib/storefront';
@@ -371,7 +372,7 @@ export function StoreEditor({ store }: { store?: OwnerStore }) {
         action={
           existing &&
           existing.status === 'active' && (
-            <Link className="panel-secondary" to={`/stores/${existing.slug}`}>
+            <Link className="panel-secondary" to={storePath(existing.slug)}>
               View store <ArrowUpRight size={16} />
             </Link>
           )

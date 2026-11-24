@@ -1,0 +1,33 @@
+# robots.txt for the public storefront.
+#
+# This file is published with the site so a plain static host answers
+# /robots.txt itself. Without it the single-page app's HTML came back at this
+# path, which is not a valid robots file and hides every sitemap from crawlers.
+# The API builds the same directives dynamically at /api/v1/seo/robots.txt.
+
+User-agent: *
+Allow: /
+
+# AI crawler directives (mirrors the platform SEO settings).
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://matgari.app/sitemap.xml
+
+LLMS-TXT: https://matgari.app/api/v1/seo/llms.txt
+AI-ROBOTS: https://matgari.app/api/v1/seo/ai.txt

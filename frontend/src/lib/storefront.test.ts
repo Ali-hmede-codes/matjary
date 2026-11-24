@@ -257,7 +257,7 @@ test('verification requires an active badge and keeps a seven-day grace window',
 });
 
 test('shop URLs support deep links', () => {
-  assert.equal(storePath('olive-kitchen'), '/stores/olive-kitchen');
+  assert.equal(storePath('olive-kitchen'), '/stores/olive-kitchen/');
   assert.equal(storeSlugFromPath('/stores/olive-kitchen'), 'olive-kitchen');
   assert.equal(storeSlugFromPath('/stores/olive-kitchen/'), 'olive-kitchen');
   assert.equal(storeSlugFromPath('/stores/%6flive-kitchen'), 'olive-kitchen');
@@ -443,21 +443,21 @@ test('category slugs stay readable, stable, and unique for other scripts', () =>
   );
   assert.equal(
     storeCategoryPath('olive', 'main-dishes'),
-    '/stores/olive/c/main-dishes',
+    '/stores/olive/c/main-dishes/',
   );
-  assert.equal(storeMenuPath('olive'), '/stores/olive?view=catalog');
+  assert.equal(storeMenuPath('olive'), '/stores/olive/?view=catalog');
   assert.equal(
     storeProductPath('olive', 'harvest-bowl'),
-    '/stores/olive/p/harvest-bowl',
+    '/stores/olive/p/harvest-bowl/',
   );
   assert.equal(
     storePostPath('olive', 'spring-drop'),
-    '/stores/olive/post/spring-drop',
+    '/stores/olive/post/spring-drop/',
   );
   // A shared post keeps its shop; a shop-less post uses the platform path.
   assert.equal(
     postPath({ slug: 'spring-drop', store: { slug: 'olive' } }),
-    '/stores/olive/post/spring-drop',
+    '/stores/olive/post/spring-drop/',
   );
   assert.equal(postPath({ slug: 'spring-drop' }), '/post/spring-drop');
   assert.equal(postSlugFromPath('/post/spring-drop'), 'spring-drop');

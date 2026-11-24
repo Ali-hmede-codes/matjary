@@ -126,31 +126,35 @@ export function isStoreVerified(
   );
 }
 
+// Storefront pages are prerendered as static shells at `stores/<slug>/index.html`,
+// so a plain static host answers the trailing-slash address with 200 and 301s
+// the flat one. Links, canonicals, and shares must use the address that answers
+// directly, otherwise search engines report the whole catalogue as a redirect.
 export function storePath(slug: string): string {
-  return `/stores/${encodeURIComponent(slug)}`;
+  return `/stores/${encodeURIComponent(slug)}/`;
 }
 
 export function storeCategoryPath(
   shopSlug: string,
   categorySlug: string,
 ): string {
-  return `/stores/${encodeURIComponent(shopSlug)}/c/${encodeURIComponent(categorySlug)}`;
+  return `/stores/${encodeURIComponent(shopSlug)}/c/${encodeURIComponent(categorySlug)}/`;
 }
 
 /** Shop URL that opens the catalogue tab directly ("All items" links). */
 export function storeMenuPath(shopSlug: string): string {
-  return `/stores/${encodeURIComponent(shopSlug)}?view=catalog`;
+  return `/stores/${encodeURIComponent(shopSlug)}/?view=catalog`;
 }
 
 export function storeProductPath(
   shopSlug: string,
   productSlug: string,
 ): string {
-  return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}`;
+  return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}/`;
 }
 
 export function storePostPath(shopSlug: string, postSlug: string): string {
-  return `/stores/${encodeURIComponent(shopSlug)}/post/${encodeURIComponent(postSlug)}`;
+  return `/stores/${encodeURIComponent(shopSlug)}/post/${encodeURIComponent(postSlug)}/`;
 }
 
 /**

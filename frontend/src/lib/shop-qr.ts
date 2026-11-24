@@ -7,7 +7,9 @@ export function shopShareUrl(origin: string, slug: string): string | null {
   try {
     const base = new URL(origin);
     if (base.protocol !== 'http:' && base.protocol !== 'https:') return null;
-    return `${base.origin}/stores/${safe}`;
+    // The trailing slash is the address the static host answers directly; the
+    // flat form 301s, so a printed code must encode the canonical one.
+    return `${base.origin}/stores/${safe}/`;
   } catch {
     return null;
   }

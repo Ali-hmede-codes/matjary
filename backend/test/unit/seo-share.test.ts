@@ -875,6 +875,15 @@ test('automatic metadata follows current content and branding without public wri
       (entry) => entry['@type'] === 'WebSite' && entry.name === 'New brand',
     ),
   );
+  // The static host publishes storefront shells as directories, so every
+  // advertised address keeps the trailing slash that answers with 200 instead
+  // of redirecting.
+  assert.equal(tags.canonical, 'https://matjary.test/stores/shop/');
+  const storeLd = tags.jsonLd?.find((entry) => entry['@type'] === 'Store');
+  assert.equal(storeLd?.url, tags.canonical);
+  // A Store item is invalid without an image, so structured data reuses the
+  // preview picture it already resolved rather than an optional logo lookup.
+  assert.match(String(storeLd?.image), /^https:\/\/matjary\.test\//u);
   assert.equal(storeSeo.metaTitle, 'Old shop | Old brand');
   branding.siteName = 'Renamed again';
   store.name = 'Renamed shop';
@@ -892,9 +901,21 @@ test('automatic metadata follows current content and branding without public wri
     imageKeys: [],
     stockQuantity: null,
   });
+  const productTags = await service.generateProductMetaTags(product, store);
   assert.match(
-    (await service.generateProductMetaTags(product, store)).title,
+    productTags.title,
     /^Fresh item - Renamed shop \| Renamed again$/u,
+  );
+  assert.equal(
+    productTags.canonical,
+    'https://matjary.test/stores/shop/p/item/',
+  );
+  // A product with no photo of its own is still a valid Product item: the shop
+  // preview fills the empty image list instead of leaving the field missing.
+  assert.deepEqual(productTags.jsonLd?.[0]?.image, [productTags.og.image]);
+  assert.equal(
+    (productTags.jsonLd?.[0]?.offers as { url: string }).url,
+    productTags.canonical,
   );
   const post = Object.assign(new Showcase(), {
     id: 'post-1',
@@ -1082,6 +1103,11 @@ test('a shop with no image at all still advertises a usable preview picture', as
   const tags = await service.generateStoreMetaTags(store);
   assert.equal(tags.og.image, 'https://matjary.test/banner.jpg');
   assert.equal(tags.twitter.image, tags.og.image);
+  // Structured data must never lose the image either.
+  assert.equal(
+    tags.jsonLd?.find((entry) => entry['@type'] === 'Store')?.image,
+    tags.og.image,
+  );
 });
 
 test('saved global SEO overrides apply to home; clearing them inherits live branding', async () => {
@@ -1423,10 +1449,16 @@ test('sitemap generation reads SEO rows and images in batches', async () => {
   // Two image keys need only the matching variants and their siblings.
   assert.equal(calls.variants, 2);
 
-  const productUrl = urls.find((url) => url.url.endsWith('/p/item-one'));
+  const productUrl = urls.find((url) => url.url.endsWith('/p/item-one/'));
   assert.ok(productUrl);
   assert.equal(productUrl.images?.length, 2);
   assert.match(productUrl.images![0]!.url, /uploads\/media%2Fone/u);
+  // Sitemap entries advertise the address the host answers directly.
+  assert.ok(
+    urls.every(
+      (url) => url.url === 'https://matjary.test' || url.url.endsWith('/'),
+    ),
+  );
   // A noindex product stays out of the document after batching.
   assert.ok(!urls.some((url) => url.url.includes('/p/item-two')));
   assert.ok(!urls.some((url) => url.url.includes('/post/hidden-post')));

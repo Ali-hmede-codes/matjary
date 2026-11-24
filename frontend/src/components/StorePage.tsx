@@ -376,9 +376,13 @@ export function StorePage({ slug }: { slug: string | null }) {
               )
             : store.description ||
               `Explore ${store.name} on ${settings.siteName}.`,
+          // Structured data and link previews reject an item without an image,
+          // so a shop with no banner, logo, or site logo still advertises the
+          // shipped platform card instead of no image at all.
           image:
             absoluteMediaUrl(store.bannerKey || store.logoKey) ??
-            brandingUrl(assetUrl(settings.logoUrl)),
+            brandingUrl(assetUrl(settings.logoUrl)) ??
+            `${window.location.origin}/banner.jpg`,
           canonical: storePath(store.slug),
           siteName: settings.siteName,
           jsonLd: {
@@ -389,8 +393,28 @@ export function StorePage({ slug }: { slug: string | null }) {
             description: store.description ?? undefined,
             image:
               absoluteMediaUrl(store.bannerKey || store.logoKey) ??
-              brandingUrl(assetUrl(settings.logoUrl)),
+              brandingUrl(assetUrl(settings.logoUrl)) ??
+              `${window.location.origin}/banner.jpg`,
             url: `${window.location.origin}${storePath(store.slug)}`,
+            ...(store.location?.city || store.location?.country
+              ? {
+                  address: {
+                    '@type': 'PostalAddress',
+                    ...(store.location.address
+                      ? { streetAddress: store.location.address }
+                      : {}),
+                    ...(store.location.city
+                      ? { addressLocality: store.location.city }
+                      : {}),
+                    ...(store.location.country
+                      ? { addressCountry: store.location.country }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(store.location?.phone
+              ? { telephone: store.location.phone }
+              : {}),
           },
         }
       : null,

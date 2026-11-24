@@ -77,7 +77,8 @@ export function PostPage({
   const previewImage =
     post?.media.find((item) => item.kind === 'image')?.primaryUrl ??
     post?.media[0]?.posterUrl ??
-    brandingUrl(assetUrl(settings.logoUrl));
+    brandingUrl(assetUrl(settings.logoUrl)) ??
+    `${window.location.origin}/banner.jpg`;
 
   useEffect(() => {
     // Opening the shared page is the view; the hook dedupes per visit.

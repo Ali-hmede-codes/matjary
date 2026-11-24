@@ -22,7 +22,11 @@ import {
   type PostLayout,
   type StoreDesign,
 } from '../../lib/design.ts';
-import { storeMediaUrl, storePresentation } from '../../lib/storefront';
+import {
+  storeMediaUrl,
+  storePath,
+  storePresentation,
+} from '../../lib/storefront';
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { useOwner, type OwnerStore } from './OwnerPanel';
@@ -534,7 +538,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           store.status === 'active' && (
             <Link
               className="panel-secondary"
-              to={`/stores/${store.slug}`}
+              to={storePath(store.slug)}
               target="_blank"
               rel="noreferrer"
             >

@@ -83,12 +83,45 @@ function brandingAssets(version: string): Plugin {
   };
 }
 
+// Crawler entry points carry absolute URLs, which sitemaps and robots files
+// require. They are copied verbatim from public/, so the origin of the domain
+// this build serves is substituted once here instead of being hard-coded for
+// every future deployment.
+const PRODUCTION_ORIGIN = 'https://matgari.app';
+
+function crawlerDocuments(origin: string): Plugin {
+  let outDir = '';
+  return {
+    name: 'matjary-crawler-documents',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      if (origin === PRODUCTION_ORIGIN) return;
+      for (const file of ['robots.txt', 'sitemap.xml']) {
+        const path = resolve(outDir, file);
+        if (!existsSync(path)) continue;
+        writeFileSync(
+          path,
+          readFileSync(path, 'utf8').replaceAll(PRODUCTION_ORIGIN, origin),
+        );
+      }
+    },
+  };
+}
+
 export default defineConfig(({ command, mode }) => {
   const root = fileURLToPath(new URL('.', import.meta.url));
   const branding = brandingVersion(resolve(root, 'public'));
   const env = loadEnv(mode, root, '');
   const backendOrigin = new URL(env.BACKEND_ORIGIN || 'http://localhost:3000')
     .origin;
+  // The deployment sets this to the domain it serves; local builds keep the
+  // production default so a plain `npm run build` still yields valid files.
+  const publicOrigin = (env.PUBLIC_ORIGIN || PRODUCTION_ORIGIN).replace(
+    /\/+$/u,
+    '',
+  );
   const apiProxy: ProxyOptions = {
     target: backendOrigin,
     changeOrigin: true,
@@ -108,7 +141,11 @@ export default defineConfig(({ command, mode }) => {
   };
 
   return {
-    plugins: [react(), brandingAssets(branding)],
+    plugins: [
+      react(),
+      brandingAssets(branding),
+      crawlerDocuments(publicOrigin),
+    ],
     // Only this public origin is exposed; backend secrets never enter the bundle.
     define: {
       __DEV_BACKEND_ORIGIN__: JSON.stringify(

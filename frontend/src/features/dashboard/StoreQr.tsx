@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Copy, Download, QrCode } from 'lucide-react';
 import QRCode from 'qrcode';
-import { storeMediaUrl } from '../../lib/storefront';
+import { storeMediaUrl, storePath } from '../../lib/storefront';
 import { qrFileName, qrLogoPlate, shopShareUrl } from '../../lib/shop-qr';
 import { Notice, PageTitle } from '../shared/PanelUI';
 import { useOwner } from './OwnerPanel';
@@ -173,7 +173,7 @@ export function StoreQr() {
             >
               <Copy size={16} /> {copied ? 'Copied' : 'Copy link'}
             </button>
-            <Link className="panel-secondary" to={`/stores/${store.slug}`}>
+            <Link className="panel-secondary" to={storePath(store.slug)}>
               Open shop <ArrowUpRight size={16} />
             </Link>
           </div>

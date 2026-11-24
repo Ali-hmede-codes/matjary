@@ -659,6 +659,7 @@ printf '\nBuilding the frontend in an isolated Node.js container...\n'
 BUILD_DIR=$(runuser -u "$SITE_USER" -- mktemp -d "$USER_HOME/.matjary-frontend.XXXXXXXX")
 docker run --rm --init --user "$SITE_UID:$SITE_GID" --cpus 1 --memory 2g --pids-limit 256 \
   --cap-drop ALL --security-opt no-new-privileges:true --env HOME=/tmp \
+  --env "PUBLIC_ORIGIN=https://$DOMAIN" \
   --mount "type=bind,src=$REPO_DIR/frontend,dst=/source,readonly" \
   --mount "type=bind,src=$BUILD_DIR,dst=/output" \
   node:22-slim sh -ec '

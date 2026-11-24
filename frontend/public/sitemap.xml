@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Published with the site so a plain static host answers /sitemap.xml with XML
+  instead of the single-page app's HTML. The catalogue changes constantly, so
+  this index only delegates to the API, which builds the URL list from live
+  content (shops, products, and posts). Keep it in step with robots.txt.
+-->
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>https://matgari.app/api/v1/seo/sitemap.xml</loc>
+  </sitemap>
+</sitemapindex>

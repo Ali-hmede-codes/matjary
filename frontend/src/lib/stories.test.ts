@@ -153,7 +153,7 @@ test('story timestamps and links read like the rest of the shop', () => {
       },
       'cedar',
     ),
-    '/stores/cedar/p/honey-jar',
+    '/stores/cedar/p/honey-jar/',
   );
   assert.equal(
     storyLinkPath(
@@ -166,7 +166,7 @@ test('story timestamps and links read like the rest of the shop', () => {
       },
       'cedar',
     ),
-    '/stores/cedar/c/sweet-things',
+    '/stores/cedar/c/sweet-things/',
   );
   assert.equal(
     storyLinkPath(
@@ -179,6 +179,6 @@ test('story timestamps and links read like the rest of the shop', () => {
       },
       'cedar',
     ),
-    '/stores/cedar',
+    '/stores/cedar/',
   );
 });

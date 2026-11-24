@@ -104,7 +104,8 @@ export function StoreCategoryPage({
               : `Explore ${group.count} ${group.count === 1 ? 'item' : 'items'} in ${group.name} at ${store.name}.`,
           image:
             assetUrl(storeMediaUrl(store.bannerKey || store.logoKey)) ??
-            brandingUrl(assetUrl(settings.logoUrl)),
+            brandingUrl(assetUrl(settings.logoUrl)) ??
+            `${window.location.origin}/banner.jpg`,
           canonical: storeCategoryPath(shopSlug, categoryParam),
           siteName: settings.siteName,
           jsonLd: {

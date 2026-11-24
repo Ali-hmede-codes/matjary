@@ -124,7 +124,8 @@ export function StoreProductPage({
               : `Order ${product.name} from ${store.name}.`),
           image:
             absoluteMedia(images[0] || store.logoKey) ??
-            brandingUrl(assetUrl(settings.logoUrl)),
+            brandingUrl(assetUrl(settings.logoUrl)) ??
+            `${window.location.origin}/banner.jpg`,
           canonical: storeProductPath(shopSlug, productSlug),
           type: 'product',
           siteName: settings.siteName,
@@ -133,9 +134,20 @@ export function StoreProductPage({
             '@type': 'Product',
             name: product.name,
             description: product.description ?? undefined,
-            image: images
-              .map((key) => absoluteMedia(key))
-              .filter((url): url is string => Boolean(url)),
+            // A Product item without an image is invalid; the shop logo or the
+            // platform card answers when the item has no photo of its own.
+            image: [
+              ...images
+                .map((key) => absoluteMedia(key))
+                .filter((url): url is string => Boolean(url)),
+              ...(images.length
+                ? []
+                : [
+                    absoluteMedia(store.logoKey) ??
+                      brandingUrl(assetUrl(settings.logoUrl)) ??
+                      `${window.location.origin}/banner.jpg`,
+                  ]),
+            ],
             sku: product.slug,
             offers: {
               '@type': 'Offer',

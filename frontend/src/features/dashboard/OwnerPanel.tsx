@@ -25,6 +25,7 @@ import {
 import type { Store } from '../../lib/api';
 import {
   storeMediaUrl,
+  storePath,
   isStoreVerified,
   isCurrentStore,
   readOwnerStoreId,
@@ -835,7 +836,7 @@ function OwnerHome() {
         }
         action={
           store.status === 'active' ? (
-            <Link className="panel-secondary" to={`/stores/${store.slug}`}>
+            <Link className="panel-secondary" to={storePath(store.slug)}>
               View {member ? 'shop' : 'my store'} <ArrowUpRight size={16} />
             </Link>
           ) : member ? (

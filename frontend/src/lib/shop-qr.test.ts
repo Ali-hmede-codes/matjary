@@ -5,11 +5,11 @@ import { qrFileName, qrLogoPlate, shopShareUrl } from './shop-qr.ts';
 test('shop QR links always target the public storefront', () => {
   assert.equal(
     shopShareUrl('https://matjary.com', 'my-shop'),
-    'https://matjary.com/stores/my-shop',
+    'https://matjary.com/stores/my-shop/',
   );
   assert.equal(
     shopShareUrl('http://127.0.0.1:5173/', 'shop-2'),
-    'http://127.0.0.1:5173/stores/shop-2',
+    'http://127.0.0.1:5173/stores/shop-2/',
   );
   for (const slug of ['', 'My Shop', '../admin', 'shop/extra', 'a'.repeat(192)])
     assert.equal(shopShareUrl('https://matjary.com', slug), null, slug);

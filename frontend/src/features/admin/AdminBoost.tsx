@@ -18,6 +18,7 @@ import {
   Pagination,
   Retry,
 } from '../shared/PanelUI';
+import { storePath } from '../../lib/storefront';
 
 type Tab = 'wallets' | 'campaigns' | 'settings';
 
@@ -614,7 +615,7 @@ function Campaigns({ id }: { id: string }) {
                   {campaign.targetStoreSlug && (
                     <a
                       className="panel-secondary"
-                      href={`/stores/${encodeURIComponent(campaign.targetStoreSlug)}`}
+                      href={storePath(campaign.targetStoreSlug)}
                       target="_blank"
                       rel="noreferrer"
                     >
