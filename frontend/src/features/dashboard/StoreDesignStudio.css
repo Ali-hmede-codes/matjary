@@ -126,6 +126,19 @@
   align-items: center;
   gap: 8px;
 }
+.design-slot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--panel-muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.design-slot-legend strong {
+  color: var(--panel-ink);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
 .design-slot-row .layout-wire {
   flex: 0 0 58px;
   width: 58px;

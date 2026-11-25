@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  catalogLayoutGroupInfo,
+  catalogLayoutGroupOf,
+  catalogLayoutGroups,
   catalogLayoutInfo,
+  catalogLayouts,
   coverShapeInfo,
   coverShapes,
   defaultDesign,
@@ -10,9 +14,6 @@ import {
   designWithPreset,
   hasSavedDesign,
   normalizeDesign,
-  postLayoutGroupInfo,
-  postLayoutGroupOf,
-  postLayoutGroups,
   postLayoutInfo,
   postLayouts,
   resolveCategoryLayout,
@@ -55,23 +56,23 @@ test('post layouts include the rows, modular and mosaic grids only', () => {
   );
 });
 
-test('every post layout has one menu, e-commerce or both group', () => {
-  for (const layout of postLayouts) {
+test('every product section layout has one menu, e-commerce or both group', () => {
+  for (const layout of catalogLayouts) {
     assert.ok(
-      postLayoutGroups.includes(postLayoutGroupOf[layout]),
+      catalogLayoutGroups.includes(catalogLayoutGroupOf[layout]),
       `${layout} is grouped`,
     );
   }
-  for (const group of postLayoutGroups) {
+  for (const group of catalogLayoutGroups) {
     assert.ok(
-      postLayouts.some((layout) => postLayoutGroupOf[layout] === group),
+      catalogLayouts.some((layout) => catalogLayoutGroupOf[layout] === group),
       `${group} has layouts`,
     );
-    assert.ok(postLayoutGroupInfo[group].label.length > 0, group);
+    assert.ok(catalogLayoutGroupInfo[group].label.length > 0, group);
   }
-  assert.equal(postLayoutGroupOf.rows, 'menu');
-  assert.equal(postLayoutGroupOf.modular, 'ecommerce');
-  assert.equal(postLayoutGroupOf.mosaic, 'both');
+  assert.equal(catalogLayoutGroupOf.menu, 'menu');
+  assert.equal(catalogLayoutGroupOf.cards, 'ecommerce');
+  assert.equal(catalogLayoutGroupOf.list, 'both');
 });
 
 test('cover styles cover the reference set without split', () => {

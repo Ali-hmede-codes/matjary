@@ -16,6 +16,9 @@ import {
   Wand2,
 } from 'lucide-react';
 import {
+  catalogLayoutGroupInfo,
+  catalogLayoutGroupOf,
+  catalogLayoutGroups,
   catalogLayoutInfo,
   catalogLayouts,
   coverShapeChoices,
@@ -25,9 +28,6 @@ import {
   heroChoices,
   normalizeDesign,
   paletteChoices,
-  postLayoutGroupInfo,
-  postLayoutGroupOf,
-  postLayoutGroups,
   postLayoutInfo,
   postLayouts,
   resolveCategoryLayout,
@@ -451,10 +451,20 @@ function LayoutSlot({
           value={value}
           onChange={(event) => onChange(event.target.value as CatalogLayout)}
         >
-          {catalogLayouts.map((layout) => (
-            <option key={layout} value={layout}>
-              {catalogLayoutInfo[layout].label}
-            </option>
+          {catalogLayoutGroups.map((group) => (
+            <optgroup
+              key={group}
+              label={catalogLayoutGroupInfo[group].label}
+              title={catalogLayoutGroupInfo[group].hint}
+            >
+              {catalogLayouts
+                .filter((layout) => catalogLayoutGroupOf[layout] === group)
+                .map((layout) => (
+                  <option key={layout} value={layout}>
+                    {catalogLayoutInfo[layout].label}
+                  </option>
+                ))}
+            </optgroup>
           ))}
         </select>
       </span>
@@ -612,22 +622,17 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             step="01"
             icon={LayoutGrid}
             title="Post layout"
-            hint={`${postLayouts.length} arrangements, grouped by the shop they suit.`}
+            hint={`${postLayouts.length} arrangements. Pick the one that fits your shop.`}
           >
-            {postLayoutGroups.map((group) => (
-              <LayoutPicker
-                key={group}
-                label={postLayoutGroupInfo[group].label}
-                hint={postLayoutGroupInfo[group].hint}
-                layouts={postLayouts.filter(
-                  (layout) => postLayoutGroupOf[layout] === group,
-                )}
-                info={postLayoutInfo}
-                wires={postWires}
-                value={design.postsLayout}
-                onChange={(postsLayout) => update({ postsLayout })}
-              />
-            ))}
+            <LayoutPicker
+              label="Posts"
+              hint="Tap a layout to use it."
+              layouts={postLayouts}
+              info={postLayoutInfo}
+              wires={postWires}
+              value={design.postsLayout}
+              onChange={(postsLayout) => update({ postsLayout })}
+            />
           </StudioSection>
 
           <StudioSection
@@ -682,6 +687,14 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                 />
               )}
             </div>
+            <p className="design-slot-legend">
+              {catalogLayoutGroups.map((group) => (
+                <span key={group}>
+                  <strong>{catalogLayoutGroupInfo[group].label}</strong>{' '}
+                  {catalogLayoutGroupInfo[group].hint}
+                </span>
+              ))}
+            </p>
             <p className="design-fineprint panel-muted">
               <Wand2 size={13} /> {rhythmSummary(design)}
             </p>

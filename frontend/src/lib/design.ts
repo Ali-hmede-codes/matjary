@@ -387,49 +387,6 @@ export const postLayoutInfo: Record<
   },
 };
 
-// The studio groups post walls by the shop they suit best. "Both" is the
-// gallery-first group, so every layout still has exactly one home.
-export const postLayoutGroups = ['menu', 'ecommerce', 'both'] as const;
-export type PostLayoutGroup = (typeof postLayoutGroups)[number];
-
-export const postLayoutGroupInfo: Record<
-  PostLayoutGroup,
-  { label: string; hint: string }
-> = {
-  menu: {
-    label: 'MENU',
-    hint: 'Readable, row-led walls for restaurant and café posts.',
-  },
-  ecommerce: {
-    label: 'E-COMMERCE',
-    hint: 'Feature-led walls for product drops and collections.',
-  },
-  both: {
-    label: 'BOTH',
-    hint: 'Gallery-first walls that suit either shop type.',
-  },
-};
-
-/** The one category each post layout is listed under in the studio. */
-export const postLayoutGroupOf: Record<PostLayout, PostLayoutGroup> = {
-  grid: 'both',
-  masonry: 'both',
-  rail: 'both',
-  spotlight: 'ecommerce',
-  mosaic: 'both',
-  modular: 'ecommerce',
-  frames: 'ecommerce',
-  wall: 'both',
-  list: 'menu',
-  stack: 'menu',
-  rows: 'menu',
-  cover: 'ecommerce',
-  tiles: 'both',
-  reel: 'both',
-  stagger: 'both',
-  drift: 'both',
-};
-
 export const catalogLayoutInfo: Record<
   CatalogLayout,
   { label: string; hint: string }
@@ -505,6 +462,53 @@ export const catalogLayoutInfo: Record<
     label: 'Cover card',
     hint: 'The same card without the floating tile.',
   },
+};
+
+// Product-section grids are grouped by the shop they suit. Every grid keeps
+// one home so the studio can show a stable MENU / E-COMMERCE / BOTH order.
+export const catalogLayoutGroups = ['menu', 'ecommerce', 'both'] as const;
+export type CatalogLayoutGroup = (typeof catalogLayoutGroups)[number];
+
+export const catalogLayoutGroupInfo: Record<
+  CatalogLayoutGroup,
+  { label: string; hint: string }
+> = {
+  menu: {
+    label: 'MENU',
+    hint: 'Price lists and menu grids for dishes and sections.',
+  },
+  ecommerce: {
+    label: 'E-COMMERCE',
+    hint: 'Product grids for cards, collections and drops.',
+  },
+  both: {
+    label: 'BOTH',
+    hint: 'Flexible grids that work for either kind of shop.',
+  },
+};
+
+/** The one category each product-section grid is listed under in the studio. */
+export const catalogLayoutGroupOf: Record<CatalogLayout, CatalogLayoutGroup> = {
+  list: 'both',
+  cards: 'ecommerce',
+  compact: 'menu',
+  menu: 'menu',
+  gallery: 'ecommerce',
+  featured: 'ecommerce',
+  shelves: 'ecommerce',
+  overlay: 'ecommerce',
+  tiles: 'ecommerce',
+  bento: 'ecommerce',
+  stagger: 'both',
+  sticker: 'ecommerce',
+  circles: 'both',
+  rail: 'ecommerce',
+  ribbon: 'ecommerce',
+  zigzag: 'both',
+  index: 'menu',
+  rows: 'menu',
+  banner: 'ecommerce',
+  cover: 'ecommerce',
 };
 
 export const rhythmInfo: Record<DesignRhythm, { label: string; hint: string }> =
