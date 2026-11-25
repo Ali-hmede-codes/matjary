@@ -126,6 +126,17 @@ export const DESIGN_CATALOG_LAYOUT_KEYS = [
 // UI to three simple choices: all sections same / 2 layouts / 3 layouts.
 export const DESIGN_RHYTHM_KEYS = ['same', 'repeat2', 'repeat3'] as const;
 
+// How the shop's category directory looks. `chips` preserves the classic
+// storefront (no cards), the rest render the photo cards from the design.
+export const DESIGN_CATEGORY_INDEX_STYLE_KEYS = [
+  'chips',
+  'poster',
+  'split',
+  'tinted',
+  'compact',
+  'banner',
+] as const;
+
 export class DesignCategoryLayoutDto implements DesignCategoryLayout {
   @IsUUID()
   categoryId!: string;
@@ -183,6 +194,22 @@ export class StoreDesignSettingsDto implements DesignSettings {
   @IsOptional()
   @IsIn(DESIGN_RHYTHM_KEYS)
   rhythm?: string;
+
+  @IsOptional()
+  @IsIn(DESIGN_CATEGORY_INDEX_STYLE_KEYS)
+  categoryIndexStyle?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  showCategoryImages?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showCategoryAction?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  splitCategoryTitle?: boolean;
 
   // Sparse per-section overrides. Bounded so one owner cannot store an
   // unbounded JSON document in the store row.

@@ -7,6 +7,7 @@
 @import './StorePage.css';
 @import './StorePostWall.css';
 @import './StoreMenu.css';
+@import './CategoryShowcase.css';
 /* Product-section grids. The base primitives load first, then one line per
    grid in the order the studio lists them. The list lives here (instead of the
    CSS being imported by each component) so the whole catalog stays in the same

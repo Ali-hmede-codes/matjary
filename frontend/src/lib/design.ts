@@ -126,6 +126,53 @@ export type PostLayout = (typeof postLayouts)[number];
 export const designRhythms = ['same', 'repeat2', 'repeat3'] as const;
 export type DesignRhythm = (typeof designRhythms)[number];
 
+// ---------------------------------------------------------------------------
+// Category directory
+// ---------------------------------------------------------------------------
+// The shop page can open with a directory of the owner's categories. Each card
+// uses the category's own image link and the category name, so the cards work
+// for a menu and for a product shop alike. `chips` keeps the classic storefront
+// (no directory cards).
+export const categoryIndexStyles = [
+  'chips',
+  'poster',
+  'split',
+  'tinted',
+  'compact',
+  'banner',
+] as const;
+export type CategoryIndexStyle = (typeof categoryIndexStyles)[number];
+
+export const categoryIndexStyleInfo: Record<
+  CategoryIndexStyle,
+  { label: string; hint: string }
+> = {
+  chips: {
+    label: 'Classic chips',
+    hint: 'The familiar filter row, with no category cards.',
+  },
+  poster: {
+    label: 'Poster cards',
+    hint: 'Full-bleed photos, two per row, with the name on the image.',
+  },
+  split: {
+    label: 'Light cards',
+    hint: 'A light card with a photo window and dark type.',
+  },
+  tinted: {
+    label: 'Tinted cards',
+    hint: 'The photo behind a brand-coloured wash.',
+  },
+  compact: {
+    label: 'Compact cards',
+    hint: 'Smaller square cards for shops with many categories.',
+  },
+  banner: {
+    label: 'Wide banners',
+    hint: 'One wide card per row, like a cover.',
+  },
+};
+
 export interface DesignCategoryLayout {
   categoryId: string;
   layout: CatalogLayout;
@@ -147,6 +194,10 @@ export interface DesignSettingsInput {
   rhythm?: string | null;
   categoryLayouts?:
     { categoryId?: string | null; layout?: string | null }[] | null;
+  categoryIndexStyle?: string | null;
+  showCategoryImages?: boolean | null;
+  showCategoryAction?: boolean | null;
+  splitCategoryTitle?: boolean | null;
   showProductImages?: boolean | null;
   showProductDescriptions?: boolean | null;
 }
@@ -166,6 +217,10 @@ export interface StoreDesign {
   thirdLayout: CatalogLayout;
   rhythm: DesignRhythm;
   categoryLayouts: DesignCategoryLayout[];
+  categoryIndexStyle: CategoryIndexStyle;
+  showCategoryImages: boolean;
+  showCategoryAction: boolean;
+  splitCategoryTitle: boolean;
   showProductImages: boolean;
   showProductDescriptions: boolean;
 }
@@ -628,6 +683,10 @@ export const defaultDesign: StoreDesign = {
   thirdLayout: 'gallery',
   rhythm: 'same',
   categoryLayouts: [],
+  categoryIndexStyle: 'chips',
+  showCategoryImages: true,
+  showCategoryAction: true,
+  splitCategoryTitle: true,
   showProductImages: true,
   showProductDescriptions: true,
 };
@@ -655,6 +714,7 @@ export function hasSavedDesign(settings?: unknown): boolean {
     typeof value.catalogLayout === 'string' ||
     typeof value.accentLayout === 'string' ||
     typeof value.rhythm === 'string' ||
+    typeof value.categoryIndexStyle === 'string' ||
     Array.isArray(value.categoryLayouts)
   );
 }
@@ -743,6 +803,14 @@ export function normalizeDesign(
     ),
     rhythm: normalizedRhythm(raw.rhythm),
     categoryLayouts: categoryOverrides(raw.categoryLayouts),
+    categoryIndexStyle: pick(
+      raw.categoryIndexStyle,
+      categoryIndexStyles,
+      defaultDesign.categoryIndexStyle,
+    ),
+    showCategoryImages: raw.showCategoryImages !== false,
+    showCategoryAction: raw.showCategoryAction !== false,
+    splitCategoryTitle: raw.splitCategoryTitle !== false,
     showProductImages: raw.showProductImages !== false,
     showProductDescriptions: raw.showProductDescriptions !== false,
   };
@@ -775,6 +843,16 @@ export function designWithPreset(
     thirdLayout: preset.thirdLayout,
     rhythm: preset.rhythm,
     categoryLayouts: current?.categoryLayouts ?? [],
+    // The category directory is part of the owner's own setup (the image links
+    // belong to the categories), so trying a template never throws it away.
+    categoryIndexStyle:
+      current?.categoryIndexStyle ?? defaultDesign.categoryIndexStyle,
+    showCategoryImages:
+      current?.showCategoryImages ?? defaultDesign.showCategoryImages,
+    showCategoryAction:
+      current?.showCategoryAction ?? defaultDesign.showCategoryAction,
+    splitCategoryTitle:
+      current?.splitCategoryTitle ?? defaultDesign.splitCategoryTitle,
     showProductImages: current?.showProductImages ?? true,
     showProductDescriptions: current?.showProductDescriptions ?? true,
   };

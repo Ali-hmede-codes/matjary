@@ -6,6 +6,8 @@ import {
   catalogLayoutGroups,
   catalogLayoutInfo,
   catalogLayouts,
+  categoryIndexStyleInfo,
+  categoryIndexStyles,
   coverShapeInfo,
   coverShapes,
   defaultDesign,
@@ -237,6 +239,10 @@ test('same rhythm uses layout 1 everywhere, but overrides still win', () => {
 test('applying a preset keeps the owner’s overrides and visibility choices', () => {
   const current = normalizeDesign({
     categoryLayouts: [{ categoryId: categoryA, layout: 'menu' }],
+    categoryIndexStyle: 'banner',
+    showCategoryImages: false,
+    showCategoryAction: false,
+    splitCategoryTitle: false,
     showProductImages: false,
     showProductDescriptions: false,
   });
@@ -245,8 +251,42 @@ test('applying a preset keeps the owner’s overrides and visibility choices', (
   assert.equal(next.palette, 'blush');
   assert.equal(next.postsLayout, 'masonry');
   assert.deepEqual(next.categoryLayouts, current.categoryLayouts);
+  assert.equal(next.categoryIndexStyle, 'banner');
+  assert.equal(next.showCategoryImages, false);
+  assert.equal(next.showCategoryAction, false);
+  assert.equal(next.splitCategoryTitle, false);
   assert.equal(next.showProductImages, false);
   assert.equal(next.showProductDescriptions, false);
+});
+
+test('category directory settings have safe defaults and known styles', () => {
+  assert.ok(categoryIndexStyles.length >= 5);
+  for (const style of categoryIndexStyles) {
+    assert.ok(categoryIndexStyleInfo[style].label.length > 0, style);
+    assert.ok(categoryIndexStyleInfo[style].hint.length > 0, style);
+  }
+  const design = normalizeDesign(null);
+  assert.equal(design.categoryIndexStyle, 'chips');
+  assert.equal(design.showCategoryImages, true);
+  assert.equal(design.showCategoryAction, true);
+  assert.equal(design.splitCategoryTitle, true);
+  const poster = normalizeDesign({
+    categoryIndexStyle: 'poster',
+    showCategoryImages: false,
+    showCategoryAction: false,
+    splitCategoryTitle: false,
+  });
+  assert.equal(poster.categoryIndexStyle, 'poster');
+  assert.equal(poster.showCategoryImages, false);
+  assert.equal(poster.showCategoryAction, false);
+  assert.equal(poster.splitCategoryTitle, false);
+  // A stale or forged row falls back to the classic directory instead of
+  // breaking the shop page.
+  assert.equal(
+    normalizeDesign({ categoryIndexStyle: 'carousel' }).categoryIndexStyle,
+    'chips',
+  );
+  assert.equal(hasSavedDesign({ categoryIndexStyle: 'poster' }), true);
 });
 
 test('pulse pairs the drifting 4:3 wall with a quiet cover', () => {

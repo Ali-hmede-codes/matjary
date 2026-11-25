@@ -472,6 +472,27 @@ export function OwnerContent({ kind }: { kind: 'products' | 'posts' }) {
   );
 }
 
+function CategoryImagePreview({ url, name }: { url: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = url.trim();
+  if (!src || failed)
+    return (
+      <span className="category-thumb-fallback" aria-hidden="true">
+        {(name.trim()[0] ?? '•').toUpperCase()}
+      </span>
+    );
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function CategoryManager({
   slug,
   close,
@@ -491,7 +512,9 @@ function CategoryManager({
       ),
   });
   const [name, setName] = useState('');
+  const [newImage, setNewImage] = useState('');
   const [renames, setRenames] = useState<Record<string, string>>({});
+  const [images, setImages] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -511,8 +534,12 @@ function CategoryManager({
     setError('');
     setNotice('');
     try {
-      await mutate(path, { name: value });
+      await mutate(path, {
+        name: value,
+        imageUrl: newImage.trim() || null,
+      });
       setName('');
+      setNewImage('');
       setNotice('Category added.');
       await refresh();
     } catch (e) {
@@ -522,20 +549,37 @@ function CategoryManager({
     }
   }
 
-  async function rename(category: Category) {
+  async function save(category: Category) {
     const value = (renames[category.id] ?? category.name).trim();
-    if (!value || value === category.name || busy) return;
+    const image = (images[category.id] ?? category.imageUrl ?? '').trim();
+    const renamed = value !== category.name;
+    const pictureChanged = image !== (category.imageUrl ?? '');
+    if (busy || !value || (!renamed && !pictureChanged)) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      await mutate(`${path}/${category.id}`, { name: value }, 'PATCH');
+      const patch: { name?: string; imageUrl?: string | null } = {};
+      if (renamed) patch.name = value;
+      if (pictureChanged) patch.imageUrl = image || null;
+      await mutate(`${path}/${category.id}`, patch, 'PATCH');
       setRenames((current) => {
         const next = { ...current };
         delete next[category.id];
         return next;
       });
-      setNotice('Category renamed.');
+      setImages((current) => {
+        const next = { ...current };
+        delete next[category.id];
+        return next;
+      });
+      setNotice(
+        renamed && pictureChanged
+          ? 'Category updated.'
+          : pictureChanged
+            ? 'Category picture saved.'
+            : 'Category renamed.',
+      );
       await refresh();
     } catch (e) {
       setError(panelError(e));
@@ -568,6 +612,12 @@ function CategoryManager({
           ? `${query.data.total} of ${limit == null ? 'unlimited' : limit} categories used across all your shops.`
           : 'Categories group the items in this shop.'}
       </p>
+      <p className="panel-muted category-image-hint">
+        Give a category a picture with a direct image link (PNG, JPG or WebP) —
+        no upload needed. A PNG with a transparent background sits on the card
+        colour, exactly like the reference boards. The shop design turns each
+        category into a card with its name and picture.
+      </p>
       <form className="panel-toolbar" onSubmit={(e) => void add(e)}>
         <input
           maxLength={100}
@@ -575,6 +625,14 @@ function CategoryManager({
           onChange={(e) => setName(e.target.value)}
           placeholder="New category name"
           aria-label="New category name"
+        />
+        <input
+          type="url"
+          inputMode="url"
+          value={newImage}
+          onChange={(e) => setNewImage(e.target.value)}
+          placeholder="Image link (optional)"
+          aria-label="New category image link"
         />
         <button className="panel-primary" disabled={busy || !name.trim()}>
           Add category
@@ -589,9 +647,18 @@ function CategoryManager({
         <div className="panel-list-card">
           {query.data.items.map((category) => {
             const value = renames[category.id] ?? category.name;
+            const picture = images[category.id] ?? category.imageUrl ?? '';
+            const pictureChanged = picture.trim() !== (category.imageUrl ?? '');
             const used = category.productCount ?? 0;
             return (
-              <div className="panel-record" key={category.id}>
+              <div className="panel-record category-row" key={category.id}>
+                <span className="panel-record-icon category-thumb">
+                  <CategoryImagePreview
+                    key={category.imageUrl ?? category.id}
+                    url={category.imageUrl ?? ''}
+                    name={category.name}
+                  />
+                </span>
                 <div className="panel-record-info">
                   <input
                     maxLength={100}
@@ -604,16 +671,40 @@ function CategoryManager({
                     }
                     aria-label={`Name for ${category.name}`}
                   />
+                  <label className="category-image-field">
+                    <ImagePlus size={14} aria-hidden="true" />
+                    <span className="sr-only">
+                      Image link for {category.name}
+                    </span>
+                    <input
+                      type="url"
+                      inputMode="url"
+                      maxLength={2048}
+                      value={picture}
+                      onChange={(e) =>
+                        setImages((current) => ({
+                          ...current,
+                          [category.id]: e.target.value,
+                        }))
+                      }
+                      placeholder="https://…/category.png"
+                    />
+                  </label>
                   <p>
                     {used} {used === 1 ? 'item' : 'items'}
+                    {picture.trim() ? '' : ' · no picture yet'}
                   </p>
                 </div>
                 <button
                   type="button"
-                  disabled={busy || value.trim() === category.name}
-                  onClick={() => void rename(category)}
+                  disabled={
+                    busy ||
+                    !value.trim() ||
+                    (value.trim() === category.name && !pictureChanged)
+                  }
+                  onClick={() => void save(category)}
                 >
-                  Rename
+                  Save
                 </button>
                 <button
                   type="button"

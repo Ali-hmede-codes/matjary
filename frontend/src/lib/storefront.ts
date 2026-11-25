@@ -585,6 +585,9 @@ export interface MenuCategoryGroup {
   key: string;
   name: string;
   count: number;
+  // Optional card picture. "More items" and image-less categories leave it
+  // undefined and the card falls back to its typographic treatment.
+  imageUrl?: string | null;
 }
 
 export function productCategoryKey(
@@ -727,7 +730,10 @@ export function productCategoryName(
 }
 
 export function categoryIndexGroups(
-  categories: Pick<StoreCategory, 'id' | 'name' | 'productCount'>[],
+  categories: Pick<
+    StoreCategory,
+    'id' | 'name' | 'productCount' | 'imageUrl'
+  >[],
   uncategorized = 0,
 ): MenuCategoryGroup[] {
   const seen = new Set<string>();
@@ -738,7 +744,13 @@ export function categoryIndexGroups(
     if (!key || !name || seen.has(key)) continue;
     seen.add(key);
     const count = Math.max(0, category.productCount ?? 0);
-    if (count > 0) groups.push({ key, name, count });
+    if (count > 0)
+      groups.push({
+        key,
+        name,
+        count,
+        imageUrl: category.imageUrl?.trim() || null,
+      });
   }
   // Older products without a category row must stay reachable from the index.
   if (uncategorized > 0)

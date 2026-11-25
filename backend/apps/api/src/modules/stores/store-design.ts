@@ -19,9 +19,16 @@ const STRING_KEYS = [
   'accentLayout',
   'thirdLayout',
   'rhythm',
+  'categoryIndexStyle',
 ] as const;
 
-const BOOLEAN_KEYS = ['showProductImages', 'showProductDescriptions'] as const;
+const BOOLEAN_KEYS = [
+  'showProductImages',
+  'showProductDescriptions',
+  'showCategoryImages',
+  'showCategoryAction',
+  'splitCategoryTitle',
+] as const;
 
 /**
  * Copy only the studio fields the storefront understands and drop overrides

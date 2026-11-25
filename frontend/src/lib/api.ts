@@ -141,6 +141,8 @@ export interface StoreCategory {
   id: string;
   name: string;
   sortOrder: number;
+  // Direct image link used by the category cards; null shows the fallback.
+  imageUrl?: string | null;
   productCount?: number;
 }
 

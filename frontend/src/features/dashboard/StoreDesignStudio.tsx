@@ -21,6 +21,8 @@ import {
   catalogLayoutGroups,
   catalogLayoutInfo,
   catalogLayouts,
+  categoryIndexStyleInfo,
+  categoryIndexStyles,
   coverShapeChoices,
   designRhythms,
   densityChoices,
@@ -36,6 +38,7 @@ import {
   shapeChoices,
   typographyChoices,
   type CatalogLayout,
+  type CategoryIndexStyle,
   type PostLayout,
   type StoreDesign,
 } from '../../lib/design.ts';
@@ -184,6 +187,43 @@ function LayoutWire({ boxes }: { boxes: WireBoxes }) {
     </svg>
   );
 }
+
+// One wireframe per category directory style. Shapes are deliberately plain:
+// posters are two big cards, light cards break into a 2x2, compact becomes a
+// 3x2 grid and banners stay wide.
+const categoryWires: Record<CategoryIndexStyle, WireBoxes> = {
+  chips: [
+    [2, 9, 10, 6],
+    [14, 9, 10, 6],
+    [26, 9, 10, 6],
+  ],
+  poster: [
+    [2, 3, 18, 22],
+    [20, 3, 18, 22],
+  ],
+  split: [
+    [2, 3, 18, 10],
+    [20, 3, 18, 10],
+    [2, 16, 18, 9],
+    [20, 16, 18, 9],
+  ],
+  tinted: [
+    [2, 3, 18, 22],
+    [20, 3, 18, 22],
+  ],
+  compact: [
+    [2, 4, 11, 9],
+    [14, 4, 11, 9],
+    [26, 4, 12, 9],
+    [2, 15, 11, 9],
+    [14, 15, 11, 9],
+    [26, 15, 12, 9],
+  ],
+  banner: [
+    [2, 4, 36, 9],
+    [2, 15, 36, 9],
+  ],
+};
 
 function StudioSection({
   id,
@@ -340,6 +380,12 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             design.postsLayout === 'list'
           ? 4
           : 6;
+  const previewCategoryTiles =
+    design.categoryIndexStyle === 'banner'
+      ? 2
+      : design.categoryIndexStyle === 'compact'
+        ? 6
+        : 4;
 
   const update = (patch: Partial<StoreDesign>) =>
     setDesign((current) => ({ ...current, ...patch }));
@@ -434,6 +480,11 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             items={[
               { id: 'design-posts', label: 'Post layout', icon: LayoutGrid },
               { id: 'design-sections', label: 'Sections', icon: Layers },
+              {
+                id: 'design-categories',
+                label: 'Category cards',
+                icon: ImageIcon,
+              },
               { id: 'design-style', label: 'Colours & type', icon: Type },
               {
                 id: 'design-advanced',
@@ -526,8 +577,65 @@ function DesignStudio({ store }: { store: OwnerStore }) {
           </StudioSection>
 
           <StudioSection
-            id="design-style"
+            id="design-categories"
             step="03"
+            icon={ImageIcon}
+            title="Category cards"
+            hint="Give every section a picture and choose how the directory looks."
+          >
+            <LayoutPicker
+              label="Category cards"
+              hint="The first stop on your shop page."
+              layouts={categoryIndexStyles}
+              info={categoryIndexStyleInfo}
+              wires={categoryWires}
+              value={design.categoryIndexStyle}
+              onChange={(categoryIndexStyle) => update({ categoryIndexStyle })}
+            />
+            <div className="design-toggles design-category-options">
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={design.showCategoryImages}
+                  onChange={(event) =>
+                    update({ showCategoryImages: event.target.checked })
+                  }
+                />
+                Show category pictures
+              </label>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={design.showCategoryAction}
+                  onChange={(event) =>
+                    update({ showCategoryAction: event.target.checked })
+                  }
+                />
+                Show the “Learn more” link
+              </label>
+              <label className="panel-toggle">
+                <input
+                  type="checkbox"
+                  checked={design.splitCategoryTitle}
+                  onChange={(event) =>
+                    update({ splitCategoryTitle: event.target.checked })
+                  }
+                />
+                Split the name into two tones
+              </label>
+            </div>
+            <p className="design-fineprint panel-muted">
+              <ImageIcon size={13} /> Paste each picture link in{' '}
+              <Link to="/dashboard/products">
+                Products / menu → Manage categories
+              </Link>
+              . PNG files with a transparent background sit on the card colour.
+            </p>
+          </StudioSection>
+
+          <StudioSection
+            id="design-style"
+            step="04"
             icon={Type}
             title="Colors & type"
             hint="Keep it simple: one palette, one type."
@@ -771,6 +879,14 @@ function DesignStudio({ store }: { store: OwnerStore }) {
               <div className="design-preview-tabs">
                 <span className="is-active">Posts</span>
                 <span>{preview.restaurant ? 'Menu' : 'Shop'}</span>
+              </div>
+              <div
+                className={`design-preview-categories is-${design.categoryIndexStyle}`}
+                aria-hidden="true"
+              >
+                {Array.from({ length: previewCategoryTiles }, (_, index) => (
+                  <i key={index} />
+                ))}
               </div>
               <div
                 className={`design-preview-wall is-${design.postsLayout}`}

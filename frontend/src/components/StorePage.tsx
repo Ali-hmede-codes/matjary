@@ -67,6 +67,7 @@ import { useShopFavorites } from '../hooks/useShopFavorites';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
 import { CatalogItems, CatalogLoading, ShopImage } from './catalog';
+import { CategoryShowcase } from './CategoryShowcase';
 import { CoverEdge } from './CoverEdge';
 import { StorePostWall } from './StorePostWall';
 import { ShopBranches } from './ShopBranches';
@@ -539,6 +540,16 @@ export function StorePage({ slug }: { slug: string | null }) {
   // shops without one keep the familiar rotating layouts. A chosen section
   // keeps its own slot in that rhythm instead of posing as the first one.
   const catalogGroups = activeGroup ? [activeGroup] : groups;
+  // The category directory replaces the chip row at the top of the catalogue.
+  // It only appears when the owner picked a card style, the shop has more than
+  // one section, and the shopper isn't searching, so the page never shows the
+  // same navigation twice.
+  const showCategoryShowcase = Boolean(
+    presentation.design &&
+    presentation.design.categoryIndexStyle !== 'chips' &&
+    groups.length > 1 &&
+    !searchTerm,
+  );
   const menuSections = catalogGroups
     .map((group) => {
       const position = groups.indexOf(group);
@@ -1139,7 +1150,14 @@ export function StorePage({ slug }: { slug: string | null }) {
                       The shop sections couldn’t load. Please try again.
                     </StatusBanner>
                   )}
-                  {groups.length > 1 && (
+                  {showCategoryShowcase && presentation.design && (
+                    <CategoryShowcase
+                      categories={groups}
+                      design={presentation.design}
+                      shopSlug={store.slug}
+                    />
+                  )}
+                  {!showCategoryShowcase && groups.length > 1 && (
                     <div
                       className="shop-menu-chips"
                       role="group"

@@ -196,6 +196,7 @@ export class CategoriesService {
               storeId: store.id,
               name,
               sortOrder: dto.sortOrder ?? (last ? last.sortOrder + 1 : 0),
+              imageUrl: dto.imageUrl ?? null,
             }),
           );
         },
@@ -237,6 +238,9 @@ export class CategoriesService {
             category.name = name;
           }
           if (dto.sortOrder !== undefined) category.sortOrder = dto.sortOrder;
+          // `undefined` leaves the picture alone; null (or a trimmed empty
+          // string, already normalised by the DTO) removes it.
+          if (dto.imageUrl !== undefined) category.imageUrl = dto.imageUrl;
           return manager.save(category);
         },
       );

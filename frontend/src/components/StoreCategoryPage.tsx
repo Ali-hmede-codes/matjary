@@ -198,6 +198,22 @@ export function StoreCategoryPage({
             {categoryPosition + 1} of {groups.length}
           </p>
           <div className="shop-detail-title-row">
+            {group.imageUrl && (
+              <img
+                key={group.imageUrl}
+                className="shop-detail-category-image"
+                src={group.imageUrl}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={(event) => {
+                  // A dead hotlink must leave the title row tidy, not a broken
+                  // image icon beside the section name.
+                  event.currentTarget.hidden = true;
+                }}
+              />
+            )}
             <h1 className="notranslate" dir="auto">
               {group.name}
             </h1>

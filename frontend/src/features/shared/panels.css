@@ -2896,3 +2896,50 @@
     width: 100%;
   }
 }
+
+/* Category manager: one picture link per category. The picture never uploads;
+   the row previews the pasted URL so the owner can see the card image. */
+.category-image-hint {
+  margin: -10px 0 16px;
+  max-width: 62ch;
+}
+.category-row {
+  align-items: flex-start;
+}
+.category-thumb {
+  margin-top: 2px;
+  background: #f0f2ed;
+}
+.category-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.category-thumb-fallback {
+  font-family: var(--panel-display, inherit);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--panel-muted);
+}
+.category-image-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--panel-muted);
+}
+.category-image-field > svg {
+  flex: none;
+}
+.category-image-field > input {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .category-row {
+    flex-wrap: wrap;
+  }
+  .category-row .panel-record-info {
+    min-width: 180px;
+  }
+}

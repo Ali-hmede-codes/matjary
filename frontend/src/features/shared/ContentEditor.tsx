@@ -62,6 +62,8 @@ export interface Category {
   id: string;
   name: string;
   sortOrder: number;
+  // Direct image link used by the category cards in the shop design.
+  imageUrl?: string | null;
   productCount?: number;
 }
 export interface CategoryList {

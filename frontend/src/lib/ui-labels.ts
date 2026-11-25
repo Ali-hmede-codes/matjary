@@ -49,6 +49,7 @@ export const ARABIC_UI_LABELS: Record<string, string> = {
   'Website SEO': 'تحسين محركات البحث',
   'My shops': 'متاجري',
   'My stores': 'متاجري',
+  'Learn more': 'اعرف المزيد',
   'Products / menu': 'المنتجات / القائمة',
   Posts: 'المنشورات',
   'Store editor': 'محرر المتجر',

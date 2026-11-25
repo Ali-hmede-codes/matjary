@@ -163,6 +163,12 @@ export interface DesignSettings {
   thirdLayout?: string;
   rhythm?: string;
   categoryLayouts?: DesignCategoryLayout[];
+  // The shop's category directory: one card style plus the labels each card
+  // shows. Code-owned keys keep a stale saved row renderable.
+  categoryIndexStyle?: string;
+  showCategoryImages?: boolean;
+  showCategoryAction?: boolean;
+  splitCategoryTitle?: boolean;
   showProductImages?: boolean;
   showProductDescriptions?: boolean;
 
@@ -982,6 +988,12 @@ export class StoreCategory extends BaseEntity {
 
   @Column({ name: 'sort_order', type: 'int', unsigned: true, default: 0 })
   sortOrder!: number;
+
+  // Direct link to the category's card image. No upload: the API stores the
+  // URL only, validates the scheme, and the storefront loads it with a
+  // no-referrer <img>. Null keeps the typographic fallback card.
+  @Column({ name: 'image_url', type: 'varchar', length: 2048, nullable: true })
+  imageUrl!: string | null;
 }
 
 export enum ProductStatus {

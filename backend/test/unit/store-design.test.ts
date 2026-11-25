@@ -7,6 +7,7 @@ import type { DesignSettings } from '../../libs/database/src/entities';
 import {
   StoreDesignSettingsDto,
   DESIGN_CATALOG_LAYOUT_KEYS,
+  DESIGN_CATEGORY_INDEX_STYLE_KEYS,
   DESIGN_COVER_SHAPE_KEYS,
   DESIGN_POST_LAYOUT_KEYS,
   DESIGN_TEMPLATE_KEYS,
@@ -38,6 +39,10 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
       accentLayout: 'cards',
       thirdLayout: 'menu',
       rhythm: 'repeat3',
+      categoryIndexStyle: 'poster',
+      showCategoryImages: true,
+      showCategoryAction: false,
+      splitCategoryTitle: true,
       showProductImages: true,
       showProductDescriptions: false,
       categoryLayouts: [{ categoryId: categoryA, layout: 'menu' }],
@@ -53,9 +58,14 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
     { rhythm: 'every3' },
     { rhythm: 'every7' },
     { thirdLayout: 'nope' },
+    { categoryIndexStyle: 'carousel' },
+    { categoryIndexStyle: '' },
     { categoryLayouts: [{ categoryId: 'not-a-uuid', layout: 'menu' }] },
     { categoryLayouts: [{ categoryId: categoryA, layout: 'nope' }] },
     { showProductImages: 'yes' },
+    { showCategoryImages: 'yes' },
+    { showCategoryAction: 1 },
+    { splitCategoryTitle: 'no' },
     { unexpectedKnob: true },
   ])
     assert.ok(designErrors(value).length > 0, JSON.stringify(value));
@@ -93,6 +103,11 @@ test('store design vocabulary stays aligned across layouts', () => {
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('rows'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('banner'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('cover'));
+  assert.ok(DESIGN_CATEGORY_INDEX_STYLE_KEYS.includes('poster'));
+  assert.ok(DESIGN_CATEGORY_INDEX_STYLE_KEYS.includes('split'));
+  assert.ok(DESIGN_CATEGORY_INDEX_STYLE_KEYS.includes('compact'));
+  assert.ok(DESIGN_CATEGORY_INDEX_STYLE_KEYS.includes('banner'));
+  assert.ok(DESIGN_CATEGORY_INDEX_STYLE_KEYS.includes('chips'));
 });
 
 test('saved design drops stale categories, duplicates, and foreign values', () => {
@@ -103,6 +118,10 @@ test('saved design drops stale categories, duplicates, and foreign values', () =
       coverShape: 'waves',
       postsLayout: 'grid',
       thirdLayout: 'menu',
+      categoryIndexStyle: 'split',
+      showCategoryImages: true,
+      showCategoryAction: false,
+      splitCategoryTitle: true,
       categoryLayouts: [
         { categoryId: categoryA, layout: 'menu' },
         { categoryId: categoryA, layout: 'cards' },
@@ -122,6 +141,10 @@ test('saved design drops stale categories, duplicates, and foreign values', () =
     coverShape: 'waves',
     postsLayout: 'grid',
     thirdLayout: 'menu',
+    categoryIndexStyle: 'split',
+    showCategoryImages: true,
+    showCategoryAction: false,
+    splitCategoryTitle: true,
     categoryLayouts: [
       { categoryId: categoryA, layout: 'menu' },
       { categoryId: categoryB, layout: 'gallery' },

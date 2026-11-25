@@ -262,6 +262,16 @@
   letter-spacing: -1.6px;
   line-height: 1.08;
 }
+/* The category's own picture follows the shopper from its card into the
+   section page, so the two screens never feel like different shops. */
+.shop-detail-category-image {
+  width: clamp(48px, 7vw, 68px);
+  height: clamp(48px, 7vw, 68px);
+  flex: none;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--ink) 55%, transparent);
+}
 .shop-count-pill {
   display: inline-flex;
   align-items: center;

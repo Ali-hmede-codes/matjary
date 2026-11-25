@@ -483,14 +483,34 @@ test('public category counts drop empty and duplicate sections', () => {
       { id: 'a', name: 'Mains', productCount: 1 },
       { id: '', name: 'Broken', productCount: 4 },
     ]),
-    [{ key: 'a', name: 'Mains', count: 3 }],
+    [{ key: 'a', name: 'Mains', count: 3, imageUrl: null }],
   );
   assert.deepEqual(categoryIndexGroups([]), []);
   assert.deepEqual(
     categoryIndexGroups([{ id: 'a', name: 'Mains', productCount: 2 }], 3),
     [
-      { key: 'a', name: 'Mains', count: 2 },
+      { key: 'a', name: 'Mains', count: 2, imageUrl: null },
       { key: 'uncategorized', name: 'More items', count: 3 },
+    ],
+  );
+  assert.deepEqual(
+    categoryIndexGroups([
+      {
+        id: 'a',
+        name: 'Mains',
+        productCount: 2,
+        imageUrl: '  https://cdn.example.com/mains.png  ',
+      },
+      { id: 'b', name: 'Drinks', productCount: 1, imageUrl: '   ' },
+    ]),
+    [
+      {
+        key: 'a',
+        name: 'Mains',
+        count: 2,
+        imageUrl: 'https://cdn.example.com/mains.png',
+      },
+      { key: 'b', name: 'Drinks', count: 1, imageUrl: null },
     ],
   );
 });

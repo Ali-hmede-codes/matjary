@@ -550,6 +550,103 @@
   display: grid;
   gap: 4px;
 }
+.design-category-options {
+  margin-top: 14px;
+}
+
+/* Miniature category directory inside the live preview card. */
+.design-preview-categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 9px;
+}
+.design-preview-categories.is-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.design-preview-categories.is-banner {
+  grid-template-columns: minmax(0, 1fr);
+}
+.design-preview-categories.is-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.design-preview-categories i {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 1.8 / 1;
+  border-radius: var(--shop-tile-radius, 10px);
+  background: linear-gradient(
+    120deg,
+    #12151a,
+    color-mix(in srgb, var(--brand-secondary) 52%, #12151a)
+  );
+}
+.design-preview-categories i::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 6px;
+  bottom: 7px;
+  width: 42%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 5px 0 rgba(255, 255, 255, 0.35);
+}
+.design-preview-categories i::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 55%;
+  background: radial-gradient(
+    80% 80% at 70% 40%,
+    rgba(255, 255, 255, 0.22),
+    transparent 65%
+  );
+}
+.design-preview-categories.is-split i {
+  background: var(--brand-surface);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--brand-ink) 10%, transparent);
+}
+.design-preview-categories.is-split i::before {
+  background: var(--brand-ink);
+  box-shadow: 0 5px 0 color-mix(in srgb, var(--brand-ink) 30%, transparent);
+}
+.design-preview-categories.is-split i::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--brand-secondary) 38%, transparent)
+  );
+}
+.design-preview-categories.is-chips i {
+  flex: 1 1 26%;
+  width: auto;
+  height: 15px;
+  aspect-ratio: auto;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-ink) 10%, var(--brand-surface));
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--brand-ink) 16%, transparent);
+}
+.design-preview-categories.is-chips i::before,
+.design-preview-categories.is-chips i::after {
+  display: none;
+}
+.design-preview-categories.is-compact i {
+  aspect-ratio: 1 / 1;
+}
+.design-preview-categories.is-compact i::before {
+  width: 52%;
+  height: 2px;
+}
+.design-preview-categories.is-banner i {
+  aspect-ratio: 3.2 / 1;
+}
 
 /* ---------- Live preview ---------- */
 .design-studio-preview {
