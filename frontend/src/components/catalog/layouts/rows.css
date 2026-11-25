@@ -1,0 +1,67 @@
+/* Styles for the rows grid; imported by layouts/rows.tsx. */
+.shop-photo-row.is-unavailable .shop-photo-row-thumb img {
+  filter: saturate(0.45);
+}
+/* Photo menu: thin rows with a small 4:3 photo, dotted leader and price. */
+.shop-catalog-items.layout-rows {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shop-photo-row {
+  gap: 12px;
+  padding: 10px 4px;
+  /* The row is taller than a text line, so the intrinsic placeholder has to
+     match it or a long menu jumps while scrolling. */
+  contain-intrinsic-size: auto 120px;
+}
+.shop-photo-row-thumb {
+  position: relative;
+  display: block;
+  flex: 0 0 96px;
+  width: 96px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: calc(var(--shop-tile-radius, 14px) * 0.7);
+  background: var(--wash);
+}
+/* The struck-through old price already carries the sale, and a badge this small
+   would cover most of the thumbnail. */
+.shop-photo-row-thumb .shop-sale-label {
+  display: none;
+}
+.shop-photo-row .shop-price-row-copy h3 {
+  font-size: 15.5px;
+}
+.shop-photo-row .shop-price-leader {
+  display: block;
+  flex: 1 1 24px;
+  min-width: 18px;
+  align-self: center;
+  border-bottom: 1px dotted color-mix(in srgb, var(--ink) 28%, transparent);
+}
+.layout-rows > .shop-photo-row {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+@media (max-width: 560px) {
+  /* The dotted leader needs room the phone row does not have. */
+  .shop-photo-row .shop-price-leader {
+    display: none;
+  }
+  /* The base phone rule forces the copy onto its own line; on a photo row the
+     thumb and the copy share the first line, so the price and the action line
+     up on the second one for every row. */
+  .shop-photo-row .shop-price-row-copy {
+    flex: 1 1 calc(100% - 108px);
+  }
+  .shop-photo-row .shop-price-row-price {
+    margin-inline-end: 0;
+  }
+  .shop-photo-row .shop-add-to-cart {
+    margin-inline-start: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-rows > .shop-photo-row {
+    animation: none;
+  }
+}

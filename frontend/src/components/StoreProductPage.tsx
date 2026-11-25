@@ -33,7 +33,7 @@ import { useShopCart } from '../hooks/useShopCart';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useShare } from '../hooks/useShare';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
-import { AddToCart, ShopImage } from './StoreCatalog';
+import { AddToCart, ShopImage } from './catalog';
 import {
   StoreDetailLoading,
   StoreDetailMissing,

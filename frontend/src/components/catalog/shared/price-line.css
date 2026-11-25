@@ -1,0 +1,80 @@
+/* Shared price-line parts for the text-only grids. */
+.shop-price-row-stock {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #8a4a1f 12%, var(--surface));
+  color: #6d3611;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.shop-price-row h3 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* Layout 3: compact price list without images. */
+.shop-price-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 15px 4px;
+  border-bottom: 1px solid var(--line);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 68px;
+}
+.shop-price-row-copy {
+  flex: 1;
+  min-width: 0;
+}
+.shop-price-row-copy h3 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  line-height: 1.4;
+}
+.shop-price-row-copy p {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-price-leader {
+  display: none;
+}
+.shop-price-row-price {
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+/* A USD price with its LBP hint reads as one right-aligned price block. */
+.shop-price-row-price.price-stack {
+  align-items: flex-end;
+  text-align: end;
+}
+.shop-price-row .shop-add-to-cart,
+.shop-price-row .shop-qty-stepper {
+  margin-inline-start: 0;
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .shop-price-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 12px 2px;
+  }
+  .shop-price-row-copy {
+    flex-basis: 100%;
+  }
+  .shop-price-row-price {
+    margin-inline-end: auto;
+  }
+}

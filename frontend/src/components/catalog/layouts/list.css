@@ -1,0 +1,74 @@
+/* Styles for the list grid; imported by layouts/list.tsx. */
+.shop-catalog-items.layout-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr));
+  gap: 16px;
+}
+/* The horizontal menu row keeps a 118px thumbnail: trim the sold-out pill so
+   the label never wraps inside it. */
+.shop-menu-item .shop-stock-label.shop-out-of-stock {
+  bottom: 8px;
+  inset-inline-end: 8px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.shop-menu-item .shop-out-of-stock svg {
+  display: none;
+}
+.storefront .shop-menu-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border-radius: var(--shop-tile-radius, 22px);
+}
+.shop-menu-item .shop-product-image {
+  flex: 0 0 118px;
+  width: 118px;
+  height: 118px;
+  aspect-ratio: auto;
+  border-radius: 16px;
+}
+.shop-menu-item .shop-product-copy {
+  padding: 4px 8px 4px 0;
+}
+.shop-menu-item h3 {
+  font-size: 17px;
+  letter-spacing: -0.2px;
+  margin-bottom: 4px;
+}
+.shop-menu-item p {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-menu-item .shop-product-bottom {
+  padding-top: 10px;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .shop-catalog-items.layout-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .shop-menu-item .shop-product-image {
+    flex-basis: 96px;
+    width: 96px;
+    height: 96px;
+    border-radius: 14px;
+  }
+  .shop-menu-item h3 {
+    font-size: 15px;
+  }
+  .shop-menu-item .shop-product-bottom {
+    font-size: 16px;
+  }
+}
+.storefront .shop-menu-item {
+  border-radius: var(--shop-tile-radius, 22px);
+}

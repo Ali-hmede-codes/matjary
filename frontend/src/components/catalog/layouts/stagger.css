@@ -1,0 +1,37 @@
+/* Styles for the stagger grid; imported by layouts/stagger.tsx. */
+/* Staggered: three columns, the middle one dropped a step. */
+.shop-catalog-items.layout-stagger {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px 14px;
+  padding-bottom: 30px;
+}
+.layout-stagger > .shop-tile-card:nth-child(3n + 2) {
+  margin-top: 30px;
+}
+.layout-stagger > .shop-tile-card {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+.shop-catalog-items.layout-stagger > .shop-skeleton {
+  aspect-ratio: 4 / 3;
+}
+@media (max-width: 720px) {
+  .shop-catalog-items.layout-stagger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+    padding-bottom: 24px;
+  }
+  /* A two-column phone cannot carry the middle-column offset, so the even
+     tiles take the step instead. */
+  .layout-stagger > .shop-tile-card:nth-child(3n + 2) {
+    margin-top: 0;
+  }
+  .layout-stagger > .shop-tile-card:nth-child(even) {
+    margin-top: 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-stagger > .shop-tile-card {
+    animation: none;
+  }
+}

@@ -1,0 +1,37 @@
+/* Styles for the rail grid; imported by layouts/rail.tsx. */
+/* Photo rail: the same 4:3 cards in the sideways, snapping strip. */
+.shop-catalog-items.layout-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.shop-catalog-items.layout-rail::-webkit-scrollbar {
+  display: none;
+}
+.shop-catalog-items.layout-rail:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.layout-rail > .shop-tile-card {
+  flex: 0 0 clamp(230px, 42vw, 300px);
+  scroll-snap-align: start;
+}
+.layout-rail > .shop-skeleton {
+  flex: 0 0 clamp(230px, 42vw, 300px);
+  aspect-ratio: 4 / 3;
+}
+.layout-rail > .shop-tile-card {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-rail > .shop-tile-card {
+    animation: none;
+  }
+}

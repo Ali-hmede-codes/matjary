@@ -1,0 +1,16 @@
+/* Styles for the featured grid; imported by layouts/featured.tsx. */
+.shop-catalog-items.layout-featured > .shop-skeleton {
+  aspect-ratio: 4 / 3;
+}
+/* Wide feature: 4:3 landscape boxes, two per row on desktop. */
+.shop-catalog-items.layout-featured {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  /* A 4:3 box stays readable side by side, even on a phone. */
+  .shop-catalog-items.layout-featured {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}

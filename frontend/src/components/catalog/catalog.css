@@ -1,0 +1,48 @@
+/* Shared product-section frame, pill and skeleton rules. Loaded once by
+   CatalogItems before any grid stylesheet. */
+/* ---------- Item layouts ---------- */
+/* The container decides its columns; each layout's card shape lives in the
+   "design studio" block further down. */
+.shop-catalog-items {
+  display: grid;
+  min-width: 0;
+}
+/* ---------- Availability states ---------- */
+/* An out-of-stock item stays browsable, so its badge must outrank the neutral
+   glass pills used for "N in cart" and low stock. */
+.shop-stock-label.shop-out-of-stock {
+  border: 1px solid color-mix(in srgb, #8a4a1f 24%, transparent);
+  background: color-mix(in srgb, #8a4a1f 14%, var(--surface));
+  color: #6d3611;
+  font-weight: 750;
+}
+/* Layout 1: horizontal menu rows. */
+.shop-product-image-link {
+  display: block;
+}
+/* Loading skeletons reuse the grid, so their boxes keep the layout ratio. */
+.shop-catalog-items .shop-skeleton.shop-product {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.shop-catalog-items .shop-skeleton.shop-product > .shop-product-image {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+.shop-catalog-items.is-portrait > .shop-skeleton {
+  aspect-ratio: 3 / 4;
+}
+/* Motion: one capped rise-and-fade for every photo-first layout. The skeleton
+   boxes stay still so loading never looks like content arriving. */
+@keyframes shop-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -1,0 +1,74 @@
+/* Styles for the circles grid; imported by layouts/circles.tsx. */
+/* Circles: round photos with the name and price centred beneath, the shape a
+   café menu and a highlights row already use. */
+.shop-catalog-items.layout-circles {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 24px 16px;
+}
+.layout-circles .shop-tile-card {
+  align-items: center;
+  text-align: center;
+}
+.layout-circles .shop-product-image {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.layout-circles .shop-item-caption {
+  align-items: center;
+  padding-top: 10px;
+}
+.layout-circles .shop-tile-card h3 {
+  min-height: 0;
+  font-size: 14px;
+}
+.layout-circles .shop-item-bottom {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+}
+.layout-circles .shop-add-to-cart {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+/* Corner pills would hang outside a round crop, so they centre instead and
+   stay short enough for the circle's narrow top and bottom chords. */
+.layout-circles .shop-sale-label {
+  display: none;
+}
+.layout-circles .shop-stock-label {
+  bottom: 14px;
+  inset-inline: 0;
+  max-width: 66%;
+  width: fit-content;
+  margin-inline: auto;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.layout-circles .shop-stock-label svg {
+  display: none;
+}
+.layout-circles > .shop-tile-card {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+.shop-catalog-items.layout-circles > .shop-skeleton {
+  aspect-ratio: 1 / 1;
+}
+@media (max-width: 560px) {
+  /* Round photos need room for a name and a price; two per row stays readable
+     where three turned into thumbnails. */
+  .shop-catalog-items.layout-circles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 12px;
+  }
+  .layout-circles .shop-tile-card h3 {
+    font-size: 13px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-circles > .shop-tile-card {
+    animation: none;
+  }
+}

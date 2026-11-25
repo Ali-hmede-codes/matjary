@@ -1,0 +1,83 @@
+/* Styles for the zigzag grid; imported by layouts/zigzag.tsx. */
+/* Zigzag: a magazine row. The photo and the copy swap sides on every other
+   item, so a short menu reads like a spread instead of a stack of cards. */
+.shop-catalog-items.layout-zigzag {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.storefront .shop-zigzag-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+  padding: 12px;
+  border-radius: var(--shop-radius, 20px);
+}
+.shop-zigzag-row .shop-product-image {
+  flex: 0 0 clamp(180px, 32%, 320px);
+  width: clamp(180px, 32%, 320px);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.shop-zigzag-row:nth-child(even) {
+  flex-direction: row-reverse;
+}
+/* Without a zero minimum the copy would force the card wider than its grid
+   column and push the photo over the rounded edge. */
+.shop-zigzag-row .shop-item-caption {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+.shop-zigzag-row h3 {
+  font-size: 17px;
+}
+.shop-zigzag-row .shop-item-caption p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-zigzag-row .shop-item-bottom {
+  justify-content: flex-start;
+  gap: 14px;
+  padding-top: 10px;
+  font-size: 16px;
+}
+.layout-zigzag > .shop-zigzag-row {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+@media (max-width: 720px) {
+  .shop-zigzag-row {
+    gap: 12px;
+    padding: 9px;
+  }
+  .shop-zigzag-row h3 {
+    font-size: 15px;
+  }
+}
+@media (max-width: 560px) {
+  .shop-zigzag-row {
+    flex-wrap: wrap;
+  }
+  .shop-zigzag-row .shop-product-image {
+    flex-basis: 38%;
+    width: 38%;
+  }
+  /* A badge that wide would cover most of a phone-size thumbnail; the struck
+     old price already carries the sale. */
+  .shop-zigzag-row .shop-sale-label {
+    display: none;
+  }
+  .shop-zigzag-row .shop-add-to-cart {
+    min-width: 0;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-zigzag > .shop-zigzag-row {
+    animation: none;
+  }
+}

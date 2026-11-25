@@ -2,8 +2,42 @@
    are imported from those route modules instead of the entry stylesheet: the
    discovery feed never downloads them.
    Import order is the cascade: the shell and banner base rules come first, then
-   the catalog, post-wall, and branch refinements that build on them. */
+   the menu/detail refinements and the product-section grids that build on them,
+   and finally the branch panel. */
 @import './StorePage.css';
 @import './StorePostWall.css';
 @import './StoreMenu.css';
+/* Product-section grids. The base primitives load first, then one line per
+   grid in the order the studio lists them. The list lives here (instead of the
+   CSS being imported by each component) so the whole catalog stays in the same
+   ordered stylesheet as the rest of the storefront and the cascade never
+   depends on which lazy chunk loaded first. Adding or removing a grid means
+   adding or removing its line here and its file under catalog/layouts/. */
+@import './catalog/catalog.css';
+@import './catalog/shared/photo-card.css';
+@import './catalog/shared/price-line.css';
+@import './catalog/shared/item-caption.css';
+@import './catalog/shared/tile-card.css';
+@import './catalog/shared/banner-card.css';
+@import './catalog/shared/shelf-rail.css';
+@import './catalog/layouts/list.css';
+@import './catalog/layouts/cards.css';
+@import './catalog/layouts/compact.css';
+@import './catalog/layouts/menu.css';
+@import './catalog/layouts/gallery.css';
+@import './catalog/layouts/featured.css';
+@import './catalog/layouts/shelves.css';
+@import './catalog/layouts/overlay.css';
+@import './catalog/layouts/tiles.css';
+@import './catalog/layouts/bento.css';
+@import './catalog/layouts/stagger.css';
+@import './catalog/layouts/sticker.css';
+@import './catalog/layouts/circles.css';
+@import './catalog/layouts/rail.css';
+@import './catalog/layouts/ribbon.css';
+@import './catalog/layouts/zigzag.css';
+@import './catalog/layouts/numbered.css';
+@import './catalog/layouts/rows.css';
+@import './catalog/layouts/banner.css';
+@import './catalog/layouts/cover.css';
 @import './ShopBranches.css';

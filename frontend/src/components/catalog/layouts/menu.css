@@ -1,0 +1,54 @@
+/* Styles for the menu grid; imported by layouts/menu.tsx. */
+/* Menu: dotted leaders and a serif line, like a printed card. */
+.shop-catalog-items.layout-menu {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.shop-menu-row {
+  align-items: baseline;
+  padding: 16px 4px;
+}
+.shop-menu-row .shop-price-row-copy h3 {
+  font-family: var(--shop-font-display, inherit);
+  font-size: 18px;
+  font-weight: var(--shop-display-weight, 600);
+  letter-spacing: var(--shop-display-spacing, -0.2px);
+}
+.shop-menu-row .shop-price-row-copy p {
+  overflow: visible;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+  text-overflow: clip;
+}
+.shop-menu-row .shop-price-leader {
+  display: block;
+  flex: 1;
+  min-width: 20px;
+  align-self: center;
+  border-bottom: 1px dotted color-mix(in srgb, var(--ink) 32%, transparent);
+}
+.shop-menu-row .shop-price-row-price {
+  font-size: 17px;
+}
+@media (max-width: 720px) {
+  .shop-menu-row .shop-price-row-copy h3 {
+    font-size: 16px;
+  }
+  .shop-menu-row .shop-add-to-cart,
+  .shop-menu-row .shop-qty-stepper {
+    flex-shrink: 0;
+  }
+}
+/* Keep a long dish name readable: the leader is decoration, not a column. */
+@media (max-width: 560px) {
+  .shop-menu-row {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .shop-menu-row .shop-price-leader {
+    display: none;
+  }
+}

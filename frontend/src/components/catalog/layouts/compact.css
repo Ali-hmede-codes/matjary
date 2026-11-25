@@ -1,0 +1,10 @@
+/* Styles for the compact grid; imported by layouts/compact.tsx. */
+.shop-catalog-items.layout-compact {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shop-catalog-items.layout-compact > .shop-skeleton {
+  display: block;
+  height: 68px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}

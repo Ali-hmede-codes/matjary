@@ -1,0 +1,98 @@
+/* Shared 4:3 photo-first card. */
+/* ---------- Photo-first layouts ---------- */
+/* Tiles, Bento, Staggered, Sticker, Circles and the Photo rail share one card:
+   a 4:3 photo and a quiet caption. Only the grid and the caption treatment
+   change, so switching between them never re-enters anything. */
+.storefront .shop-tile-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.shop-tile-card .shop-product-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-radius, 20px);
+}
+.shop-tile-card .shop-item-caption {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 11px 2px 0;
+}
+/* A two-line title slot keeps every price and button on one baseline across a
+   row, whether a dish has a short or a long name. */
+.shop-tile-card h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: 2.8em;
+  margin: 0 0 2px;
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-tile-card .shop-add-to-cart {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* The product card lifts and frames itself; a photo-first tile only wants the
+   photo to answer the pointer. */
+@media (hover: hover) and (pointer: fine) {
+  .storefront .shop-tile-card:hover {
+    border-color: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+}
+.shop-tile-card.is-sticker {
+  position: relative;
+}
+.shop-tile-card.is-sticker .shop-item-caption {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 10px;
+  bottom: 10px;
+  max-height: calc(100% - 20px);
+  padding: 9px 11px 10px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, var(--surface));
+  border-radius: var(--shop-control-radius, 14px);
+  background: var(--surface);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+.shop-tile-card.is-sticker .shop-item-bottom {
+  padding-top: 4px;
+}
+@media (max-width: 720px) {
+  .shop-tile-card h3 {
+    font-size: 14px;
+  }
+  .shop-tile-card .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+  /* A phone tile is about 150px wide; the full-size sale pill would eat a third
+     of the photo. */
+  .shop-tile-card .shop-sale-label {
+    top: 8px;
+    inset-inline-end: 8px;
+    padding: 3px 7px;
+    font-size: 10px;
+  }
+  .shop-tile-card.is-sticker .shop-item-caption {
+    inset-inline: 7px;
+    bottom: 7px;
+    padding: 8px 9px 9px;
+  }
+}

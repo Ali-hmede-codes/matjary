@@ -1,0 +1,224 @@
+/* Styles for the overlay grid; imported by layouts/overlay.tsx. */
+/* Photo overlay: the 4:3 photo is the whole tile, and a frosted glass bar
+   carries the name, price and action. Two or three fit a row, so a section
+   stays quick to browse instead of turning every item into a big post. */
+.shop-catalog-items.layout-overlay {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  gap: 12px;
+}
+.storefront .shop-overlay-card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--shop-radius, 20px);
+  background: var(--surface);
+}
+.shop-overlay-card .shop-product-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+/* A short scrim keeps the sale and stock pills legible on pale photos without
+   dimming the dish itself. */
+.shop-overlay-card .shop-product-image::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #00000038, #0000 38%);
+  pointer-events: none;
+}
+.shop-overlay-card .shop-product-image img {
+  transition:
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.35s ease;
+}
+/* Stock moves to the free top corner: the bottom edge now belongs to the bar.
+   Without its icon the pill stays short enough to sit beside a sale badge on a
+   two-column phone tile. */
+.shop-overlay-card .shop-stock-label {
+  top: 10px;
+  bottom: auto;
+  inset-inline-start: 10px;
+  inset-inline-end: auto;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.shop-overlay-card .shop-stock-label svg {
+  display: none;
+}
+.shop-overlay-card .shop-sale-label {
+  top: 10px;
+  inset-inline-end: 10px;
+}
+/* The tile draws no border, so the keyboard ring has to be its own. */
+.storefront .shop-overlay-card:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+/* The glass bar wraps instead of squeezing: a long name keeps its own line and
+   the price and action drop to the row below on a narrow tile. */
+.shop-overlay-bar {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--surface) 58%, transparent);
+  border-radius: calc(var(--shop-radius, 20px) - 6px);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 18%, transparent);
+  transition:
+    background 240ms ease,
+    border-color 240ms ease;
+}
+.shop-overlay-copy {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.shop-overlay-copy h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-family: var(--shop-font-display, inherit);
+  font-size: 15px;
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: var(--shop-display-spacing, -0.2px);
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-overlay-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.shop-overlay-bottom .price-stack {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-overlay-bottom .price-lbp {
+  font-size: 10px;
+}
+/* The bar owns the trailing edge, so the action drops its own auto margin and
+   shrinks to one compact pill. The quantity stepper keeps its tap-sized dots. */
+.shop-overlay-card .shop-add-to-cart,
+.shop-overlay-card .shop-qty-stepper {
+  flex-shrink: 0;
+  min-width: 0;
+  margin-inline-start: 0;
+  box-shadow: none;
+}
+.shop-overlay-card .shop-add-to-cart {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+/* Motion: a capped rise-and-fade on first paint, then a slow photo push-in and
+   a brighter glass bar on hover. The animation fills backwards so it releases
+   the transform when it ends and hover keeps working. */
+@keyframes shop-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.shop-catalog-items.layout-overlay > .shop-overlay-card {
+  animation: shop-overlay-in 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+  transition:
+    transform 260ms ease,
+    box-shadow 260ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .storefront .shop-overlay-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 20px 42px color-mix(in srgb, var(--ink) 18%, transparent);
+  }
+  .shop-overlay-card:hover .shop-product-image img,
+  .shop-overlay-card:focus-within .shop-product-image img {
+    transform: scale(1.07);
+  }
+  .shop-overlay-card:hover .shop-overlay-bar,
+  .shop-overlay-card:focus-within .shop-overlay-bar {
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--surface));
+    background: color-mix(in srgb, var(--surface) 93%, transparent);
+  }
+}
+@media (max-width: 720px) {
+  /* Photo overlay keeps two small 4:3 tiles per row; on a phone one full-width
+     tile would read as the big post this layout is meant to avoid. */
+  .shop-catalog-items.layout-overlay {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .shop-overlay-bar {
+    inset-inline: 6px;
+    bottom: 6px;
+    gap: 5px 8px;
+    padding: 6px 6px 6px 9px;
+  }
+  .shop-overlay-copy h3 {
+    font-size: 12px;
+  }
+  .shop-overlay-bottom .price-stack {
+    font-size: 12px;
+  }
+  .shop-overlay-card .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+}
+@media (max-width: 560px) {
+  /* One full-width 4:3 photo per row: a glass bar over a 150px tile would hide
+     half the dish, and the bar keeps the exact same place as on the desktop. */
+  .shop-catalog-items.layout-overlay {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .shop-overlay-bar {
+    inset-inline: 8px;
+    bottom: 8px;
+    gap: 8px 10px;
+    padding: 8px 9px 8px 12px;
+  }
+  .shop-overlay-copy h3 {
+    font-size: 14px;
+  }
+  .shop-overlay-bottom .price-stack {
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-catalog-items.layout-overlay > .shop-overlay-card,
+  .shop-overlay-bar,
+  .shop-overlay-card .shop-product-image img {
+    animation: none;
+    transition: none;
+  }
+  .storefront .shop-overlay-card:hover,
+  .shop-overlay-card:hover .shop-product-image img {
+    transform: none;
+  }
+}

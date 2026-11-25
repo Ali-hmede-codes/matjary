@@ -1,0 +1,152 @@
+/* Shared photo-card box (square, portrait and wide). */
+/* Layout 2: photo cards. The card is the box the owner picked: a 1:1 tile, a
+   3:4 tile or a 4:3 landscape card. The photo takes whatever height the
+   caption leaves, so the box stays on its ratio whatever the text length. */
+.storefront .shop-photo-card {
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: var(--shop-radius, 20px);
+}
+.shop-photo-card.is-square {
+  aspect-ratio: 1 / 1;
+}
+.shop-photo-card.is-portrait {
+  aspect-ratio: 3 / 4;
+}
+.shop-photo-card.is-wide {
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 4 / 3;
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.shop-photo-card .shop-product-image {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+  border-radius: var(--shop-tile-radius, 14px);
+}
+.shop-photo-card.is-wide .shop-product-image {
+  flex: 0 0 48%;
+  width: 48%;
+  height: 100%;
+  border-radius: 0;
+}
+.shop-photo-card .shop-product-copy {
+  flex: 0 0 auto;
+  padding: 8px 6px 2px;
+}
+.shop-photo-card.is-wide .shop-product-copy {
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: clamp(16px, 2.6vw, 30px);
+}
+.shop-photo-card h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-bottom: 2px;
+  font-size: 14px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-photo-card.is-wide h3 {
+  font-size: clamp(18px, 2vw, 22px);
+}
+/* A 1:1 tile has no room for prose; the taller boxes keep two lines of it. */
+.shop-photo-card .shop-product-copy p {
+  display: none;
+}
+.shop-photo-card.is-portrait .shop-product-copy p,
+.shop-photo-card.is-wide .shop-product-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 12.5px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+/* A compact tile needs a compact status pill: at 150px the full label wraps
+   over a third of the photo and hides the product. */
+.shop-photo-card .shop-stock-label {
+  bottom: 8px;
+  inset-inline-end: 8px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.shop-photo-card .shop-out-of-stock svg {
+  display: none;
+}
+.shop-photo-card .shop-product-bottom {
+  padding-top: 6px;
+  gap: 6px;
+  font-size: 15px;
+}
+.shop-photo-card.is-wide .shop-product-bottom {
+  margin-top: 16px;
+  padding-top: 0;
+  font-size: 19px;
+}
+/* The action sits inside the caption, so it must not outgrow the tile. */
+.shop-photo-card .shop-add-to-cart {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.shop-photo-card .shop-qty-stepper {
+  min-height: 32px;
+}
+@media (max-width: 700px) {
+  .shop-photo-card .shop-product-copy {
+    padding: 12px 8px 6px;
+  }
+  .shop-photo-card h3 {
+    font-size: 14px;
+  }
+  .shop-photo-card .shop-product-bottom {
+    font-size: 15px;
+  }
+  .shop-photo-card .shop-add-to-cart {
+    min-width: 0;
+    padding: 0 12px;
+  }
+}
+.shop-photo-card.is-wide h3 {
+  font-family: var(--shop-font-display, inherit);
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: var(--shop-display-spacing, -0.6px);
+  line-height: 1.2;
+}
+.shop-photo-card.is-wide p {
+  max-width: 54ch;
+  font-size: 13px;
+}
+@media (max-width: 720px) {
+  .shop-photo-card .shop-product-copy {
+    padding: 6px 4px 2px;
+  }
+  /* The wide card keeps its own breathing room; this must follow the generic
+     caption padding above to win the cascade. */
+  .shop-photo-card.is-wide .shop-product-copy {
+    padding: 14px 12px;
+  }
+  .shop-photo-card h3 {
+    font-size: 13px;
+  }
+  .shop-photo-card .shop-product-bottom {
+    font-size: 13.5px;
+  }
+  .shop-photo-card .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}

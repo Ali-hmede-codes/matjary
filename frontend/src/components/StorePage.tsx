@@ -66,7 +66,7 @@ import { useShare } from '../hooks/useShare';
 import { useShopFavorites } from '../hooks/useShopFavorites';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
-import { CatalogItems, CatalogLoading, ShopImage } from './StoreCatalog';
+import { CatalogItems, CatalogLoading, ShopImage } from './catalog';
 import { CoverEdge } from './CoverEdge';
 import { StorePostWall } from './StorePostWall';
 import { ShopBranches } from './ShopBranches';

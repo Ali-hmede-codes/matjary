@@ -1,0 +1,25 @@
+/* Shared caption block for the photo-first grids. */
+.shop-item-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.shop-item-bottom .price-stack {
+  min-width: 0;
+}
+.shop-item-bottom .price-lbp {
+  font-size: 10.5px;
+}
+@media (max-width: 720px) {
+  .shop-item-bottom {
+    font-size: 14px;
+  }
+}

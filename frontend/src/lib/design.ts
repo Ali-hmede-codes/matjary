@@ -1,4 +1,22 @@
 import { contrastColor } from './website.ts';
+import {
+  catalogLayoutInfo,
+  catalogLayouts,
+  type CatalogLayout,
+} from './catalog-layouts.ts';
+
+// The product-section grids live in their own plain-data catalogue: the studio
+// and the storefront both read it, while each grid's React component sits in
+// frontend/src/components/catalog/layouts/. Re-exported here so the saved
+// design shape stays one import.
+export {
+  catalogLayoutGroupInfo,
+  catalogLayoutGroupOf,
+  catalogLayoutGroups,
+  catalogLayoutInfo,
+  catalogLayouts,
+} from './catalog-layouts.ts';
+export type { CatalogLayout, CatalogLayoutGroup } from './catalog-layouts.ts';
 
 // ---------------------------------------------------------------------------
 // Saved shape
@@ -102,30 +120,6 @@ export const postLayouts = [
   'drift',
 ] as const;
 export type PostLayout = (typeof postLayouts)[number];
-
-export const catalogLayouts = [
-  'list',
-  'cards',
-  'compact',
-  'menu',
-  'gallery',
-  'featured',
-  'shelves',
-  'overlay',
-  'tiles',
-  'bento',
-  'stagger',
-  'sticker',
-  'circles',
-  'rail',
-  'ribbon',
-  'zigzag',
-  'index',
-  'rows',
-  'banner',
-  'cover',
-] as const;
-export type CatalogLayout = (typeof catalogLayouts)[number];
 
 // Section rhythm is deliberately simple: one style everywhere, or a repeating
 // group of two or three styles.
@@ -385,130 +379,6 @@ export const postLayoutInfo: Record<
     label: 'Drift',
     hint: 'A 4:3 strip that drifts on its own. Hover or pause to stop it.',
   },
-};
-
-export const catalogLayoutInfo: Record<
-  CatalogLayout,
-  { label: string; hint: string }
-> = {
-  list: { label: 'Classic rows', hint: 'Photo, name, description, price.' },
-  cards: {
-    label: 'Square grid',
-    hint: '1:1 card boxes, name and price inside the box.',
-  },
-  compact: { label: 'Price list', hint: 'Fast to scan, no photos.' },
-  menu: { label: 'Menu', hint: 'Dotted prices, editorial feel.' },
-  gallery: {
-    label: 'Portrait grid',
-    hint: '3:4 card boxes, copy inside the box.',
-  },
-  featured: {
-    label: 'Wide feature',
-    hint: '4:3 landscape card boxes, two per row.',
-  },
-  shelves: {
-    label: 'Sideways rail',
-    hint: '1:1 card boxes that scroll left to right.',
-  },
-  overlay: {
-    label: 'Photo overlay',
-    hint: 'Full 4:3 photos with a glass name and price.',
-  },
-  tiles: {
-    label: 'Photo tiles',
-    hint: '4:3 photos with a quiet caption below.',
-  },
-  bento: {
-    label: 'Bento',
-    hint: '4:3 photos in a mixed grid with one wide tile.',
-  },
-  stagger: {
-    label: 'Staggered',
-    hint: '4:3 photos on an offset, editorial rhythm.',
-  },
-  sticker: {
-    label: 'Sticker',
-    hint: 'A caption card overlapping each 4:3 photo.',
-  },
-  circles: {
-    label: 'Circles',
-    hint: 'Round photos with the name underneath.',
-  },
-  rail: {
-    label: 'Photo rail',
-    hint: 'A 4:3 strip that snaps sideways.',
-  },
-  ribbon: {
-    label: 'Ribbon',
-    hint: 'A 4:3 strip that drifts on its own.',
-  },
-  zigzag: {
-    label: 'Zigzag',
-    hint: 'Photo and text rows that alternate sides.',
-  },
-  index: {
-    label: 'Numbered',
-    hint: 'An editorial list with big index numbers.',
-  },
-  rows: {
-    label: 'Photo menu',
-    hint: 'Thin rows with a small 4:3 photo and dotted prices.',
-  },
-  banner: {
-    label: 'Banner card',
-    hint: 'A wide cover with a floating tile, scrolled sideways.',
-  },
-  cover: {
-    label: 'Cover card',
-    hint: 'The same card without the floating tile.',
-  },
-};
-
-// Product-section grids are grouped by the shop they suit. Every grid keeps
-// one home so the studio can show a stable MENU / E-COMMERCE / BOTH order.
-export const catalogLayoutGroups = ['menu', 'ecommerce', 'both'] as const;
-export type CatalogLayoutGroup = (typeof catalogLayoutGroups)[number];
-
-export const catalogLayoutGroupInfo: Record<
-  CatalogLayoutGroup,
-  { label: string; hint: string }
-> = {
-  menu: {
-    label: 'MENU',
-    hint: 'Price lists and menu grids for dishes and sections.',
-  },
-  ecommerce: {
-    label: 'E-COMMERCE',
-    hint: 'Product grids for cards, collections and drops.',
-  },
-  both: {
-    label: 'BOTH',
-    hint: 'Flexible grids that work for either kind of shop.',
-  },
-};
-
-/** The one category each product-section grid is listed under in the studio. */
-export const catalogLayoutGroupOf: Record<CatalogLayout, CatalogLayoutGroup> = {
-  list: 'both',
-  cards: 'ecommerce',
-  compact: 'menu',
-  menu: 'menu',
-  gallery: 'ecommerce',
-  featured: 'ecommerce',
-  shelves: 'ecommerce',
-  overlay: 'ecommerce',
-  tiles: 'ecommerce',
-  bento: 'ecommerce',
-  stagger: 'both',
-  sticker: 'ecommerce',
-  circles: 'both',
-  rail: 'ecommerce',
-  ribbon: 'ecommerce',
-  zigzag: 'both',
-  index: 'menu',
-  rows: 'menu',
-  banner: 'ecommerce',
-  cover: 'ecommerce',
 };
 
 export const rhythmInfo: Record<DesignRhythm, { label: string; hint: string }> =

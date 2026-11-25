@@ -1,0 +1,55 @@
+/* Shared sideways rail: the scrolling strip and its arrows. */
+/* Sideways rail: square cards that scroll on the x axis, snapped one by one. */
+.shop-catalog-rail {
+  position: relative;
+  min-width: 0;
+}
+.shop-rail-nav {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline: -8px;
+  display: flex;
+  justify-content: space-between;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.shop-rail-arrow {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 18%, transparent);
+  pointer-events: auto;
+}
+.shop-rail-arrow:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.shop-rail-arrow:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+/* The rail puts its arrows on their own line instead of floating them over the
+   first and last cards. */
+.shop-catalog-rail.is-rail .shop-rail-nav,
+.shop-catalog-rail.is-banner .shop-rail-nav {
+  position: static;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  transform: none;
+}
+.shop-catalog-rail.is-rail .shop-rail-arrow,
+.shop-catalog-rail.is-banner .shop-rail-arrow {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+@media (max-width: 720px) {
+  /* Touch screens swipe the rail; floating arrows would only cover cards. */
+  .shop-rail-nav {
+    display: none;
+  }
+}

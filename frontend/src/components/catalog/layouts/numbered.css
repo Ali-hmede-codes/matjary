@@ -1,0 +1,137 @@
+/* Styles for the numbered grid; imported by layouts/numbered.tsx. */
+/* Numbered: an editorial list where the index is the graphic element. */
+.shop-catalog-items.layout-index {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.shop-numbered-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.shop-numbered-index {
+  flex: 0 0 auto;
+  min-width: 26px;
+  color: color-mix(in srgb, var(--ink) 38%, var(--surface));
+  font-family: var(--shop-font-display, inherit);
+  font-size: 19px;
+  font-weight: var(--shop-display-weight, 600);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.shop-numbered-thumb {
+  display: block;
+  flex: 0 0 96px;
+  width: 96px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: calc(var(--shop-tile-radius, 14px) * 0.7);
+  background: var(--wash);
+}
+.shop-numbered-copy {
+  flex: 1;
+  min-width: 0;
+}
+.shop-numbered-copy h3 {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  line-height: 1.4;
+}
+.shop-numbered-copy p {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-numbered-price {
+  flex-shrink: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.shop-numbered-copy h3 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shop-numbered-row .shop-add-to-cart {
+  margin-inline-start: 0;
+}
+.shop-numbered-row.is-unavailable .shop-numbered-thumb img {
+  filter: saturate(0.45);
+}
+.layout-index > .shop-numbered-row {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+@media (max-width: 720px) {
+  .shop-numbered-row {
+    gap: 10px;
+    padding: 12px 2px;
+  }
+  .shop-numbered-thumb {
+    flex-basis: 80px;
+    width: 80px;
+  }
+  .shop-numbered-index {
+    min-width: 22px;
+    font-size: 17px;
+  }
+  .shop-numbered-price {
+    font-size: 15px;
+  }
+}
+@media (max-width: 560px) {
+  /* The index, the photo and the name keep the first line; the price and the
+     action sit under them instead of squeezing the name to one narrow column. */
+  .shop-numbered-row {
+    display: grid;
+    grid-template-columns: auto 64px minmax(0, 1fr);
+    grid-template-areas:
+      'index thumb copy'
+      'price price action';
+    align-items: center;
+    gap: 6px 10px;
+  }
+  .shop-numbered-index {
+    grid-area: index;
+  }
+  .shop-numbered-thumb {
+    grid-area: thumb;
+    flex-basis: auto;
+    width: 64px;
+  }
+  .shop-numbered-copy {
+    grid-area: copy;
+  }
+  .shop-numbered-copy h3 {
+    font-size: 14.5px;
+  }
+  .shop-numbered-price {
+    grid-area: price;
+    justify-self: start;
+    margin: 0;
+    font-size: 15px;
+  }
+  .shop-numbered-row .shop-add-to-cart {
+    grid-area: action;
+    justify-self: end;
+    min-height: 30px;
+    margin: 0;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-index > .shop-numbered-row {
+    animation: none;
+  }
+}

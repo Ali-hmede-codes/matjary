@@ -26,7 +26,7 @@ import { brandingUrl } from '../lib/website';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useShare } from '../hooks/useShare';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
-import { CatalogItems, CatalogLoading } from './StoreCatalog';
+import { CatalogItems, CatalogLoading } from './catalog';
 import {
   StoreDetailLoading,
   StoreDetailMissing,
