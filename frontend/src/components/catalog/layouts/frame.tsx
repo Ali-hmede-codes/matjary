@@ -1,4 +1,3 @@
-import { ArrowUp, Handbag } from 'lucide-react';
 import { storeProductPath } from '../../../lib/storefront';
 import type { CatalogGrid, CatalogGridProps, CatalogItemProps } from '../types';
 import {
@@ -13,21 +12,11 @@ import {
 } from '../primitives';
 
 /**
- * The reference's bag-with-an-up-arrow: lucide's handbag outline carries a small
- * arrow inside its body, so the mark stays legible at button size.
+ * The shop-provided shopping-bag mark. It is used as a CSS mask, so the button's
+ * text colour paints the icon and it stays visible on light and dark frames.
  */
 function BagAddIcon() {
-  return (
-    <span className="shop-frame-bag" aria-hidden="true">
-      <Handbag size={26} strokeWidth={1.8} />
-      <ArrowUp
-        className="shop-frame-bag-arrow"
-        size={12}
-        strokeWidth={2.6}
-        aria-hidden="true"
-      />
-    </span>
-  );
+  return <span className="shop-frame-bag" aria-hidden="true" />;
 }
 
 function FrameCard({ product, cart, href, lbpRate, delay }: CatalogItemProps) {

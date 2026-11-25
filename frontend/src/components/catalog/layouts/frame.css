@@ -119,19 +119,15 @@
 .shop-frame-action {
   flex: 0 0 auto;
 }
-/* Bag mark: the handbag outline with the arrow sitting inside its body. */
+/* Bag mark: the supplied shopping-bag artwork used as a mask, so currentColor
+   paints it and the icon follows the button on every brand colour. */
 .shop-frame-bag {
-  position: relative;
-  display: grid;
-  place-items: center;
+  display: block;
   width: 26px;
   height: 26px;
-}
-.shop-frame-bag-arrow {
-  position: absolute;
-  top: 58%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  background-color: currentColor;
+  -webkit-mask: url('../assets/shopping-bag.png') center / contain no-repeat;
+  mask: url('../assets/shopping-bag.png') center / contain no-repeat;
 }
 /* The square action from the reference: light tile, dark mark. */
 .shop-frame-action .shop-add-to-cart.is-icon {
@@ -226,14 +222,6 @@
   .shop-frame-bag {
     width: 24px;
     height: 24px;
-  }
-  .shop-frame-bag > svg:first-child {
-    width: 24px;
-    height: 24px;
-  }
-  .shop-frame-bag-arrow {
-    width: 9px;
-    height: 9px;
   }
   .shop-frame-action .shop-qty-stepper {
     min-height: 40px;
