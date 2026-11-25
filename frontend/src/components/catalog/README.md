@@ -16,7 +16,7 @@ catalog/
 ├─ catalog.css         shared frame, pill and skeleton rules
 ├─ shared/             cards reused by more than one grid
 │  ├─ photo-card.*     square / portrait / wide box (cards, gallery, featured, shelves)
-│  ├─ tile-card.*      4:3 photo card (tiles, bento, stagger, sticker, circles, rail)
+│  ├─ tile-card.*      4:3 photo card (tiles, bento, sticker, circles, rail)
 │  ├─ banner-card.*    cover card (banner, cover)
 │  ├─ price-line.*     text-only price row (compact, menu)
 │  ├─ item-caption.*   caption block used by tile-card and zigzag
@@ -32,7 +32,6 @@ catalog/
    ├─ overlay.tsx + overlay.css
    ├─ tiles.tsx + tiles.css
    ├─ bento.tsx + bento.css
-   ├─ stagger.tsx + stagger.css
    ├─ sticker.tsx + sticker.css
    ├─ circles.tsx + circles.css
    ├─ rail.tsx + rail.css

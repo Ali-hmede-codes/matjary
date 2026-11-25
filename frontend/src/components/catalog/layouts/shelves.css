@@ -26,3 +26,16 @@
   flex: 0 0 clamp(160px, 42vw, 210px);
   aspect-ratio: 1 / 1;
 }
+@media (max-width: 720px) {
+  /* A square box on a phone left most of the card to the caption and only a
+     thin strip of photo. Portrait boxes give the rail the larger photo it is
+     for, while the next card still peeks in from the side. */
+  .layout-shelves > .shop-photo-card {
+    flex-basis: clamp(160px, 46vw, 210px);
+    aspect-ratio: 3 / 4;
+  }
+  .layout-shelves > .shop-skeleton {
+    flex-basis: clamp(160px, 46vw, 210px);
+    aspect-ratio: 3 / 4;
+  }
+}

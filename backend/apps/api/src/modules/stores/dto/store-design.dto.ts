@@ -109,7 +109,6 @@ export const DESIGN_CATALOG_LAYOUT_KEYS = [
   'overlay',
   'tiles',
   'bento',
-  'stagger',
   'sticker',
   'circles',
   'rail',

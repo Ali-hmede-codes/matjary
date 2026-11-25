@@ -14,3 +14,14 @@
     gap: 10px;
   }
 }
+@media (min-width: 900px) {
+  /* A desktop wide card used to be a 4:3 box as tall as it was wide, so the
+     copy column kept a large empty area above and below the text. A landscape
+     crop keeps the card cinematic without the dead space. */
+  .layout-featured .shop-photo-card.is-wide {
+    aspect-ratio: 2 / 1;
+  }
+  .layout-featured .shop-photo-card.is-wide .shop-product-copy {
+    padding: clamp(18px, 2vw, 26px);
+  }
+}

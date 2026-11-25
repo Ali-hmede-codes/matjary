@@ -2,7 +2,6 @@ import type { CatalogItemProps } from '../types';
 import {
   AddToCart,
   PriceLabels,
-  ProductDescription,
   ProductName,
   SaleBadge,
   ShopImage,
@@ -42,7 +41,13 @@ export function PhotoCard({
       </a>
       <div className="shop-product-copy">
         <ProductName product={product} href={href} />
-        <ProductDescription product={product} visible={showDescriptions} />
+        {/* The element stays even without a description: the reserved two-line
+            slot keeps every portrait card's photo the same height. */}
+        {showDescriptions && (
+          <p className="notranslate" title={product.description ?? undefined}>
+            {product.description}
+          </p>
+        )}
         <div className="shop-product-bottom">
           <PriceLabels product={product} lbpRate={lbpRate} />
           <AddToCart product={product} cart={cart} chooseHref={href} />

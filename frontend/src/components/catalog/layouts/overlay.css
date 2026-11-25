@@ -62,17 +62,20 @@
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
-/* The glass bar wraps instead of squeezing: a long name keeps its own line and
-   the price and action drop to the row below on a narrow tile. */
+/* The glass bar is a two-row grid: the name takes the first row, the price
+   sits under it (the same edge the name starts on), and the action keeps the
+   trailing edge across both rows. A wrapped flex row used to push the price to
+   the far right, away from the name it belongs to. */
 .shop-overlay-bar {
   position: absolute;
   z-index: 2;
   inset-inline: 8px;
   bottom: 8px;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: center;
   align-items: center;
-  gap: 6px 10px;
+  gap: 2px 10px;
   padding: 8px 8px 8px 12px;
   border: 1px solid color-mix(in srgb, var(--surface) 58%, transparent);
   border-radius: calc(var(--shop-radius, 20px) - 6px);
@@ -85,7 +88,8 @@
     border-color 240ms ease;
 }
 .shop-overlay-copy {
-  flex: 1 1 120px;
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
 }
 .shop-overlay-copy h3 {
@@ -101,31 +105,38 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
+/* `display: contents` lets the price and the action join the bar's grid: the
+   price under the name, the action beside both rows. */
 .shop-overlay-bottom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-inline-start: auto;
+  display: contents;
 }
 .shop-overlay-bottom .price-stack {
+  grid-column: 1;
+  grid-row: 2;
+  align-items: flex-start;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
+  text-align: start;
 }
 .shop-overlay-bottom .price-lbp {
   font-size: 10px;
 }
 /* The bar owns the trailing edge, so the action drops its own auto margin and
    shrinks to one compact pill. The quantity stepper keeps its tap-sized dots. */
-.shop-overlay-card .shop-add-to-cart,
-.shop-overlay-card .shop-qty-stepper {
+.shop-overlay-bottom .shop-add-to-cart,
+.shop-overlay-bottom .shop-qty-stepper {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  justify-self: end;
   flex-shrink: 0;
   min-width: 0;
   margin-inline-start: 0;
   box-shadow: none;
 }
-.shop-overlay-card .shop-add-to-cart {
+.shop-overlay-bottom .shop-add-to-cart {
   min-height: 34px;
   padding: 0 11px;
   font-size: 12px;

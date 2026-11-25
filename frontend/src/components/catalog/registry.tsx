@@ -10,7 +10,6 @@ import { shelvesGrid } from './layouts/shelves';
 import { overlayGrid } from './layouts/overlay';
 import { tilesGrid } from './layouts/tiles';
 import { bentoGrid } from './layouts/bento';
-import { staggerGrid } from './layouts/stagger';
 import { stickerGrid } from './layouts/sticker';
 import { circlesGrid } from './layouts/circles';
 import { railGrid } from './layouts/rail';
@@ -43,7 +42,6 @@ export const catalogGridByKey: Record<CatalogLayout, CatalogGrid> = {
   overlay: overlayGrid,
   tiles: tilesGrid,
   bento: bentoGrid,
-  stagger: staggerGrid,
   sticker: stickerGrid,
   circles: circlesGrid,
   rail: railGrid,

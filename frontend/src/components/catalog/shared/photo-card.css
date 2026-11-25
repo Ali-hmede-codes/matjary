@@ -8,6 +8,9 @@
   overflow: hidden;
   padding: 8px;
   border-radius: var(--shop-radius, 20px);
+  /* The caption compacts against the card's own width, not the viewport: the
+     same card can be a 240px tile in a rail or a 176px tile in a phone grid. */
+  container-type: inline-size;
 }
 .shop-photo-card.is-square {
   aspect-ratio: 1 / 1;
@@ -56,6 +59,12 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
+/* A two-line title slot keeps every photo in a row the same height whether the
+   name runs one line or two. */
+.shop-photo-card.is-square h3,
+.shop-photo-card.is-portrait h3 {
+  min-height: 2.7em;
+}
 .shop-photo-card.is-wide h3 {
   font-size: clamp(18px, 2vw, 22px);
 }
@@ -73,6 +82,11 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
+/* A two-line description slot, so a card from a product without a description
+   keeps the same photo height as its neighbours. */
+.shop-photo-card.is-portrait .shop-product-copy p {
+  min-height: 3.3em;
+}
 /* A compact tile needs a compact status pill: at 150px the full label wraps
    over a third of the photo and hides the product. */
 .shop-photo-card .shop-stock-label {
@@ -85,9 +99,60 @@
   display: none;
 }
 .shop-photo-card .shop-product-bottom {
+  flex-wrap: nowrap;
   padding-top: 6px;
   gap: 6px;
   font-size: 15px;
+}
+.shop-photo-card .shop-product-bottom .price-stack {
+  min-width: 0;
+  overflow: hidden;
+}
+/* Price lines never wrap inside a card: a wrapped price makes that one caption
+   taller, which shrinks that one photo and breaks the row. */
+.shop-photo-card .shop-product-bottom strong,
+.shop-photo-card .shop-product-bottom .price-lbp {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* The cart stepper is sized like the Add button here, so a product already in
+   the cart does not make its caption, and therefore its photo, taller. */
+.shop-photo-card .shop-product-bottom .shop-qty-stepper {
+  gap: 0;
+  padding: 1px;
+}
+.shop-photo-card .shop-product-bottom .shop-qty-stepper button {
+  width: 28px;
+  height: 28px;
+}
+.shop-photo-card .shop-product-bottom .shop-qty-stepper output {
+  min-width: 12px;
+  font-size: 12px;
+}
+/* On a narrow card the old price would push the action onto its own line, and
+   every wrapped caption shrinks that card's photo. The discount badge on the
+   photo already carries the sale, so a compact card keeps the paying price, the
+   pound hint and the action on one line. */
+@container (max-width: 205px) {
+  .shop-photo-card .shop-product-bottom {
+    font-size: 13.5px;
+  }
+  .shop-photo-card .shop-product-bottom .price-was {
+    display: none;
+  }
+  .shop-photo-card .shop-product-bottom .price-lbp {
+    font-size: 9px;
+  }
+  .shop-photo-card .shop-product-bottom .shop-add-to-cart {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+  .shop-photo-card .shop-product-bottom .shop-add-to-cart.is-sold-out {
+    padding: 0 6px;
+    font-size: 9.5px;
+  }
 }
 .shop-photo-card.is-wide .shop-product-bottom {
   margin-top: 16px;

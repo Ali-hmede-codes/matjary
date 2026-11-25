@@ -25,7 +25,6 @@ export const catalogLayouts = [
   'overlay',
   'tiles',
   'bento',
-  'stagger',
   'sticker',
   'circles',
   'rail',
@@ -75,7 +74,6 @@ export const catalogLayoutGroupOf: Record<CatalogLayout, CatalogLayoutGroup> = {
   overlay: 'ecommerce',
   tiles: 'ecommerce',
   bento: 'ecommerce',
-  stagger: 'both',
   sticker: 'ecommerce',
   circles: 'both',
   rail: 'ecommerce',
@@ -108,7 +106,7 @@ export const catalogLayoutInfo: Record<
   },
   shelves: {
     label: 'Sideways rail',
-    hint: '1:1 card boxes that scroll left to right.',
+    hint: 'Card boxes that scroll left to right.',
   },
   overlay: {
     label: 'Photo overlay',
@@ -121,10 +119,6 @@ export const catalogLayoutInfo: Record<
   bento: {
     label: 'Bento',
     hint: '4:3 photos in a mixed grid with one wide tile.',
-  },
-  stagger: {
-    label: 'Staggered',
-    hint: '4:3 photos on an offset, editorial rhythm.',
   },
   sticker: {
     label: 'Sticker',

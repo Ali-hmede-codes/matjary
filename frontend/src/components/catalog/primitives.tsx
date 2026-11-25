@@ -122,7 +122,7 @@ export function AddToCart({
     return (
       <button
         type="button"
-        className="shop-add-to-cart"
+        className="shop-add-to-cart is-sold-out"
         disabled
         title={`${product.name} is out of stock`}
       >

@@ -8,13 +8,12 @@ import {
   tileDelay,
 } from '../primitives';
 
-export type TileVariant =
-  'tiles' | 'bento' | 'stagger' | 'sticker' | 'circles' | 'rail';
+export type TileVariant = 'tiles' | 'bento' | 'sticker' | 'circles' | 'rail';
 
 /**
  * The photo-first card: a 4:3 photo above a quiet caption. Photo tiles, Bento,
- * Staggered, Sticker, Circles and the Photo rail all wear it; their grid class
- * alone decides the arrangement, the caption treatment and the motion.
+ * Sticker, Circles and the Photo rail all wear it; their grid class alone
+ * decides the arrangement, the caption treatment and the motion.
  */
 export function TileCard({
   product,
