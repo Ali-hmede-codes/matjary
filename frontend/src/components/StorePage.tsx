@@ -67,6 +67,7 @@ import { useShopFavorites } from '../hooks/useShopFavorites';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
 import { CatalogItems, CatalogLoading, ShopImage } from './StoreCatalog';
+import { CoverEdge } from './CoverEdge';
 import { StorePostWall } from './StorePostWall';
 import { ShopBranches } from './ShopBranches';
 import { SocialIcon } from './SocialIcon';
@@ -736,6 +737,9 @@ export function StorePage({ slug }: { slug: string | null }) {
                   eager
                   fallbackName={store.name}
                 />
+                {presentation.design && (
+                  <CoverEdge shape={presentation.design.coverShape} />
+                )}
               </div>
               <div className="shop-profile">
                 <div className="shop-logo">

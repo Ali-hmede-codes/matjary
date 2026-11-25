@@ -13,6 +13,7 @@ const STRING_KEYS = [
   'shape',
   'density',
   'hero',
+  'coverShape',
   'postsLayout',
   'catalogLayout',
   'accentLayout',

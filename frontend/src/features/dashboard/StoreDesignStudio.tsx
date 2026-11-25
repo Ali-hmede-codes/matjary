@@ -18,6 +18,7 @@ import {
 import {
   catalogLayoutInfo,
   catalogLayouts,
+  coverShapeChoices,
   designRhythms,
   densityChoices,
   hasSavedDesign,
@@ -46,6 +47,7 @@ import {
 import { mutate, panelError } from '../shared/panel-api';
 import { Notice, PageTitle, useUnsaved } from '../shared/PanelUI';
 import { SettingsJump, SettingsSection } from '../shared/SettingsSections';
+import { CoverEdge } from '../../components/CoverEdge';
 import { useOwner, type OwnerStore } from './OwnerPanel';
 
 type WireBoxes = readonly (readonly [number, number, number, number])[];
@@ -488,6 +490,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   const shapes = shapeChoices();
   const densities = densityChoices();
   const heroes = heroChoices();
+  const coverStyles = coverShapeChoices();
   const advancedSummary = `${
     heroes.find((entry) => entry.key === design.hero)?.label ?? 'Classic'
   } cover · ${rhythmSummary(design)}`;
@@ -761,7 +764,7 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             <div className="design-advanced-body">
               <div className="design-advanced-block">
                 <h3>
-                  <ImageIcon size={13} aria-hidden="true" /> Cover style
+                  <ImageIcon size={13} aria-hidden="true" /> Cover layout
                 </h3>
                 <div className="design-heroes">
                   {heroes.map((choice) => (
@@ -776,6 +779,37 @@ function DesignStudio({ store }: { store: OwnerStore }) {
                       <span className={`design-hero-art is-${choice.key}`}>
                         <i />
                         <b />
+                      </span>
+                      <strong>{choice.label}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="design-advanced-block">
+                <h3>
+                  <Wand2 size={13} aria-hidden="true" /> Cover style
+                </h3>
+                <div
+                  className="design-cover-shapes"
+                  role="group"
+                  aria-label="Cover style"
+                >
+                  {coverStyles.map((choice) => (
+                    <button
+                      key={choice.key}
+                      type="button"
+                      className={`design-cover-shape ${design.coverShape === choice.key ? 'is-selected' : ''}`}
+                      aria-pressed={design.coverShape === choice.key}
+                      aria-label={`${choice.label}: ${choice.hint}`}
+                      title={choice.hint}
+                      onClick={() => update({ coverShape: choice.key })}
+                    >
+                      <span
+                        className="design-cover-shape-art"
+                        aria-hidden="true"
+                      >
+                        <CoverEdge shape={choice.key} />
                       </span>
                       <strong>{choice.label}</strong>
                     </button>
@@ -870,7 +904,9 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             style={preview.theme as CSSProperties}
           >
             <div className={`design-preview-hero is-${design.hero}`}>
-              <span className="design-preview-cover" />
+              <span className="design-preview-cover">
+                <CoverEdge shape={design.coverShape} />
+              </span>
               <span className="design-preview-logo">
                 {store.logoKey ? (
                   <img src={storeMediaUrl(store.logoKey)} alt="" />

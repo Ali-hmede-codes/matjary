@@ -156,6 +156,7 @@ export interface DesignSettings {
   shape?: string;
   density?: string;
   hero?: string;
+  coverShape?: string;
   postsLayout?: string;
   catalogLayout?: string;
   accentLayout?: string;

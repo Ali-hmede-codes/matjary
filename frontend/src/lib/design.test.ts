@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   catalogLayoutInfo,
+  coverShapeInfo,
+  coverShapes,
   defaultDesign,
   designPresets,
   designTheme,
@@ -72,6 +74,21 @@ test('every post layout has one menu, e-commerce or both group', () => {
   assert.equal(postLayoutGroupOf.mosaic, 'both');
 });
 
+test('cover styles cover the reference set without split', () => {
+  assert.equal(normalizeDesign(null).coverShape, 'none');
+  assert.equal(normalizeDesign({ coverShape: 'waves' }).coverShape, 'waves');
+  assert.equal(normalizeDesign({ coverShape: 'split' }).coverShape, 'none');
+  assert.equal(normalizeDesign({ coverShape: 'nope' }).coverShape, 'none');
+  assert.equal(coverShapes.length, 17);
+  assert.ok(coverShapes.includes('waves'));
+  assert.ok(coverShapes.includes('mountains'));
+  assert.equal((coverShapes as readonly string[]).includes('split'), false);
+  for (const shape of coverShapes)
+    assert.ok(coverShapeInfo[shape].label.length > 0, shape);
+  const current = normalizeDesign({ coverShape: 'mountains' });
+  assert.equal(designWithPreset('bloom', current).coverShape, 'mountains');
+});
+
 test('legacy-only rows keep the classic storefront', () => {
   assert.equal(hasSavedDesign(null), false);
   assert.equal(hasSavedDesign({}), false);
@@ -84,6 +101,7 @@ test('legacy-only rows keep the classic storefront', () => {
     false,
   );
   assert.equal(hasSavedDesign({ postsLayout: 'grid' }), true);
+  assert.equal(hasSavedDesign({ coverShape: 'waves' }), true);
   assert.equal(hasSavedDesign({ categoryLayouts: [] }), true);
 });
 

@@ -7,6 +7,7 @@ import type { DesignSettings } from '../../libs/database/src/entities';
 import {
   StoreDesignSettingsDto,
   DESIGN_CATALOG_LAYOUT_KEYS,
+  DESIGN_COVER_SHAPE_KEYS,
   DESIGN_POST_LAYOUT_KEYS,
   DESIGN_TEMPLATE_KEYS,
 } from '../../apps/api/src/modules/stores/dto/store-design.dto';
@@ -31,6 +32,7 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
       shape: 'soft',
       density: 'airy',
       hero: 'poster',
+      coverShape: 'waves',
       postsLayout: 'cover',
       catalogLayout: 'gallery',
       accentLayout: 'cards',
@@ -45,6 +47,8 @@ test('store design DTO accepts the studio vocabulary and rejects unknown keys', 
   for (const value of [
     { template: 'not-a-template' },
     { postsLayout: 'carousel-of-doom' },
+    { coverShape: 'split' },
+    { coverShape: 'not-an-edge' },
     { palette: 'neon' },
     { rhythm: 'every3' },
     { rhythm: 'every7' },
@@ -72,6 +76,14 @@ test('store design vocabulary stays aligned across layouts', () => {
     (DESIGN_POST_LAYOUT_KEYS as readonly string[]).includes('columns'),
     false,
   );
+  assert.equal(DESIGN_COVER_SHAPE_KEYS.length, 17);
+  assert.ok(DESIGN_COVER_SHAPE_KEYS.includes('waves'));
+  assert.ok(DESIGN_COVER_SHAPE_KEYS.includes('mountains'));
+  assert.ok(DESIGN_COVER_SHAPE_KEYS.includes('curveAsymmetrical'));
+  assert.equal(
+    (DESIGN_COVER_SHAPE_KEYS as readonly string[]).includes('split'),
+    false,
+  );
   assert.ok(DESIGN_TEMPLATE_KEYS.includes('pulse'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('menu'));
   assert.ok(DESIGN_CATALOG_LAYOUT_KEYS.includes('shelves'));
@@ -88,6 +100,7 @@ test('saved design drops stale categories, duplicates, and foreign values', () =
     {
       template: 'table',
       palette: 'sand',
+      coverShape: 'waves',
       postsLayout: 'grid',
       thirdLayout: 'menu',
       categoryLayouts: [
@@ -106,6 +119,7 @@ test('saved design drops stale categories, duplicates, and foreign values', () =
   assert.deepEqual(stored, {
     template: 'table',
     palette: 'sand',
+    coverShape: 'waves',
     postsLayout: 'grid',
     thirdLayout: 'menu',
     categoryLayouts: [

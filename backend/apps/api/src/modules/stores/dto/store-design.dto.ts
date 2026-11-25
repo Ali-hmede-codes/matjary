@@ -59,6 +59,26 @@ export const DESIGN_HERO_KEYS = [
   'immersive',
 ] as const;
 
+export const DESIGN_COVER_SHAPE_KEYS = [
+  'none',
+  'waves',
+  'fanOpacity',
+  'triangle',
+  'tiltOpacity',
+  'drops',
+  'curve',
+  'wavesBrush',
+  'pyramids',
+  'tilt',
+  'triangleAsymmetrical',
+  'wavesPattern',
+  'book',
+  'clouds',
+  'zigzag',
+  'mountains',
+  'curveAsymmetrical',
+] as const;
+
 export const DESIGN_POST_LAYOUT_KEYS = [
   'grid',
   'masonry',
@@ -137,6 +157,10 @@ export class StoreDesignSettingsDto implements DesignSettings {
   @IsOptional()
   @IsIn(DESIGN_HERO_KEYS)
   hero?: string;
+
+  @IsOptional()
+  @IsIn(DESIGN_COVER_SHAPE_KEYS)
+  coverShape?: string;
 
   @IsOptional()
   @IsIn(DESIGN_POST_LAYOUT_KEYS)

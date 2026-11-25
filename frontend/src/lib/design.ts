@@ -59,6 +59,30 @@ export const designHeroes = [
 ] as const;
 export type DesignHero = (typeof designHeroes)[number];
 
+// The 16 cut-out cover edges from the studio reference, plus the straight
+// baseline. Split is deliberately absent: the owner asked for every other
+// design and no split edge.
+export const coverShapes = [
+  'none',
+  'waves',
+  'fanOpacity',
+  'triangle',
+  'tiltOpacity',
+  'drops',
+  'curve',
+  'wavesBrush',
+  'pyramids',
+  'tilt',
+  'triangleAsymmetrical',
+  'wavesPattern',
+  'book',
+  'clouds',
+  'zigzag',
+  'mountains',
+  'curveAsymmetrical',
+] as const;
+export type CoverShape = (typeof coverShapes)[number];
+
 export const postLayouts = [
   'grid',
   'masonry',
@@ -121,6 +145,7 @@ export interface DesignSettingsInput {
   shape?: string | null;
   density?: string | null;
   hero?: string | null;
+  coverShape?: string | null;
   postsLayout?: string | null;
   catalogLayout?: string | null;
   accentLayout?: string | null;
@@ -140,6 +165,7 @@ export interface StoreDesign {
   shape: DesignShape;
   density: DesignDensity;
   hero: DesignHero;
+  coverShape: CoverShape;
   postsLayout: PostLayout;
   catalogLayout: CatalogLayout;
   accentLayout: CatalogLayout;
@@ -721,6 +747,7 @@ export const defaultDesign: StoreDesign = {
   shape: 'soft',
   density: 'balanced',
   hero: 'classic',
+  coverShape: 'none',
   postsLayout: 'grid',
   catalogLayout: 'cards',
   accentLayout: 'list',
@@ -749,6 +776,7 @@ export function hasSavedDesign(settings?: unknown): boolean {
     typeof value.shape === 'string' ||
     typeof value.density === 'string' ||
     typeof value.hero === 'string' ||
+    typeof value.coverShape === 'string' ||
     typeof value.postsLayout === 'string' ||
     typeof value.catalogLayout === 'string' ||
     typeof value.accentLayout === 'string' ||
@@ -822,6 +850,7 @@ export function normalizeDesign(
     shape: pick(raw.shape, designShapes, defaultDesign.shape),
     density: pick(raw.density, designDensities, defaultDesign.density),
     hero: pick(raw.hero, designHeroes, defaultDesign.hero),
+    coverShape: pick(raw.coverShape, coverShapes, defaultDesign.coverShape),
     postsLayout: pick(raw.postsLayout, postLayouts, defaultDesign.postsLayout),
     catalogLayout: pick(
       raw.catalogLayout,
@@ -865,6 +894,7 @@ export function designWithPreset(
     shape: preset.shape,
     density: preset.density,
     hero: preset.hero,
+    coverShape: current?.coverShape ?? defaultDesign.coverShape,
     postsLayout: preset.postsLayout,
     catalogLayout: preset.catalogLayout,
     accentLayout: preset.accentLayout,
@@ -992,6 +1022,50 @@ export function densityChoices(): {
   }));
 }
 
+export const coverShapeInfo: Record<
+  CoverShape,
+  { label: string; hint: string }
+> = {
+  none: { label: 'Straight', hint: 'Keep the cover edge straight.' },
+  waves: { label: 'Waves', hint: 'Soft waves cut into the cover.' },
+  fanOpacity: {
+    label: 'Fan opacity',
+    hint: 'A translucent fan fades the cover edge.',
+  },
+  triangle: { label: 'Triangle', hint: 'A centred V cuts into the cover.' },
+  tiltOpacity: {
+    label: 'Tilt opacity',
+    hint: 'A tilted translucent band softens the edge.',
+  },
+  drops: { label: 'Drops', hint: 'Paint-like drips hang from the cover.' },
+  curve: { label: 'Curve', hint: 'A smooth curve bows the cover edge.' },
+  wavesBrush: {
+    label: 'Waves brush',
+    hint: 'A brushed double wave cuts the edge.',
+  },
+  pyramids: {
+    label: 'Pyramids',
+    hint: 'Two geometric peaks break the edge.',
+  },
+  tilt: { label: 'Tilt', hint: 'A straight diagonal cuts the cover.' },
+  triangleAsymmetrical: {
+    label: 'Triangle asymmetrical',
+    hint: 'An off-centre V cuts the cover.',
+  },
+  wavesPattern: {
+    label: 'Waves pattern',
+    hint: 'A row of small scallops trims the edge.',
+  },
+  book: { label: 'Book', hint: 'A soft spine dip opens the cover edge.' },
+  clouds: { label: 'Clouds', hint: 'Rounded cloud bumps soften the edge.' },
+  zigzag: { label: 'Zigzag', hint: 'A fine sawtooth trims the cover.' },
+  mountains: { label: 'Mountains', hint: 'Layered peaks cut into the cover.' },
+  curveAsymmetrical: {
+    label: 'Curve asymmetrical',
+    hint: 'An uneven curve sweeps across the edge.',
+  },
+};
+
 export function heroChoices(): {
   key: DesignHero;
   label: string;
@@ -1016,6 +1090,18 @@ export function heroChoices(): {
       hint: 'Full-bleed, no frame at all.',
     },
   ];
+}
+
+export function coverShapeChoices(): {
+  key: CoverShape;
+  label: string;
+  hint: string;
+}[] {
+  return coverShapes.map((key) => ({
+    key,
+    label: coverShapeInfo[key].label,
+    hint: coverShapeInfo[key].hint,
+  }));
 }
 
 /** Small helper so previews and the API can share the brand contrast rule. */

@@ -347,6 +347,52 @@
   top: 12px;
 }
 
+/* Cover edge styles: a mini cover whose page-coloured cut-out shows the
+   shape before the owner applies it. */
+.design-cover-shapes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(102px, 1fr));
+  gap: 8px;
+}
+.design-cover-shape {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid var(--panel-line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--panel-ink);
+  text-align: start;
+}
+.design-cover-shape:hover {
+  border-color: #b9c8be;
+}
+.design-cover-shape.is-selected {
+  border-color: var(--panel-green);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel-green) 18%, transparent);
+  background: #f6faf7;
+}
+.design-cover-shape-art {
+  position: relative;
+  display: block;
+  height: 38px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #aebfb4, #7e9587);
+}
+.design-cover-shape-art .cover-edge {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: #fff;
+}
+.design-cover-shape strong {
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
 /* ---------- Layout pickers ---------- */
 .design-layout-block {
   display: grid;
@@ -523,9 +569,11 @@
   padding: 0 14px 12px;
 }
 .design-preview-cover {
+  position: relative;
   display: block;
   height: 74px;
   margin: 0 -14px 0;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at 22% 30%,
@@ -533,6 +581,13 @@
       transparent 58%
     ),
     linear-gradient(120deg, var(--preview-cover), var(--brand-ink));
+}
+.design-preview-cover .cover-edge {
+  position: absolute;
+  inset: auto 0 0;
+  width: 100%;
+  height: 20%;
+  color: var(--brand-surface);
 }
 .design-preview-logo {
   display: grid;
@@ -1099,6 +1154,7 @@
 .panel-app .design-typeface,
 .panel-app .design-shape,
 .panel-app .design-hero,
+.panel-app .design-cover-shape,
 .panel-app .design-pattern,
 .panel-app .design-remove {
   min-height: 0;
@@ -1122,6 +1178,13 @@
   display: grid;
   gap: 3px;
   padding: 8px;
+  border-radius: 11px;
+}
+.panel-app .design-cover-shape {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 7px;
   border-radius: 11px;
 }
 .panel-app .design-pattern {
