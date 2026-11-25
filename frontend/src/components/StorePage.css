@@ -127,6 +127,10 @@
 }
 .shop-banner {
   position: relative;
+  /* Keep the cover tint and cut-out edge inside the banner's stacking context.
+     They are positioned with z-index, and must paint underneath the profile and
+     logo that overlap the banner from below. */
+  isolation: isolate;
   width: 100%;
   height: var(--shop-banner-height);
   overflow: hidden;
