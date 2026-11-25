@@ -1,7 +1,7 @@
 import { useEffect, type CSSProperties } from 'react';
 import { CatalogItems } from '../components/catalog';
 import { catalogLayouts, type CatalogLayout } from '../lib/catalog-layouts';
-import { defaultDesign, designTheme } from '../lib/design';
+import { defaultDesign, designTheme, onBrandColor } from '../lib/design';
 import { previewCart, previewLbpRate, previewProducts } from './mock';
 
 export function isCatalogLayout(value: string | null): value is CatalogLayout {
@@ -20,7 +20,22 @@ export function Embed({ params }: { params: URLSearchParams }) {
   const count = Number.isFinite(parsed) ? Math.min(12, Math.max(1, parsed)) : 6;
   const products = previewProducts.slice(0, count);
   const cart = previewCart(products, params.get('incart') === '1');
-  const theme = designTheme(defaultDesign);
+  // `&brand=%23b76b7a` previews a grid with another shop's brand colour, which
+  // matters for the layouts that derive their surface from --primary.
+  const brand = params.get('brand');
+  const safeBrand =
+    brand && /^#[0-9a-f]{3,8}$/iu.test(brand) ? brand : undefined;
+  const theme = {
+    ...designTheme(defaultDesign),
+    ...(safeBrand
+      ? {
+          '--brand-primary': safeBrand,
+          // Production derives the readable text colour from the brand, so the
+          // preview must do the same or a light brand would look broken here.
+          '--brand-on-primary': onBrandColor(safeBrand),
+        }
+      : {}),
+  };
   const frame = params.get('frame');
 
   useEffect(() => {

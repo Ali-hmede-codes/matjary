@@ -119,6 +119,7 @@ export const DESIGN_CATALOG_LAYOUT_KEYS = [
   'banner',
   'cover',
   'glass',
+  'frame',
 ] as const;
 
 // Menu sections repeat one layout, a pair, or a triple. The studio keeps the

@@ -1,5 +1,14 @@
-import { useState, type CSSProperties } from 'react';
-import { Ban, Check, Minus, Package, Plus, ShoppingCart } from 'lucide-react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  ArrowUpRight,
+  Ban,
+  Check,
+  Minus,
+  Package,
+  Plus,
+  ShoppingCart,
+  SlidersHorizontal,
+} from 'lucide-react';
 import {
   assetUrl,
   type Product,
@@ -101,6 +110,7 @@ export function AddToCart({
   chooseHref,
   label = 'Add',
   icon = 'plus',
+  iconOnly = false,
 }: {
   product: Product;
   cart: ShopCartController;
@@ -108,7 +118,13 @@ export function AddToCart({
   chooseHref?: string;
   /** The word after the icon; the glass grid asks for "Add to cart". */
   label?: string;
-  icon?: 'plus' | 'cart';
+  /** A built-in icon, or a custom one for a card with its own action mark. */
+  icon?: 'plus' | 'cart' | ReactNode;
+  /**
+   * A square, icon-only control for compact cards (the frame grid). The
+   * accessible name stays on the control, so nothing is lost without the word.
+   */
+  iconOnly?: boolean;
 }) {
   const optionKey = selectedOptionsKey(selectedOptions);
   const item = cart.cart?.items.find(
@@ -124,7 +140,17 @@ export function AddToCart({
   const limit = productCartLimit(product);
   const blocked = cart.busy || cart.loading;
   if (limit === 0)
-    return (
+    return iconOnly ? (
+      <button
+        type="button"
+        className="shop-add-to-cart is-sold-out is-icon"
+        disabled
+        aria-label={`${product.name} is out of stock`}
+        title={`${product.name} is out of stock`}
+      >
+        <Ban size={18} aria-hidden="true" />
+      </button>
+    ) : (
       <button
         type="button"
         className="shop-add-to-cart is-sold-out"
@@ -137,7 +163,15 @@ export function AddToCart({
   // Products with choices open their page first: adding the base product
   // without a size or color would create an order the shop cannot fulfill.
   if (productHasOptions(product) && chooseHref)
-    return (
+    return iconOnly ? (
+      <a
+        className="shop-add-to-cart is-icon"
+        href={chooseHref}
+        aria-label={`Choose options for ${product.name}`}
+      >
+        <ArrowUpRight size={18} aria-hidden="true" />
+      </a>
+    ) : (
       <a
         className="shop-add-to-cart"
         href={chooseHref}
@@ -147,7 +181,17 @@ export function AddToCart({
       </a>
     );
   if (productHasOptions(product) && !selectedOptions?.length)
-    return (
+    return iconOnly ? (
+      <button
+        type="button"
+        className="shop-add-to-cart is-icon"
+        disabled
+        aria-label={`Choose options for ${product.name}`}
+        title="Choose a value for each option first"
+      >
+        <SlidersHorizontal size={18} aria-hidden="true" />
+      </button>
+    ) : (
       <button
         type="button"
         className="shop-add-to-cart"
@@ -162,7 +206,7 @@ export function AddToCart({
     return (
       <button
         type="button"
-        className="shop-add-to-cart"
+        className={`shop-add-to-cart${iconOnly ? ' is-icon' : ''}`}
         disabled={blocked}
         aria-label={`Add ${product.name} to cart`}
         title={`Add ${product.name} to cart`}
@@ -170,10 +214,12 @@ export function AddToCart({
       >
         {icon === 'cart' ? (
           <ShoppingCart size={17} aria-hidden="true" />
-        ) : (
+        ) : icon === 'plus' ? (
           <Plus size={17} aria-hidden="true" />
+        ) : (
+          icon
         )}
-        {label}
+        {!iconOnly && label}
       </button>
     );
   return (

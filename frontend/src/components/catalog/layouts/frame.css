@@ -1,0 +1,257 @@
+/* Styles for the frame grid; imported by layouts/frame.tsx. */
+/* Frame card: a dark frame tinted with the shop's brand colour, a light photo
+   window, the name and category above a large price and a square buy button. */
+.shop-catalog-items.layout-frame {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 16px;
+}
+.layout-frame > .shop-frame-card {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+.storefront .shop-frame-card {
+  --frame-bg: var(--primary);
+  --frame-fg: var(--on-primary, #ffffff);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px;
+  border-radius: calc(var(--shop-radius, 20px) + 8px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--frame-bg) 92%, #ffffff),
+    color-mix(in srgb, var(--frame-bg) 88%, #000000)
+  );
+  color: var(--frame-fg);
+  box-shadow: 0 20px 40px color-mix(in srgb, var(--frame-bg) 32%, transparent);
+  transition:
+    transform 0.28s ease,
+    box-shadow 0.28s ease;
+}
+/* The light window the product sits in, like the reference card. */
+.shop-frame-art {
+  position: relative;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: calc(var(--shop-radius, 20px) * 0.82);
+  background: #f2f3f5;
+}
+.shop-frame-art-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.shop-frame-art .shop-image {
+  position: absolute;
+  inset: 0;
+}
+.shop-frame-art .shop-image > img {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.shop-frame-card.is-unavailable .shop-frame-art .shop-image > img {
+  filter: saturate(0.4);
+}
+.shop-frame-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 11px 8px 6px;
+}
+.shop-frame-copy h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--frame-fg);
+  font-family: var(--shop-font-display, inherit);
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-frame-copy h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.shop-frame-meta {
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--frame-fg) 72%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-frame-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.shop-frame-price.price-stack {
+  align-items: flex-start;
+  color: var(--frame-fg);
+  font-family: var(--shop-font-display, inherit);
+  font-size: clamp(21px, 2.1vw, 27px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+/* One line for the amount: the sale badge on the photo already carries the
+   discount, and a second price line would push the button row down. */
+.shop-frame-price strong {
+  white-space: nowrap;
+}
+.shop-frame-price .price-was {
+  display: none;
+}
+.shop-frame-price .price-lbp {
+  color: color-mix(in srgb, var(--frame-fg) 62%, transparent);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.shop-frame-action {
+  flex: 0 0 auto;
+}
+/* Bag mark: the handbag outline with the arrow sitting inside its body. */
+.shop-frame-bag {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+}
+.shop-frame-bag-arrow {
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+/* The square action from the reference: light tile, dark mark. */
+.shop-frame-action .shop-add-to-cart.is-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--shop-radius, 20px) * 0.72);
+  background: var(--frame-fg);
+  color: var(--frame-bg);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.28);
+}
+.shop-frame-action .shop-add-to-cart.is-icon:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--frame-fg) 90%, #ffffff);
+  transform: translateY(-2px);
+}
+.shop-frame-action .shop-add-to-cart.is-icon.is-sold-out {
+  background: color-mix(in srgb, var(--frame-fg) 16%, transparent);
+  color: color-mix(in srgb, var(--frame-fg) 75%, transparent);
+  box-shadow: none;
+}
+/* The stepper keeps the same height as the square button, so the bottom row of
+   every card lines up whether the item is already in the cart or not. */
+.shop-frame-action .shop-qty-stepper {
+  gap: 0;
+  min-height: 46px;
+  padding: 3px;
+  border-color: color-mix(in srgb, var(--frame-fg) 26%, transparent);
+  background: color-mix(in srgb, var(--frame-fg) 12%, transparent);
+  border-radius: calc(var(--shop-radius, 20px) * 0.72);
+}
+.shop-frame-action .shop-qty-stepper button {
+  width: 28px;
+  height: 28px;
+  color: var(--frame-fg);
+}
+.shop-frame-action .shop-qty-stepper button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--frame-fg) 18%, transparent);
+}
+.shop-frame-action .shop-qty-stepper output {
+  min-width: 13px;
+  color: var(--frame-fg);
+  font-size: 12px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .storefront .shop-frame-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 28px 54px color-mix(in srgb, var(--frame-bg) 40%, transparent);
+  }
+  .shop-frame-card:hover .shop-frame-art .shop-image > img {
+    transform: scale(1.05);
+  }
+}
+/* Two cards per phone row, as on the reference card. */
+@media (max-width: 720px) {
+  .shop-catalog-items.layout-frame {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .shop-frame-card {
+    padding: 5px;
+    border-radius: calc(var(--shop-radius, 20px) + 4px);
+  }
+  .shop-frame-copy {
+    padding: 9px 6px 4px;
+  }
+  .shop-frame-copy h3 {
+    font-size: 13.5px;
+  }
+  .shop-frame-meta {
+    font-size: 11px;
+  }
+  .shop-frame-price.price-stack {
+    font-size: 18.5px;
+  }
+  .shop-frame-price .price-lbp {
+    font-size: 9px;
+  }
+  .shop-frame-bottom {
+    gap: 8px;
+    padding-top: 9px;
+  }
+  .shop-frame-action .shop-add-to-cart.is-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: calc(var(--shop-radius, 20px) * 0.6);
+  }
+  .shop-frame-bag {
+    width: 24px;
+    height: 24px;
+  }
+  .shop-frame-bag > svg:first-child {
+    width: 24px;
+    height: 24px;
+  }
+  .shop-frame-bag-arrow {
+    width: 9px;
+    height: 9px;
+  }
+  .shop-frame-action .shop-qty-stepper {
+    min-height: 40px;
+    padding: 2px;
+  }
+  .shop-frame-action .shop-qty-stepper button {
+    width: 26px;
+    height: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-frame > .shop-frame-card,
+  .shop-frame-art .shop-image > img {
+    animation: none;
+    transition: none;
+  }
+  .storefront .shop-frame-card:hover,
+  .shop-frame-card:hover .shop-frame-art .shop-image > img {
+    transform: none;
+  }
+}

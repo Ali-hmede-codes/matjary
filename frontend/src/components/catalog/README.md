@@ -41,7 +41,8 @@ catalog/
    ├─ rows.tsx + rows.css
    ├─ banner.tsx + banner.css
    ├─ cover.tsx + cover.css
-   └─ glass.tsx + glass.css
+   ├─ glass.tsx + glass.css
+   └─ frame.tsx + frame.css
 ```
 
 ## Add a grid
@@ -92,6 +93,8 @@ so a change can be judged in the states that break instead of one tidy row.
 - `&count=1,6` picks the product counts (up to four).
 - `&incart=1` puts the first product in the cart, to check the quantity stepper.
 - An embed accepts `&dir=rtl` for Arabic shops.
+- An embed accepts `&brand=%23b76b7a` to preview a brand-coloured grid with a
+  different shop primary colour (the readable text colour follows it).
 
 Each frame is a real iframe (`catalog-preview.html?embed=1&layout=…`) because the
 grids switch on viewport media queries, not container queries. The page is not a
