@@ -153,7 +153,7 @@ export const categoryIndexStyleInfo: Record<
   },
   poster: {
     label: 'Poster cards',
-    hint: 'Full-bleed photos, two per row, with the name on the image.',
+    hint: 'Full-bleed photos with the name on the image; scroll sideways.',
   },
   split: {
     label: 'Light cards',
@@ -165,11 +165,11 @@ export const categoryIndexStyleInfo: Record<
   },
   compact: {
     label: 'Compact cards',
-    hint: 'Smaller square cards for shops with many categories.',
+    hint: 'Smaller square cards for shops with many categories; scroll sideways.',
   },
   banner: {
     label: 'Wide banners',
-    hint: 'One wide card per row, like a cover.',
+    hint: 'One wide card at a time, like a cover; scroll sideways.',
   },
 };
 

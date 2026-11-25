@@ -22,7 +22,7 @@ import {
   lbpRateFor,
 } from '../lib/storefront';
 import { useShopCart } from '../hooks/useShopCart';
-import { brandingUrl } from '../lib/website';
+import { brandingUrl, enableMouseScrolling } from '../lib/website';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { useShare } from '../hooks/useShare';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
@@ -242,7 +242,11 @@ export function StoreCategoryPage({
           <Share2 size={19} aria-hidden="true" />
         </button>
       </header>
-      <nav className="shop-category-switcher" aria-label="Shop categories">
+      <nav
+        ref={enableMouseScrolling}
+        className="shop-category-switcher"
+        aria-label="Shop categories"
+      >
         <a className="shop-switcher-all" href={storeMenuPath(shopSlug)}>
           <LayoutGrid size={15} aria-hidden="true" />
           All items

@@ -7,6 +7,7 @@ import {
   type MenuCategoryGroup,
 } from '../lib/storefront';
 import { useUiLabel } from '../hooks/useUiLabel';
+import { enableMouseScrolling } from '../lib/website';
 
 /** Split a category name into the two-tone lines used by the reference cards. */
 function splitTitle(name: string): [string, string] | null {
@@ -113,7 +114,13 @@ export function CategoryShowcase({
       <h2 id={headingId} className="sr-only">
         Shop categories
       </h2>
-      <div className="shop-category-grid">
+      <div
+        ref={enableMouseScrolling}
+        className="shop-category-grid"
+        role="group"
+        aria-label="Shop categories"
+        tabIndex={0}
+      >
         {categories.map((group) => (
           <CategoryCard
             key={group.key}

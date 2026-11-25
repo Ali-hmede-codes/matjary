@@ -58,6 +58,11 @@
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   backdrop-filter: blur(14px) saturate(150%);
   scrollbar-width: none;
+  cursor: grab;
+}
+.shop-menu-chips.is-dragging,
+.shop-category-switcher.is-dragging {
+  cursor: grabbing;
 }
 .shop-menu-chips::-webkit-scrollbar,
 .shop-category-switcher::-webkit-scrollbar {
@@ -305,6 +310,7 @@
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   backdrop-filter: blur(14px) saturate(150%);
   scrollbar-width: none;
+  cursor: grab;
 }
 .shop-category-switcher a {
   display: inline-flex;

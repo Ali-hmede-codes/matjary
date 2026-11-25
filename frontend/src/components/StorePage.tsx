@@ -58,7 +58,7 @@ import {
   storeSocialLinks,
 } from '../lib/storefront';
 import { branchOpenState, primaryBranch, storeBranches } from '../lib/branches';
-import { brandingUrl } from '../lib/website';
+import { brandingUrl, enableMouseScrolling } from '../lib/website';
 import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
 import { useShopCart } from '../hooks/useShopCart';
 import { usePageSeo } from '../hooks/usePageSeo';
@@ -1225,6 +1225,7 @@ export function StorePage({ slug }: { slug: string | null }) {
                     )}
                     {!showCategoryShowcase && groups.length > 1 && (
                       <div
+                        ref={enableMouseScrolling}
                         className="shop-menu-chips"
                         role="group"
                         aria-label="Shop sections"
