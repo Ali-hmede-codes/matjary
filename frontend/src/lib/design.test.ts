@@ -8,6 +8,9 @@ import {
   designWithPreset,
   hasSavedDesign,
   normalizeDesign,
+  postLayoutGroupInfo,
+  postLayoutGroupOf,
+  postLayoutGroups,
   postLayoutInfo,
   postLayouts,
   resolveCategoryLayout,
@@ -48,6 +51,25 @@ test('post layouts include the rows, modular and mosaic grids only', () => {
     false,
     'columns are not a post wall grid',
   );
+});
+
+test('every post layout has one menu, e-commerce or both group', () => {
+  for (const layout of postLayouts) {
+    assert.ok(
+      postLayoutGroups.includes(postLayoutGroupOf[layout]),
+      `${layout} is grouped`,
+    );
+  }
+  for (const group of postLayoutGroups) {
+    assert.ok(
+      postLayouts.some((layout) => postLayoutGroupOf[layout] === group),
+      `${group} has layouts`,
+    );
+    assert.ok(postLayoutGroupInfo[group].label.length > 0, group);
+  }
+  assert.equal(postLayoutGroupOf.rows, 'menu');
+  assert.equal(postLayoutGroupOf.modular, 'ecommerce');
+  assert.equal(postLayoutGroupOf.mosaic, 'both');
 });
 
 test('legacy-only rows keep the classic storefront', () => {

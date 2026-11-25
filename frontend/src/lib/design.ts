@@ -361,6 +361,49 @@ export const postLayoutInfo: Record<
   },
 };
 
+// The studio groups post walls by the shop they suit best. "Both" is the
+// gallery-first group, so every layout still has exactly one home.
+export const postLayoutGroups = ['menu', 'ecommerce', 'both'] as const;
+export type PostLayoutGroup = (typeof postLayoutGroups)[number];
+
+export const postLayoutGroupInfo: Record<
+  PostLayoutGroup,
+  { label: string; hint: string }
+> = {
+  menu: {
+    label: 'MENU',
+    hint: 'Readable, row-led walls for restaurant and café posts.',
+  },
+  ecommerce: {
+    label: 'E-COMMERCE',
+    hint: 'Feature-led walls for product drops and collections.',
+  },
+  both: {
+    label: 'BOTH',
+    hint: 'Gallery-first walls that suit either shop type.',
+  },
+};
+
+/** The one category each post layout is listed under in the studio. */
+export const postLayoutGroupOf: Record<PostLayout, PostLayoutGroup> = {
+  grid: 'both',
+  masonry: 'both',
+  rail: 'both',
+  spotlight: 'ecommerce',
+  mosaic: 'both',
+  modular: 'ecommerce',
+  frames: 'ecommerce',
+  wall: 'both',
+  list: 'menu',
+  stack: 'menu',
+  rows: 'menu',
+  cover: 'ecommerce',
+  tiles: 'both',
+  reel: 'both',
+  stagger: 'both',
+  drift: 'both',
+};
+
 export const catalogLayoutInfo: Record<
   CatalogLayout,
   { label: string; hint: string }

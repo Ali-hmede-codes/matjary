@@ -24,6 +24,9 @@ import {
   heroChoices,
   normalizeDesign,
   paletteChoices,
+  postLayoutGroupInfo,
+  postLayoutGroupOf,
+  postLayoutGroups,
   postLayoutInfo,
   postLayouts,
   resolveCategoryLayout,
@@ -606,17 +609,22 @@ function DesignStudio({ store }: { store: OwnerStore }) {
             step="01"
             icon={LayoutGrid}
             title="Post layout"
-            hint={`${postLayouts.length} arrangements. Pick the one that fits your shop.`}
+            hint={`${postLayouts.length} arrangements, grouped by the shop they suit.`}
           >
-            <LayoutPicker
-              label="Posts"
-              hint="Tap a layout to use it."
-              layouts={postLayouts}
-              info={postLayoutInfo}
-              wires={postWires}
-              value={design.postsLayout}
-              onChange={(postsLayout) => update({ postsLayout })}
-            />
+            {postLayoutGroups.map((group) => (
+              <LayoutPicker
+                key={group}
+                label={postLayoutGroupInfo[group].label}
+                hint={postLayoutGroupInfo[group].hint}
+                layouts={postLayouts.filter(
+                  (layout) => postLayoutGroupOf[layout] === group,
+                )}
+                info={postLayoutInfo}
+                wires={postWires}
+                value={design.postsLayout}
+                onChange={(postsLayout) => update({ postsLayout })}
+              />
+            ))}
           </StudioSection>
 
           <StudioSection
