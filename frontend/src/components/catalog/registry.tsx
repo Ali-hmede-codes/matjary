@@ -19,6 +19,7 @@ import { numberedGrid } from './layouts/numbered';
 import { rowsGrid } from './layouts/rows';
 import { bannerGrid } from './layouts/banner';
 import { coverGrid } from './layouts/cover';
+import { glassGrid } from './layouts/glass';
 
 /**
  * The registry is the only place that knows every grid by name.
@@ -51,6 +52,7 @@ export const catalogGridByKey: Record<CatalogLayout, CatalogGrid> = {
   rows: rowsGrid,
   banner: bannerGrid,
   cover: coverGrid,
+  glass: glassGrid,
 };
 
 /** Every grid, in the catalogue's own order (the studio lists them grouped). */

@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import { Ban, Check, Minus, Package, Plus } from 'lucide-react';
+import { Ban, Check, Minus, Package, Plus, ShoppingCart } from 'lucide-react';
 import {
   assetUrl,
   type Product,
@@ -99,11 +99,16 @@ export function AddToCart({
   cart,
   selectedOptions = null,
   chooseHref,
+  label = 'Add',
+  icon = 'plus',
 }: {
   product: Product;
   cart: ShopCartController;
   selectedOptions?: SelectedProductOption[] | null;
   chooseHref?: string;
+  /** The word after the icon; the glass grid asks for "Add to cart". */
+  label?: string;
+  icon?: 'plus' | 'cart';
 }) {
   const optionKey = selectedOptionsKey(selectedOptions);
   const item = cart.cart?.items.find(
@@ -163,8 +168,12 @@ export function AddToCart({
         title={`Add ${product.name} to cart`}
         onClick={() => cart.add(product, selectedOptions)}
       >
-        <Plus size={17} aria-hidden="true" />
-        Add
+        {icon === 'cart' ? (
+          <ShoppingCart size={17} aria-hidden="true" />
+        ) : (
+          <Plus size={17} aria-hidden="true" />
+        )}
+        {label}
       </button>
     );
   return (

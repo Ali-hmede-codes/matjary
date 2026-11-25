@@ -1,0 +1,267 @@
+/* Styles for the glass grid; imported by layouts/glass.tsx. */
+/* Glass card: a dark, frosted tile whose ambient colour is the product photo
+   blurred behind it. The name, category and price are centred and the action is
+   a full-width pill, so the section reads like a shelf of premium cards. */
+.shop-catalog-items.layout-glass {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 215px), 1fr));
+  gap: 16px;
+}
+.layout-glass > .shop-glass-card {
+  animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: var(--shop-tile-delay, 0ms);
+}
+.storefront .shop-glass-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 10px 12px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: calc(var(--shop-radius, 20px) + 4px);
+  background: linear-gradient(180deg, rgb(10 24 40 / 0.62), rgb(4 12 22 / 0.9));
+  color: #f5f9ff;
+  box-shadow:
+    0 22px 48px color-mix(in srgb, #03101f 35%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  transition:
+    transform 0.28s ease,
+    box-shadow 0.28s ease,
+    border-color 0.28s ease;
+}
+/* Ambient wash: the product photo, blurred and scaled past the card edges. */
+.storefront .shop-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: -24%;
+  z-index: -2;
+  background-image: var(
+    --glass-photo,
+    linear-gradient(140deg, #1d4f7d, #071626)
+  );
+  background-position: center;
+  background-size: cover;
+  filter: blur(34px) saturate(1.7) brightness(0.95);
+  opacity: 0.95;
+  transform: scale(1.12);
+}
+/* A darkening gradient keeps white text legible over any photo colour. */
+.storefront .shop-glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgb(3 10 20 / 0.05) 0%,
+    rgb(3 10 20 / 0.5) 46%,
+    rgb(2 7 15 / 0.92) 100%
+  );
+}
+.shop-glass-art {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: calc(var(--shop-radius, 20px) * 0.75);
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 0 40px rgb(0 0 0 / 0.22);
+}
+.shop-glass-art .shop-image {
+  position: absolute;
+  inset: 0;
+}
+.shop-glass-art .shop-image > img {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The fallback is drawn on the dark tile, so it needs a light-on-dark face. */
+.shop-glass-art .shop-image-fallback {
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(255 255 255 / 0.72);
+}
+.shop-glass-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 4px 0;
+  text-align: center;
+}
+.shop-glass-copy h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: 2.6em;
+  margin: 0;
+  color: #f7fbff;
+  font-family: var(--shop-font-display, inherit);
+  font-size: 15px;
+  font-weight: var(--shop-display-weight, 700);
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.shop-glass-copy h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.shop-glass-meta {
+  overflow: hidden;
+  max-width: 100%;
+  margin: 0;
+  color: rgb(207 226 246 / 0.74);
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-glass-price.price-stack {
+  align-items: center;
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.35);
+}
+.shop-glass-price .price-was {
+  color: rgb(214 232 248 / 0.6);
+}
+.shop-glass-price .price-lbp {
+  color: rgb(214 232 248 / 0.72);
+  font-size: 10.5px;
+}
+.shop-glass-action {
+  margin-top: auto;
+  padding-top: 12px;
+}
+.shop-glass-action .shop-add-to-cart,
+.shop-glass-action .shop-qty-stepper {
+  width: 100%;
+  margin: 0;
+  justify-content: center;
+}
+.shop-glass-action .shop-add-to-cart {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 55%, #dff3ff);
+  border-radius: calc(var(--shop-radius, 20px) * 0.6);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 78%, #ffffff),
+    var(--primary)
+  );
+  color: var(--on-primary, #ffffff);
+  font-size: 13px;
+  font-weight: 750;
+  box-shadow:
+    0 12px 26px color-mix(in srgb, var(--primary) 42%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+.shop-glass-action .shop-add-to-cart.is-sold-out {
+  border-color: rgb(255 255 255 / 0.22);
+  background: rgb(255 255 255 / 0.14);
+  color: rgb(255 255 255 / 0.85);
+  box-shadow: none;
+}
+.shop-glass-action .shop-qty-stepper {
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 3px;
+  border-color: rgb(255 255 255 / 0.22);
+  background: rgb(255 255 255 / 0.14);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.shop-glass-action .shop-qty-stepper button {
+  width: 34px;
+  height: 34px;
+  color: #ffffff;
+}
+.shop-glass-action .shop-qty-stepper button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.18);
+}
+.shop-glass-action .shop-qty-stepper output {
+  color: #ffffff;
+}
+@media (hover: hover) and (pointer: fine) {
+  .storefront .shop-glass-card:hover {
+    transform: translateY(-3px);
+    border-color: rgb(255 255 255 / 0.34);
+    box-shadow:
+      0 30px 62px color-mix(in srgb, #03101f 42%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.16);
+  }
+  .shop-glass-card:hover .shop-glass-art .shop-image > img {
+    transform: scale(1.05);
+  }
+  .shop-glass-action .shop-add-to-cart:hover:not(:disabled) {
+    background: var(--primary);
+    transform: none;
+  }
+}
+/* Two cards per phone row, as on the reference shelf. */
+@media (max-width: 720px) {
+  .shop-catalog-items.layout-glass {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .shop-glass-card {
+    padding: 8px 8px 10px;
+  }
+  .shop-glass-copy {
+    padding: 9px 2px 0;
+  }
+  .shop-glass-copy h3 {
+    font-size: 13px;
+  }
+  .shop-glass-meta {
+    font-size: 10.5px;
+  }
+  .shop-glass-price.price-stack {
+    font-size: 16px;
+  }
+  .shop-glass-price .price-lbp {
+    font-size: 9.5px;
+  }
+  .shop-glass-action {
+    padding-top: 9px;
+  }
+  .shop-glass-action .shop-add-to-cart {
+    min-height: 38px;
+    gap: 5px;
+    padding: 0 8px;
+    font-size: 11.5px;
+  }
+  .shop-glass-action .shop-add-to-cart svg {
+    width: 15px;
+    height: 15px;
+  }
+  .shop-glass-action .shop-qty-stepper {
+    min-height: 38px;
+  }
+  .shop-glass-action .shop-qty-stepper button {
+    width: 28px;
+    height: 28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-glass > .shop-glass-card,
+  .shop-glass-art .shop-image > img {
+    animation: none;
+    transition: none;
+  }
+  .storefront .shop-glass-card:hover,
+  .shop-glass-card:hover .shop-glass-art .shop-image > img {
+    transform: none;
+  }
+}

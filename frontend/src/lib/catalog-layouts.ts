@@ -34,6 +34,7 @@ export const catalogLayouts = [
   'rows',
   'banner',
   'cover',
+  'glass',
 ] as const;
 export type CatalogLayout = (typeof catalogLayouts)[number];
 
@@ -83,6 +84,7 @@ export const catalogLayoutGroupOf: Record<CatalogLayout, CatalogLayoutGroup> = {
   rows: 'menu',
   banner: 'ecommerce',
   cover: 'ecommerce',
+  glass: 'ecommerce',
 };
 
 export const catalogLayoutInfo: Record<
@@ -155,5 +157,9 @@ export const catalogLayoutInfo: Record<
   cover: {
     label: 'Cover card',
     hint: 'The same card without the floating tile.',
+  },
+  glass: {
+    label: 'Glass card',
+    hint: 'A glowing glass card with a full-width add-to-cart.',
   },
 };

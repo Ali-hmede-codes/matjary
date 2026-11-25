@@ -40,7 +40,8 @@ catalog/
    ├─ numbered.tsx + numbered.css   (saved key: `index`)
    ├─ rows.tsx + rows.css
    ├─ banner.tsx + banner.css
-   └─ cover.tsx + cover.css
+   ├─ cover.tsx + cover.css
+   └─ glass.tsx + glass.css
 ```
 
 ## Add a grid
