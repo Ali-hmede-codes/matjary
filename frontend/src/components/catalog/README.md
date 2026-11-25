@@ -79,6 +79,25 @@ Delete its `layouts/<key>.*` files, its registry entry, its `@import` line in
 `storefront.css`, its key/label/group from `catalog-layouts.ts` and from the
 backend DTO. Shared cards stay for the grids that still use them.
 
+## Preview every grid (dev only)
+
+Run `npm run dev`, then open
+[http://127.0.0.1:5173/catalog-preview.html](http://127.0.0.1:5173/catalog-preview.html).
+
+Every grid is shown in a 390px phone frame and a 1280px desktop frame, with one
+and with six mock products (sale, sold out, low stock, options and a long name),
+so a change can be judged in the states that break instead of one tidy row.
+
+- `?layouts=zigzag,index,rows` narrows the bench to a few grids.
+- `&count=1,6` picks the product counts (up to four).
+- `&incart=1` puts the first product in the cart, to check the quantity stepper.
+- An embed accepts `&dir=rtl` for Arabic shops.
+
+Each frame is a real iframe (`catalog-preview.html?embed=1&layout=…`) because the
+grids switch on viewport media queries, not container queries. The page is not a
+Vite build entry, so it never ships; its mock data lives in
+`src/catalog-preview/`, its placeholder photos in `catalog-preview-assets/`.
+
 ## Why the CSS is listed in `storefront.css`
 
 The catalog styles are part of one ordered stylesheet with the rest of the

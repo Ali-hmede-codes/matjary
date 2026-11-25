@@ -1,0 +1,178 @@
+/* Dev-only design bench chrome. The grids themselves use the real storefront
+   stylesheets; only the gallery around them lives here. */
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background: #14181b;
+  color: #e9eef2;
+  font-family: 'DM Sans Variable', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.is-embed {
+  background: var(--brand-surface, #fff);
+}
+
+.preview-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid #2c343a;
+  background: rgb(20 24 27 / 0.94);
+  backdrop-filter: blur(10px);
+}
+
+.preview-topbar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 24px;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 13px 20px;
+}
+
+.preview-topbar strong {
+  display: block;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.preview-topbar span {
+  display: block;
+  margin-top: 2px;
+  color: #93a1ab;
+  font-size: 11.5px;
+}
+
+.preview-topbar code {
+  padding: 6px 10px;
+  border: 1px solid #2c343a;
+  border-radius: 8px;
+  background: #1a1f23;
+  color: #b7c4cc;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.preview-main {
+  display: grid;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 20px;
+  gap: 30px;
+}
+
+.preview-card {
+  padding: 18px;
+  border: 1px solid #2c343a;
+  border-radius: 16px;
+  background: #1a1f23;
+}
+
+.preview-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.preview-card-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.preview-card-head h2 code {
+  margin-inline-start: 6px;
+  color: #7d8f9a;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.preview-card-head p {
+  margin: 0;
+  flex-basis: 100%;
+  color: #93a1ab;
+  font-size: 12px;
+}
+
+.preview-group {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #253036;
+  color: #a9d5bd;
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.preview-row {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.preview-row.is-phone {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 390px));
+  justify-content: start;
+}
+
+.preview-row.is-desktop {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.preview-frame {
+  margin: 0;
+  min-width: 0;
+}
+
+.preview-frame figcaption {
+  margin-bottom: 6px;
+  color: #8496a1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.preview-host {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.preview-host iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  border: 0;
+  transform-origin: top left;
+}
+
+/* The embed page: just the grid, at the width the iframe gives it. */
+/* `.app` carries the storefront's colour variables; the preview is a fragment,
+   so it must not reserve a full viewport like the real app shell. */
+.catalog-preview-embed {
+  min-height: 0;
+}
+
+/* The bench judges the resting layout; the entrance stagger would only make a
+   screenshot (or a pause) catch the grid mid-fade. */
+.catalog-preview-embed *,
+.catalog-preview-embed *::before,
+.catalog-preview-embed *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+.catalog-preview-embed .shop-section {
+  padding-bottom: 14px;
+}

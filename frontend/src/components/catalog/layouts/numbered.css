@@ -90,16 +90,18 @@
   }
 }
 @media (max-width: 560px) {
-  /* The index, the photo and the name keep the first line; the price and the
-     action sit under them instead of squeezing the name to one narrow column. */
+  /* Index, photo and name keep the first line; the price sits under the name it
+     belongs to and the action keeps the trailing edge across both lines, so
+     every row lines up instead of the price starting under the index. */
   .shop-numbered-row {
     display: grid;
-    grid-template-columns: auto 64px minmax(0, 1fr);
+    grid-template-columns: auto 64px minmax(0, 1fr) auto;
     grid-template-areas:
-      'index thumb copy'
-      'price price action';
+      'index thumb copy action'
+      'index thumb price action';
     align-items: center;
-    gap: 6px 10px;
+    gap: 2px 10px;
+    padding: 11px 2px;
   }
   .shop-numbered-index {
     grid-area: index;
@@ -111,22 +113,35 @@
   }
   .shop-numbered-copy {
     grid-area: copy;
+    align-self: end;
   }
   .shop-numbered-copy h3 {
+    display: -webkit-box;
+    overflow: hidden;
     font-size: 14.5px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
   .shop-numbered-price {
     grid-area: price;
+    align-self: start;
     justify-self: start;
+    align-items: flex-start;
     margin: 0;
+    text-align: start;
     font-size: 15px;
   }
-  .shop-numbered-row .shop-add-to-cart {
+  .shop-numbered-row .shop-add-to-cart,
+  .shop-numbered-row .shop-qty-stepper {
     grid-area: action;
+    align-self: center;
     justify-self: end;
-    min-height: 30px;
     margin: 0;
-    padding: 0 9px;
+  }
+  .shop-numbered-row .shop-add-to-cart {
+    min-height: 32px;
+    padding: 0 10px;
     font-size: 11px;
   }
 }

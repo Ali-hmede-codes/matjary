@@ -42,22 +42,75 @@
   animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: var(--shop-tile-delay, 0ms);
 }
-@media (max-width: 560px) {
-  /* The dotted leader needs room the phone row does not have. */
+@media (max-width: 700px) {
+  /* Phone and small tablet: the photo spans both lines, the name and the price
+     sit under each other, and the action keeps the trailing edge. The previous
+     wrapped flex row dropped the copy onto its own line and left the price
+     under the thumbnail, away from the name it belongs to. */
+  .shop-photo-row {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'thumb copy action'
+      'thumb price action';
+    align-items: center;
+    gap: 2px 12px;
+    padding: 11px 2px;
+  }
+  .shop-photo-row-thumb {
+    grid-area: thumb;
+    align-self: center;
+    flex-basis: auto;
+    width: 96px;
+  }
+  .shop-photo-row .shop-price-row-copy {
+    grid-area: copy;
+    align-self: end;
+    flex: none;
+  }
+  .shop-photo-row .shop-price-row-price {
+    grid-area: price;
+    align-self: start;
+    justify-self: start;
+    margin: 0;
+  }
+  /* The price sits under the name now, so its LBP hint starts on the same edge
+     instead of hugging the right side of the desktop row. */
+  .shop-photo-row .shop-price-row-price.price-stack {
+    align-items: flex-start;
+    text-align: start;
+  }
+  /* The dotted leader needs room the wrapped row does not have. */
   .shop-photo-row .shop-price-leader {
     display: none;
   }
-  /* The base phone rule forces the copy onto its own line; on a photo row the
-     thumb and the copy share the first line, so the price and the action line
-     up on the second one for every row. */
-  .shop-photo-row .shop-price-row-copy {
-    flex: 1 1 calc(100% - 108px);
+  .shop-photo-row .shop-add-to-cart,
+  .shop-photo-row .shop-qty-stepper {
+    grid-area: action;
+    align-self: center;
+    justify-self: end;
+    margin: 0;
   }
-  .shop-photo-row .shop-price-row-price {
-    margin-inline-end: 0;
+}
+@media (max-width: 560px) {
+  .shop-photo-row {
+    grid-template-columns: 84px minmax(0, 1fr) auto;
+    gap: 2px 10px;
+  }
+  .shop-photo-row-thumb {
+    width: 84px;
+  }
+  .shop-photo-row .shop-price-row-copy h3 {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
   .shop-photo-row .shop-add-to-cart {
-    margin-inline-start: auto;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

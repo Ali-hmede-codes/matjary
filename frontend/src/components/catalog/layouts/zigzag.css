@@ -48,6 +48,25 @@
   animation: shop-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: var(--shop-tile-delay, 0ms);
 }
+/* On a desktop a zigzag row is a magazine line, not a hero: a landscape crop and
+   a capped width keep six items within about one screen instead of one and a
+   half, so the spread stays scannable. */
+@media (min-width: 900px) {
+  .shop-zigzag-row {
+    padding: 10px;
+  }
+  .shop-zigzag-row .shop-product-image {
+    flex-basis: clamp(180px, 25%, 260px);
+    width: clamp(180px, 25%, 260px);
+    aspect-ratio: 16 / 9;
+  }
+  .shop-zigzag-row h3 {
+    font-size: 16.5px;
+  }
+  .shop-zigzag-row .shop-item-bottom {
+    padding-top: 8px;
+  }
+}
 @media (max-width: 720px) {
   .shop-zigzag-row {
     gap: 12px;
