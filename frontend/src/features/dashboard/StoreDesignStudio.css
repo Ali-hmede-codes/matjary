@@ -667,6 +667,22 @@
 .design-preview-wall.is-mosaic i:nth-child(1) {
   aspect-ratio: 4 / 5;
 }
+/* Modular: a large square, a wide strip, then small squares. */
+.design-preview-wall.is-modular {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+}
+.design-preview-wall.is-modular i {
+  aspect-ratio: 1 / 1;
+}
+.design-preview-wall.is-modular i:nth-child(4n + 1) {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+.design-preview-wall.is-modular i:nth-child(4n + 2) {
+  grid-column: span 2;
+  aspect-ratio: 2 / 1;
+}
 .design-preview-wall.is-frames {
   gap: 7px;
 }
@@ -699,6 +715,14 @@
 }
 .design-preview-wall.is-stack i {
   aspect-ratio: 16 / 9;
+}
+/* Rows: panoramic strips, one under another. */
+.design-preview-wall.is-rows {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.design-preview-wall.is-rows i {
+  aspect-ratio: 3 / 1;
 }
 .design-preview-wall.is-cover {
   grid-template-columns: repeat(3, minmax(0, 1fr));

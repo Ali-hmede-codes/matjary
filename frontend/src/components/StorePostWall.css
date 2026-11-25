@@ -85,6 +85,57 @@
   }
 }
 
+/* Modular: a structured grid that repeats one large module, one wide strip
+   and six small squares. On phones the large module and the strip become
+   full-width bands; on desktop the large module grows into a square that the
+   other modules wrap. */
+.shop-post-wall.layout-modular {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.shop-post-wall.layout-modular .shop-post-tile {
+  aspect-ratio: 1 / 1;
+  border-radius: var(--shop-tile-radius, 12px);
+}
+.shop-post-wall.layout-modular .shop-post-tile.is-module-lead,
+.shop-post-wall.layout-modular .shop-post-tile.is-module-wide {
+  grid-column: 1 / -1;
+  aspect-ratio: 2 / 1;
+}
+/* The live story leads the wall as its own full-width band, so the eight-post
+   module starts on a clean row instead of being offset by a story square. */
+.shop-post-wall.layout-modular .shop-story-tile {
+  grid-column: 1 / -1;
+  aspect-ratio: 2 / 1;
+}
+@media (min-width: 900px) {
+  .shop-post-wall.layout-modular {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .shop-post-wall.layout-modular .shop-post-tile.is-module-lead {
+    grid-column: span 2;
+    grid-row: span 2;
+    aspect-ratio: 1 / 1;
+  }
+  .shop-post-wall.layout-modular .shop-post-tile.is-module-wide {
+    grid-column: span 2;
+    aspect-ratio: 2 / 1;
+  }
+}
+
+/* Rows: panoramic strips stacked one under another, so the eye reads down the
+   wall instead of scanning columns. */
+.shop-post-wall.layout-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.shop-post-wall.layout-rows .shop-post-tile {
+  aspect-ratio: 3 / 1;
+  border-radius: var(--shop-tile-radius, 12px);
+}
+
 /* Frames: gallery prints with a border and breathing room. */
 .shop-post-wall.layout-frames {
   display: grid;

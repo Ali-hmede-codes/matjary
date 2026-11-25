@@ -8,6 +8,8 @@ import {
   designWithPreset,
   hasSavedDesign,
   normalizeDesign,
+  postLayoutInfo,
+  postLayouts,
   resolveCategoryLayout,
   rhythmSummary,
 } from './design.ts';
@@ -34,6 +36,18 @@ test('every preset is a complete, distinct system', () => {
     assert.notEqual(design.postsLayout, undefined);
     assert.ok(preset.tagline.length > 0);
   }
+});
+
+test('post layouts include the rows, modular and mosaic grids only', () => {
+  for (const layout of ['rows', 'modular', 'mosaic'] as const) {
+    assert.ok(postLayouts.includes(layout), layout);
+    assert.ok(postLayoutInfo[layout].hint.length > 0, layout);
+  }
+  assert.equal(
+    (postLayouts as readonly string[]).includes('columns'),
+    false,
+    'columns are not a post wall grid',
+  );
 });
 
 test('legacy-only rows keep the classic storefront', () => {

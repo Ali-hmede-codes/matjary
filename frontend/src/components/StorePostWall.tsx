@@ -30,6 +30,20 @@ function useReducedMotion() {
   return reduced;
 }
 
+// The modular wall repeats an eight-post block: one large lead, one wide
+// strip and six small squares. Index-based classes keep that pattern intact
+// whether or not a live story leads the wall.
+function modularSlot(index: number): string {
+  switch (index % 8) {
+    case 0:
+      return 'is-module-lead';
+    case 1:
+      return 'is-module-wide';
+    default:
+      return '';
+  }
+}
+
 /**
  * The shop's post wall. The owner picks the presentation in the design studio;
  * every layout renders the same tiles so the viewer, keyboard order and
@@ -129,9 +143,11 @@ export function StorePostWall({
             </button>
           );
         }
+        const moduleClass =
+          effectiveLayout === 'modular' ? modularSlot(index) : '';
         return (
           <button
-            className="shop-post-tile"
+            className={`shop-post-tile${moduleClass ? ` ${moduleClass}` : ''}`}
             key={post.id}
             type="button"
             style={revealDelay(index)}

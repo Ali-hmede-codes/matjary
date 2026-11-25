@@ -82,6 +82,12 @@ const postWires: Record<PostLayout, WireBoxes> = {
     [15, 15, 9, 11],
     [24, 15, 14, 11],
   ],
+  modular: [
+    [2, 2, 18, 18],
+    [22, 2, 17, 8],
+    [22, 12, 8, 8],
+    [31, 12, 8, 8],
+  ],
   frames: [
     [3, 3, 10, 9],
     [15, 3, 10, 9],
@@ -116,6 +122,11 @@ const postWires: Record<PostLayout, WireBoxes> = {
   stack: [
     [2, 2, 36, 10],
     [2, 14, 36, 10],
+  ],
+  rows: [
+    [2, 2, 36, 6],
+    [2, 11, 36, 6],
+    [2, 20, 36, 6],
   ],
   cover: [
     [2, 2, 36, 12],
@@ -481,9 +492,13 @@ function DesignStudio({ store }: { store: OwnerStore }) {
   const previewTiles =
     design.postsLayout === 'stack'
       ? 2
-      : design.postsLayout === 'cover' || design.postsLayout === 'list'
-        ? 4
-        : 6;
+      : design.postsLayout === 'rows'
+        ? 3
+        : design.postsLayout === 'modular' ||
+            design.postsLayout === 'cover' ||
+            design.postsLayout === 'list'
+          ? 4
+          : 6;
 
   const update = (patch: Partial<StoreDesign>) =>
     setDesign((current) => ({ ...current, ...patch }));
