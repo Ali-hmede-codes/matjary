@@ -1,7 +1,8 @@
 import './storefront.css';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, Share2 } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 import {
   ApiError,
   assetUrl,
@@ -14,6 +15,7 @@ import {
   categorySlug,
   categoryIndexGroups,
   decimalPrice,
+  defaultProductOptionChoices,
   formatProductPrice,
   lbpPriceLabel,
   lbpRateFor,
@@ -23,6 +25,7 @@ import {
   productOptionSelection,
   storeCategoryPath,
   storeMediaUrl,
+  storeMenuItemPath,
   storePath,
   storePresentation,
   storeProductPath,
@@ -67,7 +70,11 @@ export function StoreProductPage({
   const notFound =
     storeQuery.error instanceof ApiError && storeQuery.error.status === 404;
   const store = notFound ? undefined : storeQuery.data;
-  const cart = useShopCart(store);
+  // A menu shop has no standalone item page: its items live in the menu sheet.
+  // Fetching the product would only power a page that immediately redirects.
+  const restaurant = store?.storeType === 'restaurant_menu';
+  // The menu redirect must not open a cart session just to leave the page.
+  const cart = useShopCart(restaurant ? undefined : store);
   const productQuery = useQuery({
     queryKey: ['storefront-product', shopSlug, productSlug],
     queryFn: ({ signal }) =>
@@ -75,7 +82,7 @@ export function StoreProductPage({
         `stores/${encodeURIComponent(shopSlug)}/products/${encodeURIComponent(productSlug)}`,
         signal,
       ),
-    enabled: Boolean(store),
+    enabled: Boolean(store) && !restaurant,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status === 404) && count < 1,
   });
@@ -86,7 +93,7 @@ export function StoreProductPage({
         `stores/${encodeURIComponent(shopSlug)}/categories`,
         signal,
       ),
-    enabled: Boolean(store),
+    enabled: Boolean(store) && !restaurant,
     staleTime: 5 * 60_000,
   });
   // The product endpoint is slug-global; a shop URL must never render an item
@@ -95,6 +102,14 @@ export function StoreProductPage({
     productQuery.data && (!store || productQuery.data.storeId === store.id)
       ? productQuery.data
       : undefined;
+  // The detail page follows the sheet's fast default: the first value of each
+  // group is already chosen, so a shopper can add without tapping every option.
+  const optionsInitialised = useRef(false);
+  useEffect(() => {
+    if (!product || optionsInitialised.current) return;
+    optionsInitialised.current = true;
+    setChosenOptions(defaultProductOptionChoices(product));
+  }, [product]);
   const groups = categoryIndexGroups(
     categoriesQuery.data?.items ?? [],
     categoriesQuery.data?.uncategorized ?? 0,
@@ -114,7 +129,7 @@ export function StoreProductPage({
   const price = product ? decimalPrice(productFromPriceCents(product)) : '';
 
   usePageSeo(
-    store && product
+    store && product && !restaurant
       ? {
           title: `${product.name} — ${store.name} — ${settings.siteName}`,
           description:
@@ -176,6 +191,10 @@ export function StoreProductPage({
         homeLabel="Back to discoveries"
       />
     );
+  // Keep old shared /p/ links useful for menu shops: land on the menu with the
+  // item's sheet already open. `replace` avoids a redirect loop in history.
+  if (restaurant)
+    return <Navigate replace to={storeMenuItemPath(store.slug, productSlug)} />;
   if (!product && productQuery.isPending)
     return <StoreDetailLoading label="Loading the item…" />;
   if (!product)

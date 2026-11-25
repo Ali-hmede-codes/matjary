@@ -3,6 +3,7 @@ import type { CatalogGrid, CatalogGridProps, CatalogItemProps } from '../types';
 import {
   AddToCart,
   PriceLabels,
+  ProductLink,
   SaleBadge,
   ShopImage,
   StockBadge,
@@ -27,19 +28,22 @@ function FrameCard({ product, cart, href, lbpRate, delay }: CatalogItemProps) {
       style={tileDelay(delay)}
     >
       <div className="shop-frame-art">
-        <a
-          className="shop-frame-art-link"
+        <ProductLink
+          product={product}
           href={href}
-          aria-label={`Open ${product.name}`}
+          className="shop-frame-art-link"
+          ariaLabel={`Open ${product.name}`}
         >
           <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-        </a>
+        </ProductLink>
         <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
       </div>
       <div className="shop-frame-copy">
         <h3 className="notranslate">
-          <a href={href}>{product.name}</a>
+          <ProductLink product={product} href={href}>
+            {product.name}
+          </ProductLink>
         </h3>
         <p className="shop-frame-meta">
           {product.categoryName || product.category}

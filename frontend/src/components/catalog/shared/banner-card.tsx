@@ -4,6 +4,7 @@ import {
   AddToCart,
   PriceLabels,
   ProductDescription,
+  ProductLink,
   ProductName,
   SaleBadge,
   ShopImage,
@@ -39,17 +40,18 @@ export function BannerCard({
       style={tileDelay(delay)}
     >
       <div className="shop-app-art">
-        <a
-          className="shop-app-art-link"
+        <ProductLink
+          product={product}
           href={href}
-          aria-label={`Open ${product.name}`}
+          className="shop-app-art-link"
+          ariaLabel={`Open ${product.name}`}
         >
           <span className="shop-app-banner">
             <ShopImage value={images[0]} alt={product.name} />
             <SaleBadge product={product} />
             <StockBadge product={product} cart={cart} />
           </span>
-        </a>
+        </ProductLink>
         {variant === 'banner' && (
           <span className="shop-app-tile" aria-hidden="true">
             <ShopImage value={images[1] ?? images[0]} alt="" />

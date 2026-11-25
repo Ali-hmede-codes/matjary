@@ -4,6 +4,7 @@ import {
   AddToCart,
   PriceLabels,
   ProductDescription,
+  ProductLink,
   ProductName,
   SaleBadge,
   ShopImage,
@@ -24,15 +25,16 @@ function ListItem({
     <article
       className={`shop-product shop-menu-item${unavailable ? ' is-unavailable' : ''}`}
     >
-      <a
-        className="shop-product-image shop-product-image-link"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-product-image shop-product-image-link"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
         <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
-      </a>
+      </ProductLink>
       <div className="shop-product-copy">
         <ProductName product={product} href={href} />
         <ProductDescription product={product} visible={showDescriptions} />

@@ -2343,7 +2343,9 @@ export class SeoService {
     for (const seo of productSeos) {
       if (seo.robots?.includes('noindex')) continue;
       const product = visibleProducts.get(seo.productId);
-      if (product) {
+      // Menu items are browsed inside their shop page, which is already listed
+      // above; the old /p/ path redirects and must not be advertised to crawlers.
+      if (product && product.store.storeType !== StoreType.RESTAURANT_MENU) {
         entries.push({
           title: product.name,
           url: this.productUrl(product, product.store),
@@ -2591,7 +2593,10 @@ export class SeoService {
         id: product.storeId,
       });
       if (!store) return;
-      url = this.productUrl(product, store);
+      // A menu edit changes the shop's menu page, not a standalone item page.
+      url = this.isMenuStore(store)
+        ? this.storeUrl(store)
+        : this.productUrl(product, store);
     } else {
       if ((entity as Showcase).status !== ShowcaseStatus.PUBLISHED) return;
       url = this.baseUrl + '/post/' + (entity as Showcase).slug;
@@ -2659,8 +2664,12 @@ export class SeoService {
         index += SeoService.READ_CHUNK
       ) {
         const chunk = products.slice(index, index + SeoService.READ_CHUNK);
-        const visible = chunk.filter((product) =>
-          indexable(seoByProduct.get(product.id) ?? null),
+        // Menu items no longer have a standalone page; the shop menu is their
+        // canonical address, so advertising /p/ here would only list redirects.
+        const visible = chunk.filter(
+          (product) =>
+            product.store.storeType !== StoreType.RESTAURANT_MENU &&
+            indexable(seoByProduct.get(product.id) ?? null),
         );
         if (!visible.length) continue;
         const previewUrls = await this.previewUrlsByKey(

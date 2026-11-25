@@ -3,6 +3,7 @@ import type { CatalogGrid, CatalogGridProps, CatalogItemProps } from '../types';
 import {
   AddToCart,
   PriceLabels,
+  ProductLink,
   ProductName,
   SaleBadge,
   ShopImage,
@@ -30,13 +31,14 @@ function OverlayCard({
       className={`shop-product shop-overlay-card${unavailable ? ' is-unavailable' : ''}`}
       style={tileDelay(delay)}
     >
-      <a
-        className="shop-product-image shop-product-image-link"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-product-image shop-product-image-link"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-      </a>
+      </ProductLink>
       <SaleBadge product={product} />
       <StockBadge product={product} cart={cart} />
       <div className="shop-overlay-bar">

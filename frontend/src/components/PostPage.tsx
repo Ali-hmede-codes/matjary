@@ -19,8 +19,8 @@ import {
   linkCompareAtPriceCents,
   postPath,
   storeCategoryPath,
+  storeItemPath,
   storePath,
-  storeProductPath,
 } from '../lib/storefront';
 import { usePageSeo } from '../hooks/usePageSeo';
 import { brandingUrl } from '../lib/website';
@@ -245,7 +245,7 @@ export function PostPage({
                 className="post-page-link"
                 href={
                   link.type === 'product' && link.slug
-                    ? storeProductPath(shop.slug, link.slug)
+                    ? storeItemPath(shop, link.slug)
                     : storeCategoryPath(shop.slug, categorySlug(link.name))
                 }
               >

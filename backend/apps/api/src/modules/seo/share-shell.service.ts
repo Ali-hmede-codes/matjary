@@ -16,6 +16,7 @@ import {
   ShowcaseStatus,
   Store,
   StoreCategory,
+  StoreType,
   publicWhere,
   PUBLIC_PRODUCT_STATUSES,
 } from '@app/database';
@@ -228,27 +229,32 @@ export class ShareShellService implements OnModuleInit, OnApplicationShutdown {
             ),
           );
         }
-        for await (const products of this.afterIdBatches((after) =>
-          manager.find(Product, {
-            where: {
-              storeId: store.id,
-              status: In([...PUBLIC_PRODUCT_STATUSES]),
-              ...publicWhere('product'),
-              ...(after ? { id: MoreThan(after) } : {}),
-            },
-            order: { id: 'ASC' },
-            take: ShareShellService.BATCH,
-          }),
-        )) {
-          for (const product of products) {
-            pages += Number(
-              await this.writePage(
-                [store.slug, 'p', product.slug],
-                await this.seo.generateProductMetaTags(product, store),
-                template,
-                keep,
-              ),
-            );
+        // Menu shops have no standalone item page: their items live in the
+        // menu sheet, so a /p/ shell would advertise an address that redirects.
+        // Skipping the loop also prunes shells written before this rule.
+        if (store.storeType !== StoreType.RESTAURANT_MENU) {
+          for await (const products of this.afterIdBatches((after) =>
+            manager.find(Product, {
+              where: {
+                storeId: store.id,
+                status: In([...PUBLIC_PRODUCT_STATUSES]),
+                ...publicWhere('product'),
+                ...(after ? { id: MoreThan(after) } : {}),
+              },
+              order: { id: 'ASC' },
+              take: ShareShellService.BATCH,
+            }),
+          )) {
+            for (const product of products) {
+              pages += Number(
+                await this.writePage(
+                  [store.slug, 'p', product.slug],
+                  await this.seo.generateProductMetaTags(product, store),
+                  template,
+                  keep,
+                ),
+              );
+            }
           }
         }
         // Posts live under their shop, so one shared link previews from a file

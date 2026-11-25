@@ -44,6 +44,30 @@
   box-shadow: none;
   opacity: 1;
 }
+/* The choose control stays a choose control after an add: tapping it again
+   reopens the sheet for another combination instead of turning into a stepper. */
+.shop-add-to-cart.is-choose {
+  position: relative;
+}
+.shop-choose-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+.shop-add-to-cart.is-icon .shop-choose-count {
+  position: absolute;
+  top: -5px;
+  inset-inline-end: -5px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--line));
+}
 /* Once an item is in the cart the button becomes an inline quantity control,
    so adding another one never opens the cart panel. */
 .shop-qty-stepper {

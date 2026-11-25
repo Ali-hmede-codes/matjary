@@ -1,4 +1,9 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  useState,
+  type CSSProperties,
+  type MouseEventHandler,
+  type ReactNode,
+} from 'react';
 import {
   ArrowUpRight,
   Ban,
@@ -23,9 +28,11 @@ import {
   productPriceLabel,
   selectedOptionsKey,
   storeMediaUrl,
+  storeMenuItemPath,
 } from '../../lib/storefront';
 import { productCartLimit } from '../../lib/cart';
 import type { ShopCartController } from '../../hooks/useShopCart';
+import { useProductOptions } from '../options/context';
 
 // ---------------------------------------------------------------------------
 // Shared catalog primitives
@@ -102,6 +109,63 @@ export function ShopImage({
   );
 }
 
+/**
+ * The one product link. Shops in menu mode have no item detail page, so a tap
+ * opens the option sheet in place; a retail shop keeps the real link (including
+ * middle-click and new-tab behaviour) and only its Choose control opens the
+ * sheet. `quickView` comes from the storefront provider, never from the card.
+ */
+export function ProductLink({
+  product,
+  href,
+  className,
+  ariaLabel,
+  onClick,
+  children,
+}: {
+  product: Product;
+  href: string;
+  className?: string;
+  ariaLabel?: string;
+  onClick?: MouseEventHandler<HTMLAnchorElement>;
+  children: ReactNode;
+}) {
+  const options = useProductOptions();
+  const quickView = options?.quickView === true;
+  // Menu cards still render a real link for middle-click and no-JS crawlers:
+  // it points at the shop menu with the item selected, never at the removed
+  // detail path that would answer with a redirect.
+  const menuHref =
+    quickView && options?.shopSlug
+      ? storeMenuItemPath(options.shopSlug, product.slug)
+      : undefined;
+  return (
+    <a
+      className={className}
+      href={menuHref ?? href}
+      aria-label={ariaLabel}
+      aria-haspopup={quickView ? 'dialog' : undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!quickView || event.defaultPrevented) return;
+        // Modified clicks still open the real address in a new tab.
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        options?.open(product);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
 /** Add, or a quantity stepper once the item already sits in the cart. */
 export function AddToCart({
   product,
@@ -126,6 +190,7 @@ export function AddToCart({
    */
   iconOnly?: boolean;
 }) {
+  const quickOptions = useProductOptions();
   const optionKey = selectedOptionsKey(selectedOptions);
   const item = cart.cart?.items.find(
     (entry) =>
@@ -160,33 +225,59 @@ export function AddToCart({
         Out of stock
       </button>
     );
-  // Products with choices open their page first: adding the base product
-  // without a size or color would create an order the shop cannot fulfill.
-  if (productHasOptions(product) && chooseHref)
-    return iconOnly ? (
-      <a
-        className="shop-add-to-cart is-icon"
-        href={chooseHref}
-        aria-label={`Choose options for ${product.name}`}
-      >
-        <ArrowUpRight size={18} aria-hidden="true" />
-      </a>
-    ) : (
-      <a
-        className="shop-add-to-cart"
-        href={chooseHref}
-        aria-label={`Choose options for ${product.name}`}
-      >
-        Choose
-      </a>
-    );
-  if (productHasOptions(product) && !selectedOptions?.length)
+  // Products with choices never add their base row: the shopper picks a size
+  // or colour first. On a catalogue card that picker is the in-place sheet;
+  // without a provider (the design preview) the old details link stays.
+  if (productHasOptions(product) && !selectedOptions?.length) {
+    const chooseLabel =
+      productQuantity > 0
+        ? `Choose options for ${product.name}, ${productQuantity} in cart`
+        : `Choose options for ${product.name}`;
+    const chooseCount =
+      productQuantity > 0 ? (
+        <span className="shop-choose-count" aria-hidden="true">
+          {productQuantity > 99 ? '99+' : productQuantity}
+        </span>
+      ) : null;
+    if (quickOptions && chooseHref)
+      return (
+        <button
+          type="button"
+          className={`shop-add-to-cart is-choose${iconOnly ? ' is-icon' : ''}`}
+          aria-label={chooseLabel}
+          aria-haspopup="dialog"
+          title={chooseLabel}
+          onClick={() => quickOptions.open(product)}
+        >
+          <SlidersHorizontal size={iconOnly ? 18 : 15} aria-hidden="true" />
+          {!iconOnly && 'Choose'}
+          {chooseCount}
+        </button>
+      );
+    if (chooseHref)
+      return iconOnly ? (
+        <a
+          className="shop-add-to-cart is-icon"
+          href={chooseHref}
+          aria-label={chooseLabel}
+        >
+          <ArrowUpRight size={18} aria-hidden="true" />
+        </a>
+      ) : (
+        <a
+          className="shop-add-to-cart"
+          href={chooseHref}
+          aria-label={chooseLabel}
+        >
+          Choose
+        </a>
+      );
     return iconOnly ? (
       <button
         type="button"
-        className="shop-add-to-cart is-icon"
+        className="shop-add-to-cart is-icon is-choose"
         disabled
-        aria-label={`Choose options for ${product.name}`}
+        aria-label={chooseLabel}
         title="Choose a value for each option first"
       >
         <SlidersHorizontal size={18} aria-hidden="true" />
@@ -194,13 +285,14 @@ export function AddToCart({
     ) : (
       <button
         type="button"
-        className="shop-add-to-cart"
+        className="shop-add-to-cart is-choose"
         disabled
         title="Choose a value for each option first"
       >
         Choose options
       </button>
     );
+  }
   // The cart never opens on add; the quantity control and toast confirm it.
   if (!item)
     return (
@@ -210,7 +302,7 @@ export function AddToCart({
         disabled={blocked}
         aria-label={`Add ${product.name} to cart`}
         title={`Add ${product.name} to cart`}
-        onClick={() => cart.add(product, selectedOptions)}
+        onClick={() => void cart.add(product, selectedOptions)}
       >
         {icon === 'cart' ? (
           <ShoppingCart size={17} aria-hidden="true" />
@@ -268,9 +360,11 @@ export function StockBadge({
         Out of stock
       </span>
     );
+  // Every option combination is its own cart line; the badge counts them all.
   const quantity =
-    cart.cart?.items.find((item) => item.productId === product.id)?.quantity ??
-    0;
+    cart.cart?.items
+      .filter((item) => item.productId === product.id)
+      .reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   if (quantity)
     return (
       <span className="shop-stock-label shop-glass">
@@ -345,9 +439,9 @@ export function ProductName({
 }) {
   return (
     <h3>
-      <a className="notranslate" href={href}>
+      <ProductLink product={product} href={href} className="notranslate">
         {product.name}
-      </a>
+      </ProductLink>
     </h3>
   );
 }

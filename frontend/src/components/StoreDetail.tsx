@@ -12,6 +12,7 @@ import { storeMediaUrl, storePath, storePresentation } from '../lib/storefront';
 import type { ShopCartController } from '../hooks/useShopCart';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
+import { ProductOptionsProvider } from './options/ProductOptionsProvider';
 import { StoreAvatar, StoreVerifiedBadge } from './StoreAvatar';
 
 /** Absolute media URL for canonical/OG metadata (relative local keys included). */
@@ -55,76 +56,84 @@ export function StoreDetailShell({
       className={`app storefront storefront-detail ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${count > 0 && !cart.open ? ' has-cart' : ''}${presentation.design ? ` shop-design-${presentation.design.template}` : ''}`}
       style={presentation.theme as CSSProperties}
     >
-      <a className="skip-link" href="#shop-detail-main">
-        Skip to content
-      </a>
-      <header className="shop-detail-bar">
-        <a
-          className="shop-detail-identity"
-          href={shopHref}
-          aria-label={`Back to ${store.name}`}
-          title={`Back to ${store.name}`}
-        >
-          <span className="shop-detail-back" aria-hidden="true">
-            <ArrowLeft size={17} />
-          </span>
-          <StoreAvatar store={store} />
-          <strong className="notranslate">{store.name}</strong>
-          <StoreVerifiedBadge store={store} size={16} />
+      <ProductOptionsProvider
+        cart={cart}
+        products={products}
+        shopSlug={store.slug}
+        lbpRate={lbpRate}
+        menuMode={presentation.restaurant}
+      >
+        <a className="skip-link" href="#shop-detail-main">
+          Skip to content
         </a>
-        <div
-          className="shop-tools"
-          role="group"
-          aria-label="Shop quick actions"
-        >
-          <button
-            type="button"
-            className="shop-glass"
-            onClick={() => cart.setOpen(true)}
-            aria-label={`Open cart${count ? `, ${count} items` : ''}`}
-            aria-haspopup="dialog"
-            aria-expanded={cart.open}
-            title="Shopping cart"
+        <header className="shop-detail-bar">
+          <a
+            className="shop-detail-identity"
+            href={shopHref}
+            aria-label={`Back to ${store.name}`}
+            title={`Back to ${store.name}`}
           >
-            <ShoppingCart size={21} aria-hidden="true" />
-            {count > 0 && (
-              <span className="shop-cart-count" aria-hidden="true">
-                {count > 99 ? '99+' : count}
-              </span>
-            )}
-          </button>
-        </div>
-      </header>
-      <main id="shop-detail-main" className="shop-detail-main">
-        {children}
-      </main>
-      <footer className="shop-detail-footer">
-        <span>
-          © {new Date().getFullYear()}{' '}
-          <span className="notranslate">{store.name}</span>
-        </span>
-        <a href={shopHref}>
-          Back to shop <ArrowUpRight size={15} aria-hidden="true" />
-        </a>
-      </footer>
-      <ShopCartDock cart={cart} lbpRate={lbpRate} />
-      {cart.open && (
-        <ShopCart
-          store={store}
-          products={products}
-          controller={cart}
-          lbpRate={lbpRate}
-          onBrowse={() => {
-            cart.setOpen(false);
-            window.location.assign(shopHref);
-          }}
-          onContact={() => {
-            cart.setOpen(false);
-            window.location.assign(shopHref);
-          }}
-        />
-      )}
-      <ShopToast cart={cart} notice={notice} />
+            <span className="shop-detail-back" aria-hidden="true">
+              <ArrowLeft size={17} />
+            </span>
+            <StoreAvatar store={store} />
+            <strong className="notranslate">{store.name}</strong>
+            <StoreVerifiedBadge store={store} size={16} />
+          </a>
+          <div
+            className="shop-tools"
+            role="group"
+            aria-label="Shop quick actions"
+          >
+            <button
+              type="button"
+              className="shop-glass"
+              onClick={() => cart.setOpen(true)}
+              aria-label={`Open cart${count ? `, ${count} items` : ''}`}
+              aria-haspopup="dialog"
+              aria-expanded={cart.open}
+              title="Shopping cart"
+            >
+              <ShoppingCart size={21} aria-hidden="true" />
+              {count > 0 && (
+                <span className="shop-cart-count" aria-hidden="true">
+                  {count > 99 ? '99+' : count}
+                </span>
+              )}
+            </button>
+          </div>
+        </header>
+        <main id="shop-detail-main" className="shop-detail-main">
+          {children}
+        </main>
+        <footer className="shop-detail-footer">
+          <span>
+            © {new Date().getFullYear()}{' '}
+            <span className="notranslate">{store.name}</span>
+          </span>
+          <a href={shopHref}>
+            Back to shop <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
+        </footer>
+        <ShopCartDock cart={cart} lbpRate={lbpRate} />
+        {cart.open && (
+          <ShopCart
+            store={store}
+            products={products}
+            controller={cart}
+            lbpRate={lbpRate}
+            onBrowse={() => {
+              cart.setOpen(false);
+              window.location.assign(shopHref);
+            }}
+            onContact={() => {
+              cart.setOpen(false);
+              window.location.assign(shopHref);
+            }}
+          />
+        )}
+        <ShopToast cart={cart} notice={notice} />
+      </ProductOptionsProvider>
     </div>
   );
 }

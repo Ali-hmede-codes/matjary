@@ -153,6 +153,27 @@ export function storeProductPath(
   return `/stores/${encodeURIComponent(shopSlug)}/p/${encodeURIComponent(productSlug)}/`;
 }
 
+/**
+ * A menu item's address is the shop menu with the item's sheet open. Menu shops
+ * have no standalone /p/ page, so internal links use this instead of a redirect.
+ */
+export function storeMenuItemPath(
+  shopSlug: string,
+  productSlug: string,
+): string {
+  return `${storePath(shopSlug)}?item=${encodeURIComponent(productSlug)}`;
+}
+
+/** Product link for the shop's own type: a details page or an in-place sheet. */
+export function storeItemPath(
+  store: Pick<Store, 'slug' | 'storeType'>,
+  productSlug: string,
+): string {
+  return store.storeType === 'restaurant_menu'
+    ? storeMenuItemPath(store.slug, productSlug)
+    : storeProductPath(store.slug, productSlug);
+}
+
 export function storePostPath(shopSlug: string, postSlug: string): string {
   return `/stores/${encodeURIComponent(shopSlug)}/post/${encodeURIComponent(postSlug)}/`;
 }
@@ -683,6 +704,24 @@ export function selectedOptionsKey(
         ]),
       )
     : '';
+}
+
+/**
+ * The fast default for a product's option sheet: the first value of every
+ * group. A shopper who wants the usual order can add in one tap, and a first
+ * value with its own price updates the total before any interaction.
+ */
+export function defaultProductOptionChoices(
+  product: Pick<Product, 'options'>,
+): Record<string, string> {
+  // fromEntries keeps every owner-supplied name (even "__proto__") an own data
+  // property instead of touching the object's prototype.
+  return Object.fromEntries(
+    (product.options ?? []).flatMap((group) => {
+      const first = group.values[0];
+      return first ? [[group.name, first.label]] : [];
+    }),
+  );
 }
 
 /** Returns the chosen values in product order, or null while incomplete. */

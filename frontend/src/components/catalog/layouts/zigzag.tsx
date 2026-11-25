@@ -2,6 +2,7 @@ import { storeProductPath } from '../../../lib/storefront';
 import type { CatalogGrid, CatalogGridProps, CatalogItemProps } from '../types';
 import {
   ItemCaption,
+  ProductLink,
   SaleBadge,
   ShopImage,
   StockBadge,
@@ -28,15 +29,16 @@ function ZigzagRow({
       className={`shop-product shop-zigzag-row${unavailable ? ' is-unavailable' : ''}`}
       style={tileDelay(delay)}
     >
-      <a
-        className="shop-product-image shop-product-image-link"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-product-image shop-product-image-link"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
         <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
-      </a>
+      </ProductLink>
       <ItemCaption
         product={product}
         cart={cart}

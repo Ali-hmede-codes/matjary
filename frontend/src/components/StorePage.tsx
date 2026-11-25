@@ -13,6 +13,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowUp,
@@ -67,6 +68,7 @@ import { useShopFavorites } from '../hooks/useShopFavorites';
 import { ShopCart } from './ShopCart';
 import { ShopCartDock, ShopToast } from './ShopCartDock';
 import { CatalogItems, CatalogLoading, ShopImage } from './catalog';
+import { ProductOptionsProvider } from './options/ProductOptionsProvider';
 import { CategoryShowcase } from './CategoryShowcase';
 import { CoverEdge } from './CoverEdge';
 import { StorePostWall } from './StorePostWall';
@@ -190,6 +192,11 @@ export function StorePage({ slug }: { slug: string | null }) {
     initialView === 'catalog' ? 'catalog' : 'posts',
   );
   const [menuFilter, setMenuFilter] = useState('all');
+  // A menu item shared from a post arrives as ?item=<slug>. Reading it through
+  // the router means a link inside this same shop also opens the sheet, and
+  // closing it can clear the flag without reloading the page.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const itemSlug = searchParams.get('item');
   // Sections the shopper asked to see in full, keyed by catalog group.
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -208,6 +215,11 @@ export function StorePage({ slug }: { slug: string | null }) {
   const [quickKind, setQuickKind] = useState<'post' | 'product' | null>(null);
   const [quickNotice, setQuickNotice] = useState('');
   const client = useQueryClient();
+  // Opening an item from a post keeps the same shop route, so the post dialog
+  // would otherwise stay in the top layer over the option sheet.
+  useEffect(() => {
+    if (itemSlug) setSelectedPost(null);
+  }, [itemSlug]);
   // Stories are public and short-lived; the owner view adds the remaining slots.
   const storyGroups = useStoryGroups(slug ? [slug] : undefined, Boolean(slug));
   const { seen, markSeen } = useSeenStories();
@@ -491,6 +503,35 @@ export function StorePage({ slug }: { slug: string | null }) {
     () => menuQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [menuQuery.data],
   );
+  // A shared ?item= link may point past the first catalogue page. Fetch only
+  // that one item when the loaded pages do not contain it, so the sheet can
+  // open without paging the whole menu behind the visitor.
+  const initialItemLoaded = Boolean(
+    itemSlug && menuItems.some((item) => item.slug === itemSlug),
+  );
+  const initialItemQuery = useQuery({
+    queryKey: ['storefront-product', slug, itemSlug],
+    queryFn: ({ signal }) =>
+      getJson<Product>(
+        `stores/${encodeURIComponent(slug!)}/products/${encodeURIComponent(itemSlug!)}`,
+        signal,
+      ),
+    enabled: Boolean(store && itemSlug && !initialItemLoaded),
+    staleTime: 5 * 60_000,
+    retry: (count, error) =>
+      !(error instanceof ApiError && error.status === 404) && count < 1,
+  });
+  const initialItem =
+    initialItemQuery.data?.storeId === store?.id
+      ? initialItemQuery.data
+      : undefined;
+  const optionProducts = useMemo(
+    () =>
+      initialItem && !initialItemLoaded
+        ? [...menuItems, initialItem]
+        : menuItems,
+    [menuItems, initialItem, initialItemLoaded],
+  );
   const menuTotal = Number(menuQuery.data?.pages[0]?.total ?? 0);
   // Categories with an owner row arrive as ids; older products without one
   // stay reachable through the "More items" group.
@@ -584,6 +625,15 @@ export function StorePage({ slug }: { slug: string | null }) {
     setFocusContact(true);
   }
 
+  // Closing the sheet leaves the shop URL clean, so a refresh does not reopen an
+  // item the shopper already viewed. Other query flags stay untouched.
+  function clearItemParam() {
+    if (!searchParams.has('item')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('item');
+    setSearchParams(next, { replace: true });
+  }
+
   function openStorePost(post: Post) {
     setSelectedPost(post);
   }
@@ -603,915 +653,938 @@ export function StorePage({ slug }: { slug: string | null }) {
       className={`app storefront ${store ? 'has-store' : ''} ${presentation.restaurant ? 'storefront-restaurant' : 'storefront-retail'}${cartItems > 0 && !cart.open ? ' has-cart' : ''}${presentation.design ? ` shop-design-${presentation.design.template}` : ''}`}
       style={presentation.theme as CSSProperties}
     >
-      <a className="skip-link" href="#shop-main">
-        Skip to shop
-      </a>
-      <header id="shop-top" className="shop-topbar">
-        <a className="shop-back shop-glass" href={home}>
-          <ArrowLeft size={17} aria-hidden="true" /> Back to home
+      <ProductOptionsProvider
+        cart={cart}
+        products={optionProducts}
+        shopSlug={store?.slug ?? slug ?? undefined}
+        lbpRate={lbpRate}
+        menuMode={presentation.restaurant}
+        initialSlug={itemSlug}
+        onClose={clearItemParam}
+      >
+        <a className="skip-link" href="#shop-main">
+          Skip to shop
         </a>
-        {store ? (
-          <div
-            className="shop-tools"
-            role="group"
-            aria-label="Shop quick actions"
-          >
-            <button
-              type="button"
-              className="shop-glass"
-              aria-pressed={shopFavorites.isFavorite(store.id)}
-              aria-label={
-                shopFavorites.isFavorite(store.id)
-                  ? `Remove ${store.name} from favorite shops`
-                  : `Add ${store.name} to favorite shops`
-              }
-              title={
-                shopFavorites.isFavorite(store.id)
-                  ? 'Remove from favorites'
-                  : 'Add to favorites'
-              }
-              onClick={() => shopFavorites.toggleFavorite(store.id, store.name)}
+        <header id="shop-top" className="shop-topbar">
+          <a className="shop-back shop-glass" href={home}>
+            <ArrowLeft size={17} aria-hidden="true" /> Back to home
+          </a>
+          {store ? (
+            <div
+              className="shop-tools"
+              role="group"
+              aria-label="Shop quick actions"
             >
-              <Heart
-                size={21}
-                aria-hidden="true"
-                fill={
-                  shopFavorites.isFavorite(store.id) ? 'currentColor' : 'none'
-                }
-              />
-            </button>
-            {productsSectionEnabled && (
               <button
                 type="button"
                 className="shop-glass"
-                aria-label="Search shop categories"
-                title="Search shop categories"
-                onClick={() => {
-                  selectTab('catalog');
-                  setFocusSearch(true);
-                }}
+                aria-pressed={shopFavorites.isFavorite(store.id)}
+                aria-label={
+                  shopFavorites.isFavorite(store.id)
+                    ? `Remove ${store.name} from favorite shops`
+                    : `Add ${store.name} to favorite shops`
+                }
+                title={
+                  shopFavorites.isFavorite(store.id)
+                    ? 'Remove from favorites'
+                    : 'Add to favorites'
+                }
+                onClick={() =>
+                  shopFavorites.toggleFavorite(store.id, store.name)
+                }
               >
-                <Search size={21} aria-hidden="true" />
-              </button>
-            )}
-            <button
-              type="button"
-              className="shop-glass"
-              aria-label="Share this shop"
-              title="Share this shop"
-              disabled={share.sharing}
-              onClick={() =>
-                void share.share({
-                  title: presentation.restaurant
-                    ? `${store.name} — Menu`
-                    : store.name,
-                  text: presentation.restaurant
-                    ? menuShareDescription(
-                        store.description,
-                        `Browse the menu at ${store.name} — dishes, prices, and photos.`,
-                      )
-                    : (store.description ?? undefined),
-                  url: `${window.location.origin}${storePath(store.slug)}`,
-                })
-              }
-            >
-              <Share2 size={20} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="shop-glass"
-              onClick={() => cart.setOpen(true)}
-              aria-label={`Open cart${cart.cart?.itemCount ? `, ${cart.cart.itemCount} items` : ''}`}
-              aria-haspopup="dialog"
-              aria-expanded={cart.open}
-              title="Shopping cart"
-            >
-              <ShoppingCart size={21} aria-hidden="true" />
-              {cart.cart && cart.cart.itemCount > 0 && (
-                <span className="shop-cart-count" aria-hidden="true">
-                  {cart.cart.itemCount > 99 ? '99+' : cart.cart.itemCount}
-                </span>
-              )}
-            </button>
-          </div>
-        ) : (
-          <a className="shop-platform" href={home}>
-            <ShoppingBag size={18} aria-hidden="true" />
-            {settings.siteName}
-          </a>
-        )}
-      </header>
-      {loadingShop && <LoadingBar />}
-      <main id="shop-main" className="shop-main" aria-busy={loadingShop}>
-        {loadingShop ? (
-          <ShopPageLoading />
-        ) : !store ? (
-          <section className="shop-state" role="status">
-            <Package size={36} />
-            <h1>
-              {missing
-                ? 'This shop couldn’t be found.'
-                : storeQuery.isError
-                  ? 'This shop is temporarily unavailable.'
-                  : 'Opening the shop…'}
-            </h1>
-            <p>
-              {missing
-                ? 'Check the address, or discover another independent shop.'
-                : storeQuery.isError
-                  ? 'Please try again in a moment.'
-                  : 'Getting its latest collection and details ready.'}
-            </p>
-            {storeQuery.isError && !missing && (
-              <button
-                className="primary-button"
-                onClick={() => void storeQuery.refetch()}
-                disabled={storeQuery.isFetching}
-              >
-                Try again
-              </button>
-            )}
-            <a className="secondary-button" href={home}>
-              Back to discoveries
-            </a>
-          </section>
-        ) : (
-          <>
-            <section
-              className={`shop-hero hero-${presentation.design?.hero ?? 'classic'}`}
-              aria-labelledby="shop-title"
-            >
-              <div className="shop-banner">
-                <ShopImage
-                  value={store.bannerKey || store.logoKey}
-                  alt=""
-                  eager
-                  fallbackName={store.name}
+                <Heart
+                  size={21}
+                  aria-hidden="true"
+                  fill={
+                    shopFavorites.isFavorite(store.id) ? 'currentColor' : 'none'
+                  }
                 />
-                {presentation.design && (
-                  <CoverEdge shape={presentation.design.coverShape} />
+              </button>
+              {productsSectionEnabled && (
+                <button
+                  type="button"
+                  className="shop-glass"
+                  aria-label="Search shop categories"
+                  title="Search shop categories"
+                  onClick={() => {
+                    selectTab('catalog');
+                    setFocusSearch(true);
+                  }}
+                >
+                  <Search size={21} aria-hidden="true" />
+                </button>
+              )}
+              <button
+                type="button"
+                className="shop-glass"
+                aria-label="Share this shop"
+                title="Share this shop"
+                disabled={share.sharing}
+                onClick={() =>
+                  void share.share({
+                    title: presentation.restaurant
+                      ? `${store.name} — Menu`
+                      : store.name,
+                    text: presentation.restaurant
+                      ? menuShareDescription(
+                          store.description,
+                          `Browse the menu at ${store.name} — dishes, prices, and photos.`,
+                        )
+                      : (store.description ?? undefined),
+                    url: `${window.location.origin}${storePath(store.slug)}`,
+                  })
+                }
+              >
+                <Share2 size={20} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="shop-glass"
+                onClick={() => cart.setOpen(true)}
+                aria-label={`Open cart${cart.cart?.itemCount ? `, ${cart.cart.itemCount} items` : ''}`}
+                aria-haspopup="dialog"
+                aria-expanded={cart.open}
+                title="Shopping cart"
+              >
+                <ShoppingCart size={21} aria-hidden="true" />
+                {cart.cart && cart.cart.itemCount > 0 && (
+                  <span className="shop-cart-count" aria-hidden="true">
+                    {cart.cart.itemCount > 99 ? '99+' : cart.cart.itemCount}
+                  </span>
                 )}
-              </div>
-              <div className="shop-profile">
-                <div className="shop-logo">
-                  {hasLiveStory && shopStoryGroup ? (
-                    <button
-                      type="button"
-                      className="shop-story-trigger"
-                      aria-label={`Watch ${store.name} story`}
-                      onClick={() => setStoryOpen(true)}
-                    >
-                      <StoryAvatar
-                        store={store}
-                        large
-                        expandable
-                        state={
-                          storyGroupUnseen(shopStoryGroup, seen)
-                            ? 'unseen'
-                            : 'seen'
-                        }
-                      />
-                    </button>
-                  ) : (
-                    // The owner sees the plain circular portrait plus the "+"
-                    // button; no dashed placeholder frame around the logo.
-                    <StoreAvatar store={store} large expandable />
-                  )}
-                  {viewerIsOwner && (
-                    <button
-                      type="button"
-                      className="shop-story-add"
-                      aria-label="Add a story"
-                      title="Add a story"
-                      onClick={() => setComposerOpen(true)}
-                    >
-                      <Plus size={16} aria-hidden="true" />
-                    </button>
+              </button>
+            </div>
+          ) : (
+            <a className="shop-platform" href={home}>
+              <ShoppingBag size={18} aria-hidden="true" />
+              {settings.siteName}
+            </a>
+          )}
+        </header>
+        {loadingShop && <LoadingBar />}
+        <main id="shop-main" className="shop-main" aria-busy={loadingShop}>
+          {loadingShop ? (
+            <ShopPageLoading />
+          ) : !store ? (
+            <section className="shop-state" role="status">
+              <Package size={36} />
+              <h1>
+                {missing
+                  ? 'This shop couldn’t be found.'
+                  : storeQuery.isError
+                    ? 'This shop is temporarily unavailable.'
+                    : 'Opening the shop…'}
+              </h1>
+              <p>
+                {missing
+                  ? 'Check the address, or discover another independent shop.'
+                  : storeQuery.isError
+                    ? 'Please try again in a moment.'
+                    : 'Getting its latest collection and details ready.'}
+              </p>
+              {storeQuery.isError && !missing && (
+                <button
+                  className="primary-button"
+                  onClick={() => void storeQuery.refetch()}
+                  disabled={storeQuery.isFetching}
+                >
+                  Try again
+                </button>
+              )}
+              <a className="secondary-button" href={home}>
+                Back to discoveries
+              </a>
+            </section>
+          ) : (
+            <>
+              <section
+                className={`shop-hero hero-${presentation.design?.hero ?? 'classic'}`}
+                aria-labelledby="shop-title"
+              >
+                <div className="shop-banner">
+                  <ShopImage
+                    value={store.bannerKey || store.logoKey}
+                    alt=""
+                    eager
+                    fallbackName={store.name}
+                  />
+                  {presentation.design && (
+                    <CoverEdge shape={presentation.design.coverShape} />
                   )}
                 </div>
-                <div className="shop-intro">
-                  {/* Name, category and today's hours share one line so the
-                      shop's identity and whether it is open read at a glance. */}
-                  <div className="shop-title-row">
-                    <h1 id="shop-title" ref={shopTitle}>
-                      <span
-                        className="notranslate"
-                        ref={shopTitleLabel}
-                        dir="auto"
+                <div className="shop-profile">
+                  <div className="shop-logo">
+                    {hasLiveStory && shopStoryGroup ? (
+                      <button
+                        type="button"
+                        className="shop-story-trigger"
+                        aria-label={`Watch ${store.name} story`}
+                        onClick={() => setStoryOpen(true)}
                       >
-                        {store.name}
-                      </span>
-                      <StoreVerifiedBadge store={store} size={26} />
-                    </h1>
-                    {store.businessCategoryLabel && (
-                      <span className="shop-category">
-                        {store.businessCategoryLabel}
-                      </span>
+                        <StoryAvatar
+                          store={store}
+                          large
+                          expandable
+                          state={
+                            storyGroupUnseen(shopStoryGroup, seen)
+                              ? 'unseen'
+                              : 'seen'
+                          }
+                        />
+                      </button>
+                    ) : (
+                      // The owner sees the plain circular portrait plus the "+"
+                      // button; no dashed placeholder frame around the logo.
+                      <StoreAvatar store={store} large expandable />
                     )}
-                    {mainOpenState && (
-                      <span
-                        className={`shop-hero-open ${mainOpenState.open ? 'is-open' : ''}`}
-                        title={mainOpenState.label}
+                    {viewerIsOwner && (
+                      <button
+                        type="button"
+                        className="shop-story-add"
+                        aria-label="Add a story"
+                        title="Add a story"
+                        onClick={() => setComposerOpen(true)}
                       >
-                        <span className="shop-state-dot" aria-hidden="true" />
-                        <span className="shop-hero-open-copy">
-                          <strong>
-                            {mainOpenState.open ? 'Open now' : 'Closed'}
-                          </strong>
-                          {mainOpenState.detail && (
-                            <small>{mainOpenState.detail}</small>
-                          )}
-                        </span>
-                      </span>
+                        <Plus size={16} aria-hidden="true" />
+                      </button>
                     )}
                   </div>
-                  {store.description?.trim() && (
-                    <p className="shop-description notranslate" dir="auto">
-                      {store.description}
-                    </p>
-                  )}
-                  {presentation.restaurant &&
-                    productsSectionEnabled &&
-                    groups.length > 0 && (
-                      <p className="shop-menu-summary">
-                        <Utensils size={15} aria-hidden="true" />
-                        {catalogTotal} {catalogTotal === 1 ? 'item' : 'items'}{' '}
-                        across {groups.length} menu{' '}
-                        {groups.length === 1 ? 'section' : 'sections'}
+                  <div className="shop-intro">
+                    {/* Name, category and today's hours share one line so the
+                      shop's identity and whether it is open read at a glance. */}
+                    <div className="shop-title-row">
+                      <h1 id="shop-title" ref={shopTitle}>
+                        <span
+                          className="notranslate"
+                          ref={shopTitleLabel}
+                          dir="auto"
+                        >
+                          {store.name}
+                        </span>
+                        <StoreVerifiedBadge store={store} size={26} />
+                      </h1>
+                      {store.businessCategoryLabel && (
+                        <span className="shop-category">
+                          {store.businessCategoryLabel}
+                        </span>
+                      )}
+                      {mainOpenState && (
+                        <span
+                          className={`shop-hero-open ${mainOpenState.open ? 'is-open' : ''}`}
+                          title={mainOpenState.label}
+                        >
+                          <span className="shop-state-dot" aria-hidden="true" />
+                          <span className="shop-hero-open-copy">
+                            <strong>
+                              {mainOpenState.open ? 'Open now' : 'Closed'}
+                            </strong>
+                            {mainOpenState.detail && (
+                              <small>{mainOpenState.detail}</small>
+                            )}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    {store.description?.trim() && (
+                      <p className="shop-description notranslate" dir="auto">
+                        {store.description}
                       </p>
                     )}
-                  {(socials.length > 0 || branches.length > 0) && (
-                    <div className="shop-meta">
-                      {socials.length > 0 && (
-                        <nav
-                          className="shop-socials"
-                          aria-label="Shop social links"
-                        >
-                          {socials.map(({ network, label, href }) => (
-                            <a
-                              key={network}
-                              className="shop-glass"
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label={`${store.name} on ${label} (opens in a new tab)`}
-                              title={label}
-                            >
-                              <SocialIcon network={network} size={19} />
-                            </a>
-                          ))}
-                        </nav>
+                    {presentation.restaurant &&
+                      productsSectionEnabled &&
+                      groups.length > 0 && (
+                        <p className="shop-menu-summary">
+                          <Utensils size={15} aria-hidden="true" />
+                          {catalogTotal} {catalogTotal === 1 ? 'item' : 'items'}{' '}
+                          across {groups.length} menu{' '}
+                          {groups.length === 1 ? 'section' : 'sections'}
+                        </p>
                       )}
-                      {branches.length > 0 && (
-                        <button
-                          type="button"
-                          className="shop-location shop-location-toggle shop-glass"
-                          aria-expanded={contactOpen}
-                          aria-controls="shop-contact-details"
-                          onClick={() =>
-                            contactOpen
-                              ? setContactOpen(false)
-                              : openContactDetails()
-                          }
-                        >
-                          <MapPin size={16} aria-hidden="true" />
-                          <span className="notranslate" dir="auto">
-                            {locationLabel}
-                          </span>
-                          <span className="shop-map-label">
-                            {contactOpen
-                              ? 'Hide details'
-                              : branches.length > 1
-                                ? 'View branches'
-                                : 'View details'}
-                          </span>
-                          <ChevronDown
-                            className="shop-map-chevron"
-                            size={15}
-                            aria-hidden="true"
-                          />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <ShopBranches
-                  store={store}
-                  open={contactOpen}
-                  onClose={() => setContactOpen(false)}
-                  panelRef={contactDetails}
-                />
-              </div>
-            </section>
-            {storeQuery.isError && (
-              <StatusBanner
-                action="Retry shop details"
-                onAction={() => void storeQuery.refetch()}
-              >
-                Shop details couldn’t refresh. The last loaded details are
-                shown.
-              </StatusBanner>
-            )}
-            <div className="shop-content">
-              {tabs.length === 0 && (
-                <div className="shop-inline-state" role="status">
-                  <h2>This shop is getting ready.</h2>
-                  <p>Check back soon for the latest from this shop.</p>
-                </div>
-              )}
-              {tabs.length > 0 && (
-                <div
-                  className="shop-nav"
-                  role="tablist"
-                  aria-label="Shop content"
-                >
-                  {tabs.map(({ id, label, Icon }) => (
-                    <div
-                      className="shop-tab-group"
-                      key={id}
-                      role="presentation"
-                    >
-                      <button
-                        id={`shop-tab-${id}`}
-                        type="button"
-                        role="tab"
-                        aria-controls={`shop-${id}`}
-                        aria-selected={activeTab === id}
-                        tabIndex={activeTab === id ? 0 : -1}
-                        onClick={() => selectTab(id)}
-                        onKeyDown={(event) => {
-                          const index = tabs.findIndex((tab) => tab.id === id);
-                          let nextIndex = index;
-                          if (event.key === 'Home') nextIndex = 0;
-                          else if (event.key === 'End')
-                            nextIndex = tabs.length - 1;
-                          else if (event.key === 'ArrowLeft')
-                            nextIndex = (index - 1 + tabs.length) % tabs.length;
-                          else if (event.key === 'ArrowRight')
-                            nextIndex = (index + 1) % tabs.length;
-                          else return;
-                          event.preventDefault();
-                          const next = tabs[nextIndex]?.id;
-                          if (next) {
-                            selectTab(next);
-                            document
-                              .getElementById(`shop-tab-${next}`)
-                              ?.focus();
-                          }
-                        }}
-                      >
-                        <Icon size={18} aria-hidden="true" />
-                        {label}
-                      </button>
-                      {/* The owner's shortcut belongs to the same tab it
-                          publishes into; shoppers never see these buttons. */}
-                      {viewerIsOwner && (
-                        <button
-                          type="button"
-                          className="shop-tab-add"
-                          aria-haspopup="dialog"
-                          aria-label={
-                            id === 'posts'
-                              ? 'Add a post'
-                              : presentation.restaurant
-                                ? 'Add a menu item'
-                                : 'Add a product'
-                          }
-                          title={
-                            id === 'posts'
-                              ? 'Add a post'
-                              : presentation.restaurant
-                                ? 'Add a menu item'
-                                : 'Add a product'
-                          }
-                          onClick={() =>
-                            setQuickKind(id === 'posts' ? 'post' : 'product')
-                          }
-                        >
-                          <Plus size={16} aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {postsSectionEnabled && (
-                <section
-                  id="shop-posts"
-                  className="shop-section shop-tabpanel shop-posts-panel"
-                  role="tabpanel"
-                  aria-labelledby="shop-tab-posts"
-                  tabIndex={0}
-                  hidden={activeTab !== 'posts'}
-                >
-                  {activeTab === 'posts' && (
-                    <>
-                      <h2 className="sr-only">Posts</h2>
-                      {postsQuery.isPending && (
-                        <ShopCardsLoading label="Loading posts…" />
-                      )}
-                      {postsQuery.isError && (
-                        <StatusBanner
-                          action="Retry posts"
-                          onAction={() => void postsQuery.refetch()}
-                        >
-                          Posts couldn’t load right now.
-                        </StatusBanner>
-                      )}
-                      <StorePostWall
-                        posts={shopPosts}
-                        layout={presentation.design?.postsLayout ?? 'grid'}
-                        story={newestShopStory}
-                        storySeen={shopStorySeen}
-                        onOpenStory={
-                          hasLiveStory ? () => setStoryOpen(true) : undefined
-                        }
-                        onOpen={openStorePost}
-                      />
-                      {!posts.length && postsQuery.isSuccess && (
-                        <div className="shop-inline-state">
-                          <p>
-                            {viewerIsOwner
-                              ? 'Your shop is ready for its first post.'
-                              : 'This shop hasn’t shared any posts yet.'}
-                          </p>
-                          {viewerIsOwner && (
-                            <button
-                              className="secondary-button"
-                              aria-haspopup="dialog"
-                              onClick={() => setQuickKind('post')}
-                            >
-                              <Plus size={16} aria-hidden="true" />
-                              Add your first post
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {postsQuery.hasNextPage && (
-                        <button
-                          className="secondary-button"
-                          disabled={postsQuery.isFetching}
-                          onClick={() => void postsQuery.fetchNextPage()}
-                        >
-                          {postsQuery.isFetchingNextPage && (
-                            <LoaderCircle
-                              className="spin"
-                              size={16}
+                    {(socials.length > 0 || branches.length > 0) && (
+                      <div className="shop-meta">
+                        {socials.length > 0 && (
+                          <nav
+                            className="shop-socials"
+                            aria-label="Shop social links"
+                          >
+                            {socials.map(({ network, label, href }) => (
+                              <a
+                                key={network}
+                                className="shop-glass"
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`${store.name} on ${label} (opens in a new tab)`}
+                                title={label}
+                              >
+                                <SocialIcon network={network} size={19} />
+                              </a>
+                            ))}
+                          </nav>
+                        )}
+                        {branches.length > 0 && (
+                          <button
+                            type="button"
+                            className="shop-location shop-location-toggle shop-glass"
+                            aria-expanded={contactOpen}
+                            aria-controls="shop-contact-details"
+                            onClick={() =>
+                              contactOpen
+                                ? setContactOpen(false)
+                                : openContactDetails()
+                            }
+                          >
+                            <MapPin size={16} aria-hidden="true" />
+                            <span className="notranslate" dir="auto">
+                              {locationLabel}
+                            </span>
+                            <span className="shop-map-label">
+                              {contactOpen
+                                ? 'Hide details'
+                                : branches.length > 1
+                                  ? 'View branches'
+                                  : 'View details'}
+                            </span>
+                            <ChevronDown
+                              className="shop-map-chevron"
+                              size={15}
                               aria-hidden="true"
                             />
-                          )}
-                          {postsQuery.isFetchingNextPage
-                            ? 'Loading…'
-                            : 'More posts'}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </section>
-              )}
-              {productsSectionEnabled && (
-                <section
-                  id="shop-catalog"
-                  className="shop-section shop-tabpanel"
-                  role="tabpanel"
-                  aria-labelledby="shop-tab-catalog"
-                  tabIndex={0}
-                  hidden={activeTab !== 'catalog'}
-                >
-                  <div className="shop-catalog-head">
-                    <div className="shop-catalog-title">
-                      <h2 id="catalog-title">
-                        {presentation.restaurant ? 'Our menu' : 'Our products'}
-                      </h2>
-                      <p className="shop-results" role="status">
-                        {searchTerm ? (
-                          `${matchingItems.length} ${matchingItems.length === 1 ? 'match' : 'matches'}`
-                        ) : activeGroup ? (
-                          <>
-                            {/* While pages are still arriving, the count says
-                                how much of the section is on screen. */}
-                            {sectionItems.length < activeGroup.count
-                              ? `${sectionItems.length} of ${activeGroup.count}`
-                              : activeGroup.count}{' '}
-                            {activeGroup.count === 1 ? 'item' : 'items'} in{' '}
-                            <span className="notranslate">
-                              {activeGroup.name}
-                            </span>
-                          </>
-                        ) : (
-                          `${catalogTotal} ${catalogTotal === 1 ? 'item' : 'items'} across ${groups.length} ${groups.length === 1 ? 'section' : 'sections'}`
+                          </button>
                         )}
-                      </p>
-                    </div>
-                    <div className="shop-catalog-tools">
-                      <label className="shop-search">
-                        <Search size={18} aria-hidden="true" />
-                        <span className="sr-only">
-                          Search the menu by item name
-                        </span>
-                        <input
-                          ref={searchInput}
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder={
-                            presentation.restaurant
-                              ? 'Search the menu…'
-                              : 'Search products…'
-                          }
-                          type="search"
-                        />
-                      </label>
-                      {search && (
-                        <button
-                          type="button"
-                          className="shop-clear-filters"
-                          onClick={() => setSearch('')}
-                        >
-                          Clear search
-                        </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                  {categoriesQuery.isPending && (
-                    <div className="shop-menu-chips" aria-hidden="true">
-                      {[0, 1, 2, 3].map((index) => (
-                        <span
-                          className="shop-chip-skeleton shop-skeleton"
-                          key={index}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {categoriesQuery.isError && (
-                    <StatusBanner
-                      action="Try again"
-                      onAction={() => void categoriesQuery.refetch()}
-                    >
-                      The shop sections couldn’t load. Please try again.
-                    </StatusBanner>
-                  )}
-                  {showCategoryShowcase && presentation.design && (
-                    <CategoryShowcase
-                      categories={groups}
-                      design={presentation.design}
-                      shopSlug={store.slug}
-                    />
-                  )}
-                  {!showCategoryShowcase && groups.length > 1 && (
-                    <div
-                      className="shop-menu-chips"
-                      role="group"
-                      aria-label="Shop sections"
-                    >
-                      <button
-                        type="button"
-                        className={
-                          menuFilterKey === 'all' ? 'is-active' : undefined
-                        }
-                        aria-pressed={menuFilterKey === 'all'}
-                        onClick={() => setMenuFilter('all')}
+                  <ShopBranches
+                    store={store}
+                    open={contactOpen}
+                    onClose={() => setContactOpen(false)}
+                    panelRef={contactDetails}
+                  />
+                </div>
+              </section>
+              {storeQuery.isError && (
+                <StatusBanner
+                  action="Retry shop details"
+                  onAction={() => void storeQuery.refetch()}
+                >
+                  Shop details couldn’t refresh. The last loaded details are
+                  shown.
+                </StatusBanner>
+              )}
+              <div className="shop-content">
+                {tabs.length === 0 && (
+                  <div className="shop-inline-state" role="status">
+                    <h2>This shop is getting ready.</h2>
+                    <p>Check back soon for the latest from this shop.</p>
+                  </div>
+                )}
+                {tabs.length > 0 && (
+                  <div
+                    className="shop-nav"
+                    role="tablist"
+                    aria-label="Shop content"
+                  >
+                    {tabs.map(({ id, label, Icon }) => (
+                      <div
+                        className="shop-tab-group"
+                        key={id}
+                        role="presentation"
                       >
-                        <LayoutGrid size={15} aria-hidden="true" />
-                        All items
-                        <span className="shop-chip-count">{catalogTotal}</span>
-                      </button>
-                      {groups.map((group) => (
                         <button
-                          key={group.key}
+                          id={`shop-tab-${id}`}
                           type="button"
-                          className={
-                            menuFilterKey === group.key
-                              ? 'is-active'
-                              : undefined
-                          }
-                          aria-pressed={menuFilterKey === group.key}
-                          onClick={() => setMenuFilter(group.key)}
+                          role="tab"
+                          aria-controls={`shop-${id}`}
+                          aria-selected={activeTab === id}
+                          tabIndex={activeTab === id ? 0 : -1}
+                          onClick={() => selectTab(id)}
+                          onKeyDown={(event) => {
+                            const index = tabs.findIndex(
+                              (tab) => tab.id === id,
+                            );
+                            let nextIndex = index;
+                            if (event.key === 'Home') nextIndex = 0;
+                            else if (event.key === 'End')
+                              nextIndex = tabs.length - 1;
+                            else if (event.key === 'ArrowLeft')
+                              nextIndex =
+                                (index - 1 + tabs.length) % tabs.length;
+                            else if (event.key === 'ArrowRight')
+                              nextIndex = (index + 1) % tabs.length;
+                            else return;
+                            event.preventDefault();
+                            const next = tabs[nextIndex]?.id;
+                            if (next) {
+                              selectTab(next);
+                              document
+                                .getElementById(`shop-tab-${next}`)
+                                ?.focus();
+                            }
+                          }}
                         >
-                          <span className="notranslate">{group.name}</span>
-                          <span className="shop-chip-count">{group.count}</span>
+                          <Icon size={18} aria-hidden="true" />
+                          {label}
                         </button>
-                      ))}
-                    </div>
-                  )}
-                  {menuQuery.isError && (
-                    <StatusBanner
-                      action="Try again"
-                      onAction={() => void menuQuery.refetch()}
-                    >
-                      The menu couldn’t load. Please try again.
-                    </StatusBanner>
-                  )}
-                  {menuQuery.isPending ? (
-                    <CatalogLoading layout="list" />
-                  ) : menuSections.length ? (
-                    <div className="shop-menu-sections">
-                      {menuSections.map(({ group, layout, items }) => {
-                        // The visible count is always the honest one: a search
-                        // or a partly loaded catalogue never overstates it.
-                        const count = items.length;
-                        const expanded = expandedSections.includes(group.key);
-                        const visible = expanded
-                          ? items
-                          : items.slice(0, CATALOG_SECTION_PREVIEW);
-                        return (
-                          <section
-                            className="shop-menu-section"
-                            key={group.key}
-                            aria-labelledby={`menu-${group.key}`}
+                        {/* The owner's shortcut belongs to the same tab it
+                          publishes into; shoppers never see these buttons. */}
+                        {viewerIsOwner && (
+                          <button
+                            type="button"
+                            className="shop-tab-add"
+                            aria-haspopup="dialog"
+                            aria-label={
+                              id === 'posts'
+                                ? 'Add a post'
+                                : presentation.restaurant
+                                  ? 'Add a menu item'
+                                  : 'Add a product'
+                            }
+                            title={
+                              id === 'posts'
+                                ? 'Add a post'
+                                : presentation.restaurant
+                                  ? 'Add a menu item'
+                                  : 'Add a product'
+                            }
+                            onClick={() =>
+                              setQuickKind(id === 'posts' ? 'post' : 'product')
+                            }
                           >
-                            <div className="shop-menu-section-head">
-                              <h3 id={`menu-${group.key}`}>
-                                <span className="notranslate">
-                                  {group.name}
-                                </span>
-                                <span className="shop-menu-count">
-                                  {count} {count === 1 ? 'item' : 'items'}
-                                </span>
-                              </h3>
-                              <a
-                                className="shop-menu-section-link"
-                                href={storeCategoryPath(
-                                  store.slug,
-                                  categorySlug(group.name),
-                                )}
-                              >
-                                View section
-                                <ArrowUpRight size={15} aria-hidden="true" />
-                              </a>
-                            </div>
-                            <div id={`menu-${group.key}-items`}>
-                              <CatalogItems
-                                products={visible}
-                                cart={cart}
-                                layout={layout}
-                                shopSlug={store.slug}
-                                lbpRate={lbpRate}
-                                showImages={
-                                  presentation.design?.showProductImages
-                                }
-                                showDescriptions={
-                                  presentation.design?.showProductDescriptions
-                                }
-                              />
-                            </div>
-                            {items.length > CATALOG_SECTION_PREVIEW && (
+                            <Plus size={16} aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {postsSectionEnabled && (
+                  <section
+                    id="shop-posts"
+                    className="shop-section shop-tabpanel shop-posts-panel"
+                    role="tabpanel"
+                    aria-labelledby="shop-tab-posts"
+                    tabIndex={0}
+                    hidden={activeTab !== 'posts'}
+                  >
+                    {activeTab === 'posts' && (
+                      <>
+                        <h2 className="sr-only">Posts</h2>
+                        {postsQuery.isPending && (
+                          <ShopCardsLoading label="Loading posts…" />
+                        )}
+                        {postsQuery.isError && (
+                          <StatusBanner
+                            action="Retry posts"
+                            onAction={() => void postsQuery.refetch()}
+                          >
+                            Posts couldn’t load right now.
+                          </StatusBanner>
+                        )}
+                        <StorePostWall
+                          posts={shopPosts}
+                          layout={presentation.design?.postsLayout ?? 'grid'}
+                          story={newestShopStory}
+                          storySeen={shopStorySeen}
+                          onOpenStory={
+                            hasLiveStory ? () => setStoryOpen(true) : undefined
+                          }
+                          onOpen={openStorePost}
+                        />
+                        {!posts.length && postsQuery.isSuccess && (
+                          <div className="shop-inline-state">
+                            <p>
+                              {viewerIsOwner
+                                ? 'Your shop is ready for its first post.'
+                                : 'This shop hasn’t shared any posts yet.'}
+                            </p>
+                            {viewerIsOwner && (
                               <button
-                                type="button"
-                                className="shop-menu-more"
-                                aria-expanded={expanded}
-                                aria-controls={`menu-${group.key}-items`}
-                                onClick={() => toggleSection(group.key)}
+                                className="secondary-button"
+                                aria-haspopup="dialog"
+                                onClick={() => setQuickKind('post')}
                               >
-                                {expanded
-                                  ? 'Show less'
-                                  : `View all ${items.length} items`}
-                                <ChevronDown
-                                  size={16}
-                                  className={expanded ? 'is-open' : ''}
-                                  aria-hidden="true"
-                                />
+                                <Plus size={16} aria-hidden="true" />
+                                Add your first post
                               </button>
                             )}
-                          </section>
-                        );
-                      })}
-                    </div>
-                  ) : !menuQuery.isError ? (
-                    categoriesQuery.isSuccess &&
-                    (sectionLoading ? (
-                      <div className="shop-inline-state" role="status">
-                        <LoaderCircle
-                          className="spin"
-                          size={22}
-                          aria-hidden="true"
-                        />
-                        <p>Gathering this section…</p>
-                      </div>
-                    ) : (
-                      <div className="shop-inline-state">
-                        <h3>
-                          {searchTerm
-                            ? 'No matching items.'
-                            : menuFilterKey !== 'all'
-                              ? 'Nothing in this section yet.'
-                              : viewerIsOwner
-                                ? presentation.restaurant
-                                  ? 'Your menu is ready for its first item.'
-                                  : 'Your shop is ready for its first product.'
-                                : presentation.restaurant
-                                  ? 'The menu is coming soon.'
-                                  : 'New finds are on their way.'}
-                        </h3>
-                        <p>
-                          {searchTerm
-                            ? 'Try another search, or browse every section.'
-                            : viewerIsOwner && menuFilterKey === 'all'
-                              ? 'Add it right here — it appears on your shop as soon as you publish.'
-                              : 'Check back soon for the latest from this shop.'}
-                        </p>
-                        {searchTerm ? (
+                          </div>
+                        )}
+                        {postsQuery.hasNextPage && (
                           <button
                             className="secondary-button"
+                            disabled={postsQuery.isFetching}
+                            onClick={() => void postsQuery.fetchNextPage()}
+                          >
+                            {postsQuery.isFetchingNextPage && (
+                              <LoaderCircle
+                                className="spin"
+                                size={16}
+                                aria-hidden="true"
+                              />
+                            )}
+                            {postsQuery.isFetchingNextPage
+                              ? 'Loading…'
+                              : 'More posts'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </section>
+                )}
+                {productsSectionEnabled && (
+                  <section
+                    id="shop-catalog"
+                    className="shop-section shop-tabpanel"
+                    role="tabpanel"
+                    aria-labelledby="shop-tab-catalog"
+                    tabIndex={0}
+                    hidden={activeTab !== 'catalog'}
+                  >
+                    <div className="shop-catalog-head">
+                      <div className="shop-catalog-title">
+                        <h2 id="catalog-title">
+                          {presentation.restaurant
+                            ? 'Our menu'
+                            : 'Our products'}
+                        </h2>
+                        <p className="shop-results" role="status">
+                          {searchTerm ? (
+                            `${matchingItems.length} ${matchingItems.length === 1 ? 'match' : 'matches'}`
+                          ) : activeGroup ? (
+                            <>
+                              {/* While pages are still arriving, the count says
+                                how much of the section is on screen. */}
+                              {sectionItems.length < activeGroup.count
+                                ? `${sectionItems.length} of ${activeGroup.count}`
+                                : activeGroup.count}{' '}
+                              {activeGroup.count === 1 ? 'item' : 'items'} in{' '}
+                              <span className="notranslate">
+                                {activeGroup.name}
+                              </span>
+                            </>
+                          ) : (
+                            `${catalogTotal} ${catalogTotal === 1 ? 'item' : 'items'} across ${groups.length} ${groups.length === 1 ? 'section' : 'sections'}`
+                          )}
+                        </p>
+                      </div>
+                      <div className="shop-catalog-tools">
+                        <label className="shop-search">
+                          <Search size={18} aria-hidden="true" />
+                          <span className="sr-only">
+                            Search the menu by item name
+                          </span>
+                          <input
+                            ref={searchInput}
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder={
+                              presentation.restaurant
+                                ? 'Search the menu…'
+                                : 'Search products…'
+                            }
+                            type="search"
+                          />
+                        </label>
+                        {search && (
+                          <button
+                            type="button"
+                            className="shop-clear-filters"
                             onClick={() => setSearch('')}
                           >
                             Clear search
                           </button>
-                        ) : menuFilterKey !== 'all' ? (
-                          <button
-                            className="secondary-button"
-                            onClick={() => setMenuFilter('all')}
-                          >
-                            Show all items
-                          </button>
-                        ) : (
-                          viewerIsOwner && (
-                            <button
-                              className="secondary-button"
-                              aria-haspopup="dialog"
-                              onClick={() => setQuickKind('product')}
-                            >
-                              <Plus size={16} aria-hidden="true" />
-                              Add{' '}
-                              {presentation.restaurant
-                                ? 'a menu item'
-                                : 'a product'}
-                            </button>
-                          )
                         )}
                       </div>
-                    ))
-                  ) : null}
-                  {menuQuery.hasNextPage && (
-                    <div className="shop-pagination">
-                      <p>
-                        Showing {menuItems.length} of {menuTotal} items.
-                      </p>
-                      <button
-                        className="secondary-button"
-                        disabled={menuQuery.isFetching}
-                        onClick={() => void menuQuery.fetchNextPage()}
-                      >
-                        {menuQuery.isFetchingNextPage
-                          ? 'Loading…'
-                          : 'Load more items'}
-                      </button>
                     </div>
-                  )}
-                </section>
-              )}
-            </div>
-          </>
-        )}
-      </main>
-      <footer className="shop-footer">
-        <div className="shop-footer-main">
-          <div className="shop-footer-brand">
-            <StoreAvatar store={store} />
-            <div>
-              <strong>{store?.name || 'Independent shops'}</strong>
-              <p>A little discovery. Something special.</p>
-            </div>
-          </div>
-          <a className="shop-footer-platform shop-glass" href={home}>
-            <ShoppingBag size={20} aria-hidden="true" />
-            <span>
-              <small>Powered by</small>
-              <strong>{settings.siteName}</strong>
-            </span>
-            <ArrowUpRight size={16} aria-hidden="true" />
-          </a>
-        </div>
-        <div className="shop-footer-bottom">
-          <p>
-            © {new Date().getFullYear()} {store?.name || settings.siteName}
-          </p>
-          <a className="shop-footer-top" href="#shop-top">
-            Back to top
-            <span className="shop-glass">
-              <ArrowUp size={16} aria-hidden="true" />
-            </span>
-          </a>
-        </div>
-      </footer>
-      <ShopCartDock cart={cart} lbpRate={lbpRate} />
-      {cart.open && store && (
-        <ShopCart
-          store={store}
-          products={[]}
-          controller={cart}
-          lbpRate={lbpRate}
-          onBrowse={() => {
-            cart.setOpen(false);
-            selectTab('catalog');
-            setFocusSearch(true);
-          }}
-          onContact={() => {
-            cart.setOpen(false);
-            openContactDetails();
-          }}
-        />
-      )}
-      {selectedPost && store && activeTab === 'posts' && (
-        <PostDialog
-          key={selectedPost.id}
-          posts={viewerPosts.map((post) =>
-            withLikes({ ...post, store: post.store ?? store }),
+                    {categoriesQuery.isPending && (
+                      <div className="shop-menu-chips" aria-hidden="true">
+                        {[0, 1, 2, 3].map((index) => (
+                          <span
+                            className="shop-chip-skeleton shop-skeleton"
+                            key={index}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {categoriesQuery.isError && (
+                      <StatusBanner
+                        action="Try again"
+                        onAction={() => void categoriesQuery.refetch()}
+                      >
+                        The shop sections couldn’t load. Please try again.
+                      </StatusBanner>
+                    )}
+                    {showCategoryShowcase && presentation.design && (
+                      <CategoryShowcase
+                        categories={groups}
+                        design={presentation.design}
+                        shopSlug={store.slug}
+                      />
+                    )}
+                    {!showCategoryShowcase && groups.length > 1 && (
+                      <div
+                        className="shop-menu-chips"
+                        role="group"
+                        aria-label="Shop sections"
+                      >
+                        <button
+                          type="button"
+                          className={
+                            menuFilterKey === 'all' ? 'is-active' : undefined
+                          }
+                          aria-pressed={menuFilterKey === 'all'}
+                          onClick={() => setMenuFilter('all')}
+                        >
+                          <LayoutGrid size={15} aria-hidden="true" />
+                          All items
+                          <span className="shop-chip-count">
+                            {catalogTotal}
+                          </span>
+                        </button>
+                        {groups.map((group) => (
+                          <button
+                            key={group.key}
+                            type="button"
+                            className={
+                              menuFilterKey === group.key
+                                ? 'is-active'
+                                : undefined
+                            }
+                            aria-pressed={menuFilterKey === group.key}
+                            onClick={() => setMenuFilter(group.key)}
+                          >
+                            <span className="notranslate">{group.name}</span>
+                            <span className="shop-chip-count">
+                              {group.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {menuQuery.isError && (
+                      <StatusBanner
+                        action="Try again"
+                        onAction={() => void menuQuery.refetch()}
+                      >
+                        The menu couldn’t load. Please try again.
+                      </StatusBanner>
+                    )}
+                    {menuQuery.isPending ? (
+                      <CatalogLoading layout="list" />
+                    ) : menuSections.length ? (
+                      <div className="shop-menu-sections">
+                        {menuSections.map(({ group, layout, items }) => {
+                          // The visible count is always the honest one: a search
+                          // or a partly loaded catalogue never overstates it.
+                          const count = items.length;
+                          const expanded = expandedSections.includes(group.key);
+                          const visible = expanded
+                            ? items
+                            : items.slice(0, CATALOG_SECTION_PREVIEW);
+                          return (
+                            <section
+                              className="shop-menu-section"
+                              key={group.key}
+                              aria-labelledby={`menu-${group.key}`}
+                            >
+                              <div className="shop-menu-section-head">
+                                <h3 id={`menu-${group.key}`}>
+                                  <span className="notranslate">
+                                    {group.name}
+                                  </span>
+                                  <span className="shop-menu-count">
+                                    {count} {count === 1 ? 'item' : 'items'}
+                                  </span>
+                                </h3>
+                                <a
+                                  className="shop-menu-section-link"
+                                  href={storeCategoryPath(
+                                    store.slug,
+                                    categorySlug(group.name),
+                                  )}
+                                >
+                                  View section
+                                  <ArrowUpRight size={15} aria-hidden="true" />
+                                </a>
+                              </div>
+                              <div id={`menu-${group.key}-items`}>
+                                <CatalogItems
+                                  products={visible}
+                                  cart={cart}
+                                  layout={layout}
+                                  shopSlug={store.slug}
+                                  lbpRate={lbpRate}
+                                  showImages={
+                                    presentation.design?.showProductImages
+                                  }
+                                  showDescriptions={
+                                    presentation.design?.showProductDescriptions
+                                  }
+                                />
+                              </div>
+                              {items.length > CATALOG_SECTION_PREVIEW && (
+                                <button
+                                  type="button"
+                                  className="shop-menu-more"
+                                  aria-expanded={expanded}
+                                  aria-controls={`menu-${group.key}-items`}
+                                  onClick={() => toggleSection(group.key)}
+                                >
+                                  {expanded
+                                    ? 'Show less'
+                                    : `View all ${items.length} items`}
+                                  <ChevronDown
+                                    size={16}
+                                    className={expanded ? 'is-open' : ''}
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              )}
+                            </section>
+                          );
+                        })}
+                      </div>
+                    ) : !menuQuery.isError ? (
+                      categoriesQuery.isSuccess &&
+                      (sectionLoading ? (
+                        <div className="shop-inline-state" role="status">
+                          <LoaderCircle
+                            className="spin"
+                            size={22}
+                            aria-hidden="true"
+                          />
+                          <p>Gathering this section…</p>
+                        </div>
+                      ) : (
+                        <div className="shop-inline-state">
+                          <h3>
+                            {searchTerm
+                              ? 'No matching items.'
+                              : menuFilterKey !== 'all'
+                                ? 'Nothing in this section yet.'
+                                : viewerIsOwner
+                                  ? presentation.restaurant
+                                    ? 'Your menu is ready for its first item.'
+                                    : 'Your shop is ready for its first product.'
+                                  : presentation.restaurant
+                                    ? 'The menu is coming soon.'
+                                    : 'New finds are on their way.'}
+                          </h3>
+                          <p>
+                            {searchTerm
+                              ? 'Try another search, or browse every section.'
+                              : viewerIsOwner && menuFilterKey === 'all'
+                                ? 'Add it right here — it appears on your shop as soon as you publish.'
+                                : 'Check back soon for the latest from this shop.'}
+                          </p>
+                          {searchTerm ? (
+                            <button
+                              className="secondary-button"
+                              onClick={() => setSearch('')}
+                            >
+                              Clear search
+                            </button>
+                          ) : menuFilterKey !== 'all' ? (
+                            <button
+                              className="secondary-button"
+                              onClick={() => setMenuFilter('all')}
+                            >
+                              Show all items
+                            </button>
+                          ) : (
+                            viewerIsOwner && (
+                              <button
+                                className="secondary-button"
+                                aria-haspopup="dialog"
+                                onClick={() => setQuickKind('product')}
+                              >
+                                <Plus size={16} aria-hidden="true" />
+                                Add{' '}
+                                {presentation.restaurant
+                                  ? 'a menu item'
+                                  : 'a product'}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      ))
+                    ) : null}
+                    {menuQuery.hasNextPage && (
+                      <div className="shop-pagination">
+                        <p>
+                          Showing {menuItems.length} of {menuTotal} items.
+                        </p>
+                        <button
+                          className="secondary-button"
+                          disabled={menuQuery.isFetching}
+                          onClick={() => void menuQuery.fetchNextPage()}
+                        >
+                          {menuQuery.isFetchingNextPage
+                            ? 'Loading…'
+                            : 'Load more items'}
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                )}
+              </div>
+            </>
           )}
-          initialPostId={selectedPost.id}
-          notice={postNotice}
-          saved={saved}
-          liking={liking}
-          onLike={(post) => void likePost(post)}
-          onSave={savePost}
-          onNotice={setPostNotice}
-          onActivePost={(post) => void registerView(post)}
-          onNearEnd={() => {
-            // Keep the shop's next page warm as the shopper approaches its
-            // last loaded post, so the reel never dead-ends mid-shop.
-            if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage)
-              void postsQuery.fetchNextPage();
-          }}
-          onClose={() => setSelectedPost(null)}
-        />
-      )}
-      <ShopToast
-        cart={cart}
-        notice={share.notice || favoriteNotice || storyNotice || quickNotice}
-        noticeIcon={
-          !share.notice && favoriteNotice ? (
-            <Heart size={16} aria-hidden="true" />
-          ) : undefined
-        }
-      />
-      {storyOpen && shopStoryGroup && (
-        <StoryViewer
-          key={shopStoryGroup.store.id}
-          groups={storyGroups.data?.groups ?? []}
-          initialStoreId={store?.id ?? ''}
-          canManage={viewerIsOwner}
-          onSeen={markSeen}
-          onDelete={
-            viewerIsOwner
-              ? async (story) => {
-                  await deleteStory(story.id);
-                  refreshStories();
-                  setStoryNotice('Story deleted · the slot is free again.');
-                }
-              : undefined
-          }
-          onClose={() => setStoryOpen(false)}
-        />
-      )}
-      {composerOpen && store && (
-        <StoryComposer
-          store={store}
-          myStories={myStories.data}
-          onClose={() => setComposerOpen(false)}
-          onShared={() => {
-            setComposerOpen(false);
-            refreshStories();
-            setStoryNotice('Story shared · live for 24 hours.');
-          }}
-        />
-      )}
-      {quickKind && store && viewerIsOwner && (
-        // The panel look is scoped to .panel-app; the dialog renders in the
-        // top layer itself, so this wrapper must not paint or reserve space.
-        <div className="panel-app panel-embed">
-          <ContentEditor
-            key={`${quickKind}-${store.id}`}
+        </main>
+        <footer className="shop-footer">
+          <div className="shop-footer-main">
+            <div className="shop-footer-brand">
+              <StoreAvatar store={store} />
+              <div>
+                <strong>{store?.name || 'Independent shops'}</strong>
+                <p>A little discovery. Something special.</p>
+              </div>
+            </div>
+            <a className="shop-footer-platform shop-glass" href={home}>
+              <ShoppingBag size={20} aria-hidden="true" />
+              <span>
+                <small>Powered by</small>
+                <strong>{settings.siteName}</strong>
+              </span>
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          </div>
+          <div className="shop-footer-bottom">
+            <p>
+              © {new Date().getFullYear()} {store?.name || settings.siteName}
+            </p>
+            <a className="shop-footer-top" href="#shop-top">
+              Back to top
+              <span className="shop-glass">
+                <ArrowUp size={16} aria-hidden="true" />
+              </span>
+            </a>
+          </div>
+        </footer>
+        <ShopCartDock cart={cart} lbpRate={lbpRate} />
+        {cart.open && store && (
+          <ShopCart
             store={store}
-            kind={quickKind === 'product' ? 'products' : 'posts'}
-            item={null}
-            cacheScope={`shop-${store.id}`}
-            close={() => setQuickKind(null)}
-            done={(message) => {
-              setQuickKind(null);
-              setQuickNotice(message);
-              selectTab(quickKind === 'product' ? 'catalog' : 'posts');
-              // A published row is public immediately, so every surface that
-              // may have loaded this shop has to drop its cached copy.
-              void client.invalidateQueries({
-                queryKey: ['storefront-posts', store.slug],
-              });
-              void client.invalidateQueries({
-                queryKey: ['storefront-menu', store.slug],
-              });
-              void client.invalidateQueries({
-                queryKey: ['storefront-categories', store.slug],
-              });
-              void client.invalidateQueries({
-                queryKey: ['storefront', store.slug],
-              });
-              void client.invalidateQueries({ queryKey: ['panel'] });
-              void client.invalidateQueries({ queryKey: ['explore'] });
-              // Shop cards and the directory show post/product counts.
-              void client.invalidateQueries({ queryKey: ['stores'] });
-              void client.invalidateQueries({ queryKey: ['store-directory'] });
+            products={[]}
+            controller={cart}
+            lbpRate={lbpRate}
+            onBrowse={() => {
+              cart.setOpen(false);
+              selectTab('catalog');
+              setFocusSearch(true);
+            }}
+            onContact={() => {
+              cart.setOpen(false);
+              openContactDetails();
             }}
           />
-        </div>
-      )}
+        )}
+        {selectedPost && store && activeTab === 'posts' && (
+          <PostDialog
+            key={selectedPost.id}
+            posts={viewerPosts.map((post) =>
+              withLikes({ ...post, store: post.store ?? store }),
+            )}
+            initialPostId={selectedPost.id}
+            notice={postNotice}
+            saved={saved}
+            liking={liking}
+            onLike={(post) => void likePost(post)}
+            onSave={savePost}
+            onNotice={setPostNotice}
+            onActivePost={(post) => void registerView(post)}
+            onNearEnd={() => {
+              // Keep the shop's next page warm as the shopper approaches its
+              // last loaded post, so the reel never dead-ends mid-shop.
+              if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage)
+                void postsQuery.fetchNextPage();
+            }}
+            onClose={() => setSelectedPost(null)}
+          />
+        )}
+        <ShopToast
+          cart={cart}
+          notice={share.notice || favoriteNotice || storyNotice || quickNotice}
+          noticeIcon={
+            !share.notice && favoriteNotice ? (
+              <Heart size={16} aria-hidden="true" />
+            ) : undefined
+          }
+        />
+        {storyOpen && shopStoryGroup && (
+          <StoryViewer
+            key={shopStoryGroup.store.id}
+            groups={storyGroups.data?.groups ?? []}
+            initialStoreId={store?.id ?? ''}
+            canManage={viewerIsOwner}
+            onSeen={markSeen}
+            onDelete={
+              viewerIsOwner
+                ? async (story) => {
+                    await deleteStory(story.id);
+                    refreshStories();
+                    setStoryNotice('Story deleted · the slot is free again.');
+                  }
+                : undefined
+            }
+            onClose={() => setStoryOpen(false)}
+          />
+        )}
+        {composerOpen && store && (
+          <StoryComposer
+            store={store}
+            myStories={myStories.data}
+            onClose={() => setComposerOpen(false)}
+            onShared={() => {
+              setComposerOpen(false);
+              refreshStories();
+              setStoryNotice('Story shared · live for 24 hours.');
+            }}
+          />
+        )}
+        {quickKind && store && viewerIsOwner && (
+          // The panel look is scoped to .panel-app; the dialog renders in the
+          // top layer itself, so this wrapper must not paint or reserve space.
+          <div className="panel-app panel-embed">
+            <ContentEditor
+              key={`${quickKind}-${store.id}`}
+              store={store}
+              kind={quickKind === 'product' ? 'products' : 'posts'}
+              item={null}
+              cacheScope={`shop-${store.id}`}
+              close={() => setQuickKind(null)}
+              done={(message) => {
+                setQuickKind(null);
+                setQuickNotice(message);
+                selectTab(quickKind === 'product' ? 'catalog' : 'posts');
+                // A published row is public immediately, so every surface that
+                // may have loaded this shop has to drop its cached copy.
+                void client.invalidateQueries({
+                  queryKey: ['storefront-posts', store.slug],
+                });
+                void client.invalidateQueries({
+                  queryKey: ['storefront-menu', store.slug],
+                });
+                void client.invalidateQueries({
+                  queryKey: ['storefront-categories', store.slug],
+                });
+                void client.invalidateQueries({
+                  queryKey: ['storefront', store.slug],
+                });
+                void client.invalidateQueries({ queryKey: ['panel'] });
+                void client.invalidateQueries({ queryKey: ['explore'] });
+                // Shop cards and the directory show post/product counts.
+                void client.invalidateQueries({ queryKey: ['stores'] });
+                void client.invalidateQueries({
+                  queryKey: ['store-directory'],
+                });
+              }}
+            />
+          </div>
+        )}
+      </ProductOptionsProvider>
     </div>
   );
 }

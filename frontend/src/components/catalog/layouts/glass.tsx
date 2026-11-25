@@ -5,6 +5,7 @@ import type { CatalogGrid, CatalogGridProps, CatalogItemProps } from '../types';
 import {
   AddToCart,
   PriceLabels,
+  ProductLink,
   ProductName,
   SaleBadge,
   ShopImage,
@@ -33,15 +34,16 @@ function GlassCard({ product, cart, href, lbpRate, delay }: CatalogItemProps) {
       className={`shop-glass-card${unavailable ? ' is-unavailable' : ''}`}
       style={style}
     >
-      <a
-        className="shop-glass-art"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-glass-art"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
         <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
-      </a>
+      </ProductLink>
       <div className="shop-glass-copy">
         <ProductName product={product} href={href} />
         <p className="shop-glass-meta">

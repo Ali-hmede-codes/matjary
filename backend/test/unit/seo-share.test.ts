@@ -587,6 +587,70 @@ test('the refresher writes one shell per public storefront page', async () => {
   }
 });
 
+test('menu shops get a shop shell but no item shells', async () => {
+  await fs.mkdir('.tmp', { recursive: true });
+  const directory = await fs.mkdtemp(path.join('.tmp', 'menu-shell-'));
+  try {
+    const templatePath = path.join(directory, 'index.html');
+    await fs.writeFile(
+      templatePath,
+      '<!doctype html><html><head><title>Default</title></head>' +
+        '<body><div id="root"></div></body></html>',
+    );
+    const root = path.join(directory, 'stores');
+    const store = {
+      id: 'store-menu',
+      slug: 'menu-shop',
+      storeType: StoreType.RESTAURANT_MENU,
+    };
+    const category = { id: 'category-1', name: 'Mains', sortOrder: 1 };
+    const product = { id: 'product-1', slug: 'dish-x' };
+    let productMetaCalls = 0;
+    const manager = {
+      find: async (target: unknown) =>
+        target === Store
+          ? [store]
+          : target === StoreCategory
+            ? [category]
+            : target === Product
+              ? [product]
+              : [],
+      count: async () => 0,
+    };
+    const seo = {
+      getPageMeta: async () => meta,
+      generateStoreMetaTags: async () => meta,
+      generateCategoryMetaTags: async () => meta,
+      generateUncategorizedShareMeta: async () => meta,
+      generateProductMetaTags: async () => {
+        productMetaCalls++;
+        return meta;
+      },
+      generateShowcaseMetaTags: async () => meta,
+      categoryPathSlug: (name: string) => name.toLowerCase(),
+    };
+    const service = new ShareShellService(
+      { manager, query: async () => [{ stores: 1 }] } as never,
+      seo as never,
+      new ConfigService({
+        SHARE_SHELL_TEMPLATE: templatePath,
+        SHARE_SHELL_ROOT: root,
+        SHARE_SHELL_REFRESH_SECONDS: 120,
+      }) as never,
+    );
+    // Six site pages, the shop page, and its section: the item has no shell.
+    assert.equal(await service.refreshAll(), 8);
+    assert.equal(productMetaCalls, 0);
+    await fs.access(path.join(root, 'menu-shop', 'index.html'));
+    await fs.access(path.join(root, 'menu-shop', 'c', 'mains', 'index.html'));
+    await assert.rejects(
+      fs.access(path.join(root, 'menu-shop', 'p', 'dish-x', 'index.html')),
+    );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 async function shellSchedulerFixture(t: TestContext, withTemplate = true) {
   await fs.mkdir('.tmp', { recursive: true });
   const directory = await fs.mkdtemp(path.join('.tmp', 'shell-scheduler-'));
@@ -1248,6 +1312,15 @@ function crawlerDocumentFixture() {
       description: 'Second shop',
       updatedAt: new Date('2026-01-03T00:00:00.000Z'),
     }),
+    // Menu shops keep their dishes in the menu page; they have no /p/ page.
+    Object.assign(new Store(), {
+      id: 'store-3',
+      slug: 'menu-shop',
+      name: 'Menu shop',
+      description: 'A menu',
+      storeType: StoreType.RESTAURANT_MENU,
+      updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+    }),
   ];
   const products = [
     Object.assign(new Product(), {
@@ -1269,6 +1342,17 @@ function crawlerDocumentFixture() {
       status: 'active',
       storeId: 'store-2',
       store: stores[1],
+      imageKeys: [],
+      updatedAt: new Date('2026-01-05T00:00:00.000Z'),
+    }),
+    Object.assign(new Product(), {
+      id: 'product-3',
+      slug: 'menu-item',
+      name: 'Menu item',
+      description: 'A dish',
+      status: 'active',
+      storeId: 'store-3',
+      store: stores[2],
       imageKeys: [],
       updatedAt: new Date('2026-01-05T00:00:00.000Z'),
     }),
@@ -1307,6 +1391,10 @@ function crawlerDocumentFixture() {
     Object.assign(new ProductSeo(), {
       productId: 'product-2',
       robots: RobotsDirective.NOINDEX_FOLLOW,
+    }),
+    Object.assign(new ProductSeo(), {
+      productId: 'product-3',
+      robots: RobotsDirective.INDEX_FOLLOW,
     }),
   ];
   const showcaseSeos = [
@@ -1462,6 +1550,9 @@ test('sitemap generation reads SEO rows and images in batches', async () => {
   // A noindex product stays out of the document after batching.
   assert.ok(!urls.some((url) => url.url.includes('/p/item-two')));
   assert.ok(!urls.some((url) => url.url.includes('/post/hidden-post')));
+  // A menu item has no standalone page; only its shop's menu is advertised.
+  assert.ok(!urls.some((url) => url.url.includes('/p/menu-item')));
+  assert.ok(urls.some((url) => url.url.endsWith('/stores/menu-shop/')));
 });
 
 test('llms.txt resolves products and posts with one read each', async () => {
@@ -1474,6 +1565,8 @@ test('llms.txt resolves products and posts with one read each', async () => {
   assert.doesNotMatch(txt, /Item two/u);
   assert.match(txt, /\/post\/spring-drop/u);
   assert.doesNotMatch(txt, /hidden-post/u);
+  // Menu items are read on the menu page already listed for the shop.
+  assert.doesNotMatch(txt, /menu-item/u);
 });
 
 test('identical crawler documents are built once and rebuilt after a change', async () => {

@@ -4,7 +4,13 @@ import type { Product } from '../../../lib/api';
 import { storeProductPath } from '../../../lib/storefront';
 import type { ShopCartController } from '../../../hooks/useShopCart';
 import type { CatalogGrid, CatalogGridProps } from '../types';
-import { PriceLabels, SaleBadge, ShopImage, StockBadge } from '../primitives';
+import {
+  PriceLabels,
+  ProductLink,
+  SaleBadge,
+  ShopImage,
+  StockBadge,
+} from '../primitives';
 
 /**
  * One tile of the Ribbon. The repeated set exists only for the seamless loop,
@@ -43,13 +49,14 @@ function RibbonTile({
       </div>
     );
   return (
-    <a
-      className="shop-ribbon-tile"
+    <ProductLink
+      product={product}
       href={href}
-      aria-label={`Open ${product.name}`}
+      className="shop-ribbon-tile"
+      ariaLabel={`Open ${product.name}`}
     >
       {body}
-    </a>
+    </ProductLink>
   );
 }
 

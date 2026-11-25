@@ -19,6 +19,7 @@ import {
   type StoreLifecycleStatus,
   priceInput,
   decimalPrice,
+  defaultProductOptionChoices,
   isStoreVerified,
   menuCategoryGroups,
   menuShareDescription,
@@ -34,6 +35,8 @@ import {
   slugDraft,
   sizedMediaKey,
   storeCategoryPath,
+  storeItemPath,
+  storeMenuItemPath,
   storeMenuPath,
   storePostPath,
   storefrontRouteFromPath,
@@ -272,6 +275,24 @@ test('shop URLs support deep links', () => {
     `/stores/${'a'.repeat(192)}`,
   ])
     assert.equal(storeSlugFromPath(path), null);
+});
+
+test('menu items link to the shop sheet while retail items keep their page', () => {
+  assert.equal(
+    storeMenuItemPath('olive shop', 'harvest bowl'),
+    '/stores/olive%20shop/?item=harvest%20bowl',
+  );
+  assert.equal(
+    storeItemPath(
+      { slug: 'olive', storeType: 'restaurant_menu' },
+      'harvest-bowl',
+    ),
+    '/stores/olive/?item=harvest-bowl',
+  );
+  assert.equal(
+    storeItemPath({ slug: 'olive', storeType: 'ecommerce' }, 'harvest-bowl'),
+    '/stores/olive/p/harvest-bowl/',
+  );
 });
 
 test('store type selects the layout and safely derives shop colors', () => {
@@ -768,6 +789,31 @@ test('product option selection stays complete and in product order', () => {
       { name: 'Size', value: 'M', priceCents: '200' },
       { name: 'Color', value: 'Blue', priceCents: '100' },
     ],
+  );
+});
+
+test('the option sheet preselects one value per group for a one-tap add', () => {
+  assert.deepEqual(defaultProductOptionChoices({ options: null }), {});
+  assert.deepEqual(
+    defaultProductOptionChoices({
+      options: [
+        {
+          name: 'Size',
+          values: [
+            { label: 'S', priceCents: null },
+            { label: 'M', priceCents: '200' },
+          ],
+        },
+        {
+          name: 'Color',
+          values: [
+            { label: 'Red', priceCents: null },
+            { label: 'Blue', priceCents: '100' },
+          ],
+        },
+      ],
+    }),
+    { Size: 'S', Color: 'Red' },
   );
 });
 

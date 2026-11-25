@@ -4,6 +4,7 @@ import {
   AddToCart,
   PriceLabels,
   ProductDescription,
+  ProductLink,
   ProductName,
   SaleBadge,
   ShopImage,
@@ -30,14 +31,15 @@ function PhotoRow({
       className={`shop-price-row shop-photo-row${unavailable ? ' is-unavailable' : ''}`}
       style={tileDelay(delay)}
     >
-      <a
-        className="shop-photo-row-thumb"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-photo-row-thumb"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
         <SaleBadge product={product} />
-      </a>
+      </ProductLink>
       <div className="shop-price-row-copy">
         <ProductName product={product} href={href} />
         <ProductDescription product={product} visible={showDescriptions} />

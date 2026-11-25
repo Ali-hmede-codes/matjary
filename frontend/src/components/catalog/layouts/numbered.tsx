@@ -4,6 +4,7 @@ import {
   AddToCart,
   PriceLabels,
   ProductDescription,
+  ProductLink,
   ProductName,
   ShopImage,
   isUnavailable,
@@ -33,13 +34,14 @@ function NumberedRow({
       <span className="shop-numbered-index" aria-hidden="true">
         {String(position).padStart(2, '0')}
       </span>
-      <a
-        className="shop-numbered-thumb"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-numbered-thumb"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
-      </a>
+      </ProductLink>
       <div className="shop-numbered-copy">
         <ProductName product={product} href={href} />
         <ProductDescription product={product} visible={showDescriptions} />

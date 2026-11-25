@@ -22,8 +22,8 @@ import {
   lbpRateFor,
   linkCompareAtPriceCents,
   storeCategoryPath,
+  storeItemPath,
   storePath,
-  storeProductPath,
 } from '../lib/storefront';
 import type { Post } from '../lib/api';
 import { resumeFeedPlayback, suspendFeedPlayback } from '../lib/video-playback';
@@ -201,7 +201,7 @@ function PostSlide({
                 className="reel-product"
                 href={
                   post.link.type === 'product' && post.link.slug
-                    ? storeProductPath(post.store.slug, post.link.slug)
+                    ? storeItemPath(post.store, post.link.slug)
                     : storeCategoryPath(
                         post.store.slug,
                         categorySlug(post.link.name),

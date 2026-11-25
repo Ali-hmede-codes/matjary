@@ -1,6 +1,7 @@
 import type { CatalogItemProps } from '../types';
 import {
   ItemCaption,
+  ProductLink,
   SaleBadge,
   ShopImage,
   StockBadge,
@@ -29,15 +30,16 @@ export function TileCard({
       className={`shop-product shop-tile-card is-${variant}${unavailable ? ' is-unavailable' : ''}`}
       style={tileDelay(delay)}
     >
-      <a
-        className="shop-product-image shop-product-image-link"
+      <ProductLink
+        product={product}
         href={href}
-        aria-label={`Open ${product.name}`}
+        className="shop-product-image shop-product-image-link"
+        ariaLabel={`Open ${product.name}`}
       >
         <ShopImage value={product.imageKeys?.[0]} alt={product.name} />
         <SaleBadge product={product} />
         <StockBadge product={product} cart={cart} />
-      </a>
+      </ProductLink>
       <ItemCaption
         product={product}
         cart={cart}

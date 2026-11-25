@@ -83,26 +83,27 @@ export function useShopCart(store: Store | undefined) {
     return saved;
   }
 
-  function add(
+  async function add(
     product: Product,
     selectedOptions: SelectedProductOption[] | null = null,
-  ) {
+  ): Promise<boolean> {
     setCheckout(undefined);
-    if (!store || product.storeId !== store.id) return;
+    if (!store || product.storeId !== store.id) return false;
     if (productHasOptions(product) && !selectedOptions?.length) {
       const failure = 'Choose a value for each option before adding this item.';
       setMessage(failure);
       notify('error', failure);
-      return;
+      return false;
     }
     const productQuantity =
       cart?.items
         .filter((item) => item.productId === product.id)
         .reduce((sum, item) => sum + item.quantity, 0) ?? 0;
     if (productQuantity + 1 > productCartLimit(product)) {
-      setMessage('You’ve reached the available quantity for this item.');
-      notify('error', 'You’ve reached the available quantity for this item.');
-      return;
+      const failure = 'You’ve reached the available quantity for this item.';
+      setMessage(failure);
+      notify('error', failure);
+      return false;
     }
     // The existing server cart has one currency. Never silently relabel a price.
     if (cart && product.currency !== cart.currency) {
@@ -110,13 +111,15 @@ export function useShopCart(store: Store | undefined) {
         'This item’s currency is not supported by this shop’s cart. Please contact the shop to order it.';
       setMessage(failure);
       notify('error', failure);
-      return;
+      return false;
     }
-    void change(async () =>
+    // The option sheet waits for this result: it only closes after the cart
+    // has accepted the line, so a failed request keeps the choices on screen.
+    const ok = await change(async () =>
       cartApi.add(store.slug, product.id, selectedOptions),
-    ).then((ok) => {
-      if (ok) notify('success', `${product.name} added to cart`);
-    });
+    );
+    if (ok) notify('success', `${product.name} added to cart`);
+    return ok;
   }
 
   function update(item: CartItem, quantity: number) {
